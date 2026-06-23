@@ -126,40 +126,13 @@
     .cmd-line .flag  { color: var(--accent2); }
     .cmd-line .val   { color: var(--accent); }
 
-    /* Logo half-block output */
-    #logo-out {
-      display: block; white-space: pre;
-      font-size: 1.4rem; line-height: 1.0;
-      letter-spacing: 0; margin: .25rem 0 .5rem;
+    /* ── Terminal video ─────────────────────────────────────────── */
+    .term-video {
+      display: block; width: 100%; height: auto;
       image-rendering: pixelated;
+      /* crisp pixels, no smoothing */
+      image-rendering: crisp-edges;
     }
-    #logo-canvas { display: none; }
-
-    .cursor {
-      display: inline-block; width: .55em; height: 1em;
-      background: var(--accent); vertical-align: text-bottom;
-      animation: blink 1s step-end infinite;
-    }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-
-    /* ── webm demo section ─────────────────────────────────────── */
-    .demo-section { padding: 3.5rem 0 4rem; }
-    .demo-inner {
-      display: grid; grid-template-columns: 1fr 1fr;
-      gap: 2.5rem; align-items: center;
-    }
-    @media (max-width: 768px) { .demo-inner { grid-template-columns: 1fr; } }
-    .demo-section h2 { font-size: 1.7rem; font-weight: 700; letter-spacing: -.02em; margin: .6rem 0 .75rem; }
-    .demo-section p { color: var(--muted); font-size: .95rem; margin-bottom: .75rem; }
-
-    .video-wrap {
-      border-radius: var(--radius);
-      overflow: hidden;
-      border: 1px solid var(--border);
-      box-shadow: 0 16px 48px rgba(0,0,0,.5);
-      background: #000;
-    }
-    .video-wrap video { display: block; width: 100%; height: auto; image-rendering: pixelated; }
 
     /* ── Features ──────────────────────────────────────────────── */
     .features { padding: 5rem 0; background: var(--bg2); }
@@ -237,7 +210,6 @@
   <div class="container nav-inner">
     <a class="nav-logo" href="#">cati<span> ▀▄</span></a>
     <ul class="nav-links">
-      <li><a href="#demo">Demo</a></li>
       <li><a href="#features">Features</a></li>
       <li><a href="#how">How it works</a></li>
       <li><a href="#usage">Usage</a></li>
@@ -275,42 +247,19 @@
         <div class="cmd-line">
           <span class="prompt">$</span>
           <span class="cmd"> cati </span><span class="flag">--play</span>
-          <span class="flag"> --fps</span> <span class="val">4</span>
+          <span class="flag"> --fps</span> <span class="val">2</span>
           <span class="cmd"> assets/</span>
         </div>
-        <!-- Hidden canvas used to decode PNG frames -->
-        <canvas id="logo-canvas" width="24" height="14"></canvas>
-        <!-- Half-block rendered output appears here -->
-        <code id="logo-out" aria-label="cati logo rendered as half-block characters"></code>
-        <span class="cursor"></span>
+        <!-- Real terminal recording of cati --play assets/ -->
+        <video id="term-video" class="term-video" autoplay loop muted playsinline
+               aria-label="Terminal recording of cati animating the logo">
+          <source src="cati.webm" type="video/webm" />
+        </video>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ── Live demo (webm) ──────────────────────────────────────────── -->
-<section class="demo-section" id="demo">
-  <div class="container demo-inner">
-    <div>
-      <span class="tag">in action</span>
-      <h2>See it run in the terminal</h2>
-      <p>
-        The webm below is a real recording of <code style="color:var(--accent);font-family:var(--font-mono)">cati --play</code>
-        animating the logo frames directly in foot terminal.
-      </p>
-      <p>
-        Each frame is a 24×14 pixel PNG rendered as 24×7 terminal cells —
-        two pixel rows per cell, each cell colored with 24-bit ANSI sequences.
-      </p>
-    </div>
-    <div class="video-wrap">
-      <video autoplay loop muted playsinline
-             aria-label="Terminal recording of cati animating the logo">
-        <source src="cati.webm" type="video/webm" />
-      </video>
-    </div>
-  </div>
-</section>
 
 <!-- ── Features ─────────────────────────────────────────────────── -->
 <section class="features" id="features">
@@ -458,87 +407,23 @@
   </div>
 </footer>
 
-<!-- ── Scripts ───────────────────────────────────────────────────── -->
 <script>
 (function() {
   'use strict';
 
-  // ── Half-block renderer ─────────────────────────────────────────
-  // Mirrors the Go halfblock.pairToCell / Render logic exactly.
-  function rgbEq(a, b) { return a[0]===b[0] && a[1]===b[1] && a[2]===b[2]; }
-  function rgb(r,g,b) { return `rgb(${r},${g},${b})`; }
-
-  function renderHalfblock(imageData, width, height) {
-    const d = imageData.data;
-    const px = (x, y) => {
-      const i = (y * width + x) * 4;
-      return [d[i], d[i+1], d[i+2], d[i+3]];
-    };
-    let html = '';
-    for (let y = 0; y < height; y += 2) {
-      for (let x = 0; x < width; x++) {
-        const top = px(x, y);
-        const bot = (y+1 < height) ? px(x, y+1) : [0,0,0,0];
-        const topT = top[3] < 16, botT = bot[3] < 16;
-
-        if (topT && botT) { html += ' '; continue; }
-
-        let ch, fg, bg = null;
-        if (topT)                   { ch = '▄'; fg = bot; }
-        else if (botT)              { ch = '▀'; fg = top; }
-        else if (rgbEq(top, bot))   { ch = '█'; fg = top; }
-        else                        { ch = '▀'; fg = top; bg = bot; }
-
-        const style = bg
-          ? `color:${rgb(...fg)};background:${rgb(...bg)}`
-          : `color:${rgb(...fg)}`;
-        html += `<span style="${style}">${ch}</span>`;
-      }
-      html += '\n';
-    }
-    return html;
+  // ── Slow down the terminal video to match --fps 2 feel ─────────
+  const vid = document.getElementById('term-video');
+  if (vid) {
+    vid.playbackRate = 0.5;
+    // Re-apply after src loads (some browsers reset it)
+    vid.addEventListener('canplay', () => { vid.playbackRate = 0.5; });
   }
 
-  // ── Logo animation ──────────────────────────────────────────────
-  const canvas  = document.getElementById('logo-canvas');
-  const ctx     = canvas.getContext('2d');
-  const logoOut = document.getElementById('logo-out');
-  const frames  = ['cati_0001.png','cati_0002.png','cati_0003.png','cati_0004.png'];
-  const loaded  = [];
-  let frameIdx  = 0;
-  let ready     = false;
-
-  // Pre-load all frames
-  let loadCount = 0;
-  frames.forEach((src, i) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      loaded[i] = img;
-      if (++loadCount === frames.length) { ready = true; tick(); }
-    };
-    img.onerror = () => { loadCount++; }; // skip missing
-    img.src = src;
-  });
-
-  function tick() {
-    if (!ready || loaded.length === 0) return;
-    const img = loaded[frameIdx % loaded.filter(Boolean).length];
-    if (!img) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    logoOut.innerHTML = renderHalfblock(data, canvas.width, canvas.height);
-    frameIdx++;
-    setTimeout(tick, 250); // 4 fps to match the terminal demo
-  }
-
-  // ── Pixel grid: show frame 0 of the cati logo ──────────────────
-  const grid = document.getElementById('pixel-grid');
+  // ── Pixel grid: render cati_0001.png as raw pixels ─────────────
+  const grid   = document.getElementById('pixel-grid');
   const PW = 24, PH = 14;
   const pixEls = [];
 
-  // Build empty grid first
   for (let i = 0; i < PW * PH; i++) {
     const el = document.createElement('div');
     el.className = 'px';
@@ -547,7 +432,6 @@
     pixEls.push(el);
   }
 
-  // Fill when frame 0 is loaded
   function fillGrid(img) {
     const gc = document.createElement('canvas');
     gc.width = PW; gc.height = PH;
@@ -556,29 +440,26 @@
     const d = gx.getImageData(0, 0, PW, PH).data;
     pixEls.forEach((el, i) => {
       const r = d[i*4], g = d[i*4+1], b = d[i*4+2], a = d[i*4+3];
-      el.style.background = a < 16
-        ? 'transparent'
-        : `rgb(${r},${g},${b})`;
+      el.style.background = a < 16 ? 'transparent' : `rgb(${r},${g},${b})`;
     });
 
-    // Scan-line highlight: pairs of rows light up sequentially
+    // Scan-line highlight sweeps through row pairs to illustrate 2px/cell
     let scan = 0;
     setInterval(() => {
       const pair = scan % (PH / 2);
       pixEls.forEach((el, i) => {
         const row = Math.floor(i / PW);
         const inPair = Math.floor(row / 2) === pair;
-        el.style.opacity = inPair ? '1' : '0.45';
-        el.style.outline = inPair ? '1px solid rgba(240,180,41,.7)' : 'none';
+        el.style.opacity = inPair ? '1' : '0.4';
+        el.style.outline = inPair ? '1px solid rgba(240,180,41,.75)' : 'none';
       });
       scan++;
-    }, 300);
+    }, 500);
   }
 
-  // Wait for the first frame to be available
-  const waitForFrame = setInterval(() => {
-    if (loaded[0]) { clearInterval(waitForFrame); fillGrid(loaded[0]); }
-  }, 50);
+  const frame0 = new Image();
+  frame0.onload = () => fillGrid(frame0);
+  frame0.src = 'cati_0001.png';
 
 })();
 </script>
