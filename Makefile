@@ -1,6 +1,8 @@
 .PHONY: ⚙️  # make all commands phony
 BINARY  := cati
 PREFIX  ?= /usr/local
+DEMO_DIR = ../emojig/spec/art/frames
+DEMO     = $(DEMO_DIR)/emojig_fall_*.png
 
 help: ⚙️  ## show this help
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -9,8 +11,14 @@ help: ⚙️  ## show this help
 build: ⚙️  ## build the binary
 	go build -o $(BINARY) .
 
-run: ⚙️ build ## build the binary
-	./$(BINARY)
+run: ⚙️ build ## build and run (requires an image arg: make run IMG=foo.png)
+	./$(BINARY) $(IMG)
+
+demo: ⚙️ build ## play the emojig falling animation (q or Ctrl+C to stop)
+	@if test -d $(DEMO_DIR); \
+	 then ./$(BINARY) --play --fps 12 $(DEMO); \
+	 else echo "No demo found in DEMO_DIR=$(DEMO_DIR)"; \
+	 fi
 
 install: ⚙️ build  ## install to ~/go/bin (user)
 	go install .
@@ -18,6 +26,9 @@ install: ⚙️ build  ## install to ~/go/bin (user)
 test: ⚙️  ## run linter and tests
 	go vet ./...
 	go test ./...
+
+tidy: ⚙️  ## tidy go modules
+	go mod tidy
 
 clean: ⚙️  ## remove build artifacts
 	rm -f $(BINARY)
