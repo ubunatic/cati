@@ -116,4 +116,5 @@ Support for more formats (GIF, WebP, …) can be added by importing the relevant
 
 ## License
 
-MIT
+AGPL-3.0-or-later
+
