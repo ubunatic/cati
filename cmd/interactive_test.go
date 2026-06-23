@@ -45,17 +45,22 @@ func TestFitPixelDims(t *testing.T) {
 
 func TestParseSGRMouse(t *testing.T) {
 	tests := []struct {
-		name            string
-		input           string
-		wantBtn         int
+		name             string
+		input            string
+		wantBtn          int
 		wantCol, wantRow int
-		wantRelease     bool
-		wantOK          bool
+		wantRelease      bool
+		wantOK           bool
 	}{
+		// Scroll
 		{"scroll up at 10,5", "\x1b[<64;10;5M", 64, 10, 5, false, true},
 		{"scroll down at 20,3", "\x1b[<65;20;3M", 65, 20, 3, false, true},
+		// Clicks
 		{"left press at 1,1", "\x1b[<0;1;1M", 0, 1, 1, false, true},
 		{"left release at 1,1", "\x1b[<0;1;1m", 0, 1, 1, true, true},
+		// Drag (left button held + motion: btn = 0 + 32 = 32)
+		{"left drag at 15,7", "\x1b[<32;15;7M", 32, 15, 7, false, true},
+		// Non-mouse
 		{"plain key ESC", "\x1b", 0, 0, 0, false, false},
 		{"arrow key up", "\x1b[A", 0, 0, 0, false, false},
 		{"plain plus", "+", 0, 0, 0, false, false},
@@ -75,6 +80,68 @@ func TestParseSGRMouse(t *testing.T) {
 					btn, col, row, release, tc.wantBtn, tc.wantCol, tc.wantRow, tc.wantRelease)
 			}
 		})
+	}
+}
+
+// ── SGR button predicates ─────────────────────────────────────────────────────
+
+func TestSGRPredicates(t *testing.T) {
+	type row struct {
+		btn      int
+		isScroll bool
+		isDrag   bool
+		button   int
+	}
+	tests := []row{
+		{0, false, false, 0},   // left click
+		{1, false, false, 1},   // middle click
+		{2, false, false, 2},   // right click
+		{32, false, true, 0},   // left drag
+		{33, false, true, 1},   // middle drag
+		{34, false, true, 2},   // right drag
+		{64, true, false, 0},   // scroll up
+		{65, true, false, 1},   // scroll down
+		{68, true, false, 0},   // scroll up + shift
+		{36, false, true, 0},   // left drag + shift (32+4)
+	}
+	for _, tc := range tests {
+		if got := sgrIsScroll(tc.btn); got != tc.isScroll {
+			t.Errorf("sgrIsScroll(%d) = %v, want %v", tc.btn, got, tc.isScroll)
+		}
+		if got := sgrIsDrag(tc.btn); got != tc.isDrag {
+			t.Errorf("sgrIsDrag(%d) = %v, want %v", tc.btn, got, tc.isDrag)
+		}
+		if got := sgrButton(tc.btn); got != tc.button {
+			t.Errorf("sgrButton(%d) = %v, want %v", tc.btn, got, tc.button)
+		}
+	}
+}
+
+// ── dragState pan math ────────────────────────────────────────────────────────
+
+func TestDragPanMath(t *testing.T) {
+	// Start drag at terminal column 40, row 10, with pan (20, 10).
+	drag := dragState{
+		active:    true,
+		startCol:  40,
+		startRow:  10,
+		startPanX: 20,
+		startPanY: 10,
+	}
+	state := viewState{zoom: 2.0, panX: 20, panY: 10}
+
+	// Simulate drag 10 cols right, 3 rows down.
+	c, r := 50, 13
+	state.panX = drag.startPanX - (c - drag.startCol)
+	state.panY = drag.startPanY - (r-drag.startRow)*2
+
+	// Dragging right (image moves right → panX decreases).
+	if state.panX != 10 {
+		t.Errorf("panX = %d, want 10", state.panX)
+	}
+	// Dragging down 3 rows = 6 pixel rows → panY decreases.
+	if state.panY != 4 {
+		t.Errorf("panY = %d, want 4", state.panY)
 	}
 }
 

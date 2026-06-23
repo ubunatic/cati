@@ -22,11 +22,36 @@ const (
 	maxZoom  = 8.0   // 8×
 )
 
-// SGR mouse button codes (lower 6 bits; upper bits carry modifiers).
+// SGR button-code bit layout:
+//
+//	bits 0–1  button number (0=left, 1=middle, 2=right)
+//	bit  2    Shift modifier
+//	bit  3    Meta/Alt modifier
+//	bit  4    Ctrl modifier
+//	bit  5    motion flag  – set when the event is a drag (button held + move)
+//	bit  6    scroll flag  – set for scroll-wheel events
 const (
-	sgrScrollUp   = 64
-	sgrScrollDown = 65
+	sgrFlagMotion = 1 << 5 // 0x20
+	sgrFlagScroll = 1 << 6 // 0x40
 )
+
+// sgrIsScroll reports whether the event is a scroll-wheel event.
+func sgrIsScroll(btn int) bool { return btn&sgrFlagScroll != 0 }
+
+// sgrIsDrag reports whether the event is a button-motion (drag) event.
+func sgrIsDrag(btn int) bool { return btn&sgrFlagScroll == 0 && btn&sgrFlagMotion != 0 }
+
+// sgrButton returns the button number (0 = left, 1 = middle, 2 = right).
+func sgrButton(btn int) int { return btn & 3 }
+
+// sgrScrollDir returns -1 for scroll-up (zoom in) and +1 for scroll-down (zoom out).
+// Valid only when sgrIsScroll(btn) is true.
+func sgrScrollDir(btn int) int {
+	if btn&1 == 0 {
+		return -1 // scroll up
+	}
+	return 1 // scroll down
+}
 
 // ── viewState ────────────────────────────────────────────────────────────────
 
@@ -37,16 +62,30 @@ type viewState struct {
 	panY int // pixel offset into the zoomed image (y)
 }
 
+// ── dragState ────────────────────────────────────────────────────────────────
+
+// dragState tracks an in-progress left-button drag used to pan the image.
+type dragState struct {
+	active    bool
+	startCol  int // 0-indexed terminal column where drag began
+	startRow  int // 0-indexed terminal row    where drag began
+	startPanX int // state.panX at drag start
+	startPanY int // state.panY at drag start
+}
+
 // ── interactive ──────────────────────────────────────────────────────────────
 
 // interactive opens a single image in a full-screen interactive viewer.
 //
-// Keys / mouse:
+// Mouse:
+//
+//	scroll up/down     zoom in / out  at cursor position
+//	left-button drag   pan (grab-and-pull the image)
+//
+// Keys:
 //
 //	+/=          zoom in  (centred on screen)
 //	-            zoom out (centred on screen)
-//	scroll up    zoom in  at cursor position
-//	scroll down  zoom out at cursor position
 //	↑↓←→         pan
 //	c / C        copy current viewport to clipboard (PNG)
 //	q/Q/Esc/^C   quit
@@ -78,7 +117,7 @@ func interactive(path string, initWidth, initHeight int) error {
 	// Reads up to 32 bytes per event.  Terminal emulators deliver complete
 	// escape sequences (including SGR mouse events) in a single write, so a
 	// single Read call almost always returns one complete event.
-	inputs := make(chan string, 16)
+	inputs := make(chan string, 32)
 	go func() {
 		buf := make([]byte, 32)
 		for {
@@ -102,6 +141,7 @@ func interactive(path string, initWidth, initHeight int) error {
 	}()
 
 	state := viewState{zoom: 1.0}
+	var drag dragState
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
 
 	var status string
@@ -130,21 +170,44 @@ func interactive(path string, initWidth, initHeight int) error {
 			newStatus := ""
 
 			// ── SGR mouse event ───────────────────────────────────────────────
-			if btn, col, row, release, ok := parseSGRMouse(k); ok && !release {
-				// col/row are 1-indexed terminal coordinates.
-				switch btn & 0x43 { // mask off shift/meta/ctrl modifier bits (0x3C) but keep scroll bit (0x40) and button bits (0x03)
-				case sgrScrollUp:
-					newZoom := math.Min(state.zoom*zoomStep, maxZoom)
+			if btn, col, row, release, ok := parseSGRMouse(k); ok {
+				// col/row are 1-indexed terminal coordinates → convert to 0-indexed.
+				c, r := col-1, row-1
+
+				switch {
+				// ── Scroll wheel: zoom at cursor ──────────────────────────────
+				case sgrIsScroll(btn) && !release:
+					var newZoom float64
+					if sgrScrollDir(btn) < 0 {
+						newZoom = math.Min(state.zoom*zoomStep, maxZoom)
+					} else {
+						newZoom = math.Max(state.zoom/zoomStep, minZoom)
+					}
 					if newZoom != state.zoom {
-						zoomAtCursor(&state, newZoom, col-1, row-1)
+						zoomAtCursor(&state, newZoom, c, r)
 						changed = true
 					}
-				case sgrScrollDown:
-					newZoom := math.Max(state.zoom/zoomStep, minZoom)
-					if newZoom != state.zoom {
-						zoomAtCursor(&state, newZoom, col-1, row-1)
-						changed = true
+
+				// ── Left press: start drag ────────────────────────────────────
+				case !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release:
+					drag = dragState{
+						active:    true,
+						startCol:  c,
+						startRow:  r,
+						startPanX: state.panX,
+						startPanY: state.panY,
 					}
+
+				// ── Left drag: update pan ─────────────────────────────────────
+				case sgrIsDrag(btn) && sgrButton(btn) == 0 && drag.active:
+					// Grab-and-pull: dragging right shows more of the left side.
+					state.panX = drag.startPanX - (c - drag.startCol)
+					state.panY = drag.startPanY - (r-drag.startRow)*2
+					changed = true
+
+				// ── Left release: end drag ────────────────────────────────────
+				case !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && release:
+					drag.active = false
 				}
 
 			} else {
@@ -280,7 +343,7 @@ func renderView(orig image.Image, state *viewState, termCols, termRows int) {
 
 // parseSGRMouse parses an SGR extended mouse event of the form:
 //
-//	\x1b[<btn;col;rowM   (press)
+//	\x1b[<btn;col;rowM   (press / drag)
 //	\x1b[<btn;col;rowm   (release)
 //
 // col and row are 1-indexed terminal coordinates.

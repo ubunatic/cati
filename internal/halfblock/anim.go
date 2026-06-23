@@ -19,12 +19,14 @@ const (
 	// ANSIEraseDown clears from the cursor to the end of the screen.
 	ANSIEraseDown = "\x1b[J"
 
-	// ANSIMouseOn enables normal mouse tracking (clicks + scroll wheel) and
+	// ANSIMouseOn enables button-event mouse tracking (clicks, drag, scroll) and
 	// SGR extended coordinate encoding (required for terminals wider than 223 cols
 	// and for reliable button/position parsing).
-	ANSIMouseOn = "\x1b[?1000h\x1b[?1006h"
+	// ?1002h = button-event tracking (reports movement while a button is held).
+	// ?1006h = SGR extended coordinates.
+	ANSIMouseOn = "\x1b[?1002h\x1b[?1006h"
 	// ANSIMouseOff disables the modes enabled by ANSIMouseOn.
-	ANSIMouseOff = "\x1b[?1000l\x1b[?1006l"
+	ANSIMouseOff = "\x1b[?1002l\x1b[?1006l"
 )
 
 // HideCursor writes the hide-cursor escape to w.
