@@ -18,6 +18,13 @@ const (
 	ANSICursorHome = "\x1b[H"
 	// ANSIEraseDown clears from the cursor to the end of the screen.
 	ANSIEraseDown = "\x1b[J"
+
+	// ANSIMouseOn enables normal mouse tracking (clicks + scroll wheel) and
+	// SGR extended coordinate encoding (required for terminals wider than 223 cols
+	// and for reliable button/position parsing).
+	ANSIMouseOn = "\x1b[?1000h\x1b[?1006h"
+	// ANSIMouseOff disables the modes enabled by ANSIMouseOn.
+	ANSIMouseOff = "\x1b[?1000l\x1b[?1006l"
 )
 
 // HideCursor writes the hide-cursor escape to w.
@@ -34,3 +41,9 @@ func CursorHome(w io.Writer) { fmt.Fprint(w, ANSICursorHome) }
 
 // EraseDown erases from the cursor to the end of the screen.
 func EraseDown(w io.Writer) { fmt.Fprint(w, ANSIEraseDown) }
+
+// EnableMouse enables normal mouse tracking with SGR extended coordinates.
+func EnableMouse(w io.Writer) { fmt.Fprint(w, ANSIMouseOn) }
+
+// DisableMouse disables mouse tracking.
+func DisableMouse(w io.Writer) { fmt.Fprint(w, ANSIMouseOff) }

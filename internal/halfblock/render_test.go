@@ -94,6 +94,54 @@ func TestScale(t *testing.T) {
 	}
 }
 
+// ── ScaleToFit ────────────────────────────────────────────────────────────────
+
+func TestScaleToFit(t *testing.T) {
+	red := rgba(255, 0, 0, 255)
+	// 100×50 pixels → aspect ratio 2:1
+	orig := solidImage(100, 50, red)
+
+	tests := []struct {
+		name    string
+		cols    int
+		rows    int
+		wantW   int
+		wantH   int
+	}{
+		// Width-only constraint (rows=0)
+		{"width only, fits", 200, 0, 100, 50},
+		{"width only, exact", 100, 0, 100, 50},
+		{"width only, half", 50, 0, 50, 25},
+
+		// Height-only constraint (cols=0).
+		// rows=10 → pixelH=20; 100px wide × 50px tall scaled to 20px tall
+		// → width = 100*20/50 = 40 cols.
+		{"height only, fits tall", 0, 50, 100, 50},
+		{"height only, shrink", 0, 10, 40, 20},
+
+		// Both constraints — tighter wins.
+		// rows=10 → pixelH=20 → width budget 40; cols=50 is looser → height wins.
+		{"both, height tighter", 50, 10, 40, 20},
+		// rows=100 → pixelH=200 → height is not the constraint; cols=50 → width wins.
+		{"both, width tighter", 50, 100, 50, 25},
+
+		// No constraints → unchanged.
+		{"no constraints", 0, 0, 100, 50},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			out := ScaleToFit(orig, tc.cols, tc.rows)
+			b := out.Bounds()
+			gotW, gotH := b.Dx(), b.Dy()
+			if gotW != tc.wantW || gotH != tc.wantH {
+				t.Errorf("ScaleToFit(cols=%d, rows=%d): got %dx%d want %dx%d",
+					tc.cols, tc.rows, gotW, gotH, tc.wantW, tc.wantH)
+			}
+		})
+	}
+}
+
 // ── Render ────────────────────────────────────────────────────────────────────
 
 func TestRender_SolidColor(t *testing.T) {

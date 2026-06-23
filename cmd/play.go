@@ -15,7 +15,8 @@ import (
 // play renders frames in a loop at the given fps until the user presses 'q'
 // or a signal (SIGINT/SIGTERM) is received.
 // Frames are pre-loaded and scaled once before the animation starts.
-func play(paths []string, fps int) error {
+// width and height are in terminal characters (0 = auto-detect from terminal).
+func play(paths []string, fps, width, height int) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("no images to play")
 	}
@@ -23,7 +24,12 @@ func play(paths []string, fps int) error {
 		return fmt.Errorf("--fps must be > 0")
 	}
 
-	cols := halfblock.TermWidth()
+	// Determine display dimensions: explicit flags take priority; fall back to
+	// the terminal size when both are zero.
+	cols, rows := width, height
+	if cols == 0 && rows == 0 {
+		cols = halfblock.TermWidth()
+	}
 
 	// ── Pre-load & scale all frames ───────────────────────────────────────────
 	frames := make([]image.Image, 0, len(paths))
@@ -32,8 +38,8 @@ func play(paths []string, fps int) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
-		if cols > 0 {
-			img = halfblock.Scale(img, cols)
+		if cols > 0 || rows > 0 {
+			img = halfblock.ScaleToFit(img, cols, rows)
 		}
 		frames = append(frames, img)
 	}

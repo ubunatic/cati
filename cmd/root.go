@@ -21,11 +21,14 @@ var imageExts = map[string]bool{
 
 // New returns the root Cobra command for cati.
 func New() *cobra.Command {
-	var ansiMode  bool
-	var recursive bool
-	var noHeader  bool
-	var playMode  bool
-	var fps       int
+	var ansiMode     bool
+	var recursive    bool
+	var noHeader     bool
+	var playMode     bool
+	var interactMode bool
+	var fps          int
+	var width        int
+	var height       int
 
 	root := &cobra.Command{
 		Use:   "cati [flags] <image|dir> [image|dir ...]",
@@ -45,20 +48,26 @@ Press Ctrl+C to stop playback.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return run(opts{
-				ansi:      ansiMode,
-				recursive: recursive,
-				noHeader:  noHeader,
-				playMode:  playMode,
-				fps:       fps,
+				ansi:        ansiMode,
+				recursive:   recursive,
+				noHeader:    noHeader,
+				playMode:    playMode,
+				interactive: interactMode,
+				fps:         fps,
+				width:       width,
+				height:      height,
 			}, args)
 		},
 	}
 
-	root.Flags().BoolVar(&ansiMode,   "ansi",      true,  "render with 24-bit ANSI true-color (default)")
-	root.Flags().BoolVarP(&recursive, "recursive", "r",   false, "recurse into subdirectories")
-	root.Flags().BoolVar(&noHeader,   "no-header", false, "suppress filename headers between images")
-	root.Flags().BoolVarP(&playMode,  "play",      "p",   false, "animate frames in a loop (Ctrl+C to stop)")
-	root.Flags().IntVar(&fps,         "fps",       15,    "frames per second for --play mode")
+	root.Flags().BoolVar(&ansiMode,      "ansi",        true,  "render with 24-bit ANSI true-color (default)")
+	root.Flags().BoolVarP(&recursive,    "recursive",   "r",   false, "recurse into subdirectories")
+	root.Flags().BoolVar(&noHeader,      "no-header",   false, "suppress filename headers between images")
+	root.Flags().BoolVarP(&playMode,     "play",        "p",   false, "animate frames in a loop (Ctrl+C to stop)")
+	root.Flags().BoolVarP(&interactMode, "interactive", "i",   false, "interactive viewer: +/- zoom, arrow keys pan, q quit")
+	root.Flags().IntVar(&fps,            "fps",         15,    "frames per second for --play mode")
+	root.Flags().IntVarP(&width,         "width",       "w",   0,     "target width in terminal columns (0 = auto)")
+	root.Flags().IntVar(&height,         "height",      0,     "target height in terminal rows (0 = auto)")
 
 	return root
 }
@@ -66,11 +75,14 @@ Press Ctrl+C to stop playback.`,
 // ── options ───────────────────────────────────────────────────────────────────
 
 type opts struct {
-	ansi      bool
-	recursive bool
-	noHeader  bool
-	playMode  bool
-	fps       int
+	ansi        bool
+	recursive   bool
+	noHeader    bool
+	playMode    bool
+	interactive bool
+	fps         int
+	width       int // terminal columns; 0 = auto
+	height      int // terminal rows;   0 = auto
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────
@@ -90,11 +102,23 @@ func run(o opts, args []string) error {
 	}
 
 	if o.playMode {
-		return play(paths, o.fps)
+		return play(paths, o.fps, o.width, o.height)
+	}
+
+	if o.interactive {
+		if len(paths) != 1 {
+			return fmt.Errorf("--interactive requires exactly one image (got %d)", len(paths))
+		}
+		return interactive(paths[0], o.width, o.height)
 	}
 
 	// ── Static render ─────────────────────────────────────────────────────────
-	cols := halfblock.TermWidth()
+	// Determine display dimensions: explicit flags take priority; fall back to
+	// the terminal size when both are zero.
+	cols, rows := o.width, o.height
+	if cols == 0 && rows == 0 {
+		cols = halfblock.TermWidth()
+	}
 	multi := len(paths) > 1
 
 	for _, path := range paths {
@@ -107,8 +131,8 @@ func run(o opts, args []string) error {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 
-		if cols > 0 {
-			img = halfblock.Scale(img, cols)
+		if cols > 0 || rows > 0 {
+			img = halfblock.ScaleToFit(img, cols, rows)
 		}
 
 		if err := halfblock.Render(os.Stdout, img); err != nil {

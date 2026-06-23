@@ -5,26 +5,26 @@ import (
 )
 
 func TestPlay_NoFrames(t *testing.T) {
-	err := play([]string{}, 15)
+	err := play([]string{}, 15, 0, 0)
 	if err == nil {
 		t.Error("expected error for empty frame list, got nil")
 	}
 }
 
 func TestPlay_BadFPS(t *testing.T) {
-	err := play([]string{"../testdata/solid_red_4x4.png"}, 0)
+	err := play([]string{"../testdata/solid_red_4x4.png"}, 0, 0, 0)
 	if err == nil {
 		t.Error("expected error for fps=0, got nil")
 	}
 
-	err = play([]string{"../testdata/solid_red_4x4.png"}, -1)
+	err = play([]string{"../testdata/solid_red_4x4.png"}, -1, 0, 0)
 	if err == nil {
 		t.Error("expected error for fps=-1, got nil")
 	}
 }
 
 func TestPlay_MissingFile(t *testing.T) {
-	err := play([]string{"nonexistent.png"}, 15)
+	err := play([]string{"nonexistent.png"}, 15, 0, 0)
 	if err == nil {
 		t.Error("expected error for missing file, got nil")
 	}

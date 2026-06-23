@@ -63,29 +63,92 @@ func eqRGB(a, b color.RGBA) bool {
 
 // ── Scaling ───────────────────────────────────────────────────────────────────
 
+// ScaleToFit scales img to fit within the given terminal dimensions while
+// always preserving the original aspect ratio.
+//
+// cols and rows are in terminal characters; because each character cell encodes
+// two pixel rows, the effective pixel height budget is rows*2.
+//
+// Rules:
+//   - cols <= 0  →  no width constraint.
+//   - rows <= 0  →  no height constraint.
+//   - both <= 0  →  image is returned unchanged.
+//
+// When both constraints are active the tighter one (the one that results in the
+// smaller image) wins, so the output always fits inside the requested box.
+// The image is never upscaled; if it already fits it is returned as-is.
+func ScaleToFit(img image.Image, cols, rows int) image.Image {
+	b := img.Bounds()
+	srcW, srcH := b.Dx(), b.Dy()
+	if srcW == 0 || srcH == 0 {
+		return img
+	}
+
+	// Convert terminal rows to pixel rows (each cell = 2 pixel rows).
+	pixelH := rows * 2
+
+	// Compute candidate target dimensions from each active constraint.
+	newW, newH := srcW, srcH // start with original (= no scaling)
+
+	if cols > 0 && cols < newW {
+		// Width-constrained candidate.
+		newW = cols
+		newH = srcH * newW / srcW
+	}
+	if pixelH > 0 && srcH*newW/srcW > pixelH {
+		// Height-constrained candidate (may tighten the width-constrained result).
+		newH = pixelH
+		newW = srcW * newH / srcH
+	}
+
+	if newH < 1 {
+		newH = 1
+	}
+	if newW < 1 {
+		newW = 1
+	}
+
+	// No change needed.
+	if newW == srcW && newH == srcH {
+		return img
+	}
+
+	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
+	for y := 0; y < newH; y++ {
+		srcY := b.Min.Y + y*srcH/newH
+		for x := 0; x < newW; x++ {
+			srcX := b.Min.X + x*srcW/newW
+			dst.Set(x, y, img.At(srcX, srcY))
+		}
+	}
+	return dst
+}
+
 // Scale returns the image unchanged when its pixel width already fits within
 // maxCols terminal columns.  Otherwise it returns a nearest-neighbour scaled
 // copy whose pixel width equals maxCols (height is scaled proportionally).
 //
-// Each terminal column renders one pixel wide, so "fits in maxCols columns"
-// means img.Bounds().Dx() <= maxCols.
+// Deprecated: prefer ScaleToFit which also supports a height constraint.
 func Scale(img image.Image, maxCols int) image.Image {
+	return ScaleToFit(img, maxCols, 0)
+}
+
+// ScaleNN returns a nearest-neighbour scaled copy of img at exactly w×h pixels.
+// Unlike ScaleToFit it also upscales, so it is suitable for zoom > 1.
+func ScaleNN(img image.Image, w, h int) image.Image {
 	b := img.Bounds()
-	w, h := b.Dx(), b.Dy()
-	if maxCols <= 0 || w <= maxCols {
+	srcW, srcH := b.Dx(), b.Dy()
+	if srcW == 0 || srcH == 0 || w < 1 || h < 1 {
 		return img
 	}
-	// Scale down proportionally; keep at least 1 row.
-	newW := maxCols
-	newH := h * newW / w
-	if newH < 1 {
-		newH = 1
+	if srcW == w && srcH == h {
+		return img
 	}
-	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
-	for y := 0; y < newH; y++ {
-		srcY := b.Min.Y + y*h/newH
-		for x := 0; x < newW; x++ {
-			srcX := b.Min.X + x*w/newW
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		srcY := b.Min.Y + y*srcH/h
+		for x := 0; x < w; x++ {
+			srcX := b.Min.X + x*srcW/w
 			dst.Set(x, y, img.At(srcX, srcY))
 		}
 	}
