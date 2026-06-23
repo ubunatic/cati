@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>cati — cat for images</title>
   <meta name="description" content="cati renders PNG and JPEG images in your terminal using Unicode half-block characters and 24-bit ANSI true-color. Like cat, but for images." />
+  <link rel="icon" type="image/png" href="cati_0001.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
@@ -60,10 +61,16 @@
       height: 56px;
     }
     .nav-logo {
+      display: inline-flex; align-items: center; gap: 0.5rem;
       font-family: var(--font-mono); font-size: 1.25rem; font-weight: 600;
       color: var(--accent); text-decoration: none; letter-spacing: -.02em;
     }
-    .nav-logo span { color: var(--muted); }
+    .nav-logo img {
+      height: 24px; width: auto;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    .nav-logo span { color: var(--text); }
     .nav-links { display: flex; gap: 1.5rem; list-style: none; }
     .nav-links a { color: var(--muted); font-size: .9rem; text-decoration: none; transition: color .2s; }
     .nav-links a:hover { color: var(--text); }
@@ -208,7 +215,10 @@
 <!-- ── Nav ──────────────────────────────────────────────────────── -->
 <nav>
   <div class="container nav-inner">
-    <a class="nav-logo" href="#">cati<span> ▀▄</span></a>
+    <a class="nav-logo" href="#">
+      <img src="cati_0001.png" alt="cati" />
+      <span>cati</span>
+    </a>
     <ul class="nav-links">
       <li><a href="#features">Features</a></li>
       <li><a href="#how">How it works</a></li>
