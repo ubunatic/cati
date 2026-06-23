@@ -1,0 +1,10 @@
+version = 1
+SPDX-PackageName = "cati"
+SPDX-PackageSupplier = "Uwe Jugel <ubunatic@noreply.codeberg.org>"
+SPDX-PackageDownloadLocation = "https://codeberg.org/ubunatic/cati"
+
+[[annotations]]
+path = ["**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Uwe Jugel"
+SPDX-License-Identifier = "MIT"

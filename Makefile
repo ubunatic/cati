@@ -30,6 +30,10 @@ test: ⚙️  ## run linter and tests
 	go vet ./...
 	go test ./...
 
+reuse: ⚙️  ## verify license compliance linting
+	reuse lint
+
+
 generate: ⚙️  ## generate static assets/code (e.g., inlined docs/index.html pixel colors)
 	go run scripts/generate_pixels.go
 
