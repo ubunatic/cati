@@ -137,7 +137,7 @@ func interactive(path string, initWidth, initHeight int) error {
 		halfblock.DisableMouse(os.Stdout)
 		halfblock.EraseDown(os.Stdout)
 		halfblock.ShowCursor(os.Stdout)
-		fmt.Fprintln(os.Stdout)
+		fmt.Fprint(os.Stdout, "\r\n") // CR+LF: ensure col 0 so the shell won't show a stray '%'
 	}()
 
 	state := viewState{zoom: 1.0}

@@ -17,7 +17,10 @@ const (
 	// ANSICursorHome moves the cursor to the top-left (0,0) without clearing.
 	ANSICursorHome = "\x1b[H"
 	// ANSIEraseDown clears from the cursor to the end of the screen.
-	ANSIEraseDown = "\x1b[J"
+	// The leading \r ensures the erase starts from column 0, preventing
+	// stale characters left of the cursor on the current row from leaking
+	// through when the rendered area shrinks (e.g. after a zoom-out).
+	ANSIEraseDown = "\r\x1b[J"
 
 	// ANSIMouseOn enables button-event mouse tracking (clicks, drag, scroll) and
 	// SGR extended coordinate encoding (required for terminals wider than 223 cols

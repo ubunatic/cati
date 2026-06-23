@@ -86,7 +86,7 @@ func play(paths []string, fps, width, height int) error {
 	defer func() {
 		halfblock.EraseDown(os.Stdout)
 		halfblock.ShowCursor(os.Stdout)
-		fmt.Fprintln(os.Stdout)
+		fmt.Fprint(os.Stdout, "\r\n") // CR+LF: ensure col 0 so the shell won't show a stray '%'
 	}()
 
 	ticker := time.NewTicker(time.Duration(float64(time.Second) / float64(fps)))
