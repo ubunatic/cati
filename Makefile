@@ -30,6 +30,9 @@ test: ⚙️  ## run linter and tests
 	go vet ./...
 	go test ./...
 
+generate: ⚙️  ## generate static assets/code (e.g., inlined docs/index.html pixel colors)
+	go run scripts/generate_pixels.go
+
 tidy: ⚙️  ## tidy go modules
 	go mod tidy
 
