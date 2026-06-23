@@ -20,6 +20,9 @@ demo: ⚙️ build ## play the emojig falling animation (q or Ctrl+C to stop)
 	 else echo "No demo found in DEMO_DIR=$(DEMO_DIR)"; \
 	 fi
 
+logo: ⚙️ build ## animate the cati logo (q or Ctrl+C to stop)
+	./$(BINARY) --play --fps 4 assets/
+
 install: ⚙️ build  ## install to ~/go/bin (user)
 	go install .
 

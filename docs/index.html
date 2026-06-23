@@ -22,14 +22,12 @@
       --accent:    #f0b429;
       --accent2:   #3b82f6;
       --accent3:   #10b981;
-      --danger:    #f87171;
       --radius:    12px;
       --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
       --font-sans: 'Inter', system-ui, sans-serif;
     }
 
     html { scroll-behavior: smooth; }
-
     body {
       font-family: var(--font-sans);
       background: var(--bg);
@@ -42,16 +40,12 @@
     .container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
     .tag {
       display: inline-block;
-      font-family: var(--font-mono);
-      font-size: .72rem;
-      font-weight: 600;
-      letter-spacing: .08em;
-      text-transform: uppercase;
+      font-family: var(--font-mono); font-size: .72rem; font-weight: 600;
+      letter-spacing: .08em; text-transform: uppercase;
       color: var(--accent);
       background: rgba(240,180,41,.1);
       border: 1px solid rgba(240,180,41,.25);
-      border-radius: 99px;
-      padding: .2em .75em;
+      border-radius: 99px; padding: .2em .75em;
     }
 
     /* ── Nav ────────────────────────────────────────────────────── */
@@ -66,37 +60,27 @@
       height: 56px;
     }
     .nav-logo {
-      font-family: var(--font-mono);
-      font-size: 1.25rem; font-weight: 600;
-      color: var(--accent);
-      text-decoration: none;
-      letter-spacing: -.02em;
+      font-family: var(--font-mono); font-size: 1.25rem; font-weight: 600;
+      color: var(--accent); text-decoration: none; letter-spacing: -.02em;
     }
     .nav-logo span { color: var(--muted); }
     .nav-links { display: flex; gap: 1.5rem; list-style: none; }
-    .nav-links a {
-      color: var(--muted); font-size: .9rem;
-      text-decoration: none; transition: color .2s;
-    }
+    .nav-links a { color: var(--muted); font-size: .9rem; text-decoration: none; transition: color .2s; }
     .nav-links a:hover { color: var(--text); }
 
     /* ── Hero ───────────────────────────────────────────────────── */
     .hero {
-      padding: 6rem 0 4rem;
+      padding: 5rem 0 4rem;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 3rem;
-      align-items: center;
+      gap: 3rem; align-items: center;
     }
     @media (max-width: 768px) { .hero { grid-template-columns: 1fr; padding: 3rem 0 2rem; } }
 
     .hero-eyebrow { margin-bottom: 1rem; }
     .hero h1 {
-      font-size: clamp(2.4rem, 5vw, 3.6rem);
-      font-weight: 800;
-      line-height: 1.1;
-      letter-spacing: -.03em;
-      margin-bottom: 1.25rem;
+      font-size: clamp(2.4rem, 5vw, 3.6rem); font-weight: 800;
+      line-height: 1.1; letter-spacing: -.03em; margin-bottom: 1.25rem;
     }
     .hero h1 em {
       font-style: normal;
@@ -104,203 +88,146 @@
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
       background-clip: text;
     }
-    .hero-desc { color: var(--muted); font-size: 1.1rem; margin-bottom: 2rem; max-width: 480px; }
-
+    .hero-desc { color: var(--muted); font-size: 1.05rem; margin-bottom: 2rem; max-width: 480px; }
     .btn-row { display: flex; gap: .75rem; flex-wrap: wrap; }
     .btn {
       display: inline-flex; align-items: center; gap: .4rem;
-      padding: .6rem 1.25rem;
-      border-radius: 8px;
-      font-size: .9rem; font-weight: 600;
-      text-decoration: none;
+      padding: .6rem 1.25rem; border-radius: 8px;
+      font-size: .9rem; font-weight: 600; text-decoration: none;
       transition: transform .15s, box-shadow .15s;
       cursor: pointer; border: none;
     }
     .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }
     .btn-primary { background: var(--accent); color: #0d0f14; }
-    .btn-ghost {
-      background: transparent;
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
+    .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
     .btn-ghost:hover { border-color: var(--muted); }
 
     /* ── Terminal window ───────────────────────────────────────── */
     .terminal-wrap {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+      box-shadow: 0 24px 64px rgba(0,0,0,.55);
     }
     .terminal-bar {
       display: flex; align-items: center; gap: .5rem;
-      padding: .6rem 1rem;
-      background: var(--bg3);
+      padding: .6rem 1rem; background: var(--bg3);
       border-bottom: 1px solid var(--border);
     }
     .dot { width: 12px; height: 12px; border-radius: 50%; }
-    .dot-r { background: #ff5f57; }
-    .dot-y { background: #ffbd2e; }
-    .dot-g { background: #28c840; }
-    .term-title {
-      flex: 1; text-align: center;
-      font-family: var(--font-mono); font-size: .75rem;
-      color: var(--muted);
-    }
+    .dot-r { background: #ff5f57; } .dot-y { background: #ffbd2e; } .dot-g { background: #28c840; }
+    .term-title { flex: 1; text-align: center; font-family: var(--font-mono); font-size: .75rem; color: var(--muted); }
     .terminal-body {
-      padding: 1rem;
-      font-family: var(--font-mono);
-      font-size: .8rem;
-      line-height: 1.35;
-      min-height: 240px;
+      padding: 1rem 1.25rem;
+      font-family: var(--font-mono); font-size: .85rem; line-height: 1.5;
     }
-    .cmd-line { color: var(--muted); margin-bottom: .5rem; }
-    .cmd-line span { color: var(--accent3); }
-    #halfblock-canvas { display: none; }
-    #halfblock-out {
-      display: block;
-      white-space: pre;
-      line-height: 1.0;
-      font-size: .72rem;
-      letter-spacing: 0;
+    .cmd-line { color: var(--muted); margin-bottom: .6rem; }
+    .cmd-line .prompt { color: var(--accent3); }
+    .cmd-line .cmd   { color: var(--text); }
+    .cmd-line .flag  { color: var(--accent2); }
+    .cmd-line .val   { color: var(--accent); }
+
+    /* Logo half-block output */
+    #logo-out {
+      display: block; white-space: pre;
+      font-size: 1.4rem; line-height: 1.0;
+      letter-spacing: 0; margin: .25rem 0 .5rem;
+      image-rendering: pixelated;
     }
+    #logo-canvas { display: none; }
+
+    .cursor {
+      display: inline-block; width: .55em; height: 1em;
+      background: var(--accent); vertical-align: text-bottom;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* ── webm demo section ─────────────────────────────────────── */
+    .demo-section { padding: 3.5rem 0 4rem; }
+    .demo-inner {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 2.5rem; align-items: center;
+    }
+    @media (max-width: 768px) { .demo-inner { grid-template-columns: 1fr; } }
+    .demo-section h2 { font-size: 1.7rem; font-weight: 700; letter-spacing: -.02em; margin: .6rem 0 .75rem; }
+    .demo-section p { color: var(--muted); font-size: .95rem; margin-bottom: .75rem; }
+
+    .video-wrap {
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 16px 48px rgba(0,0,0,.5);
+      background: #000;
+    }
+    .video-wrap video { display: block; width: 100%; height: auto; image-rendering: pixelated; }
 
     /* ── Features ──────────────────────────────────────────────── */
-    .features { padding: 5rem 0; }
+    .features { padding: 5rem 0; background: var(--bg2); }
     .section-header { text-align: center; margin-bottom: 3rem; }
-    .section-header h2 {
-      font-size: clamp(1.6rem, 3vw, 2.2rem);
-      font-weight: 700; letter-spacing: -.02em;
-      margin-top: .5rem;
-    }
+    .section-header h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 700; letter-spacing: -.02em; margin-top: .5rem; }
     .section-header p { color: var(--muted); margin-top: .5rem; }
 
-    .feature-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.25rem;
-    }
+    .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
     .feature-card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1.5rem;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.5rem;
       transition: border-color .2s, transform .2s;
     }
     .feature-card:hover { border-color: var(--accent); transform: translateY(-3px); }
-    .feature-icon {
-      font-size: 1.8rem; margin-bottom: .75rem;
-      display: inline-block;
-    }
+    .feature-icon { font-size: 1.6rem; margin-bottom: .75rem; display: inline-block; }
     .feature-card h3 { font-size: 1rem; font-weight: 600; margin-bottom: .4rem; }
     .feature-card p { color: var(--muted); font-size: .88rem; }
 
     /* ── How it works ──────────────────────────────────────────── */
-    .how { padding: 5rem 0; background: var(--bg2); }
-    .how-inner {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 3rem;
-      align-items: center;
-    }
+    .how { padding: 5rem 0; }
+    .how-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; }
     @media (max-width: 768px) { .how-inner { grid-template-columns: 1fr; } }
     .how h2 { font-size: 1.8rem; font-weight: 700; letter-spacing: -.02em; margin-bottom: 1rem; }
     .how p { color: var(--muted); margin-bottom: 1rem; }
-    .block-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-family: var(--font-mono);
-      font-size: .82rem;
-      margin-top: 1.25rem;
-    }
+
+    .block-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: .82rem; margin-top: 1.25rem; }
     .block-table th {
       text-align: left; color: var(--muted);
-      border-bottom: 1px solid var(--border);
-      padding: .4rem .75rem;
-      font-weight: 600; font-size: .75rem;
-      text-transform: uppercase; letter-spacing: .06em;
+      border-bottom: 1px solid var(--border); padding: .4rem .75rem;
+      font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em;
     }
     .block-table td { padding: .4rem .75rem; }
     .block-table tr:hover td { background: rgba(255,255,255,.03); }
     .block-table td:first-child { font-size: 1.1rem; }
 
+    /* pixel grid */
     .pixel-demo {
-      display: grid;
-      grid-template-columns: repeat(8, 1fr);
-      gap: 2px;
-      background: var(--bg3);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 1.25rem;
+      display: grid; grid-template-columns: repeat(24, 1fr); gap: 1px;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1rem;
     }
-    .px { aspect-ratio: 1; border-radius: 2px; transition: opacity .4s; }
+    .px { aspect-ratio: 1; border-radius: 1px; transition: opacity .3s; }
 
     /* ── Usage ──────────────────────────────────────────────────── */
-    .usage { padding: 5rem 0; }
-    .usage-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 1.25rem;
-    }
-    .usage-card {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-    }
-    .usage-card-head {
-      padding: .75rem 1rem;
-      background: var(--bg3);
-      border-bottom: 1px solid var(--border);
-      font-size: .8rem; font-weight: 600; color: var(--muted);
-      font-family: var(--font-mono);
-    }
-    pre.code {
-      padding: 1rem;
-      font-family: var(--font-mono);
-      font-size: .82rem;
-      line-height: 1.7;
-      overflow-x: auto;
-      color: var(--text);
-    }
-    pre.code .c { color: var(--muted); } /* comment */
-    pre.code .f { color: var(--accent3); } /* flag */
-    pre.code .v { color: var(--accent); } /* value */
-    pre.code .p { color: var(--accent2); } /* prompt */
+    .usage { padding: 5rem 0; background: var(--bg2); }
+    .usage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; }
+    .usage-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .usage-card-head { padding: .75rem 1rem; background: var(--bg3); border-bottom: 1px solid var(--border); font-size: .8rem; font-weight: 600; color: var(--muted); font-family: var(--font-mono); }
+    pre.code { padding: 1rem; font-family: var(--font-mono); font-size: .82rem; line-height: 1.7; overflow-x: auto; color: var(--text); }
+    pre.code .c { color: var(--muted); }
+    pre.code .f { color: var(--accent2); }
+    pre.code .v { color: var(--accent); }
+    pre.code .p { color: var(--accent3); }
 
     /* ── Install ────────────────────────────────────────────────── */
-    .install {
-      padding: 5rem 0;
-      background: var(--bg2);
-    }
-    .install-box {
-      max-width: 640px; margin: 2rem auto 0;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-    }
+    .install { padding: 5rem 0; }
+    .install-box { max-width: 640px; margin: 2rem auto 0; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
     .install-box pre.code { padding: 1.25rem 1.5rem; font-size: .85rem; }
 
     /* ── Footer ─────────────────────────────────────────────────── */
-    footer {
-      padding: 2.5rem 0;
-      border-top: 1px solid var(--border);
-      text-align: center;
-      color: var(--muted);
-      font-size: .85rem;
-    }
+    footer { padding: 2.5rem 0; border-top: 1px solid var(--border); text-align: center; color: var(--muted); font-size: .85rem; }
     footer a { color: var(--muted); text-decoration: none; }
     footer a:hover { color: var(--text); }
 
-    /* ── Animations ─────────────────────────────────────────────── */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-    .hero > * { animation: fadeUp .6s ease both; }
-    .hero > *:nth-child(2) { animation-delay: .1s; }
+    /* ── Fade-in ─────────────────────────────────────────────────── */
+    @keyframes fadeUp { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
+    .hero > * { animation: fadeUp .55s ease both; }
+    .hero > *:nth-child(2) { animation-delay: .12s; }
   </style>
 </head>
 <body>
@@ -310,6 +237,7 @@
   <div class="container nav-inner">
     <a class="nav-logo" href="#">cati<span> ▀▄</span></a>
     <ul class="nav-links">
+      <li><a href="#demo">Demo</a></li>
       <li><a href="#features">Features</a></li>
       <li><a href="#how">How it works</a></li>
       <li><a href="#usage">Usage</a></li>
@@ -344,10 +272,42 @@
         <div class="term-title">cati — bash</div>
       </div>
       <div class="terminal-body">
-        <div class="cmd-line"><span>$</span> cati --play --fps 15 frames/</div>
-        <canvas id="halfblock-canvas" width="64" height="64"></canvas>
-        <code id="halfblock-out" aria-label="Live half-block animation demo"></code>
+        <div class="cmd-line">
+          <span class="prompt">$</span>
+          <span class="cmd"> cati </span><span class="flag">--play</span>
+          <span class="flag"> --fps</span> <span class="val">4</span>
+          <span class="cmd"> assets/</span>
+        </div>
+        <!-- Hidden canvas used to decode PNG frames -->
+        <canvas id="logo-canvas" width="24" height="14"></canvas>
+        <!-- Half-block rendered output appears here -->
+        <code id="logo-out" aria-label="cati logo rendered as half-block characters"></code>
+        <span class="cursor"></span>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Live demo (webm) ──────────────────────────────────────────── -->
+<section class="demo-section" id="demo">
+  <div class="container demo-inner">
+    <div>
+      <span class="tag">in action</span>
+      <h2>See it run in the terminal</h2>
+      <p>
+        The webm below is a real recording of <code style="color:var(--accent);font-family:var(--font-mono)">cati --play</code>
+        animating the logo frames directly in foot terminal.
+      </p>
+      <p>
+        Each frame is a 24×14 pixel PNG rendered as 24×7 terminal cells —
+        two pixel rows per cell, each cell colored with 24-bit ANSI sequences.
+      </p>
+    </div>
+    <div class="video-wrap">
+      <video autoplay loop muted playsinline
+             aria-label="Terminal recording of cati animating the logo">
+        <source src="cati.webm" type="video/webm" />
+      </video>
     </div>
   </div>
 </section>
@@ -369,7 +329,7 @@
       <div class="feature-card">
         <div class="feature-icon">📁</div>
         <h3>Folder support</h3>
-        <p>Pass a directory to render all images inside it, sorted. Use <code>-r</code> to recurse into subdirectories automatically.</p>
+        <p>Pass a directory to render all images inside, sorted. Use <code>-r</code> to recurse into subdirectories automatically.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">▶</div>
@@ -379,12 +339,12 @@
       <div class="feature-card">
         <div class="feature-icon">⟷</div>
         <h3>Auto-scaling</h3>
-        <p>Detects your terminal width via <code>TIOCGWINSZ</code> and scales images down to fit — images never overflow or break the layout.</p>
+        <p>Detects terminal width via <code>TIOCGWINSZ</code> and scales images down to fit — images never overflow or break your layout.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">🖼</div>
         <h3>PNG & JPEG</h3>
-        <p>Supports PNG (including transparency) and JPEG out of the box. More formats can be added by registering Go image decoders.</p>
+        <p>Supports PNG (including full transparency) and JPEG out of the box. More formats can be added by registering Go image decoders.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">⌨</div>
@@ -402,9 +362,9 @@
       <span class="tag">technique</span>
       <h2>Two pixels, one cell.</h2>
       <p>
-        Unicode provides block characters that divide a terminal cell into a
-        top half and a bottom half. By setting the foreground and background
-        colors independently, each cell encodes <strong>two pixel rows</strong>.
+        Unicode block characters divide a terminal cell into a top half and a
+        bottom half. Setting foreground and background colors independently
+        lets each cell encode <strong>two pixel rows</strong>.
       </p>
       <p>
         Combined with 24-bit ANSI escape sequences
@@ -412,9 +372,7 @@
         cati achieves full true-color rendering with no image protocol required.
       </p>
       <table class="block-table">
-        <thead>
-          <tr><th>Char</th><th>Top half</th><th>Bottom half</th></tr>
-        </thead>
+        <thead><tr><th>Char</th><th>Top half</th><th>Bottom half</th></tr></thead>
         <tbody>
           <tr><td>▀</td><td style="color:var(--accent)">fg color</td><td style="color:var(--accent2)">bg color</td></tr>
           <tr><td>▄</td><td style="color:var(--accent2)">bg color</td><td style="color:var(--accent)">fg color</td></tr>
@@ -423,11 +381,10 @@
         </tbody>
       </table>
     </div>
-
     <div>
-      <div id="pixel-grid" class="pixel-demo"></div>
-      <p style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:.75rem;font-family:var(--font-mono)">
-        8×8 source pixels → 8×4 terminal cells
+      <div id="pixel-grid" class="pixel-demo" aria-label="24x14 pixel preview of the cati logo"></div>
+      <p style="text-align:center;color:var(--muted);font-size:.78rem;margin-top:.75rem;font-family:var(--font-mono)">
+        24×14 source pixels → 24×7 terminal cells
       </p>
     </div>
   </div>
@@ -455,15 +412,15 @@
       <div class="usage-card">
         <div class="usage-card-head">Animate frames</div>
         <pre class="code"><span class="p">$</span> cati <span class="f">--play</span> frames/
-<span class="p">$</span> cati <span class="f">-p</span> <span class="f">--fps</span> <span class="v">24</span> frames/
+<span class="p">$</span> cati <span class="f">-p --fps</span> <span class="v">24</span> frames/
 <span class="p">$</span> cati <span class="f">-p</span> frame_<span class="v">*.png</span></pre>
       </div>
       <div class="usage-card">
-        <div class="usage-card-head">Flags</div>
+        <div class="usage-card-head">All flags</div>
         <pre class="code"><span class="f">--ansi</span>       24-bit true-color <span class="c">(default)</span>
 <span class="f">--play</span>  <span class="f">-p</span>   animate in a loop
 <span class="f">--fps</span>  <span class="v">N</span>     frames/sec <span class="c">(default 15)</span>
-<span class="f">-r</span>           recurse subdirectories
+<span class="f">-r</span>           recurse subdirs
 <span class="f">--no-header</span>  suppress filenames</pre>
       </div>
     </div>
@@ -481,12 +438,11 @@
     <div class="install-box">
       <pre class="code"><span class="c"># clone and install</span>
 <span class="p">$</span> git clone https://codeberg.org/ubunatic/cati
-<span class="p">$</span> cd cati
-<span class="p">$</span> make install
+<span class="p">$</span> cd cati && make install
 
-<span class="c"># or build locally</span>
+<span class="c"># or build locally and try the logo demo</span>
 <span class="p">$</span> make build
-<span class="p">$</span> ./cati --help</pre>
+<span class="p">$</span> ./cati <span class="f">--play --fps</span> <span class="v">4</span> assets/</pre>
     </div>
   </div>
 </section>
@@ -502,53 +458,40 @@
   </div>
 </footer>
 
-<!-- ── Live half-block demo ──────────────────────────────────────── -->
+<!-- ── Scripts ───────────────────────────────────────────────────── -->
 <script>
 (function() {
   'use strict';
 
-  // ── Half-block renderer (mirrors Go logic) ──────────────────────
-  function toHex(r, g, b) {
-    return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
-  }
-
-  function rgbEqual(a, b) {
-    return a[0]===b[0] && a[1]===b[1] && a[2]===b[2];
-  }
+  // ── Half-block renderer ─────────────────────────────────────────
+  // Mirrors the Go halfblock.pairToCell / Render logic exactly.
+  function rgbEq(a, b) { return a[0]===b[0] && a[1]===b[1] && a[2]===b[2]; }
+  function rgb(r,g,b) { return `rgb(${r},${g},${b})`; }
 
   function renderHalfblock(imageData, width, height) {
+    const d = imageData.data;
     const px = (x, y) => {
       const i = (y * width + x) * 4;
-      const d = imageData.data;
       return [d[i], d[i+1], d[i+2], d[i+3]];
     };
-
     let html = '';
     for (let y = 0; y < height; y += 2) {
       for (let x = 0; x < width; x++) {
         const top = px(x, y);
         const bot = (y+1 < height) ? px(x, y+1) : [0,0,0,0];
-        const topT = top[3] < 16;
-        const botT = bot[3] < 16;
+        const topT = top[3] < 16, botT = bot[3] < 16;
 
-        let ch, fg, bg;
-        if (topT && botT) {
-          html += '<span> </span>';
-          continue;
-        } else if (topT) {
-          ch = '▄'; fg = bot;
-        } else if (botT) {
-          ch = '▀'; fg = top;
-        } else if (rgbEqual(top, bot)) {
-          ch = '█'; fg = top;
-        } else {
-          ch = '▀'; fg = top; bg = bot;
-        }
+        if (topT && botT) { html += ' '; continue; }
 
-        const fgC = toHex(fg[0], fg[1], fg[2]);
+        let ch, fg, bg = null;
+        if (topT)                   { ch = '▄'; fg = bot; }
+        else if (botT)              { ch = '▀'; fg = top; }
+        else if (rgbEq(top, bot))   { ch = '█'; fg = top; }
+        else                        { ch = '▀'; fg = top; bg = bot; }
+
         const style = bg
-          ? `color:${fgC};background:${toHex(bg[0],bg[1],bg[2])}`
-          : `color:${fgC}`;
+          ? `color:${rgb(...fg)};background:${rgb(...bg)}`
+          : `color:${rgb(...fg)}`;
         html += `<span style="${style}">${ch}</span>`;
       }
       html += '\n';
@@ -556,114 +499,89 @@
     return html;
   }
 
-  // ── Animated smiley painter ─────────────────────────────────────
-  const canvas = document.getElementById('halfblock-canvas');
-  const ctx    = canvas.getContext('2d');
-  const out    = document.getElementById('halfblock-out');
-  const W = canvas.width, H = canvas.height;
+  // ── Logo animation ──────────────────────────────────────────────
+  const canvas  = document.getElementById('logo-canvas');
+  const ctx     = canvas.getContext('2d');
+  const logoOut = document.getElementById('logo-out');
+  const frames  = ['cati_0001.png','cati_0002.png','cati_0003.png','cati_0004.png'];
+  const loaded  = [];
+  let frameIdx  = 0;
+  let ready     = false;
 
-  let frame = 0;
-  // Hue cycles through spectrum
-  function drawFrame(t) {
-    ctx.clearRect(0, 0, W, H);
-
-    const hue = (t * 2) % 360;
-    const cx = W/2, cy = H/2, r = W/2 - 2;
-
-    // Face
-    const grad = ctx.createRadialGradient(cx-4, cy-4, 2, cx, cy, r);
-    grad.addColorStop(0, `hsl(${hue},90%,68%)`);
-    grad.addColorStop(1, `hsl(${hue},80%,48%)`);
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI*2);
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    // Eyes
-    const eyeY = cy - r*0.2;
-    const eyeR = r * 0.12;
-    [cx - r*0.3, cx + r*0.3].forEach(ex => {
-      ctx.beginPath();
-      ctx.arc(ex, eyeY, eyeR*1.4, 0, Math.PI*2);
-      ctx.fillStyle = '#fff';
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(ex + 1, eyeY + 1, eyeR*0.7, 0, Math.PI*2);
-      ctx.fillStyle = '#111';
-      ctx.fill();
-    });
-
-    // Smile
-    ctx.beginPath();
-    ctx.arc(cx, cy + r*0.05, r*0.5, 0.2, Math.PI-0.2);
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-    ctx.lineWidth = r * 0.13;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-
-    // Teeth
-    ctx.beginPath();
-    ctx.arc(cx, cy + r*0.05, r*0.5, 0.2, Math.PI-0.2);
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(cx - r*0.35, cy + r*0.2, r*0.7, r*0.22);
-  }
+  // Pre-load all frames
+  let loadCount = 0;
+  frames.forEach((src, i) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      loaded[i] = img;
+      if (++loadCount === frames.length) { ready = true; tick(); }
+    };
+    img.onerror = () => { loadCount++; }; // skip missing
+    img.src = src;
+  });
 
   function tick() {
-    drawFrame(frame++);
-    const imgData = ctx.getImageData(0, 0, W, H);
-    out.innerHTML = renderHalfblock(imgData, W, H);
-    requestAnimationFrame(() => setTimeout(tick, 66)); // ~15 fps
+    if (!ready || loaded.length === 0) return;
+    const img = loaded[frameIdx % loaded.filter(Boolean).length];
+    if (!img) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    logoOut.innerHTML = renderHalfblock(data, canvas.width, canvas.height);
+    frameIdx++;
+    setTimeout(tick, 250); // 4 fps to match the terminal demo
   }
-  tick();
 
-  // ── Pixel grid demo ─────────────────────────────────────────────
-  const grid   = document.getElementById('pixel-grid');
-  const GCOLS  = 8, GROWS = 8;
-  const pixels = [];
-  const palette = [
-    '#f0b429','#f0b429','#f0b429','#f59e0b',
-    '#3b82f6','#10b981','#f87171','#8b5cf6',
-    '#0d0f14',
-  ];
+  // ── Pixel grid: show frame 0 of the cati logo ──────────────────
+  const grid = document.getElementById('pixel-grid');
+  const PW = 24, PH = 14;
+  const pixEls = [];
 
-  // Build a simple smiley pixel pattern
-  const smileyPx = [
-    0,0,1,1,1,1,0,0,
-    0,1,1,1,1,1,1,0,
-    1,1,8,8,1,8,8,1,
-    1,1,8,8,1,8,8,1,
-    1,1,1,1,1,1,1,1,
-    1,8,1,1,1,1,8,1,
-    1,1,8,8,8,8,1,1,
-    0,1,1,1,1,1,1,0,
-  ];
-
-  for (let i = 0; i < GCOLS*GROWS; i++) {
+  // Build empty grid first
+  for (let i = 0; i < PW * PH; i++) {
     const el = document.createElement('div');
     el.className = 'px';
-    el.style.background = palette[smileyPx[i]];
+    el.style.background = '#1a1e2a';
     grid.appendChild(el);
-    pixels.push(el);
+    pixEls.push(el);
   }
 
-  // Pulse animation
-  let gpulse = 0;
-  setInterval(() => {
-    gpulse++;
-    pixels.forEach((px, i) => {
-      const row = Math.floor(i/GCOLS);
-      const delay = (row * 80) % 400;
-      // highlight current "scan line pair"
-      const scanRow = Math.floor(gpulse / 3) % (GROWS/2);
-      const inScan = Math.floor(row/2) === scanRow;
-      px.style.opacity = inScan ? '1' : '0.65';
-      px.style.outline = inScan ? '1px solid rgba(240,180,41,.6)' : 'none';
+  // Fill when frame 0 is loaded
+  function fillGrid(img) {
+    const gc = document.createElement('canvas');
+    gc.width = PW; gc.height = PH;
+    const gx = gc.getContext('2d');
+    gx.drawImage(img, 0, 0, PW, PH);
+    const d = gx.getImageData(0, 0, PW, PH).data;
+    pixEls.forEach((el, i) => {
+      const r = d[i*4], g = d[i*4+1], b = d[i*4+2], a = d[i*4+3];
+      el.style.background = a < 16
+        ? 'transparent'
+        : `rgb(${r},${g},${b})`;
     });
-  }, 120);
+
+    // Scan-line highlight: pairs of rows light up sequentially
+    let scan = 0;
+    setInterval(() => {
+      const pair = scan % (PH / 2);
+      pixEls.forEach((el, i) => {
+        const row = Math.floor(i / PW);
+        const inPair = Math.floor(row / 2) === pair;
+        el.style.opacity = inPair ? '1' : '0.45';
+        el.style.outline = inPair ? '1px solid rgba(240,180,41,.7)' : 'none';
+      });
+      scan++;
+    }, 300);
+  }
+
+  // Wait for the first frame to be available
+  const waitForFrame = setInterval(() => {
+    if (loaded[0]) { clearInterval(waitForFrame); fillGrid(loaded[0]); }
+  }, 50);
 
 })();
 </script>
+
 </body>
 </html>
