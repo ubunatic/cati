@@ -35,3 +35,8 @@ tidy: ⚙️  ## tidy go modules
 
 clean: ⚙️  ## remove build artifacts
 	rm -f $(BINARY)
+
+
+browse: ⚙️  ## open website
+	open docs/index.html
+
