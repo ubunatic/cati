@@ -21,3 +21,5 @@ Adhere to the following conventions.
 - Web Assets: If you modify the logo `docs/cati_0001.png`, you must run `make generate` to sync the static inline color coordinates in `docs/index.html`.
 - Licensing: The project is licensed under `AGPL-3.0-or-later`. Follow REUSE spec guidelines; license headers should be declared via `REUSE.toml` annotations instead of adding comment blocks to individual source files.
 
+## General Rules
+- Always run "make install" when a feature is ready

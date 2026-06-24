@@ -97,11 +97,11 @@ func run(o opts, args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(paths) == 0 {
-		return fmt.Errorf("no supported images found")
-	}
 
 	if o.playMode {
+		if len(paths) == 0 {
+			return fmt.Errorf("no supported images found")
+		}
 		return play(paths, o.fps, o.width, o.height)
 	}
 
@@ -116,7 +116,14 @@ func run(o opts, args []string) error {
 		if len(args) > 1 || isDir {
 			return browser(args, o.width, o.height)
 		}
+		if len(paths) == 0 {
+			return fmt.Errorf("no supported images found")
+		}
 		return interactive(paths[0], o.width, o.height)
+	}
+
+	if len(paths) == 0 {
+		return fmt.Errorf("no supported images found")
 	}
 
 	// ── Static render ─────────────────────────────────────────────────────────
