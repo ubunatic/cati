@@ -8,9 +8,12 @@ import (
 	"os"
 )
 
-// LoadImage opens any image file whose format is registered with the standard
-// image package (PNG and JPEG by default) and returns the decoded image.
+// LoadImage opens a still image (PNG/JPEG) or, for video files, extracts
+// and returns the first frame using ffmpeg.
 func LoadImage(path string) (image.Image, error) {
+	if IsVideo(path) {
+		return LoadVideoFrame(path)
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)

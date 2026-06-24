@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"image"
+	"math"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,26 +14,77 @@ import (
 	"golang.org/x/term"
 )
 
-// play renders frames in a loop at the given fps until the user presses 'q'
-// or a signal (SIGINT/SIGTERM) is received.
-// Frames are pre-loaded and scaled once before the animation starts.
+// play is the entry point for --play mode.
+// It dispatches to playImages (pre-load loop) or playVideos (streaming)
+// depending on whether any path is a video file.
 // width and height are in terminal characters (0 = auto-detect from terminal).
 func play(paths []string, fps, width, height int) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("no images to play")
 	}
-	if fps <= 0 {
-		return fmt.Errorf("--fps must be > 0")
+
+	for _, p := range paths {
+		if halfblock.IsVideo(p) {
+			return playVideos(paths, fps, width, height)
+		}
+	}
+	return playImages(paths, fps, width, height)
+}
+
+// ── shared terminal setup ─────────────────────────────────────────────────────
+
+// playTerminal sets up raw mode, signals, and the quit channel.
+// Returns a restore function, a signal channel, and a quit channel.
+// The caller must defer restore().
+func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}) {
+	fd := int(os.Stdin.Fd())
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		oldState = nil
+	}
+	restore = func() {
+		if oldState != nil {
+			_ = term.Restore(fd, oldState)
+		}
 	}
 
-	// Determine display dimensions: explicit flags take priority; fall back to
-	// the terminal size when both are zero.
+	sigs = make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	quit = make(chan struct{}, 1)
+	go func() {
+		buf := make([]byte, 1)
+		for {
+			n, err := os.Stdin.Read(buf)
+			if err != nil || n == 0 {
+				return
+			}
+			if buf[0] == 'q' || buf[0] == 'Q' || buf[0] == 27 || buf[0] == 3 {
+				quit <- struct{}{}
+				return
+			}
+		}
+	}()
+
+	halfblock.HideCursor(os.Stdout)
+	halfblock.ClearScreen(os.Stdout)
+	return
+}
+
+// ── image sequence mode ───────────────────────────────────────────────────────
+
+// playImages pre-loads all frames and loops them at fps.
+func playImages(paths []string, fps, width, height int) error {
+	if fps <= 0 {
+		fps = 15
+	}
+
 	cols, rows := width, height
 	if cols == 0 && rows == 0 {
 		cols = halfblock.TermWidth()
 	}
 
-	// ── Pre-load & scale all frames ───────────────────────────────────────────
+	// Pre-load & scale all frames.
 	frames := make([]image.Image, 0, len(paths))
 	for _, p := range paths {
 		img, err := halfblock.LoadImage(p)
@@ -44,49 +97,13 @@ func play(paths []string, fps, width, height int) error {
 		frames = append(frames, img)
 	}
 
-	// ── Raw terminal mode (so 'q' is read without Enter) ──────────────────────
-	fd := int(os.Stdin.Fd())
-	oldState, err := term.MakeRaw(fd)
-	if err != nil {
-		// stdin is not a tty (e.g. in tests) — skip raw mode; q won't work.
-		oldState = nil
-	}
-	restore := func() {
-		if oldState != nil {
-			_ = term.Restore(fd, oldState)
-		}
-	}
+	restore, sigs, quit := playTerminal()
 	defer restore()
-
-	// ── Signal handling ───────────────────────────────────────────────────────
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigs)
-
-	// ── Keypress reader ───────────────────────────────────────────────────────
-	quit := make(chan struct{}, 1)
-	go func() {
-		buf := make([]byte, 1)
-		for {
-			n, err := os.Stdin.Read(buf)
-			if err != nil || n == 0 {
-				return
-			}
-			// 'q', 'Q', ESC, or Ctrl+C all quit.
-			if buf[0] == 'q' || buf[0] == 'Q' || buf[0] == 27 || buf[0] == 3 {
-				quit <- struct{}{}
-				return
-			}
-		}
-	}()
-
-	// ── Enter animation mode ──────────────────────────────────────────────────
-	halfblock.HideCursor(os.Stdout)
-	halfblock.ClearScreen(os.Stdout)
 	defer func() {
 		halfblock.EraseDown(os.Stdout)
 		halfblock.ShowCursor(os.Stdout)
-		fmt.Fprint(os.Stdout, "\r\n") // CR+LF: ensure col 0 so the shell won't show a stray '%'
+		fmt.Fprint(os.Stdout, "\r\n")
 	}()
 
 	ticker := time.NewTicker(time.Duration(float64(time.Second) / float64(fps)))
@@ -100,14 +117,118 @@ func play(paths []string, fps, width, height int) error {
 		case <-sigs:
 			return nil
 		case <-ticker.C:
-			// Home cursor before render; ansiEraseLine inside Render clears
-			// each line so previous-frame pixels don't bleed through.
 			halfblock.CursorHome(os.Stdout)
 			if err := halfblock.Render(os.Stdout, frames[i]); err != nil {
 				return err
 			}
-			halfblock.EraseDown(os.Stdout) // clear below if frame shrank
+			halfblock.EraseDown(os.Stdout)
 			i = (i + 1) % len(frames)
+		}
+	}
+}
+
+// ── video streaming mode ──────────────────────────────────────────────────────
+
+// playVideos streams one or more video files sequentially, looping forever.
+// All paths must be video files.
+func playVideos(paths []string, fps, width, height int) error {
+	// Validate: all paths must be video files.
+	for _, p := range paths {
+		if !halfblock.IsVideo(p) {
+			return fmt.Errorf("%s: cannot mix image and video files in --play mode", p)
+		}
+	}
+
+	// Resolve display fps: probe native fps from the first video if not set.
+	displayFPS := float64(fps)
+	if displayFPS <= 0 {
+		native, err := halfblock.ProbeVideoFPS(paths[0])
+		if err != nil {
+			// ffprobe not available or failed; fall back to 15.
+			native = 15
+		}
+		displayFPS = native
+	}
+	if displayFPS <= 0 {
+		displayFPS = 15
+	}
+
+	cols, rows := width, height
+	if cols == 0 && rows == 0 {
+		cols, rows = halfblock.TermWidth(), halfblock.TermHeight()
+	}
+
+	restore, sigs, quit := playTerminal()
+	defer restore()
+	defer signal.Stop(sigs)
+	defer func() {
+		halfblock.EraseDown(os.Stdout)
+		halfblock.ShowCursor(os.Stdout)
+		fmt.Fprint(os.Stdout, "\r\n")
+	}()
+
+	interval := time.Duration(float64(time.Second) / displayFPS)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// index into paths; restartStream opens a fresh stream for paths[videoIdx].
+	videoIdx := 0
+	frames, cleanup, err := halfblock.OpenVideoStream(ctx, paths[videoIdx])
+	if err != nil {
+		return fmt.Errorf("open video stream: %w", err)
+	}
+	defer cleanup()
+
+	var lastFrame image.Image
+
+	for {
+		select {
+		case <-quit:
+			return nil
+		case <-sigs:
+			return nil
+
+		case img, ok := <-frames:
+			if !ok {
+				// Current video ended — advance to next (or loop back).
+				cleanup()
+				videoIdx = (videoIdx + 1) % len(paths)
+				frames, cleanup, err = halfblock.OpenVideoStream(ctx, paths[videoIdx])
+				if err != nil {
+					return fmt.Errorf("open video stream: %w", err)
+				}
+				continue
+			}
+			// Scale the incoming frame to fit the terminal.
+			if cols > 0 || rows > 0 {
+				img = halfblock.ScaleToFit(img, cols, rows)
+			}
+			lastFrame = img
+
+		case <-ticker.C:
+			if lastFrame == nil {
+				continue // no frame yet
+			}
+			halfblock.CursorHome(os.Stdout)
+			if err := halfblock.Render(os.Stdout, lastFrame); err != nil {
+				return err
+			}
+			halfblock.EraseDown(os.Stdout)
+
+			// Drop stale buffered frames to stay in sync with the ticker.
+			// This prevents the display from lagging behind the decode goroutine.
+			n := int(math.Max(0, float64(len(frames)-1)))
+			for range n {
+				if img, ok := <-frames; ok {
+					if cols > 0 || rows > 0 {
+						img = halfblock.ScaleToFit(img, cols, rows)
+					}
+					lastFrame = img
+				}
+			}
 		}
 	}
 }

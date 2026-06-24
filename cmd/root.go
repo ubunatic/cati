@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// imageExts is the set of file extensions cati recognises as images.
+// imageExts is the set of still-image file extensions cati recognises.
 var imageExts = map[string]bool{
 	".png":  true,
 	".jpg":  true,
@@ -65,7 +65,7 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().BoolVar(&noHeader,      "no-header",   false, "suppress filename headers between images")
 	root.Flags().BoolVarP(&playMode,     "play",        "p",   false, "animate frames in a loop (Ctrl+C to stop)")
 	root.Flags().BoolVarP(&interactMode, "interactive", "i",   false, "interactive viewer: +/- zoom, arrow keys pan, q quit")
-	root.Flags().IntVar(&fps,            "fps",         15,    "frames per second for --play mode")
+	root.Flags().IntVar(&fps,            "fps",         0,     "frames per second (0 = auto: native fps for video, 15 for images)")
 	root.Flags().IntVarP(&width,         "width",       "w",   0,     "target width in terminal columns (0 = auto)")
 	root.Flags().IntVar(&height,         "height",      0,     "target height in terminal rows (0 = auto)")
 
@@ -189,7 +189,8 @@ func expandArgs(args []string, recursive bool) ([]string, error) {
 	return out, nil
 }
 
-// isImageFile returns true when the file extension is a supported image type.
+// isImageFile returns true when the file extension is a supported still image
+// or video type.
 func isImageFile(path string) bool {
-	return imageExts[strings.ToLower(filepath.Ext(path))]
+	return imageExts[strings.ToLower(filepath.Ext(path))] || halfblock.IsVideo(path)
 }
