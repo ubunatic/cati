@@ -1,0 +1,28 @@
+# Cati Browser Stylestyle
+app:
+  bg: null
+  border_style: "box"
+  border_color: "#475569"
+
+buttons:
+  fg: "#94a3b8"
+  bg: "#1e293b"
+  border_color: "#334155"
+  left_cap: "["
+  right_cap: "]"
+  active_fg: "#f8fafc"
+  active_bg: "#475569"
+
+preview:
+  bg: null
+
+control_bar:
+  bg: "#0f172a"
+
+scroll_bar:
+  thumb_char: "█"
+  rail_char: "▒"
+  width: 1
+  thumb_fg: "#64748b"
+  rail_fg: "#334155"
+  rail_bg: null
