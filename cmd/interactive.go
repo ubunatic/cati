@@ -138,15 +138,29 @@ func tokenizeInput(s string) []string {
 }
 
 func interactive(path string, initWidth, initHeight int) error {
-	return interactiveWithChan(path, initWidth, initHeight, nil)
+	return interactiveWithChan(path, initWidth, initHeight, nil, nil, nil, nil)
 }
 
-func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs chan string) error {
+func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string) error {
 	// Load the original image once; it is never mutated.
 	orig, err := halfblock.LoadImage(path)
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
+
+	if style == nil {
+		style = loadStyle()
+	}
+	if labels == nil {
+		labels = loadLabels()
+		for k, v := range loadButtons(style.BtnLeftCap, style.BtnRightCap) {
+			labels[k] = v
+		}
+	}
+	if viewBtnRows == nil {
+		viewBtnRows = loadViewButtonRows()
+	}
+	btnActions := loadButtonActions()
 
 	// ── Raw terminal mode ─────────────────────────────────────────────────────
 	fd := int(os.Stdin.Fd())
@@ -207,14 +221,18 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 	var spacePanAnchor dragState
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
 
+	var buttons []menuButton
+	activeAction := ""
 	var status string
 	redraw := func() {
 		halfblock.CursorHome(os.Stdout)
-		renderView(orig, &state, termCols, termRows)
+		renderView(orig, &state, termCols, max(1, termRows-2))
 		halfblock.EraseDown(os.Stdout)
+		buttons = drawBottomMenu(os.Stdout, termRows, "image_viewer", activeAction, style, labels, viewBtnRows, nil, btnActions)
 		if status != "" {
-			// Pin status on the last terminal row with reverse-video styling.
-			fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[K\x1b[7m %s \x1b[m", termRows, status)
+			drawHintBar(os.Stdout, termRows, status, nil, style)
+		} else {
+			drawHintBar(os.Stdout, termRows, labels["hint_viewer"], nil, style)
 		}
 	}
 	redraw()
@@ -238,6 +256,38 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 				if btn, col, row, release, ok := parseSGRMouse(tok); ok {
 					// col/row are 1-indexed terminal coordinates → convert to 0-indexed.
 					c, r := col-1, row-1
+
+					// ── Button bar (row termRows-1) ───────────────────────────────
+					if row == termRows-1 {
+						newAction := ""
+						for _, b := range buttons {
+							if col >= b.col && col < b.col+b.width {
+								newAction = b.action
+								break
+							}
+						}
+						if newAction != activeAction {
+							activeAction = newAction
+							changed = true
+						}
+						if release && newAction != "" {
+							switch newAction {
+							case "inc_zoom":
+								state.zoom = math.Min(state.zoom*zoomStep, maxZoom)
+								changed = true
+							case "dec_zoom":
+								state.zoom = math.Max(state.zoom/zoomStep, minZoom)
+								changed = true
+							case "go_back", "quit":
+								shouldQuit = true
+							}
+						}
+						return
+					}
+					if activeAction != "" {
+						activeAction = ""
+						changed = true
+					}
 
 					switch {
 					// ── Scroll wheel: zoom at cursor ──────────────────────────────
@@ -530,7 +580,7 @@ func cropImage(img image.Image, x, y, w, h int) image.Image {
 
 // interactiveVideo plays a video file in the terminal using the caller's shared
 // input channel so that keyboard events are routed through the browser's tokenizer.
-func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan string) error {
+func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string) error {
 	// The browser restores cooked-mode before calling us.  We must enter raw
 	// mode ourselves so single keypresses are readable without Enter.
 	fd := int(os.Stdin.Fd())
@@ -546,6 +596,20 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if style == nil {
+		style = loadStyle()
+	}
+	if labels == nil {
+		labels = loadLabels()
+		for k, v := range loadButtons(style.BtnLeftCap, style.BtnRightCap) {
+			labels[k] = v
+		}
+	}
+	if viewBtnRows == nil {
+		viewBtnRows = loadViewButtonRows()
+	}
+	btnActions := loadButtonActions()
 
 	inputs := sharedInputs
 	if inputs == nil {
@@ -566,12 +630,17 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 
 	halfblock.HideCursor(os.Stdout)
 	halfblock.ClearScreen(os.Stdout)
+	halfblock.EnableMouse(os.Stdout)
 	defer func() {
+		halfblock.DisableMouse(os.Stdout)
 		halfblock.EraseDown(os.Stdout)
 		halfblock.ShowCursor(os.Stdout)
 		fmt.Fprint(os.Stdout, "\r\n")
 	}()
 
+	paused := false
+	var buttons []menuButton
+	activeAction := ""
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
 
 	// Probe native fps for smooth playback.
@@ -595,20 +664,45 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 
 	var lastFrame image.Image
 
-	isQuitToken := func(tok string) bool {
+	processToken := func(tok string) (quit bool) {
+		if _, col, row, release, ok := parseSGRMouse(tok); ok {
+			if row == termRows-1 {
+				newAction := ""
+				for _, b := range buttons {
+					if col >= b.col && col < b.col+b.width {
+						newAction = b.action
+						break
+					}
+				}
+				activeAction = newAction
+				if release && newAction != "" {
+					switch newAction {
+					case "play_video":
+						paused = false
+					case "pause_video":
+						paused = true
+					case "go_back", "quit":
+						return true
+					}
+				}
+			}
+			return false
+		}
 		switch tok {
 		case "q", "Q", "\x1b", "\x03":
 			return true
+		case " ":
+			paused = !paused
 		}
 		return false
 	}
 
 	for {
-		// Priority: drain any pending quit tokens before yielding to the high-
-		// frequency ticker/frames cases (which would otherwise starve input).
+		// Priority: drain any pending quit/input tokens before yielding to the
+		// high-frequency ticker/frames cases (which would otherwise starve input).
 		select {
 		case tok := <-inputs:
-			if isQuitToken(tok) {
+			if processToken(tok) {
 				return nil
 			}
 		default:
@@ -619,7 +713,7 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 			return nil
 
 		case tok := <-inputs:
-			if isQuitToken(tok) {
+			if processToken(tok) {
 				return nil
 			}
 
@@ -627,22 +721,31 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 			if !ok {
 				return nil // video ended
 			}
-			lastFrame = halfblock.ScaleToFit(img, termCols, termRows)
+			if !paused {
+				lastFrame = halfblock.ScaleToFit(img, termCols, max(1, termRows-2))
+			}
 
 		case <-ticker.C:
 			if lastFrame == nil {
 				continue
 			}
-			halfblock.CursorHome(os.Stdout)
-			if err := halfblock.Render(os.Stdout, lastFrame); err != nil {
-				return err
+			if !paused {
+				halfblock.CursorHome(os.Stdout)
+				if err := halfblock.Render(os.Stdout, lastFrame); err != nil {
+					return err
+				}
+				halfblock.EraseDown(os.Stdout)
 			}
-			halfblock.EraseDown(os.Stdout)
-			// Drop stale buffered frames to stay in sync with the ticker.
-			n := max(0, len(frames)-1)
-			for range n {
-				if img, ok := <-frames; ok {
-					lastFrame = halfblock.ScaleToFit(img, termCols, termRows)
+			conditions := map[string]bool{"playing": !paused}
+			buttons = drawBottomMenu(os.Stdout, termRows, "video_player", activeAction, style, labels, viewBtnRows, conditions, btnActions)
+			drawHintBar(os.Stdout, termRows, labels["hint_viewer"], nil, style)
+			if !paused {
+				// Drop stale buffered frames to stay in sync with the ticker.
+				n := max(0, len(frames)-1)
+				for range n {
+					if img, ok := <-frames; ok {
+						lastFrame = halfblock.ScaleToFit(img, termCols, max(1, termRows-2))
+					}
 				}
 			}
 		}

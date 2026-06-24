@@ -17,7 +17,26 @@
           "enum": ["primary", "secondary", "active", "muted", "info", "danger"],
           "description": "Theme token from spec/theme.yaml"
         },
-        "action": { "type": "string", "description": "Registered action name mapped to a Go handler at startup" }
+        "action": {
+          "type": "string",
+          "description": "Registered action name mapped to a Go handler at startup",
+          "enum": [
+            "nav_prev",
+            "nav_next",
+            "open_settings",
+            "open_about",
+            "open_website",
+            "quit",
+            "go_back",
+            "toggle_mode",
+            "inc_zoom",
+            "dec_zoom",
+            "play_video",
+            "pause_video",
+            "save_settings",
+            "cancel_settings"
+          ]
+        }
       }
     }
   },

@@ -66,6 +66,52 @@ func createFolderIcon() image.Image {
 
 // ── Style Configuration ──────────────────────────────────────────────────────
 
+// ControlSpec describes a single tunable setting loaded from spec/controls.yaml.
+type ControlSpec struct {
+	Key    string
+	Type   string   // "int", "bool", "enum"
+	Min    int
+	Max    int
+	Values []string // for enum type
+}
+
+// settingsFieldLabel converts a snake_case control key to a Title Case display label.
+func settingsFieldLabel(key string) string {
+	parts := strings.Split(key, "_")
+	for i, p := range parts {
+		if len(p) > 0 {
+			parts[i] = strings.ToUpper(p[:1]) + p[1:]
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// applySettingsDelta increments or decrements the field matched by c.Key inside s.
+func applySettingsDelta(c ControlSpec, delta int, s *Settings) {
+	switch c.Key {
+	case "preview_height":
+		s.MaxPreviewHeight = max(c.Min, min(c.Max, s.MaxPreviewHeight+delta))
+	case "view_mode":
+		if len(c.Values) > 0 {
+			idx := 0
+			for i, v := range c.Values {
+				if v == s.ViewMode {
+					idx = i
+					break
+				}
+			}
+			idx = ((idx + delta) % len(c.Values) + len(c.Values)) % len(c.Values)
+			s.ViewMode = c.Values[idx]
+		}
+	case "preview_videos":
+		s.PreviewVideos = delta > 0
+	case "max_jobs":
+		s.MaxJobs = max(c.Min, min(c.Max, s.MaxJobs+delta))
+	case "video_frames":
+		s.VideoFrames = max(c.Min, min(c.Max, s.VideoFrames+delta))
+	}
+}
+
 type StyleConfig struct {
 	AppBg           string
 	AppBorderStyle  string
@@ -475,6 +521,54 @@ func loadLabels() map[string]string {
 	return labels
 }
 
+// loadButtonActions reads spec/buttons.yaml and returns key → action name.
+// The defaults mirror the built-in action strings wired in click handlers.
+func loadButtonActions() map[string]string {
+	actions := map[string]string{
+		"prev":     "nav_prev",
+		"next":     "nav_next",
+		"settings": "open_settings",
+		"about":    "open_about",
+		"mode":     "toggle_mode",
+		"quit":     "quit",
+		"back":     "go_back",
+		"zoom_in":  "inc_zoom",
+		"zoom_out": "dec_zoom",
+		"play":     "play_video",
+		"pause":    "pause_video",
+		"save":     "save_settings",
+		"cancel":   "cancel_settings",
+	}
+	data, err := os.ReadFile("spec/buttons.yaml")
+	if err != nil {
+		return actions
+	}
+	inButtons := false
+	currentKey := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
+			continue
+		}
+		if trimmed == "buttons:" {
+			inButtons = true
+			continue
+		}
+		if !inButtons {
+			continue
+		}
+		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
+			currentKey = strings.TrimSuffix(trimmed, ":")
+			continue
+		}
+		if currentKey != "" && strings.HasPrefix(line, "    action: ") {
+			action := strings.TrimSpace(strings.TrimPrefix(line, "    action: "))
+			actions[currentKey] = action
+		}
+	}
+	return actions
+}
+
 // loadButtons reads spec/buttons.yaml and returns key → rendered label (caps applied).
 func loadButtons(leftCap, rightCap string) map[string]string {
 	wrap := func(text string) string { return leftCap + text + rightCap }
@@ -483,6 +577,7 @@ func loadButtons(leftCap, rightCap string) map[string]string {
 		"next":     wrap("Next ▶"),
 		"settings": wrap("⚙ Settings"),
 		"about":    wrap("ℹ About"),
+		"mode":     wrap("Mode"),
 		"quit":     wrap("✖ Quit"),
 		"back":     wrap("◀ Back"),
 		"zoom_in":  wrap("+ Zoom In"),
@@ -708,6 +803,74 @@ func saveConfig(cfg Settings) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
+func loadControls() []ControlSpec {
+	specs := []ControlSpec{
+		{Key: "preview_height", Type: "int", Min: 10, Max: 200},
+		{Key: "view_mode",      Type: "enum", Values: []string{"grid", "preview"}},
+		{Key: "preview_videos", Type: "bool"},
+		{Key: "max_jobs",       Type: "int", Min: 1, Max: 32},
+		{Key: "video_frames",   Type: "int", Min: 1, Max: 60},
+	}
+	data, err := os.ReadFile("spec/controls.yaml")
+	if err != nil {
+		return specs
+	}
+	specIdx := map[string]int{}
+	for i, s := range specs {
+		specIdx[s.Key] = i
+	}
+	inControls := false
+	currentKey := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
+			continue
+		}
+		if trimmed == "controls:" {
+			inControls = true
+			continue
+		}
+		if !inControls {
+			continue
+		}
+		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
+			currentKey = strings.TrimSuffix(trimmed, ":")
+			continue
+		}
+		idx, ok := specIdx[currentKey]
+		if !ok {
+			continue
+		}
+		parts := strings.SplitN(trimmed, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		k, v := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+		switch k {
+		case "min":
+			if n, err := strconv.Atoi(v); err == nil {
+				specs[idx].Min = n
+			}
+		case "max":
+			if n, err := strconv.Atoi(v); err == nil {
+				specs[idx].Max = n
+			}
+		case "values":
+			v = strings.Trim(v, "[]")
+			var vals []string
+			for _, val := range strings.Split(v, ",") {
+				if s := strings.TrimSpace(val); s != "" {
+					vals = append(vals, s)
+				}
+			}
+			if len(vals) > 0 {
+				specs[idx].Values = vals
+			}
+		}
+	}
+	return specs
+}
+
 // ── Dynamic Directory Loading ───────────────────────────────────────────────
 
 func loadBrowserItems(currentDir string, initialItems []browserItem) []browserItem {
@@ -771,6 +934,8 @@ func browser(args []string, initWidth, initHeight int) error {
 		labels[k] = v
 	}
 	viewBtnRows := loadViewButtonRows()
+	controls := loadControls()
+	btnActions := loadButtonActions()
 
 	cfgHeight := cfg.MaxPreviewHeight
 	viewMode := cfg.ViewMode // "grid" or "preview", toggled dynamically
@@ -955,12 +1120,8 @@ func browser(args []string, initWidth, initHeight int) error {
 		}
 	}
 
-	activeSettingsField := 0 // For settings view navigation
-	tempHeight := cfgHeight
-	tempViewMode := viewMode
-	tempPreviewVideos := previewVideos
-	tempMaxJobs := nWorkers
-	tempVideoFrames := nVideoFrames
+	activeSettingsField := 0
+	var tempCfg Settings
 	var buttons []menuButton
 	hoveredButtonAction := ""
 	var scrollDrag scrollDragState
@@ -977,18 +1138,17 @@ func browser(args []string, initWidth, initHeight int) error {
 
 		if viewMode == "about" {
 			drawAboutPage(os.Stdout, termCols, effHeight)
-			buttons = drawBottomMenu(os.Stdout, effHeight, "about", hoveredButtonAction, style, labels, viewBtnRows, nil)
+			buttons = drawBottomMenu(os.Stdout, effHeight, "about", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions)
 			drawHintBar(os.Stdout, effHeight, labels["hint_about"], nil, style)
 			return
 		}
 
-		settingsFieldNames := []string{"Height", "View Mode", "Preview Videos", "Max Jobs", "Video Frames"}
 		if viewMode == "settings" {
-			drawSettingsPage(os.Stdout, termCols, effHeight, tempHeight, tempViewMode, tempPreviewVideos, tempMaxJobs, tempVideoFrames, activeSettingsField)
-			buttons = drawBottomMenu(os.Stdout, effHeight, "settings", hoveredButtonAction, style, labels, viewBtnRows, nil)
+			drawSettingsPage(os.Stdout, termCols, effHeight, controls, tempCfg, activeSettingsField)
+			buttons = drawBottomMenu(os.Stdout, effHeight, "settings", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions)
 			activeSetting := ""
-			if activeSettingsField >= 0 && activeSettingsField < len(settingsFieldNames) {
-				activeSetting = settingsFieldNames[activeSettingsField]
+			if activeSettingsField >= 0 && activeSettingsField < len(controls) {
+				activeSetting = settingsFieldLabel(controls[activeSettingsField].Key)
 			}
 			drawHintBar(os.Stdout, effHeight, labels["hint_settings"], map[string]string{"active_setting": activeSetting}, style)
 			return
@@ -1322,7 +1482,7 @@ func browser(args []string, initWidth, initHeight int) error {
 		fmt.Fprintf(os.Stdout, "\x1b[1;1H\x1b[K%s%s\x1b[m", baseAnsi, hdrText)
 
 		// Print bottom menu buttons
-		buttons = drawBottomMenu(os.Stdout, effHeight, "grid", hoveredButtonAction, style, labels, viewBtnRows, nil)
+		buttons = drawBottomMenu(os.Stdout, effHeight, "grid", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions)
 
 		// Print hint bar
 		activeFileName := ""
@@ -1459,11 +1619,14 @@ func browser(args []string, initWidth, initHeight int) error {
 						if row == effHeight-1 && release {
 							for _, b := range buttons {
 								if col >= b.col && col < b.col+b.width {
-									if b.action == "back" {
+									switch b.action {
+									case "go_back":
 										viewMode = "grid"
 										halfblock.ClearScreen(os.Stdout)
 										changed = true
-									} else if b.action == "quit" {
+									case "open_website":
+										// not yet implemented
+									case "quit":
 										shouldQuit = true
 									}
 								}
@@ -1477,39 +1640,11 @@ func browser(args []string, initWidth, initHeight int) error {
 							for _, b := range buttons {
 								if col >= b.col && col < b.col+b.width {
 									switch b.action {
-									case "inc":
-										switch activeSettingsField {
-										case 0:
-											tempHeight = min(60, tempHeight+1)
-										case 1:
-											tempViewMode = "preview"
-										case 2:
-											tempPreviewVideos = true
-										case 3:
-											tempMaxJobs = min(64, tempMaxJobs+1)
-										case 4:
-											tempVideoFrames = min(30, tempVideoFrames+1)
-										}
-										changed = true
-									case "dec":
-										switch activeSettingsField {
-										case 0:
-											tempHeight = max(10, tempHeight-1)
-										case 1:
-											tempViewMode = "grid"
-										case 2:
-											tempPreviewVideos = false
-										case 3:
-											tempMaxJobs = max(1, tempMaxJobs-1)
-										case 4:
-											tempVideoFrames = max(1, tempVideoFrames-1)
-										}
-										changed = true
-									case "save":
-										cfgHeight = tempHeight
-										previewVideos = tempPreviewVideos
-										nVideoFrames = tempVideoFrames
-										viewMode = tempViewMode
+									case "save_settings":
+										cfgHeight = tempCfg.MaxPreviewHeight
+										previewVideos = tempCfg.PreviewVideos
+										nVideoFrames = tempCfg.VideoFrames
+										viewMode = tempCfg.ViewMode
 										if viewMode == "settings" {
 											viewMode = "grid"
 										}
@@ -1517,22 +1652,17 @@ func browser(args []string, initWidth, initHeight int) error {
 											MaxPreviewHeight: cfgHeight,
 											ViewMode:         viewMode,
 											PreviewVideos:    previewVideos,
-											MaxJobs:          tempMaxJobs,
+											MaxJobs:          tempCfg.MaxJobs,
 											VideoFrames:      nVideoFrames,
 										})
 										halfblock.ClearScreen(os.Stdout)
 										changed = true
-									case "cancel":
-										tempHeight = cfgHeight
-										tempPreviewVideos = previewVideos
-										tempVideoFrames = nVideoFrames
-										if viewMode != "grid" && viewMode != "preview" {
-											viewMode = "grid"
-										}
-										tempViewMode = viewMode
+									case "cancel_settings":
 										viewMode = "grid"
 										halfblock.ClearScreen(os.Stdout)
 										changed = true
+									case "quit":
+										shouldQuit = true
 									}
 								}
 							}
@@ -1583,20 +1713,33 @@ func browser(args []string, initWidth, initHeight int) error {
 						for _, b := range buttons {
 							if col >= b.col && col < b.col+b.width {
 								switch b.action {
-								case "prev":
+								case "nav_prev":
 									selectedIdx = max(0, selectedIdx-itemsPerPage)
 									changed = true
-								case "next":
+								case "nav_next":
 									selectedIdx = min(len(items)-1, selectedIdx+itemsPerPage)
 									changed = true
-								case "settings":
+								case "open_settings":
+									tempCfg = Settings{
+										MaxPreviewHeight: cfgHeight,
+										ViewMode:         viewMode,
+										PreviewVideos:    previewVideos,
+										MaxJobs:          nWorkers,
+										VideoFrames:      nVideoFrames,
+									}
 									viewMode = "settings"
-									tempHeight = cfgHeight
-									tempViewMode = viewMode
 									activeSettingsField = 0
 									changed = true
-								case "about":
+								case "open_about":
 									viewMode = "about"
+									changed = true
+								case "toggle_mode":
+									if viewMode == "grid" {
+										viewMode = "preview"
+									} else {
+										viewMode = "grid"
+									}
+									halfblock.ClearScreen(os.Stdout)
 									changed = true
 								case "quit":
 									shouldQuit = true
@@ -1691,7 +1834,7 @@ func browser(args []string, initWidth, initHeight int) error {
 										fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l")
 										halfblock.ShowCursor(os.Stdout)
 
-										_ = interactiveWithChan(targetItem.path, initWidth, initHeight, inputs)
+										_ = interactiveWithChan(targetItem.path, initWidth, initHeight, inputs, style, labels, viewBtnRows)
 
 										oldState, err = term.MakeRaw(fd)
 										halfblock.HideCursor(os.Stdout)
@@ -1720,42 +1863,24 @@ func browser(args []string, initWidth, initHeight int) error {
 
 					if viewMode == "settings" {
 						switch tok {
-						case "\t": // Tab cycles through 5 settings fields
-							activeSettingsField = (activeSettingsField + 1) % 5
+						case "\t":
+							activeSettingsField = (activeSettingsField + 1) % len(controls)
 							changed = true
-						case "\x1b[A": // ↑ / increase
-							switch activeSettingsField {
-							case 0:
-								tempHeight = min(60, tempHeight+1)
-							case 1:
-								tempViewMode = "preview"
-							case 2:
-								tempPreviewVideos = true
-							case 3:
-								tempMaxJobs = min(64, tempMaxJobs+1)
-							case 4:
-								tempVideoFrames = min(30, tempVideoFrames+1)
+						case "\x1b[A": // ↑ increase
+							if activeSettingsField < len(controls) {
+								applySettingsDelta(controls[activeSettingsField], +1, &tempCfg)
 							}
 							changed = true
-						case "\x1b[B": // ↓ / decrease
-							switch activeSettingsField {
-							case 0:
-								tempHeight = max(10, tempHeight-1)
-							case 1:
-								tempViewMode = "grid"
-							case 2:
-								tempPreviewVideos = false
-							case 3:
-								tempMaxJobs = max(1, tempMaxJobs-1)
-							case 4:
-								tempVideoFrames = max(1, tempVideoFrames-1)
+						case "\x1b[B": // ↓ decrease
+							if activeSettingsField < len(controls) {
+								applySettingsDelta(controls[activeSettingsField], -1, &tempCfg)
 							}
 							changed = true
 						case "\x0d", "\x0a": // Enter — save
-							cfgHeight = tempHeight
-							previewVideos = tempPreviewVideos
-							nVideoFrames = tempVideoFrames
-							viewMode = tempViewMode
+							cfgHeight = tempCfg.MaxPreviewHeight
+							previewVideos = tempCfg.PreviewVideos
+							nVideoFrames = tempCfg.VideoFrames
+							viewMode = tempCfg.ViewMode
 							if viewMode == "settings" {
 								viewMode = "grid"
 							}
@@ -1763,19 +1888,12 @@ func browser(args []string, initWidth, initHeight int) error {
 								MaxPreviewHeight: cfgHeight,
 								ViewMode:         viewMode,
 								PreviewVideos:    previewVideos,
-								MaxJobs:          tempMaxJobs,
+								MaxJobs:          tempCfg.MaxJobs,
 								VideoFrames:      nVideoFrames,
 							})
 							halfblock.ClearScreen(os.Stdout)
 							changed = true
 						case "q", "Q", "\x1b", "c", "C": // Cancel
-							tempHeight = cfgHeight
-							tempPreviewVideos = previewVideos
-							tempVideoFrames = nVideoFrames
-							if viewMode != "grid" && viewMode != "preview" {
-								viewMode = "grid"
-							}
-							tempViewMode = viewMode
 							viewMode = "grid"
 							halfblock.ClearScreen(os.Stdout)
 							changed = true
@@ -1795,11 +1913,13 @@ func browser(args []string, initWidth, initHeight int) error {
 						changed = true
 
 					case "s", "S":
-						tempHeight = cfgHeight
-						tempViewMode = viewMode // capture before changing to "settings"
-						tempPreviewVideos = previewVideos
-						tempMaxJobs = nWorkers
-						tempVideoFrames = nVideoFrames
+						tempCfg = Settings{
+							MaxPreviewHeight: cfgHeight,
+							ViewMode:         viewMode,
+							PreviewVideos:    previewVideos,
+							MaxJobs:          nWorkers,
+							VideoFrames:      nVideoFrames,
+						}
 						viewMode = "settings"
 						activeSettingsField = 0
 						changed = true
@@ -1875,9 +1995,9 @@ func browser(args []string, initWidth, initHeight int) error {
 							halfblock.ShowCursor(os.Stdout)
 
 							if halfblock.IsVideo(targetItem.path) {
-								_ = interactiveVideo(targetItem.path, initWidth, initHeight, inputs)
+								_ = interactiveVideo(targetItem.path, initWidth, initHeight, inputs, style, labels, viewBtnRows)
 							} else {
-								_ = interactiveWithChan(targetItem.path, initWidth, initHeight, inputs)
+								_ = interactiveWithChan(targetItem.path, initWidth, initHeight, inputs, style, labels, viewBtnRows)
 							}
 
 							// Propagate any quit signal that arrived while the viewer ran.
@@ -1960,21 +2080,32 @@ func drawAboutPage(w io.Writer, termCols, termRows int) {
 	}
 }
 
-func drawSettingsPage(w io.Writer, termCols, termRows, tempHeight int, tempViewMode string, tempPreviewVideos bool, tempMaxJobs, tempVideoFrames, activeField int) {
+func drawSettingsPage(w io.Writer, termCols, termRows int, controls []ControlSpec, temp Settings, activeField int) {
 	halfblock.ClearScreen(w)
 
-	previewVideosStr := "true"
-	if !tempPreviewVideos {
-		previewVideosStr = "false"
-	}
-
 	type field struct{ label, value string }
-	fields := []field{
-		{"Height", fmt.Sprintf("%d rows", tempHeight)},
-		{"View Mode", tempViewMode},
-		{"Preview Videos", previewVideosStr},
-		{"Max Jobs", fmt.Sprintf("%d", tempMaxJobs)},
-		{"Video Frames", fmt.Sprintf("%d", tempVideoFrames)},
+	fields := make([]field, len(controls))
+	for i, c := range controls {
+		var value string
+		switch c.Key {
+		case "preview_height":
+			value = fmt.Sprintf("%d rows", temp.MaxPreviewHeight)
+		case "view_mode":
+			value = temp.ViewMode
+		case "preview_videos":
+			if temp.PreviewVideos {
+				value = "true"
+			} else {
+				value = "false"
+			}
+		case "max_jobs":
+			value = fmt.Sprintf("%d", temp.MaxJobs)
+		case "video_frames":
+			value = fmt.Sprintf("%d", temp.VideoFrames)
+		default:
+			value = "?"
+		}
+		fields[i] = field{settingsFieldLabel(c.Key), value}
 	}
 
 	lines := []string{
@@ -2070,7 +2201,8 @@ func drawHintBar(w io.Writer, termRow int, label string, vars map[string]string,
 
 // drawBottomMenu renders the button bar for the given view using the row template from views.yaml.
 // conditions is an optional map of runtime boolean flags (e.g. "playing") used by if() expressions.
-func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, conditions map[string]bool) []menuButton {
+// btnActions maps button key names to their registered action names (from spec/buttons.yaml); nil means use key name as action.
+func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, conditions map[string]bool, btnActions map[string]string) []menuButton {
 	if style == nil {
 		style = loadStyle()
 	}
@@ -2134,7 +2266,11 @@ func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction str
 			label = key
 		}
 
-		btn := menuButton{label: label, action: key, col: col, width: tplWidth(label, nil)}
+		action := key
+		if a, ok := btnActions[key]; ok {
+			action = a
+		}
+		btn := menuButton{label: label, action: action, col: col, width: tplWidth(label, nil)}
 		buttons = append(buttons, btn)
 
 		fg := styleFG(style.BtnFg, "")
@@ -2150,7 +2286,7 @@ func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction str
 				}
 			}
 		}
-		if key == activeAction {
+		if action == activeAction {
 			boldEsc = "\x1b[1m"
 			fg = styleFG(style.BtnActiveFg, fg)
 			bg = styleBG(style.BtnActiveBg, bg)

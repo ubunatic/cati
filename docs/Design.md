@@ -151,7 +151,10 @@ tplResolve(key, vars) string     — resolves key: quoted literal, vars map, or 
 
 ### 3.9 `spec/controls.yaml` — runtime controls
 
-Declares tunable fields with action bindings. **Not yet wired** — currently settings are adjusted via keyboard only.
+Loaded by `loadControls()` → `[]ControlSpec`. Drives the settings form:
+- Field labels come from `settingsFieldLabel(key)` (snake_case → Title Case)
+- Tab cycles through `len(controls)` fields
+- `↑`/`↓` call `applySettingsDelta(c, ±1, &tempCfg)` which uses `c.Min`/`c.Max` for int fields and `c.Values` for enum fields
 
 ```yaml
 controls:
@@ -160,9 +163,11 @@ controls:
     min: 10
     max: 200
     default: 40
-    set: set_preview_height
+    set: set_preview_height    # not yet wired — action name for future use
     get: get_preview_height
 ```
+
+Adding a new control to `controls.yaml` with a known `key` (one handled in `applySettingsDelta`) is enough to add it to the settings form.
 
 ---
 
@@ -222,6 +227,13 @@ row (effHeight):    hint bar       — drawHintBar()
 
 ---
 
-## 7. Audio (`internal/audio`)
+## 7. Interactive Viewers (`cmd/interactive.go`)
 
-New package for audio playback. `play_video` and `pause_video` button actions are stubbed in the browser event loop, ready to call into this package. The `conditions["playing"]` flag in `drawBottomMenu` will reflect playback state when wired.
+`interactiveWithChan` (image) and `interactiveVideo` accept `style`, `labels`, `viewBtnRows` from the browser:
+
+- Image viewer: renders image in `termRows-2` rows; button bar at `termRows-1`; hint bar at `termRows`. Button actions: `zoom_in`, `zoom_out`, `back`, `quit`.
+- Video viewer: same layout. Adds `paused bool`; Space bar toggles. `conditions["playing"] = !paused` passed to `drawBottomMenu` so `{ if(playing, pause, play) }` resolves at render time. Mouse tracking is enabled on entry (the browser disables it before calling the viewer).
+
+## 8. Audio (`internal/audio`)
+
+New package for audio playback. `play_video` and `pause_video` button actions are stubbed in the browser event loop, ready to call into this package. The `conditions["playing"]` flag in `drawBottomMenu` already reflects the video player's `paused` state and will extend naturally to audio.

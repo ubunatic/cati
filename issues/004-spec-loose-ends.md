@@ -29,14 +29,14 @@ And wire `open_website` action in the browser click handler (opens `https://code
 
 ## B. `image_viewer` and `video_player` view modes — layouts declared but not inline
 
-`spec/views.yaml` defines `image_viewer` and `video_player` layouts. The browser draws buttons for view mode `"image_viewer"` or `"video_player"` via `drawBottomMenu`. But the browser's `viewMode` variable only takes values `"grid"`, `"preview"`, `"about"`, `"settings"`. The image/video viewer runs as a blocking sub-process (via `cmd/interactive.go`), not as an inline view mode.
+✅ **Fixed** — chose option 2 (keep external viewers, pass button context into them).
 
-**Effect:** the `image_viewer`/`video_player` button rows are never rendered.
+`interactiveWithChan` and `interactiveVideo` now accept `style`, `labels`, `viewBtnRows` and call `drawBottomMenu`/`drawHintBar` during their redraw. The image takes `termRows-2` rows; the bottom 2 rows are the button bar and hint bar.
 
-**Options:**
-1. Convert viewer to inline view mode — set `viewMode = "image_viewer"` and render the viewer inside the browser redraw loop (major refactor).
-2. Keep external viewer but pass a button row to it so it can render its own controls.
-3. Leave as-is if the external viewer already handles its own key bindings.
+`interactiveVideo` also:
+- Enables mouse tracking on entry (so buttons are clickable)
+- Adds `paused bool` state; Space bar toggles pause
+- Passes `conditions["playing"] = !paused` to `drawBottomMenu` so `{ if(playing, pause, play) }` resolves correctly
 
 ---
 
@@ -50,9 +50,7 @@ And wire `open_website` action in the browser click handler (opens `https://code
 
 ## D. `controls.yaml` — declared but not read
 
-`spec/controls.yaml` declares runtime control bindings (`set`/`get` action names, `min`/`max`). Nothing reads this file. Settings are currently keyboard-only and hardcoded in `drawSettingsPage`.
-
-**Fix:** load controls and use them to drive the settings form dynamically.
+✅ **Fixed** — `loadControls()` reads `spec/controls.yaml` and returns `[]ControlSpec`. The settings form (`drawSettingsPage`) is now driven by this slice: field labels derive from `settingsFieldLabel(key)`, tab cycling uses `len(controls)`, and inc/dec bounds come from `c.Min`/`c.Max`. `applySettingsDelta` dispatches on `c.Key` to update the right field in the `Settings` struct.
 
 ---
 
