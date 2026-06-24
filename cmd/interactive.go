@@ -89,7 +89,55 @@ type dragState struct {
 //	↑↓←→         pan
 //	c / C        copy current viewport to clipboard (PNG)
 //	q/Q/Esc/^C   quit
+func tokenizeInput(s string) []string {
+	var tokens []string
+	i := 0
+	for i < len(s) {
+		if s[i] == '\x1b' {
+			if i+3 < len(s) && s[i:i+3] == "\x1b[<" {
+				idx := -1
+				for j := i + 3; j < len(s); j++ {
+					if s[j] == 'M' || s[j] == 'm' {
+						idx = j
+						break
+					}
+				}
+				if idx != -1 {
+					tokens = append(tokens, s[i:idx+1])
+					i = idx + 1
+					continue
+				}
+			}
+			if i+2 < len(s) && s[i+1] == '[' {
+				idx := -1
+				for j := i + 2; j < len(s); j++ {
+					c := s[j]
+					if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '~' {
+						idx = j
+						break
+					}
+				}
+				if idx != -1 {
+					tokens = append(tokens, s[i:idx+1])
+					i = idx + 1
+					continue
+				}
+			}
+			tokens = append(tokens, "\x1b")
+			i++
+		} else {
+			tokens = append(tokens, string(s[i]))
+			i++
+		}
+	}
+	return tokens
+}
+
 func interactive(path string, initWidth, initHeight int) error {
+	return interactiveWithChan(path, initWidth, initHeight, nil)
+}
+
+func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs chan string) error {
 	// Load the original image once; it is never mutated.
 	orig, err := halfblock.LoadImage(path)
 	if err != nil {
@@ -113,21 +161,24 @@ func interactive(path string, initWidth, initHeight int) error {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigs)
 
-	// ── Input reader (goroutine) ──────────────────────────────────────────────
-	// Reads up to 32 bytes per event.  Terminal emulators deliver complete
-	// escape sequences (including SGR mouse events) in a single write, so a
-	// single Read call almost always returns one complete event.
-	inputs := make(chan string, 32)
-	go func() {
-		buf := make([]byte, 32)
-		for {
-			n, err := os.Stdin.Read(buf)
-			if err != nil || n == 0 {
-				return
+	// ── Input reader (goroutine or shared) ────────────────────────────────────
+	inputs := sharedInputs
+	if inputs == nil {
+		inputs = make(chan string, 32)
+		go func() {
+			buf := make([]byte, 4096)
+			for {
+				n, err := os.Stdin.Read(buf)
+				if err != nil || n == 0 {
+					return
+				}
+				tokens := tokenizeInput(string(buf[:n]))
+				for _, tok := range tokens {
+					inputs <- tok
+				}
 			}
-			inputs <- string(buf[:n])
-		}
-	}()
+		}()
+	}
 
 	// ── Enter visual mode ─────────────────────────────────────────────────────
 	halfblock.HideCursor(os.Stdout)
@@ -168,92 +219,115 @@ func interactive(path string, initWidth, initHeight int) error {
 
 			changed := false
 			newStatus := ""
+			shouldQuit := false
 
-			// ── SGR mouse event ───────────────────────────────────────────────
-			if btn, col, row, release, ok := parseSGRMouse(k); ok {
-				// col/row are 1-indexed terminal coordinates → convert to 0-indexed.
-				c, r := col-1, row-1
+			processInput := func(tok string) {
+				// ── SGR mouse event ───────────────────────────────────────────────
+				if btn, col, row, release, ok := parseSGRMouse(tok); ok {
+					// col/row are 1-indexed terminal coordinates → convert to 0-indexed.
+					c, r := col-1, row-1
 
-				switch {
-				// ── Scroll wheel: zoom at cursor ──────────────────────────────
-				case sgrIsScroll(btn) && !release:
-					var newZoom float64
-					if sgrScrollDir(btn) < 0 {
-						newZoom = math.Min(state.zoom*zoomStep, maxZoom)
-					} else {
-						newZoom = math.Max(state.zoom/zoomStep, minZoom)
+					switch {
+					// ── Scroll wheel: zoom at cursor ──────────────────────────────
+					case sgrIsScroll(btn) && !release:
+						var newZoom float64
+						if sgrScrollDir(btn) < 0 {
+							newZoom = math.Min(state.zoom*zoomStep, maxZoom)
+						} else {
+							newZoom = math.Max(state.zoom/zoomStep, minZoom)
+						}
+						if newZoom != state.zoom {
+							zoomAtCursor(&state, newZoom, c, r)
+							changed = true
+						}
+
+					// ── Left press: start drag ────────────────────────────────────
+					case !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release:
+						drag = dragState{
+							active:    true,
+							startCol:  c,
+							startRow:  r,
+							startPanX: state.panX,
+							startPanY: state.panY,
+						}
+
+					// ── Left drag: update pan ─────────────────────────────────────
+					case sgrIsDrag(btn) && sgrButton(btn) == 0 && drag.active:
+						// Grab-and-pull: dragging right shows more of the left side.
+						state.panX = drag.startPanX - (c - drag.startCol)
+						state.panY = drag.startPanY - (r-drag.startRow)*2
+						changed = true
+
+					// ── Left release: end drag ────────────────────────────────────
+					case !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && release:
+						drag.active = false
 					}
-					if newZoom != state.zoom {
-						zoomAtCursor(&state, newZoom, c, r)
+
+				} else {
+					// ── Keyboard event ────────────────────────────────────────────
+					switch tok {
+					case "q", "Q", "\x1b", "\x03":
+						shouldQuit = true
+
+					case "+", "=":
+						newZoom := math.Min(state.zoom*zoomStep, maxZoom)
+						if newZoom != state.zoom {
+							state.zoom = newZoom
+							changed = true
+						}
+
+					case "-":
+						newZoom := math.Max(state.zoom/zoomStep, minZoom)
+						if newZoom != state.zoom {
+							state.zoom = newZoom
+							changed = true
+						}
+
+					case "\x1b[A": // ↑
+						state.panY -= vStep
+						changed = true
+
+					case "\x1b[B": // ↓
+						state.panY += vStep
+						changed = true
+
+					case "\x1b[C": // →
+						state.panX += hStep
+						changed = true
+
+					case "\x1b[D": // ←
+						state.panX -= hStep
+						changed = true
+
+					case "c", "C":
+						vp := buildViewport(orig, &state, termCols, termRows)
+						if copyErr := copyImageToClipboard(vp); copyErr != nil {
+							newStatus = "⚠ copy failed: " + copyErr.Error()
+						} else {
+							newStatus = "✓ copied to clipboard"
+						}
 						changed = true
 					}
-
-				// ── Left press: start drag ────────────────────────────────────
-				case !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release:
-					drag = dragState{
-						active:    true,
-						startCol:  c,
-						startRow:  r,
-						startPanX: state.panX,
-						startPanY: state.panY,
-					}
-
-				// ── Left drag: update pan ─────────────────────────────────────
-				case sgrIsDrag(btn) && sgrButton(btn) == 0 && drag.active:
-					// Grab-and-pull: dragging right shows more of the left side.
-					state.panX = drag.startPanX - (c - drag.startCol)
-					state.panY = drag.startPanY - (r-drag.startRow)*2
-					changed = true
-
-				// ── Left release: end drag ────────────────────────────────────
-				case !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && release:
-					drag.active = false
 				}
+			}
 
-			} else {
-				// ── Keyboard event ────────────────────────────────────────────
-				switch k {
-				case "q", "Q", "\x1b", "\x03":
-					return nil
+			// Process first event
+			processInput(k)
+			if shouldQuit {
+				return nil
+			}
 
-				case "+", "=":
-					newZoom := math.Min(state.zoom*zoomStep, maxZoom)
-					if newZoom != state.zoom {
-						state.zoom = newZoom
-						changed = true
+			// Coalesce / drain consecutive events
+			draining := true
+			for draining {
+				select {
+				case tok := <-inputs:
+					processInput(tok)
+					if shouldQuit {
+						return nil
 					}
-
-				case "-":
-					newZoom := math.Max(state.zoom/zoomStep, minZoom)
-					if newZoom != state.zoom {
-						state.zoom = newZoom
-						changed = true
-					}
-
-				case "\x1b[A": // ↑
-					state.panY -= vStep
-					changed = true
-
-				case "\x1b[B": // ↓
-					state.panY += vStep
-					changed = true
-
-				case "\x1b[C": // →
-					state.panX += hStep
-					changed = true
-
-				case "\x1b[D": // ←
-					state.panX -= hStep
-					changed = true
-
-				case "c", "C":
-					vp := buildViewport(orig, &state, termCols, termRows)
-					if copyErr := copyImageToClipboard(vp); copyErr != nil {
-						newStatus = "⚠ copy failed: " + copyErr.Error()
-					} else {
-						newStatus = "✓ copied to clipboard"
-					}
-					changed = true
+				default:
+					draining = false
 				}
 			}
 

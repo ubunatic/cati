@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
@@ -17,11 +19,167 @@ type menuButton struct {
 	label  string
 	col    int // 1-indexed column
 	width  int // character width
-	action string // e.g. "prev", "next", "about", "back", "quit"
+	action string // e.g. "prev", "next", "settings", "about", "back", "quit", "inc", "dec", "save", "cancel"
 }
+
+// ── YAML view parser ─────────────────────────────────────────────────────────
+
+type YamlView struct {
+	Type     string
+	Name     string
+	Title    string
+	Content  string
+	Controls []string
+}
+
+func parseYamlView(path string) (*YamlView, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	view := &YamlView{}
+	lines := strings.Split(string(data), "\n")
+
+	inContent := false
+	inControls := false
+
+	for _, line := range lines {
+		if inContent {
+			if line == "" {
+				view.Content += "\n"
+				continue
+			}
+			if strings.HasPrefix(line, "  ") || strings.HasPrefix(line, "\t") {
+				view.Content += strings.TrimPrefix(strings.TrimPrefix(line, "  "), "\t") + "\n"
+				continue
+			} else {
+				inContent = false
+			}
+		}
+
+		if inControls {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "- ") {
+				view.Controls = append(view.Controls, strings.TrimPrefix(trimmed, "- "))
+				continue
+			} else if line != "" && !strings.HasPrefix(line, " ") {
+				inControls = false
+			}
+		}
+
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		if strings.HasPrefix(line, "type:") {
+			view.Type = strings.TrimSpace(strings.TrimPrefix(line, "type:"))
+		} else if strings.HasPrefix(line, "name:") {
+			view.Name = strings.TrimSpace(strings.TrimPrefix(line, "name:"))
+		} else if strings.HasPrefix(line, "title:") {
+			view.Title = strings.TrimSpace(strings.TrimPrefix(line, "title:"))
+		} else if strings.HasPrefix(line, "content: |") {
+			inContent = true
+		} else if strings.HasPrefix(line, "controls:") {
+			inControls = true
+		}
+	}
+
+	return view, nil
+}
+
+func getAboutView() *YamlView {
+	view, err := parseYamlView("spec/about.yaml")
+	if err == nil && view != nil {
+		return view
+	}
+	// Fallback
+	return &YamlView{
+		Type:  "view",
+		Name:  "about",
+		Title: "Cati — cat for images & video in terminal",
+		Content: `Version: 1.0.0
+License: AGPL-3.0-or-later
+Authors: Uwe Jugel (codeberg.org/ubunatic/cati)
+
+Controls (Grid Preview):
+  • Left/Right/Up/Down Arrow: Move selection
+  • PageUp/PageDown, [, ]: Navigate pages
+  • Mouse wheel: Scroll pages
+  • Click thumbnail / Enter / Space: View full screen
+  • a / A: Toggle About page
+  • s / S: Settings dialog
+  • q / Esc: Quit application
+
+Controls (Interactive Single View):
+  • + / -: Zoom in / zoom out (centred on screen)
+  • Mouse wheel: Zoom in / zoom out at cursor position
+  • Left-click drag: Pan (grab-and-pull the image)
+  • Up/Down/Left/Right Arrows: Pan the image
+  • c / C: Copy current viewport to clipboard (PNG)
+  • q / Esc: Go back to Grid view`,
+		Controls: []string{"back", "quit", "website"},
+	}
+}
+
+// ── Config loader & saver ───────────────────────────────────────────────────
+
+func getConfigDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "cati")
+}
+
+func loadSettings() int {
+	dir := getConfigDir()
+	if dir == "" {
+		return 20
+	}
+	path := filepath.Join(dir, "config")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 20
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 && strings.TrimSpace(parts[0]) == "height" {
+			h, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+			if err == nil && h > 0 {
+				return h
+			}
+		}
+	}
+	return 20
+}
+
+func saveSettings(height int) error {
+	dir := getConfigDir()
+	if dir == "" {
+		return fmt.Errorf("could not determine home dir")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, "config")
+	content := fmt.Sprintf("height=%d\n", height)
+	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+// ── Browser ──────────────────────────────────────────────────────────────────
 
 // browser runs an interactive grid preview of multiple images and videos.
 func browser(paths []string, initWidth, initHeight int) error {
+	cfgHeight := loadSettings()
+	tempHeight := cfgHeight // For temporary edits in the settings dialog
+
 	// Cache for thumbnails to keep resizing and page navigation super responsive.
 	type thumbKey struct {
 		path string
@@ -59,31 +217,35 @@ func browser(paths []string, initWidth, initHeight int) error {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigs)
 
-	// Setup input channel
+	// Setup input channel with large buffer to avoid splitting escape sequences
 	inputs := make(chan string, 32)
 	go func() {
-		buf := make([]byte, 32)
+		buf := make([]byte, 4096)
 		for {
 			n, err := os.Stdin.Read(buf)
 			if err != nil || n == 0 {
 				return
 			}
-			inputs <- string(buf[:n])
+			tokens := tokenizeInput(string(buf[:n]))
+			for _, tok := range tokens {
+				inputs <- tok
+			}
 		}
 	}()
 
 	halfblock.HideCursor(os.Stdout)
 	halfblock.ClearScreen(os.Stdout)
-	halfblock.EnableMouse(os.Stdout)
+	// Enable mouse reporting with any-event tracking (\x1b[?1003h) to capture hover/motion
+	fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h")
 	defer func() {
-		halfblock.DisableMouse(os.Stdout)
+		fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l")
 		halfblock.EraseDown(os.Stdout)
 		halfblock.ShowCursor(os.Stdout)
 		fmt.Fprint(os.Stdout, "\r\n")
 	}()
 
 	selectedIdx := 0
-	viewMode := "grid" // "grid" or "about"
+	viewMode := "grid" // "grid", "about", or "settings"
 	var buttons []menuButton
 
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
@@ -91,16 +253,27 @@ func browser(paths []string, initWidth, initHeight int) error {
 	redraw := func() {
 		termCols, termRows = resolveTermSize(initWidth, initHeight)
 
+		effHeight := termRows
+		if cfgHeight > 0 && cfgHeight < termRows {
+			effHeight = cfgHeight
+		}
+
 		if viewMode == "about" {
-			drawAboutPage(os.Stdout, termCols, termRows)
-			buttons = drawBottomMenu(os.Stdout, termCols, termRows, 0, 0, true)
+			drawAboutPage(os.Stdout, termCols, effHeight)
+			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "about")
+			return
+		}
+
+		if viewMode == "settings" {
+			drawSettingsPage(os.Stdout, termCols, effHeight, tempHeight)
+			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "settings")
 			return
 		}
 
 		// Grid view
 		marginTop := 1
 		marginBottom := 3
-		gridRowsLimit := termRows - marginTop - marginBottom
+		gridRowsLimit := effHeight - marginTop - marginBottom
 
 		if gridRowsLimit <= 0 {
 			halfblock.ClearScreen(os.Stdout)
@@ -116,7 +289,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 		if termCols < 40 {
 			gridCols = 1
 		}
-		if termRows < 14 {
+		if effHeight < 14 {
 			gridRows = 1
 		}
 
@@ -212,10 +385,10 @@ func browser(paths []string, initWidth, initHeight int) error {
 			pageIdx+1, numPages, startIdx+1, endIdx, len(paths))
 
 		// Print bottom menu buttons
-		buttons = drawBottomMenu(os.Stdout, termCols, termRows, pageIdx, numPages, false)
+		buttons = drawBottomMenu(os.Stdout, termCols, effHeight, pageIdx, numPages, "grid")
 
 		// Print status line
-		fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[K\x1b[7m [Enter/Click] View  [◀/▶/Scroll] Page  [a] About  [q] Quit \x1b[m", termRows)
+		fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[K\x1b[7m [Enter/Click] View  [◀/▶/Scroll] Page  [s] Settings  [a] About  [q] Quit \x1b[m", effHeight)
 	}
 
 	redraw()
@@ -227,6 +400,10 @@ func browser(paths []string, initWidth, initHeight int) error {
 
 		case k := <-inputs:
 			termCols, termRows = resolveTermSize(initWidth, initHeight)
+			effHeight := termRows
+			if cfgHeight > 0 && cfgHeight < termRows {
+				effHeight = cfgHeight
+			}
 
 			gridCols := 3
 			gridRows := 2
@@ -236,185 +413,281 @@ func browser(paths []string, initWidth, initHeight int) error {
 			if termCols < 40 {
 				gridCols = 1
 			}
-			if termRows < 14 {
+			if effHeight < 14 {
 				gridRows = 1
 			}
 			itemsPerPage := gridCols * gridRows
 
-			if btn, col, row, release, ok := parseSGRMouse(k); ok {
-				if viewMode == "about" {
-					if row == termRows-1 && release {
-						for _, b := range buttons {
-							if col >= b.col && col < b.col+b.width {
-								if b.action == "back" {
-									viewMode = "grid"
-									halfblock.ClearScreen(os.Stdout)
-									redraw()
-								} else if b.action == "quit" {
-									return nil
+			changed := false
+			shouldQuit := false
+
+			processInput := func(tok string) {
+				if btn, col, row, release, ok := parseSGRMouse(tok); ok {
+					if viewMode == "about" {
+						if row == effHeight-1 && release {
+							for _, b := range buttons {
+								if col >= b.col && col < b.col+b.width {
+									if b.action == "back" {
+										viewMode = "grid"
+										halfblock.ClearScreen(os.Stdout)
+										changed = true
+									} else if b.action == "quit" {
+										shouldQuit = true
+									}
 								}
 							}
 						}
+						return
 					}
-					continue
-				}
 
-				// Grid view mouse interactions
-				if sgrIsScroll(btn) && !release {
-					if sgrScrollDir(btn) < 0 {
-						selectedIdx = max(0, selectedIdx-itemsPerPage)
+					if viewMode == "settings" {
+						if row == effHeight-1 && release {
+							for _, b := range buttons {
+								if col >= b.col && col < b.col+b.width {
+									switch b.action {
+									case "inc":
+										tempHeight = min(60, tempHeight+1)
+										changed = true
+									case "dec":
+										tempHeight = max(10, tempHeight-1)
+										changed = true
+									case "save":
+										cfgHeight = tempHeight
+										_ = saveSettings(cfgHeight)
+										viewMode = "grid"
+										halfblock.ClearScreen(os.Stdout)
+										changed = true
+									case "cancel":
+										tempHeight = cfgHeight
+										viewMode = "grid"
+										halfblock.ClearScreen(os.Stdout)
+										changed = true
+									}
+								}
+							}
+						}
+						return
+					}
+
+					// Grid view mouse interactions: scroll, buttons, hover & click
+					if sgrIsScroll(btn) && !release {
+						if sgrScrollDir(btn) < 0 {
+							selectedIdx = max(0, selectedIdx-itemsPerPage)
+						} else {
+							selectedIdx = min(len(paths)-1, selectedIdx+itemsPerPage)
+						}
+						changed = true
+					} else if row == effHeight-1 && release {
+						// Button click
+						for _, b := range buttons {
+							if col >= b.col && col < b.col+b.width {
+								switch b.action {
+								case "prev":
+									selectedIdx = max(0, selectedIdx-itemsPerPage)
+									changed = true
+								case "next":
+									selectedIdx = min(len(paths)-1, selectedIdx+itemsPerPage)
+									changed = true
+								case "settings":
+									viewMode = "settings"
+									tempHeight = cfgHeight
+									changed = true
+								case "about":
+									viewMode = "about"
+									changed = true
+								case "quit":
+									shouldQuit = true
+								}
+								break
+							}
+						}
 					} else {
-						selectedIdx = min(len(paths)-1, selectedIdx+itemsPerPage)
-					}
-					redraw()
-				} else if row == termRows-1 && release {
-					// Button click
-					for _, b := range buttons {
-						if col >= b.col && col < b.col+b.width {
-							switch b.action {
-							case "prev":
-								selectedIdx = max(0, selectedIdx-itemsPerPage)
-								redraw()
-							case "next":
-								selectedIdx = min(len(paths)-1, selectedIdx+itemsPerPage)
-								redraw()
-							case "about":
-								viewMode = "about"
-								redraw()
-							case "quit":
-								return nil
+						// Hover detection and single click view logic
+						marginTop := 1
+						c := col - 1
+						r := row - 1 - marginTop
+
+						gapX := 4
+						gapY := 2
+						gridRowsLimit := effHeight - marginTop - 3
+						cellW := (termCols - (gridCols-1)*gapX) / gridCols
+						cellH := (gridRowsLimit - (gridRows-1)*gapY) / gridRows
+						if cellW < 10 {
+							cellW = 10
+						}
+						if cellH < 4 {
+							cellH = 4
+						}
+
+						pageIdx := selectedIdx / itemsPerPage
+						startIdx := pageIdx * itemsPerPage
+						endIdx := startIdx + itemsPerPage
+						if endIdx > len(paths) {
+							endIdx = len(paths)
+						}
+
+						for cellItemIdx := 0; cellItemIdx < (endIdx - startIdx); cellItemIdx++ {
+							colIdx := cellItemIdx % gridCols
+							rowIdx := cellItemIdx / gridCols
+							left := colIdx * (cellW + gapX)
+							right := left + cellW
+							top := rowIdx * (cellH + gapY)
+							bottom := top + cellH
+
+							if c >= left && c < right && r >= top && r < bottom {
+								clickedIdx := startIdx + cellItemIdx
+								if clickedIdx != selectedIdx {
+									selectedIdx = clickedIdx
+									changed = true
+								}
+
+								// Left-click to view item alone, using shared inputs channel to protect input focus
+								if !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release {
+									if oldState != nil {
+										_ = term.Restore(fd, oldState)
+									}
+									fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l") // Disable mouse hover temporarily
+									halfblock.ShowCursor(os.Stdout)
+
+									_ = interactiveWithChan(paths[selectedIdx], initWidth, initHeight, inputs)
+
+									oldState, err = term.MakeRaw(fd)
+									halfblock.HideCursor(os.Stdout)
+									halfblock.ClearScreen(os.Stdout)
+									fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h") // Re-enable hover tracking
+
+									changed = true
+								}
+								break
 							}
-							break
 						}
 					}
-				} else if !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release {
-					// Left-click on thumbnail
-					marginTop := 1
-					c := col - 1
-					r := row - 1 - marginTop
-
-					gapX := 4
-					gapY := 2
-					gridRowsLimit := termRows - marginTop - 3
-					cellW := (termCols - (gridCols-1)*gapX) / gridCols
-					cellH := (gridRowsLimit - (gridRows-1)*gapY) / gridRows
-					if cellW < 10 {
-						cellW = 10
-					}
-					if cellH < 4 {
-						cellH = 4
-					}
-
-					pageIdx := selectedIdx / itemsPerPage
-					startIdx := pageIdx * itemsPerPage
-					endIdx := startIdx + itemsPerPage
-					if endIdx > len(paths) {
-						endIdx = len(paths)
-					}
-
-					for cellItemIdx := 0; cellItemIdx < (endIdx - startIdx); cellItemIdx++ {
-						colIdx := cellItemIdx % gridCols
-						rowIdx := cellItemIdx / gridCols
-						left := colIdx * (cellW + gapX)
-						right := left + cellW
-						top := rowIdx * (cellH + gapY)
-						bottom := top + cellH
-
-						if c >= left && c < right && r >= top && r < bottom {
-							clickedIdx := startIdx + cellItemIdx
-							selectedIdx = clickedIdx
-							redraw()
-
-							// Open single interactive view
-							if oldState != nil {
-								_ = term.Restore(fd, oldState)
-							}
-							halfblock.DisableMouse(os.Stdout)
-							halfblock.ShowCursor(os.Stdout)
-
-							_ = interactive(paths[selectedIdx], initWidth, initHeight)
-
-							oldState, err = term.MakeRaw(fd)
-							halfblock.HideCursor(os.Stdout)
+				} else {
+					// Keyboard events
+					if viewMode == "about" {
+						switch tok {
+						case "q", "Q", "\x1b", "a", "A":
+							viewMode = "grid"
 							halfblock.ClearScreen(os.Stdout)
-							halfblock.EnableMouse(os.Stdout)
-
-							redraw()
-							break
+							changed = true
+						case "\x03": // Ctrl+C
+							shouldQuit = true
 						}
+						return
+					}
+
+					if viewMode == "settings" {
+						switch tok {
+						case "\x1b[A": // ↑
+							tempHeight = min(60, tempHeight+1)
+							changed = true
+						case "\x1b[B": // ↓
+							tempHeight = max(10, tempHeight-1)
+							changed = true
+						case "\x0d", "\x0a": // Enter
+							cfgHeight = tempHeight
+							_ = saveSettings(cfgHeight)
+							viewMode = "grid"
+							halfblock.ClearScreen(os.Stdout)
+							changed = true
+						case "q", "Q", "\x1b", "c", "C": // Cancel
+							tempHeight = cfgHeight
+							viewMode = "grid"
+							halfblock.ClearScreen(os.Stdout)
+							changed = true
+						case "\x03": // Ctrl+C
+							shouldQuit = true
+						}
+						return
+					}
+
+					// Grid view keyboard inputs
+					switch tok {
+					case "q", "Q", "\x1b", "\x03":
+						shouldQuit = true
+
+					case "a", "A":
+						viewMode = "about"
+						changed = true
+
+					case "s", "S":
+						viewMode = "settings"
+						tempHeight = cfgHeight
+						changed = true
+
+					case "\x1b[D": // Left arrow
+						if selectedIdx > 0 {
+							selectedIdx--
+							changed = true
+						}
+
+					case "\x1b[C": // Right arrow
+						if selectedIdx < len(paths)-1 {
+							selectedIdx++
+							changed = true
+						}
+
+					case "\x1b[A": // Up arrow
+						if selectedIdx >= gridCols {
+							selectedIdx -= gridCols
+							changed = true
+						}
+
+					case "\x1b[B": // Down arrow
+						if selectedIdx+gridCols < len(paths) {
+							selectedIdx += gridCols
+							changed = true
+						}
+
+					case "\x0d", "\x0a", " ": // Enter or Space
+						if oldState != nil {
+							_ = term.Restore(fd, oldState)
+						}
+						fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l")
+						halfblock.ShowCursor(os.Stdout)
+
+						_ = interactiveWithChan(paths[selectedIdx], initWidth, initHeight, inputs)
+
+						oldState, err = term.MakeRaw(fd)
+						halfblock.HideCursor(os.Stdout)
+						halfblock.ClearScreen(os.Stdout)
+						fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h")
+
+						changed = true
+
+					case "\x1b[5~", "[": // Page Up
+						selectedIdx = max(0, selectedIdx-itemsPerPage)
+						changed = true
+
+					case "\x1b[6~", "]": // Page Down
+						selectedIdx = min(len(paths)-1, selectedIdx+itemsPerPage)
+						changed = true
 					}
 				}
-			} else {
-				// Keyboard events
-				if viewMode == "about" {
-					switch k {
-					case "q", "Q", "\x1b", "a", "A":
-						viewMode = "grid"
-						halfblock.ClearScreen(os.Stdout)
-						redraw()
-					case "\x03": // Ctrl+C
+			}
+
+			// Process first event
+			processInput(k)
+			if shouldQuit {
+				return nil
+			}
+
+			// Coalesce / drain consecutive events
+			draining := true
+			for draining {
+				select {
+				case tok := <-inputs:
+					processInput(tok)
+					if shouldQuit {
 						return nil
 					}
-					continue
+				default:
+					draining = false
 				}
+			}
 
-				// Grid view keyboard inputs
-				switch k {
-				case "q", "Q", "\x1b", "\x03":
-					return nil
-
-				case "a", "A":
-					viewMode = "about"
-					redraw()
-
-				case "\x1b[D": // Left arrow
-					if selectedIdx > 0 {
-						selectedIdx--
-						redraw()
-					}
-
-				case "\x1b[C": // Right arrow
-					if selectedIdx < len(paths)-1 {
-						selectedIdx++
-						redraw()
-					}
-
-				case "\x1b[A": // Up arrow
-					if selectedIdx >= gridCols {
-						selectedIdx -= gridCols
-						redraw()
-					}
-
-				case "\x1b[B": // Down arrow
-					if selectedIdx+gridCols < len(paths) {
-						selectedIdx += gridCols
-						redraw()
-					}
-
-				case "\x0d", "\x0a", " ": // Enter or Space
-					if oldState != nil {
-						_ = term.Restore(fd, oldState)
-					}
-					halfblock.DisableMouse(os.Stdout)
-					halfblock.ShowCursor(os.Stdout)
-
-					_ = interactive(paths[selectedIdx], initWidth, initHeight)
-
-					oldState, err = term.MakeRaw(fd)
-					halfblock.HideCursor(os.Stdout)
-					halfblock.ClearScreen(os.Stdout)
-					halfblock.EnableMouse(os.Stdout)
-
-					redraw()
-
-				case "\x1b[5~", "[": // Page Up
-					selectedIdx = max(0, selectedIdx-itemsPerPage)
-					redraw()
-
-				case "\x1b[6~", "]": // Page Down
-					selectedIdx = min(len(paths)-1, selectedIdx+itemsPerPage)
-					redraw()
-				}
+			if changed {
+				redraw()
 			}
 		}
 	}
@@ -423,37 +696,15 @@ func browser(paths []string, initWidth, initHeight int) error {
 func drawAboutPage(w io.Writer, termCols, termRows int) {
 	halfblock.ClearScreen(w)
 
-	lines := []string{
-		"                   _   _ ",
-		"  ___  __ _  _ _  (_) | |",
-		" / __|/ _` || ' \\ | | |_|",
-		"| (__| (_| || | | || |  _ ",
-		" \\___|\\__,||_|_|_||_| |_|",
-		"  cat for images & video in terminal",
-		"",
-		"Version: 1.0.0",
-		"License: AGPL-3.0-or-later",
-		"Authors: Uwe Jugel (codeberg.org/ubunatic/cati)",
-		"",
-		"Controls (Grid Preview):",
-		"  • Left/Right/Up/Down Arrow: Move selection",
-		"  • PageUp/PageDown, [, ]: Navigate pages",
-		"  • Mouse wheel: Scroll pages",
-		"  • Click thumbnail / Enter / Space: View full screen",
-		"  • a / A: Toggle About page",
-		"  • q / Esc: Quit application",
-		"",
-		"Controls (Interactive Single View):",
-		"  • + / -: Zoom in / zoom out (centred on screen)",
-		"  • Mouse wheel: Zoom in / zoom out at cursor position",
-		"  • Left-click drag: Pan (grab-and-pull the image)",
-		"  • Up/Down/Left/Right Arrows: Pan the image",
-		"  • c / C: Copy current viewport to clipboard (PNG)",
-		"  • q / Esc: Go back to Grid view",
-	}
+	about := getAboutView()
+	lines := strings.Split(about.Content, "\n")
+
+	// Print Title
+	titleLine := "=== " + about.Title + " ==="
+	fmt.Fprintf(w, "\x1b[2;%dH\x1b[1;36m%s\x1b[m", max(1, (termCols-len(titleLine))/2), titleLine)
 
 	for i, line := range lines {
-		row := 2 + i
+		row := 4 + i
 		if row >= termRows-2 {
 			break
 		}
@@ -465,13 +716,39 @@ func drawAboutPage(w io.Writer, termCols, termRows int) {
 	}
 }
 
-func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, isAboutPage bool) []menuButton {
+func drawSettingsPage(w io.Writer, termCols, termRows int, tempHeight int) {
+	halfblock.ClearScreen(w)
+
+	lines := []string{
+		"=================================",
+		"          CATI SETTINGS          ",
+		"=================================",
+		"",
+		fmt.Sprintf("  Browser Height:  [ %d ] rows", tempHeight),
+		"",
+		"  Use ↑ / ↓ to adjust height.",
+		"  Press Enter to Save, Esc to Cancel.",
+		"",
+		"=================================",
+	}
+
+	for i, line := range lines {
+		row := (termRows-len(lines))/2 + i
+		col := (termCols - len(line)) / 2
+		if col < 1 {
+			col = 1
+		}
+		fmt.Fprintf(w, "\x1b[%d;%dH\x1b[K%s", row, col, line)
+	}
+}
+
+func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, viewMode string) []menuButton {
 	var buttons []menuButton
 
 	// Clear the button line first
 	fmt.Fprintf(w, "\x1b[%d;1H\x1b[K", termRows-1)
 
-	if isAboutPage {
+	if viewMode == "about" {
 		btnBack := menuButton{
 			label:  "[◀ Back]",
 			action: "back",
@@ -488,6 +765,41 @@ func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, 
 		btnQuit.width = len(btnQuit.label)
 
 		buttons = append(buttons, btnBack, btnQuit)
+	} else if viewMode == "settings" {
+		btnInc := menuButton{
+			label:  "[▲ Increase]",
+			action: "inc",
+		}
+		btnDec := menuButton{
+			label:  "[▼ Decrease]",
+			action: "dec",
+		}
+		btnSave := menuButton{
+			label:  "[✔ Save]",
+			action: "save",
+		}
+		btnCancel := menuButton{
+			label:  "[✖ Cancel]",
+			action: "cancel",
+		}
+
+		currentCol := 4
+		btnInc.col = currentCol
+		btnInc.width = len(btnInc.label)
+
+		currentCol += btnInc.width + 3
+		btnDec.col = currentCol
+		btnDec.width = len(btnDec.label)
+
+		currentCol += btnDec.width + 3
+		btnSave.col = currentCol
+		btnSave.width = len(btnSave.label)
+
+		currentCol += btnSave.width + 3
+		btnCancel.col = currentCol
+		btnCancel.width = len(btnCancel.label)
+
+		buttons = append(buttons, btnInc, btnDec, btnSave, btnCancel)
 	} else {
 		btnPrev := menuButton{
 			label:  "[◀ Prev]",
@@ -496,6 +808,10 @@ func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, 
 		btnNext := menuButton{
 			label:  "[Next ▶]",
 			action: "next",
+		}
+		btnSettings := menuButton{
+			label:  "[⚙ Settings]",
+			action: "settings",
 		}
 		btnAbout := menuButton{
 			label:  "[ℹ About]",
@@ -506,23 +822,27 @@ func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, 
 			action: "quit",
 		}
 
-		currentCol := 4
+		currentCol := 2
 		btnPrev.col = currentCol
 		btnPrev.width = len(btnPrev.label)
 
-		currentCol += btnPrev.width + 3
+		currentCol += btnPrev.width + 2
 		btnNext.col = currentCol
 		btnNext.width = len(btnNext.label)
 
-		currentCol += btnNext.width + 3
+		currentCol += btnNext.width + 2
+		btnSettings.col = currentCol
+		btnSettings.width = len(btnSettings.label)
+
+		currentCol += btnSettings.width + 2
 		btnAbout.col = currentCol
 		btnAbout.width = len(btnAbout.label)
 
-		currentCol += btnAbout.width + 3
+		currentCol += btnAbout.width + 2
 		btnQuit.col = currentCol
 		btnQuit.width = len(btnQuit.label)
 
-		buttons = append(buttons, btnPrev, btnNext, btnAbout, btnQuit)
+		buttons = append(buttons, btnPrev, btnNext, btnSettings, btnAbout, btnQuit)
 	}
 
 	for _, btn := range buttons {

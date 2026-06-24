@@ -1,0 +1,28 @@
+type: view
+name: about
+title: Cati — cat for images & video in terminal
+content: |
+  Version: 1.0.0
+  License: AGPL-3.0-or-later
+  Authors: Uwe Jugel (codeberg.org/ubunatic/cati)
+
+  Controls (Grid Preview):
+    • Left/Right/Up/Down Arrow: Move selection
+    • PageUp/PageDown, [, ]: Navigate pages
+    • Mouse wheel: Scroll pages
+    • Click thumbnail / Enter / Space: View full screen
+    • a / A: Toggle About page
+    • s / S: Settings dialog
+    • q / Esc: Quit application
+
+  Controls (Interactive Single View):
+    • + / -: Zoom in / zoom out (centred on screen)
+    • Mouse wheel: Zoom in / zoom out at cursor position
+    • Left-click drag: Pan (grab-and-pull the image)
+    • Up/Down/Left/Right Arrows: Pan the image
+    • c / C: Copy current viewport to clipboard (PNG)
+    • q / Esc: Go back to Grid view
+controls:
+  - back
+  - quit
+  - website
