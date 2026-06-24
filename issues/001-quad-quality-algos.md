@@ -62,11 +62,6 @@ propagates decided colours into ambiguous regions.
 anchoredPixel = lerp(rawPixel, neighborColor, anchorWeight)
 ```
 
-#### SplitHalf: Neighbour-Guided 2nd Colour (option b)
-In `SplitHalf` mode, instead of using the bottom (or top) row average as the
-2nd colour, sample from fg/bg of the best-matching neighbouring halfblock cell.
-This can produce sharper colour boundaries at region transitions.
-
 #### Dithering
 - **Error diffusion** (Floyd–Steinberg): propagate quantisation error to right/
   lower neighbours; reduces banding but adds noise texture.
