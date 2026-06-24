@@ -1,6 +1,7 @@
 type: view
 name: about
 title: Cati — cat for images & video in terminal
+
 content: |
   Version: 1.0.0
   License: AGPL-3.0-or-later
@@ -22,6 +23,7 @@ content: |
     • Up/Down/Left/Right Arrows: Pan the image
     • c / C: Copy current viewport to clipboard (PNG)
     • q / Esc: Go back to Grid view
+
 controls:
   - back
   - quit

@@ -2,30 +2,31 @@
 # Cati Browser Style
 $schema: "./style.schema.json"
 app:
-  bg: null
-  border_style: "box"
-  border_color: "#475569"
+  bg: slv
+  border_style: double
+  border_color: gry
 
 buttons:
-  fg: "#94a3b8"
-  bg: "#1e293b"
-  border_color: "#334155"
+  fg: slv
+  bg: null
+  border_color: blk
   left_cap: "["
   right_cap: "]"
-  active_fg: "#f8fafc"
-  active_bg: "#475569"
+  active_fg: null
+  active_bg: gry
 
 preview:
   bg: null
 
 control_bar:
-  bg: "#0f172a"
-  fg: "#94a3b8"
+  bg: null
+  fg: gry
 
 scroll_bar:
   thumb_char: "█"
-  rail_char: "▒"
-  width: 1
-  thumb_fg: "#64748b"
-  rail_fg: "#334155"
+  rail_char: "░"
+  width: 2
+  thumb_fg: slv
+  rail_fg: null
   rail_bg: null
+
