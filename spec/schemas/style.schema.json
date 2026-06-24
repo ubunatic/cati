@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "style.schema.json",
+  "title": "Cati Style Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "color": {
+      "description": "null (transparent), #rgb, #rrggbb, or a named/abbreviated color",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        { "type": "string", "pattern": "^#[0-9a-fA-F]{3}$" },
+        {
+          "type": "string",
+          "enum": [
+            "dark", "light",
+            "black", "blk", "white", "wht", "red",
+            "green", "grn", "blue", "blu",
+            "yellow", "yel", "orange", "org",
+            "purple", "pur", "pink", "pnk",
+            "cyan", "cyn", "magenta", "mag",
+            "brown", "brn", "gray", "grey", "gry",
+            "navy", "nav", "lime", "aqua", "teal",
+            "maroon", "olive", "silver", "slv"
+          ]
+        }
+      ]
+    },
+    "border_style": {
+      "type": "string",
+      "enum": ["none", "box", "double"]
+    }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bg":           { "$ref": "#/definitions/color" },
+        "border_style": { "$ref": "#/definitions/border_style" },
+        "border_color": { "$ref": "#/definitions/color" }
+      }
+    },
+    "buttons": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fg":           { "$ref": "#/definitions/color" },
+        "bg":           { "$ref": "#/definitions/color" },
+        "border_color": { "$ref": "#/definitions/color" },
+        "left_cap":     { "type": "string" },
+        "right_cap":    { "type": "string" },
+        "active_fg":    { "$ref": "#/definitions/color" },
+        "active_bg":    { "$ref": "#/definitions/color" }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bg": { "$ref": "#/definitions/color" }
+      }
+    },
+    "control_bar": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Bottom area background (button row + hint row)",
+      "properties": {
+        "bg": { "$ref": "#/definitions/color" },
+        "fg": { "$ref": "#/definitions/color" }
+      }
+    },
+    "header_bar": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Top status bar showing app name, directory and page info",
+      "properties": {
+        "fg":   { "$ref": "#/definitions/color" },
+        "bg":   { "$ref": "#/definitions/color" },
+        "bold": { "type": "boolean" }
+      }
+    },
+    "grid": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Grid and list item display styles",
+      "properties": {
+        "item_fg":          { "$ref": "#/definitions/color" },
+        "item_bg":          { "$ref": "#/definitions/color" },
+        "selected_fg":      { "$ref": "#/definitions/color" },
+        "selected_bg":      { "$ref": "#/definitions/color" },
+        "selected_bold":    { "type": "boolean" },
+        "selected_marker":  { "type": "string", "description": "Leading character(s) before a selected item label; use empty string for no marker" },
+        "image_border":     { "$ref": "#/definitions/border_style", "description": "Border drawn around each image cell (planned)" }
+      }
+    },
+    "scroll_bar": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "thumb_char": { "type": "string" },
+        "rail_char":  { "type": "string" },
+        "width":      { "type": "integer", "enum": [1, 2] },
+        "thumb_fg":   { "$ref": "#/definitions/color" },
+        "rail_fg":    { "$ref": "#/definitions/color" },
+        "rail_bg":    { "$ref": "#/definitions/color" }
+      }
+    }
+  }
+}

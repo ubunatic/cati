@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "controls.schema.json",
+  "title": "Cati Controls",
+  "description": "Tunable application controls with get/set action bindings",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "int_control": {
+      "type": "object",
+      "required": ["type", "set", "get"],
+      "additionalProperties": false,
+      "properties": {
+        "type":    { "type": "string", "enum": ["int"] },
+        "min":     { "type": "integer" },
+        "max":     { "type": "integer" },
+        "default": { "type": "integer" },
+        "set":     { "type": "string", "description": "Registered setter action name" },
+        "get":     { "type": "string", "description": "Registered getter action name" }
+      }
+    },
+    "enum_control": {
+      "type": "object",
+      "required": ["type", "values", "set", "get"],
+      "additionalProperties": false,
+      "properties": {
+        "type":    { "type": "string", "enum": ["enum"] },
+        "values":  { "type": "array", "items": { "type": "string" }, "minItems": 2 },
+        "default": { "type": "string" },
+        "set":     { "type": "string" },
+        "get":     { "type": "string" }
+      }
+    },
+    "bool_control": {
+      "type": "object",
+      "required": ["type", "set", "get"],
+      "additionalProperties": false,
+      "properties": {
+        "type":    { "type": "string", "enum": ["bool"] },
+        "default": { "type": "boolean" },
+        "set":     { "type": "string" },
+        "get":     { "type": "string" }
+      }
+    }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "controls": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "$ref": "#/definitions/int_control" },
+          { "$ref": "#/definitions/enum_control" },
+          { "$ref": "#/definitions/bool_control" }
+        ]
+      }
+    }
+  }
+}

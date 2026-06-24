@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=./schemas/theme.schema.json
+# Cati Theme — semantic style tokens
+# Referenced by spec/buttons.yaml and spec/views.yaml template expressions.
+# Colors: null = terminal default, #rrggbb / #rgb, or a named color (see style.yaml).
+$schema: "./schemas/theme.schema.json"
+
+primary:
+  fg: wht
+  bg: null
+  bold: true
+
+secondary:
+  fg: gry
+  bg: null
+  bold: false
+
+active:
+  fg: wht
+  bg: gry
+  bold: true
+
+muted:
+  fg: "#475569"
+  bg: null
+  bold: false
+
+info:
+  fg: cyn
+  bg: null
+  bold: false
+
+danger:
+  fg: red
+  bg: null
+  bold: false

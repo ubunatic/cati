@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 	"syscall"
 	"time"
 
@@ -79,6 +80,19 @@ type StyleConfig struct {
 	PreviewBg       string
 	ControlBarBg    string
 	ControlBarFg    string
+	// Header bar (top status line)
+	HeaderFg   string
+	HeaderBg   string
+	HeaderBold bool
+	// Grid / list item display
+	GridItemFg         string
+	GridItemBg         string
+	GridSelectedFg     string
+	GridSelectedBg     string
+	GridSelectedBold   bool
+	GridSelectedMarker string
+	ImageBorder        string
+	// Scroll bar
 	ScrollThumbChar string
 	ScrollRailChar  string
 	ScrollWidth     int
@@ -136,9 +150,24 @@ func parseColor(s string) (color.RGBA, bool) {
 	return color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}, true
 }
 
+// paletteFG/paletteBG return ANSI sequences for 16-color palette names.
+// These adapt to the user's terminal theme (Solarized, Gruvbox, etc.)
+// unlike 24-bit hex which is always a fixed color.
+var paletteFGCodes = map[string]string{
+	"dark":  "\x1b[90m", // bright black / dark gray
+	"light": "\x1b[97m", // bright white
+}
+var paletteBGCodes = map[string]string{
+	"dark":  "\x1b[100m",
+	"light": "\x1b[107m",
+}
+
 func styleFG(s string, def string) string {
 	if s == "" {
 		return def
+	}
+	if ansi, ok := paletteFGCodes[strings.ToLower(s)]; ok {
+		return ansi
 	}
 	c, ok := parseColor(s)
 	if !ok {
@@ -151,6 +180,9 @@ func styleBG(s string, def string) string {
 	if s == "" {
 		return def
 	}
+	if ansi, ok := paletteBGCodes[strings.ToLower(s)]; ok {
+		return ansi
+	}
 	c, ok := parseColor(s)
 	if !ok {
 		return def
@@ -158,26 +190,135 @@ func styleBG(s string, def string) string {
 	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
 }
 
+// renderTpl renders a template string with variable substitution and inline styling.
+//
+// Syntax: literal text mixed with { expr } blocks where expr is:
+//   key            — value from vars map (falls back to key name if missing)
+//   'literal'      — quoted literal string passed through as-is
+//   key | mod …    — value with style modifiers applied
+//
+// Modifiers: bold, dim, italic, underline, or any named/hex color (applied as fg).
+// After each styled segment the baseAnsi style is restored automatically.
+func renderTpl(tpl string, vars map[string]string, baseAnsi string) string {
+	var sb strings.Builder
+	i := 0
+	for i < len(tpl) {
+		open := strings.Index(tpl[i:], "{")
+		if open == -1 {
+			sb.WriteString(tpl[i:])
+			break
+		}
+		sb.WriteString(tpl[i : i+open])
+		i += open + 1
+		close := strings.Index(tpl[i:], "}")
+		if close == -1 {
+			sb.WriteByte('{')
+			continue
+		}
+		expr := tpl[i : i+close]
+		i += close + 1
+
+		parts := strings.Split(expr, "|")
+		key := strings.TrimSpace(parts[0])
+		val := tplResolve(key, vars)
+
+		if len(parts) == 1 {
+			sb.WriteString(val)
+			continue
+		}
+		for _, mod := range parts[1:] {
+			switch strings.TrimSpace(mod) {
+			case "bold":
+				sb.WriteString("\x1b[1m")
+			case "dim":
+				sb.WriteString("\x1b[2m")
+			case "italic":
+				sb.WriteString("\x1b[3m")
+			case "underline":
+				sb.WriteString("\x1b[4m")
+			default:
+				if fg := styleFG(strings.TrimSpace(mod), ""); fg != "" {
+					sb.WriteString(fg)
+				}
+			}
+		}
+		sb.WriteString(val)
+		sb.WriteString("\x1b[m")
+		sb.WriteString(baseAnsi)
+	}
+	return sb.String()
+}
+
+// tplResolve returns the value for a template key: unquotes 'literal' / "literal",
+// looks up vars, or falls back to the key itself.
+func tplResolve(key string, vars map[string]string) string {
+	if len(key) >= 2 &&
+		((key[0] == '\'' && key[len(key)-1] == '\'') ||
+			(key[0] == '"' && key[len(key)-1] == '"')) {
+		return key[1 : len(key)-1]
+	}
+	if vars != nil {
+		if v, ok := vars[key]; ok {
+			return v
+		}
+	}
+	return key
+}
+
+// tplWidth returns the visual (rune) width of a rendered template string,
+// counting only the resolved text — not the { } syntax or ANSI escapes.
+func tplWidth(tpl string, vars map[string]string) int {
+	w := 0
+	i := 0
+	for i < len(tpl) {
+		open := strings.Index(tpl[i:], "{")
+		if open == -1 {
+			w += utf8.RuneCountInString(tpl[i:])
+			break
+		}
+		w += utf8.RuneCountInString(tpl[i : i+open])
+		i += open + 1
+		close := strings.Index(tpl[i:], "}")
+		if close == -1 {
+			break
+		}
+		expr := tpl[i : i+close]
+		i += close + 1
+		parts := strings.Split(expr, "|")
+		w += utf8.RuneCountInString(tplResolve(strings.TrimSpace(parts[0]), vars))
+	}
+	return w
+}
+
+// fmtHeader is renderTpl specialised for the header bar (kept for call-site clarity).
+func fmtHeader(tpl string, vars map[string]string, baseAnsi string) string {
+	return renderTpl(tpl, vars, baseAnsi)
+}
+
+func styleSelectedAnsi(style *StyleConfig) string {
+	s := styleFG(style.GridSelectedFg, "")
+	s += styleBG(style.GridSelectedBg, "")
+	if style.GridSelectedBold {
+		s = "\x1b[1m" + s
+	}
+	return s
+}
+
+func styleItemAnsi(style *StyleConfig) string {
+	return styleFG(style.GridItemFg, "") + styleBG(style.GridItemBg, "")
+}
+
 func loadStyle() *StyleConfig {
 	cfg := &StyleConfig{
-		AppBg:           "",
-		AppBorderStyle:  "box",
-		AppBorderColor:  "#475569",
-		BtnFg:           "#94a3b8",
-		BtnBg:           "#1e293b",
-		BtnBorderColor:  "#334155",
-		BtnLeftCap:      "[",
-		BtnRightCap:     "]",
-		BtnActiveFg:     "#f8fafc",
-		BtnActiveBg:     "#475569",
-		PreviewBg:       "",
-		ControlBarBg:    "#0f172a",
-		ControlBarFg:    "#94a3b8",
-		ScrollThumbChar: "█",
-		ScrollRailChar:  "▒",
-		ScrollWidth:     1,
-		ScrollThumbFg:   "#64748b",
-		ScrollRailFg:    "#334155",
+		AppBorderStyle:     "box",
+		BtnLeftCap:         "[",
+		BtnRightCap:        "]",
+		GridSelectedBold:   true,
+		GridSelectedMarker: " ",
+		ImageBorder:        "none",
+		ScrollThumbChar:    "█",
+		ScrollRailChar:     "▒",
+		ScrollWidth:        1,
 		ScrollRailBg:    "",
 	}
 
@@ -247,6 +388,34 @@ func loadStyle() *StyleConfig {
 			case "fg":
 				cfg.ControlBarFg = val
 			}
+		case "header_bar":
+			switch key {
+			case "fg":
+				cfg.HeaderFg = val
+			case "bg":
+				cfg.HeaderBg = val
+			case "bold":
+				cfg.HeaderBold = val == "true"
+			}
+		case "grid":
+			switch key {
+			case "item_fg":
+				cfg.GridItemFg = val
+			case "item_bg":
+				cfg.GridItemBg = val
+			case "selected_fg":
+				cfg.GridSelectedFg = val
+			case "selected_bg":
+				cfg.GridSelectedBg = val
+			case "selected_bold":
+				cfg.GridSelectedBold = val == "true"
+			case "selected_marker":
+				cfg.GridSelectedMarker = val
+			case "image_border":
+				if val == "box" || val == "double" || val == "none" {
+					cfg.ImageBorder = val
+				}
+			}
 		case "scroll_bar":
 			switch key {
 			case "thumb_char":
@@ -274,16 +443,14 @@ func loadStyle() *StyleConfig {
 
 func loadLabels() map[string]string {
 	labels := map[string]string{
-		"prev":     "[◀ Prev]",
-		"next":     "[Next ▶]",
-		"settings": "[⚙ Settings]",
-		"about":    "[ℹ About]",
-		"quit":     "[✖ Quit]",
-		"back":     "[◀ Back]",
-		"inc":      "[▲ Increase]",
-		"dec":      "[▼ Decrease]",
-		"save":     "[✔ Save]",
-		"cancel":   "[✖ Cancel]",
+		"app_name":       "Cati Browser",
+		"header":         " {app_name}  [{dir}] — Page {page}/{pages} ({start}-{end} of {total})",
+		"folder_icon":    "📁",
+		"file_icon":      "📄",
+		"hint_browser":   "[Enter/Click] View/Enter  [◀/▶/Scroll] Page  [s] Settings  [m] Toggle Mode  [q] Quit",
+		"hint_settings":  "[▲/▼] Adjust  [s/Enter] Save  [Esc/q] Cancel",
+		"hint_about":     "[q/Esc] Back",
+		"hint_viewer":    "[q/Esc] Back  [+/-] Zoom",
 	}
 
 	data, err := os.ReadFile("spec/labels.yaml")
@@ -291,8 +458,7 @@ func loadLabels() map[string]string {
 		return labels
 	}
 
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
+	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -300,14 +466,62 @@ func loadLabels() map[string]string {
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
-			val := strings.TrimSpace(parts[1])
-			val = strings.Trim(val, "\"'")
+			val := strings.Trim(strings.TrimSpace(parts[1]), "\"'")
 			if val != "" {
 				labels[key] = val
 			}
 		}
 	}
 	return labels
+}
+
+// loadButtons reads spec/buttons.yaml and returns key → rendered label (caps applied).
+func loadButtons(leftCap, rightCap string) map[string]string {
+	wrap := func(text string) string { return leftCap + text + rightCap }
+	buttons := map[string]string{
+		"prev":     wrap("◀ Prev"),
+		"next":     wrap("Next ▶"),
+		"settings": wrap("⚙ Settings"),
+		"about":    wrap("ℹ About"),
+		"quit":     wrap("✖ Quit"),
+		"back":     wrap("◀ Back"),
+		"zoom_in":  wrap("+ Zoom In"),
+		"zoom_out": wrap("- Zoom Out"),
+		"play":     wrap("▶ Play"),
+		"pause":    wrap("⏸ Pause"),
+		"save":     wrap("✔ Save"),
+		"cancel":   wrap("✖ Cancel"),
+	}
+
+	data, err := os.ReadFile("spec/buttons.yaml")
+	if err != nil {
+		return buttons
+	}
+
+	inButtons := false
+	currentKey := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
+			continue
+		}
+		if trimmed == "buttons:" {
+			inButtons = true
+			continue
+		}
+		if !inButtons {
+			continue
+		}
+		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
+			currentKey = strings.TrimSuffix(trimmed, ":")
+			continue
+		}
+		if currentKey != "" && strings.HasPrefix(line, "    text: ") {
+			text := strings.Trim(strings.TrimPrefix(line, "    text: "), "\"'")
+			buttons[currentKey] = wrap(text)
+		}
+	}
+	return buttons
 }
 
 // ── YAML view parser ─────────────────────────────────────────────────────────
@@ -552,6 +766,11 @@ type scrollDragState struct {
 func browser(args []string, initWidth, initHeight int) error {
 	cfg := loadConfig()
 	style := loadStyle()
+	labels := loadLabels()
+	for k, v := range loadButtons(style.BtnLeftCap, style.BtnRightCap) {
+		labels[k] = v
+	}
+	viewBtnRows := loadViewButtonRows()
 
 	cfgHeight := cfg.MaxPreviewHeight
 	viewMode := cfg.ViewMode // "grid" or "preview", toggled dynamically
@@ -758,13 +977,20 @@ func browser(args []string, initWidth, initHeight int) error {
 
 		if viewMode == "about" {
 			drawAboutPage(os.Stdout, termCols, effHeight)
-			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "about", hoveredButtonAction, style)
+			buttons = drawBottomMenu(os.Stdout, effHeight, "about", hoveredButtonAction, style, labels, viewBtnRows, nil)
+			drawHintBar(os.Stdout, effHeight, labels["hint_about"], nil, style)
 			return
 		}
 
+		settingsFieldNames := []string{"Height", "View Mode", "Preview Videos", "Max Jobs", "Video Frames"}
 		if viewMode == "settings" {
 			drawSettingsPage(os.Stdout, termCols, effHeight, tempHeight, tempViewMode, tempPreviewVideos, tempMaxJobs, tempVideoFrames, activeSettingsField)
-			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "settings", hoveredButtonAction, style)
+			buttons = drawBottomMenu(os.Stdout, effHeight, "settings", hoveredButtonAction, style, labels, viewBtnRows, nil)
+			activeSetting := ""
+			if activeSettingsField >= 0 && activeSettingsField < len(settingsFieldNames) {
+				activeSetting = settingsFieldNames[activeSettingsField]
+			}
+			drawHintBar(os.Stdout, effHeight, labels["hint_settings"], map[string]string{"active_setting": activeSetting}, style)
 			return
 		}
 
@@ -955,6 +1181,12 @@ func browser(args []string, initWidth, initHeight int) error {
 		halfblock.EraseDown(os.Stdout)
 
 		// Print filenames centered below thumbnails (Grid) or in dynamic vertical lists
+		folderIcon := labels["folder_icon"]
+		fileIcon := labels["file_icon"]
+		selAnsi := styleSelectedAnsi(style)
+		itemAnsi := styleItemAnsi(style)
+		marker := style.GridSelectedMarker
+
 		if viewMode == "preview" {
 			for idx := startIdx; idx < endIdx; idx++ {
 				cellItemIdx := idx - startIdx
@@ -962,12 +1194,12 @@ func browser(args []string, initWidth, initHeight int) error {
 
 				name := items[idx].name
 				if items[idx].isDir {
-					name = "📁 " + name
+					name = folderIcon + " " + name
 					if items[idx].name == ".." {
-						name = "📁 .."
+						name = folderIcon + " .."
 					}
 				} else {
-					name = "📄 " + name
+					name = fileIcon + " " + name
 				}
 
 				if len(name) > leftW-3 {
@@ -975,11 +1207,11 @@ func browser(args []string, initWidth, initHeight int) error {
 				}
 
 				if idx == selectedIdx {
-					spaces := strings.Repeat(" ", max(0, leftW-len(name)-1))
-					fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[1;38;2;255;255;255;48;2;71;85;105m %s%s\x1b[m", rowAbs, name, spaces)
+					spaces := strings.Repeat(" ", max(0, leftW-len(marker)-len(name)))
+					fmt.Fprintf(os.Stdout, "\x1b[%d;1H%s%s%s%s\x1b[m", rowAbs, selAnsi, marker, name, spaces)
 				} else {
-					spaces := strings.Repeat(" ", max(0, leftW-len(name)-1))
-					fmt.Fprintf(os.Stdout, "\x1b[%d;1H %s%s", rowAbs, name, spaces)
+					spaces := strings.Repeat(" ", max(0, leftW-1-len(name)))
+					fmt.Fprintf(os.Stdout, "\x1b[%d;1H%s %s%s\x1b[m", rowAbs, itemAnsi, name, spaces)
 				}
 			}
 		} else if isDense {
@@ -990,9 +1222,9 @@ func browser(args []string, initWidth, initHeight int) error {
 				left := colIdx * (cellW + gapX)
 				rowAbs := marginTop + 1 + rowIdx
 
-				name := "📁 " + items[idx].name
+				name := folderIcon + " " + items[idx].name
 				if items[idx].name == ".." {
-					name = "📁 .."
+					name = folderIcon + " .."
 				}
 				if len(name) > cellW {
 					name = name[:cellW-3] + "..."
@@ -1000,9 +1232,9 @@ func browser(args []string, initWidth, initHeight int) error {
 				colAbs := left + 2
 
 				if idx == selectedIdx {
-					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH\x1b[1;38;2;255;255;255;48;2;71;85;105m %s \x1b[m", rowAbs, colAbs, name)
+					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH%s%s%s \x1b[m", rowAbs, colAbs, selAnsi, marker, name)
 				} else {
-					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH%s", rowAbs, colAbs, name)
+					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH%s%s\x1b[m", rowAbs, colAbs, itemAnsi, name)
 				}
 			}
 		} else {
@@ -1016,9 +1248,9 @@ func browser(args []string, initWidth, initHeight int) error {
 
 				name := items[idx].name
 				if items[idx].isDir {
-					name = "📁 " + name
+					name = folderIcon + " " + name
 					if items[idx].name == ".." {
-						name = "📁 .."
+						name = folderIcon + " .."
 					}
 				}
 				if len(name) > cellW {
@@ -1027,9 +1259,9 @@ func browser(args []string, initWidth, initHeight int) error {
 				colAbs := left + 1 + (cellW-len(name))/2
 
 				if idx == selectedIdx {
-					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH\x1b[1;38;2;255;255;255;48;2;71;85;105m %s \x1b[m", rowAbs, colAbs, name)
+					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH%s%s%s \x1b[m", rowAbs, colAbs, selAnsi, marker, name)
 				} else {
-					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH%s", rowAbs, colAbs, name)
+					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH%s%s\x1b[m", rowAbs, colAbs, itemAnsi, name)
 				}
 			}
 		}
@@ -1073,15 +1305,31 @@ func browser(args []string, initWidth, initHeight int) error {
 		if currentDir != "" {
 			dirInfo = currentDir
 		}
-		fmt.Fprintf(os.Stdout, "\x1b[1;1H\x1b[K\x1b[1;36m Cati Browser \x1b[m [%s] — Page %d/%d (%d-%d of %d)",
-			dirInfo, pageIdx+1, numPages, startIdx+1, endIdx, len(items))
+		hdrBold := ""
+		if style.HeaderBold {
+			hdrBold = "\x1b[1m"
+		}
+		baseAnsi := hdrBold + styleFG(style.HeaderFg, "") + styleBG(style.HeaderBg, "")
+		hdrText := fmtHeader(labels["header"], map[string]string{
+			"app_name": labels["app_name"],
+			"dir":      dirInfo,
+			"page":     strconv.Itoa(pageIdx + 1),
+			"pages":    strconv.Itoa(numPages),
+			"start":    strconv.Itoa(startIdx + 1),
+			"end":      strconv.Itoa(endIdx),
+			"total":    strconv.Itoa(len(items)),
+		}, baseAnsi)
+		fmt.Fprintf(os.Stdout, "\x1b[1;1H\x1b[K%s%s\x1b[m", baseAnsi, hdrText)
 
 		// Print bottom menu buttons
-		buttons = drawBottomMenu(os.Stdout, termCols, effHeight, pageIdx, numPages, "grid", hoveredButtonAction, style)
+		buttons = drawBottomMenu(os.Stdout, effHeight, "grid", hoveredButtonAction, style, labels, viewBtnRows, nil)
 
-		// Print status line
-		fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[K%s%s [Enter/Click] View/Enter  [◀/▶/Scroll] Page  [s] Settings  [m] Toggle Mode  [q] Quit \x1b[m",
-			effHeight, styleBG(style.ControlBarBg, ""), styleFG(style.ControlBarFg, ""))
+		// Print hint bar
+		activeFileName := ""
+		if selectedIdx >= 0 && selectedIdx < len(items) {
+			activeFileName = items[selectedIdx].name
+		}
+		drawHintBar(os.Stdout, effHeight, labels["hint_browser"], map[string]string{"active_file": activeFileName}, style)
 	}
 
 	redraw()
@@ -1352,6 +1600,12 @@ func browser(args []string, initWidth, initHeight int) error {
 									changed = true
 								case "quit":
 									shouldQuit = true
+								case "inc_zoom":
+									cfgHeight = min(termRows, cfgHeight+1)
+									changed = true
+								case "dec_zoom":
+									cfgHeight = max(10, cfgHeight-1)
+									changed = true
 								}
 								break
 							}
@@ -1755,129 +2009,156 @@ func drawSettingsPage(w io.Writer, termCols, termRows, tempHeight int, tempViewM
 	}
 }
 
-func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, viewMode string, activeAction string, style *StyleConfig) []menuButton {
+// loadViewButtonRows reads the button-bar row template for each view from spec/views.yaml.
+// A row is treated as a button row when it contains { } expressions but no hint_ references.
+func loadViewButtonRows() map[string]string {
+	defaults := map[string]string{
+		"browser":      "{ prev } { next } | { settings } { about } | { quit }",
+		"settings":     "{ save } { cancel } | { quit }",
+		"about":        "{ back } | { quit }",
+		"image_viewer": "{ zoom_in } { zoom_out } { back } { quit }",
+		"video_player": "{ zoom_in } { zoom_out } { if(playing, pause, play) } { back } { quit }",
+	}
+	data, err := os.ReadFile("spec/views.yaml")
+	if err != nil {
+		return defaults
+	}
+	result := map[string]string{}
+	currentView := ""
+	inViews := false
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
+			continue
+		}
+		if trimmed == "views:" {
+			inViews = true
+			continue
+		}
+		if !inViews {
+			continue
+		}
+		// View name: exactly 2-space indent, ends with ":"
+		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
+			currentView = strings.TrimSuffix(trimmed, ":")
+			continue
+		}
+		// Row entry: 4-space indent + "- row: "
+		if currentView != "" && strings.HasPrefix(line, "    - row: ") {
+			tpl := strings.Trim(strings.TrimPrefix(line, "    - row: "), "\"'")
+			if !strings.Contains(tpl, "hint_") {
+				if _, exists := result[currentView]; !exists {
+					result[currentView] = tpl
+				}
+			}
+		}
+	}
+	for k, v := range defaults {
+		if _, exists := result[k]; !exists {
+			result[k] = v
+		}
+	}
+	return result
+}
+
+// drawHintBar renders the hint text line (last terminal row) for the current view.
+func drawHintBar(w io.Writer, termRow int, label string, vars map[string]string, style *StyleConfig) {
+	ctrlAnsi := styleBG(style.ControlBarBg, "") + styleFG(style.ControlBarFg, "")
+	text := renderTpl(label, vars, ctrlAnsi)
+	fmt.Fprintf(w, "\x1b[%d;1H\x1b[K%s %s \x1b[m", termRow, ctrlAnsi, text)
+}
+
+// drawBottomMenu renders the button bar for the given view using the row template from views.yaml.
+// conditions is an optional map of runtime boolean flags (e.g. "playing") used by if() expressions.
+func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, conditions map[string]bool) []menuButton {
 	if style == nil {
 		style = loadStyle()
 	}
-	var buttons []menuButton
-	labels := loadLabels()
 
-	// Clear the button line and apply control bar background from style
-	fmt.Fprintf(w, "\x1b[%d;1H\x1b[K%s", termRows-1, styleBG(style.ControlBarBg, ""))
-
-	if viewMode == "about" {
-		btnBack := menuButton{
-			label:  labels["back"],
-			action: "back",
-		}
-		btnQuit := menuButton{
-			label:  labels["quit"],
-			action: "quit",
-		}
-
-		btnBack.col = 2
-		btnBack.width = len(btnBack.label)
-
-		btnQuit.col = btnBack.col + btnBack.width + 3
-		btnQuit.width = len(btnQuit.label)
-
-		buttons = append(buttons, btnBack, btnQuit)
-	} else if viewMode == "settings" {
-		btnInc := menuButton{
-			label:  labels["inc"],
-			action: "inc",
-		}
-		btnDec := menuButton{
-			label:  labels["dec"],
-			action: "dec",
-		}
-		btnSave := menuButton{
-			label:  labels["save"],
-			action: "save",
-		}
-		btnCancel := menuButton{
-			label:  labels["cancel"],
-			action: "cancel",
-		}
-
-		currentCol := 4
-		btnInc.col = currentCol
-		btnInc.width = len(btnInc.label)
-
-		currentCol += btnInc.width + 3
-		btnDec.col = currentCol
-		btnDec.width = len(btnDec.label)
-
-		currentCol += btnDec.width + 3
-		btnSave.col = currentCol
-		btnSave.width = len(btnSave.label)
-
-		currentCol += btnSave.width + 3
-		btnCancel.col = currentCol
-		btnCancel.width = len(btnCancel.label)
-
-		buttons = append(buttons, btnInc, btnDec, btnSave, btnCancel)
-	} else {
-		btnPrev := menuButton{
-			label:  labels["prev"],
-			action: "prev",
-		}
-		btnNext := menuButton{
-			label:  labels["next"],
-			action: "next",
-		}
-		btnSettings := menuButton{
-			label:  labels["settings"],
-			action: "settings",
-		}
-		btnAbout := menuButton{
-			label:  labels["about"],
-			action: "about",
-		}
-		btnQuit := menuButton{
-			label:  labels["quit"],
-			action: "quit",
-		}
-
-		currentCol := 2
-		btnPrev.col = currentCol
-		btnPrev.width = len(btnPrev.label)
-
-		currentCol += btnPrev.width + 2
-		btnNext.col = currentCol
-		btnNext.width = len(btnNext.label)
-
-		currentCol += btnNext.width + 2
-		btnSettings.col = currentCol
-		btnSettings.width = len(btnSettings.label)
-
-		currentCol += btnSettings.width + 2
-		btnAbout.col = currentCol
-		btnAbout.width = len(btnAbout.label)
-
-		currentCol += btnAbout.width + 2
-		btnQuit.col = currentCol
-		btnQuit.width = len(btnQuit.label)
-
-		buttons = append(buttons, btnPrev, btnNext, btnSettings, btnAbout, btnQuit)
+	viewName := viewMode
+	if viewMode == "grid" || viewMode == "preview" {
+		viewName = "browser"
 	}
 
-	for _, btn := range buttons {
-		if btn.action == activeAction {
-			// Subtle Highlight style: bold text on slate-gray background
-			fmt.Fprintf(w, "\x1b[%d;%dH\x1b[1m%s%s%s\x1b[m",
-				termRows-1, btn.col,
-				styleFG(style.BtnActiveFg, ""),
-				styleBG(style.BtnActiveBg, ""),
-				btn.label)
-		} else {
-			// Subtle Nord-style slate gray buttons
-			fmt.Fprintf(w, "\x1b[%d;%dH%s%s%s\x1b[m",
-				termRows-1, btn.col,
-				styleFG(style.BtnFg, ""),
-				styleBG(style.BtnBg, ""),
-				btn.label)
+	ctrlAnsi := styleBG(style.ControlBarBg, "") + styleFG(style.ControlBarFg, "")
+	fmt.Fprintf(w, "\x1b[%d;1H\x1b[K%s", termRows-1, ctrlAnsi)
+
+	tpl := viewBtnRows[viewName]
+	if tpl == "" {
+		return nil
+	}
+
+	var buttons []menuButton
+	col := 1
+	i := 0
+	for i < len(tpl) {
+		open := strings.Index(tpl[i:], "{")
+		if open == -1 {
+			break
 		}
+		// Render literal content between buttons (e.g. " | " separators)
+		literal := tpl[i : i+open]
+		if strings.TrimSpace(literal) != "" {
+			fmt.Fprintf(w, "\x1b[%d;%dH%s%s\x1b[m", termRows-1, col, ctrlAnsi, literal)
+		}
+		col += utf8.RuneCountInString(literal)
+		i += open + 1
+
+		close := strings.Index(tpl[i:], "}")
+		if close == -1 {
+			break
+		}
+		expr := tpl[i : i+close]
+		i += close + 1
+
+		parts := strings.Split(expr, "|")
+		key := strings.TrimSpace(parts[0])
+		mods := parts[1:]
+
+		// if(cond, trueKey, falseKey) — resolve at render time using conditions map
+		if strings.HasPrefix(key, "if(") && strings.HasSuffix(key, ")") {
+			inner := key[3 : len(key)-1]
+			ifParts := strings.SplitN(inner, ",", 3)
+			if len(ifParts) == 3 {
+				cond := strings.TrimSpace(ifParts[0])
+				if conditions[cond] {
+					key = strings.TrimSpace(ifParts[1])
+				} else {
+					key = strings.TrimSpace(ifParts[2])
+				}
+			}
+		}
+
+		label := labels[key]
+		if label == "" {
+			label = key
+		}
+
+		btn := menuButton{label: label, action: key, col: col, width: tplWidth(label, nil)}
+		buttons = append(buttons, btn)
+
+		fg := styleFG(style.BtnFg, "")
+		bg := styleBG(style.BtnBg, "")
+		boldEsc := ""
+		for _, mod := range mods {
+			switch strings.TrimSpace(mod) {
+			case "bold":
+				boldEsc = "\x1b[1m"
+			default:
+				if c := styleFG(strings.TrimSpace(mod), ""); c != "" {
+					fg = c
+				}
+			}
+		}
+		if key == activeAction {
+			boldEsc = "\x1b[1m"
+			fg = styleFG(style.BtnActiveFg, fg)
+			bg = styleBG(style.BtnActiveBg, bg)
+		}
+		baseAnsi := boldEsc + fg + bg
+		rendered := renderTpl(label, nil, baseAnsi)
+		fmt.Fprintf(w, "\x1b[%d;%dH%s%s\x1b[m", termRows-1, col, baseAnsi, rendered)
+		col += btn.width
 	}
 	return buttons
 }

@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "buttons.schema.json",
+  "title": "Cati Buttons",
+  "description": "Button widget definitions with action bindings",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "button": {
+      "type": "object",
+      "required": ["text", "action"],
+      "additionalProperties": false,
+      "properties": {
+        "text":   { "type": "string", "description": "Button label (caps from style.yaml buttons.left_cap/right_cap are applied)" },
+        "style":  {
+          "type": "string",
+          "enum": ["primary", "secondary", "active", "muted", "info", "danger"],
+          "description": "Theme token from spec/theme.yaml"
+        },
+        "action": { "type": "string", "description": "Registered action name mapped to a Go handler at startup" }
+      }
+    }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "buttons": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/definitions/button" }
+    }
+  }
+}

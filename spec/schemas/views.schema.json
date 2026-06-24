@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "views.schema.json",
+  "title": "Cati Views",
+  "description": "Declarative layout for each app screen",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "area_row": {
+      "type": "object",
+      "required": ["area"],
+      "additionalProperties": false,
+      "properties": {
+        "area": {
+          "type": "string",
+          "enum": ["grid", "canvas", "settings_form", "about_content"],
+          "description": "Named content area that fills remaining vertical space"
+        }
+      }
+    },
+    "template_row": {
+      "type": "object",
+      "required": ["row"],
+      "additionalProperties": false,
+      "properties": {
+        "row": {
+          "type": "string",
+          "description": "Template string rendered as one terminal line. Syntax: { key } or { key | modifier... }. Keys resolve to buttons (spec/buttons.yaml) or labels (spec/labels.yaml). Modifiers: color names (red, cyn...), bold, dim, italic, underline."
+        }
+      }
+    },
+    "view": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/area_row" },
+          { "$ref": "#/definitions/template_row" }
+        ]
+      }
+    }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "views": {
+      "type": "object",
+      "properties": {
+        "browser":      { "$ref": "#/definitions/view" },
+        "image_viewer": { "$ref": "#/definitions/view" },
+        "video_player": { "$ref": "#/definitions/view" },
+        "settings":     { "$ref": "#/definitions/view" },
+        "about":        { "$ref": "#/definitions/view" }
+      },
+      "additionalProperties": { "$ref": "#/definitions/view" }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "config.schema.json",
+  "title": "Cati Config Defaults",
+  "description": "Default values for ~/.config/cati/config settings",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema":        { "type": "string" },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preview_height":  { "type": "integer", "minimum": 10, "maximum": 200 },
+        "view_mode":       { "type": "string", "enum": ["grid", "preview"] },
+        "max_jobs":        { "type": "integer", "minimum": 1, "maximum": 32 },
+        "video_frames":    { "type": "integer", "minimum": 1, "maximum": 60 },
+        "preview_videos":  { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,11 +1,20 @@
-prev: "[◀ Prev]"
-next: "[Next ▶]"
-settings: "[⚙ Settings]"
-about: "[ℹ︎About]"
-quit: "[✖ Quit]"
-back: "[◀ Back]"
-inc: "[▲ Inc]"
-dec: "[▼ Dec]"
-save: "[✔ Save]"
-cancel: "[✖ Cancel]"
+# yaml-language-server: $schema=./schemas/labels.schema.json
+# Cati Labels — non-button user-visible strings.
+# Button text lives in spec/buttons.yaml; caps come from style.yaml buttons.left_cap/right_cap.
+$schema: "./schemas/labels.schema.json"
 
+# App identity
+app_name: "Cati Browser"
+
+# Header bar template — variables: {app_name} {dir} {page} {pages} {start} {end} {total}
+header: " {app_name | cyn | bold }  [{dir}] — Page {page}/{pages} ({start}-{end} of {total})"
+
+# Grid / list icons
+folder_icon: "📁"
+file_icon: "📄"
+
+# Hint bars (bottom row, below the button row)
+hint_browser: "File: { active_file } — open:↵/🖱︎  navigate:↕↔/⬆︎⬇︎/🖱︎"
+hint_settings: "Setting: { active_setting } — adjust:◀/▶  save:↵  cancel:Esc"
+hint_about: ""
+hint_viewer: ""

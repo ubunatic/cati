@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=./schemas/controls.schema.json
+# Cati Controls — tunable runtime values with get/set action bindings.
+# set/get: registered Go handler names (bound at app startup).
+$schema: "./schemas/controls.schema.json"
+
+controls:
+  preview_height:
+    type: int
+    min: 10
+    max: 200
+    default: 40
+    set: set_preview_height
+    get: get_preview_height
+
+  view_mode:
+    type: enum
+    values: [grid, preview]
+    default: grid
+    set: set_view_mode
+    get: get_view_mode
+
+  preview_videos:
+    type: bool
+    default: true
+    set: set_preview_videos
+    get: get_preview_videos
+
+  max_jobs:
+    type: int
+    min: 1
+    max: 32
+    default: 4
+    set: set_max_jobs
+    get: get_max_jobs
+
+  video_frames:
+    type: int
+    min: 1
+    max: 60
+    default: 8
+    set: set_video_frames
+    get: get_video_frames

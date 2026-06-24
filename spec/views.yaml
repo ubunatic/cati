@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=./schemas/views.schema.json
+# Cati Views — declarative screen layouts.
+#
+# Each view is a list of rows/areas stacked top-to-bottom:
+#   - area: <name>  fills remaining vertical space with a named content area
+#   - row: "<tpl>"  renders one terminal line from a template string
+#
+# Template syntax:  { key }  or  { key | modifier modifier ... }
+#   key       — button name (spec/buttons.yaml) or label key (spec/labels.yaml)
+#   modifiers — color names (red, cyn, blu …), bold, dim, italic, underline
+#
+# Literal spaces between { } blocks are preserved as padding.
+# Button keys are rendered as styled widgets; label keys as plain text.
+$schema: "./schemas/views.schema.json"
+
+views:
+  browser:
+    - area: grid
+    - row: "{ prev } { next } | { settings } { about } | { quit }"
+    - row: "{ hint_browser }"
+
+  image_viewer:
+    - area: canvas
+    - row: "{ zoom_in } { zoom_out } { back } { quit }"
+    - row: "{ hint_viewer }"
+
+  video_player:
+    - area: canvas
+    - row: "{ zoom_in } { zoom_out } { if(playing, pause, play) } { back } { quit }"
+    - row: "{ hint_viewer }"
+
+  settings:
+    - area: settings_form
+    - row: "{ save } { cancel } | { quit }"
+    - row: "{ hint_settings }"
+
+  about:
+    - area: about_content
+    - row: "{ back } { website } | { quit }"
+    - row: "{ hint_about }"

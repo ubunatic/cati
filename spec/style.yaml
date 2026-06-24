@@ -1,6 +1,7 @@
-# yaml-language-server: $schema=./style.schema.json
+# yaml-language-server: $schema=./schemas/style.schema.json
 # Cati Browser Style
-$schema: "./style.schema.json"
+$schema: "./schemas/style.schema.json"
+
 app:
   bg: slv
   border_style: double
@@ -21,6 +22,20 @@ preview:
 control_bar:
   bg: null
   fg: gry
+
+header_bar:
+  fg: null
+  bg: null
+  bold: false
+
+grid:
+  item_fg: null
+  item_bg: null
+  selected_fg: wht
+  selected_bg: gry
+  selected_bold: true
+  selected_marker: " "
+  image_border: none
 
 scroll_bar:
   thumb_char: "█"

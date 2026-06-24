@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "theme.schema.json",
+  "title": "Cati Theme Tokens",
+  "description": "Semantic style tokens referenced by buttons.yaml and views.yaml",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "color": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        { "type": "string", "pattern": "^#[0-9a-fA-F]{3}$" },
+        {
+          "type": "string",
+          "enum": [
+            "black", "blk", "white", "wht", "red",
+            "green", "grn", "blue", "blu",
+            "yellow", "yel", "orange", "org",
+            "purple", "pur", "pink", "pnk",
+            "cyan", "cyn", "magenta", "mag",
+            "brown", "brn", "gray", "grey", "gry",
+            "navy", "nav", "lime", "aqua", "teal",
+            "maroon", "olive", "silver", "slv"
+          ]
+        }
+      ]
+    },
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fg":   { "$ref": "#/definitions/color" },
+        "bg":   { "$ref": "#/definitions/color" },
+        "bold": { "type": "boolean" }
+      }
+    }
+  },
+  "properties": {
+    "$schema":   { "type": "string" },
+    "primary":   { "$ref": "#/definitions/token" },
+    "secondary": { "$ref": "#/definitions/token" },
+    "active":    { "$ref": "#/definitions/token" },
+    "muted":     { "$ref": "#/definitions/token" },
+    "info":      { "$ref": "#/definitions/token" },
+    "danger":    { "$ref": "#/definitions/token" }
+  }
+}

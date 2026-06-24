@@ -1,0 +1,67 @@
+# yaml-language-server: $schema=./schemas/buttons.schema.json
+# Cati Buttons — widget definitions with action bindings.
+# text: label without caps (caps come from style.yaml buttons.left_cap / right_cap)
+# style: theme token from spec/theme.yaml
+# action: registered Go handler name (see cmd/browser.go action registry)
+$schema: "./schemas/buttons.schema.json"
+
+buttons:
+  prev:
+    text: "◀ Prev"
+    style: secondary
+    action: nav_prev
+
+  next:
+    text: "Next ▶"
+    style: secondary
+    action: nav_next
+
+  settings:
+    text: "{ 'S' | bold | light }ettings"
+    style: secondary
+    action: open_settings
+
+  about:
+    text: "{ 'A' | bold | light }bout"
+    style: secondary
+    action: open_about
+
+  quit:
+    text: "{ 'Q' | bold | light }uit"
+    style: danger
+    action: quit
+
+  back:
+    text: "◀ Back"
+    style: secondary
+    action: go_back
+
+  zoom_in:
+    text: "+ Zoom In"
+    style: secondary
+    action: inc_zoom
+
+  zoom_out:
+    text: "- Zoom Out"
+    style: secondary
+    action: dec_zoom
+
+  play:
+    text: "▶︎ Play"
+    style: primary
+    action: play_video
+
+  pause:
+    text: "⏸︎ Play"
+    style: primary
+    action: pause_video
+
+  save:
+    text: "✔ Save"
+    style: primary
+    action: save_settings
+
+  cancel:
+    text: "✖ Cancel"
+    style: secondary
+    action: cancel_settings
