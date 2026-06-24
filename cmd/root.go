@@ -106,10 +106,17 @@ func run(o opts, args []string) error {
 	}
 
 	if o.interactive {
-		if len(paths) == 1 {
-			return interactive(paths[0], o.width, o.height)
+		isDir := false
+		if len(args) == 1 {
+			info, err := os.Stat(args[0])
+			if err == nil && info.IsDir() {
+				isDir = true
+			}
 		}
-		return browser(paths, o.width, o.height)
+		if len(args) > 1 || isDir {
+			return browser(args, o.width, o.height)
+		}
+		return interactive(paths[0], o.width, o.height)
 	}
 
 	// ── Static render ─────────────────────────────────────────────────────────

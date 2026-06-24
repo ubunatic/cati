@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"io"
 	"os"
 	"os/signal"
@@ -20,6 +21,83 @@ type menuButton struct {
 	col    int // 1-indexed column
 	width  int // character width
 	action string // e.g. "prev", "next", "settings", "about", "back", "quit", "inc", "dec", "save", "cancel"
+}
+
+type browserItem struct {
+	path  string
+	isDir bool
+	name  string
+}
+
+// ── Custom folder pixel icon ──────────────────────────────────────────────────
+
+func createFolderIcon() image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, 16, 12))
+	folderColor := color.RGBA{R: 245, G: 158, B: 11, A: 255} // Amber/yellow
+	tabColor := color.RGBA{R: 217, G: 119, B: 6, A: 255}    // Darker amber for tab
+	borderColor := color.RGBA{R: 146, G: 64, B: 14, A: 255} // Dark brown outline
+
+	for y := 0; y < 12; y++ {
+		for x := 0; x < 16; x++ {
+			// Tab border & fill
+			if y >= 1 && y <= 2 && x >= 1 && x <= 5 {
+				if y == 1 || x == 1 || x == 5 {
+					img.Set(x, y, borderColor)
+				} else {
+					img.Set(x, y, tabColor)
+				}
+			}
+			// Body border & fill
+			if y >= 3 && y <= 10 && x >= 1 && x <= 14 {
+				if y == 3 || y == 10 || x == 1 || x == 14 {
+					img.Set(x, y, borderColor)
+				} else {
+					img.Set(x, y, folderColor)
+				}
+			}
+		}
+	}
+	return img
+}
+
+// ── Customizable Labels ──────────────────────────────────────────────────────
+
+func loadLabels() map[string]string {
+	labels := map[string]string{
+		"prev":     "[◀ Prev]",
+		"next":     "[Next ▶]",
+		"settings": "[⚙ Settings]",
+		"about":    "[ℹ About]",
+		"quit":     "[✖ Quit]",
+		"back":     "[◀ Back]",
+		"inc":      "[▲ Increase]",
+		"dec":      "[▼ Decrease]",
+		"save":     "[✔ Save]",
+		"cancel":   "[✖ Cancel]",
+	}
+
+	data, err := os.ReadFile("spec/labels.yaml")
+	if err != nil {
+		return labels // Fallback to default labels
+	}
+
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			val = strings.Trim(val, "\"'")
+			if val != "" {
+				labels[key] = val
+			}
+		}
+	}
+	return labels
 }
 
 // ── YAML view parser ─────────────────────────────────────────────────────────
@@ -173,26 +251,102 @@ func saveSettings(height int) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
+// ── Dynamic Directory Loading ───────────────────────────────────────────────
+
+func loadBrowserItems(currentDir string, initialItems []browserItem) []browserItem {
+	if currentDir == "" {
+		return initialItems
+	}
+
+	var out []browserItem
+	// Parent folder entry
+	out = append(out, browserItem{
+		path:  filepath.Dir(currentDir),
+		isDir: true,
+		name:  "..",
+	})
+
+	files, err := os.ReadDir(currentDir)
+	if err != nil {
+		return out
+	}
+
+	var dirs []browserItem
+	var imgs []browserItem
+
+	for _, f := range files {
+		name := f.Name()
+		if strings.HasPrefix(name, ".") {
+			continue // Skip hidden files
+		}
+		path := filepath.Join(currentDir, name)
+		if f.IsDir() {
+			dirs = append(dirs, browserItem{
+				path:  path,
+				isDir: true,
+				name:  name,
+			})
+		} else if isImageFile(path) {
+			imgs = append(imgs, browserItem{
+				path:  path,
+				isDir: false,
+				name:  name,
+			})
+		}
+	}
+
+	out = append(out, dirs...)
+	out = append(out, imgs...)
+	return out
+}
+
 // ── Browser ──────────────────────────────────────────────────────────────────
 
-// browser runs an interactive grid preview of multiple images and videos.
-func browser(paths []string, initWidth, initHeight int) error {
+// browser runs an interactive grid preview of files and subdirectories.
+func browser(args []string, initWidth, initHeight int) error {
 	cfgHeight := loadSettings()
-	tempHeight := cfgHeight // For temporary edits in the settings dialog
+	tempHeight := cfgHeight
 
-	// Cache for thumbnails to keep resizing and page navigation super responsive.
+	var initialItems []browserItem
+	for _, p := range args {
+		info, err := os.Stat(p)
+		if err == nil {
+			initialItems = append(initialItems, browserItem{
+				path:  p,
+				isDir: info.IsDir(),
+				name:  filepath.Base(p),
+			})
+		}
+	}
+
+	currentDir := ""
+	if len(args) == 1 {
+		info, err := os.Stat(args[0])
+		if err == nil && info.IsDir() {
+			currentDir = args[0]
+		}
+	}
+
+	items := loadBrowserItems(currentDir, initialItems)
+
 	type thumbKey struct {
 		path string
 		w, h int
 	}
 	thumbCache := make(map[thumbKey]image.Image)
 
-	getThumbnail := func(path string, cellW, cellH int) (image.Image, error) {
-		key := thumbKey{path: path, w: cellW, h: cellH}
+	getThumbnail := func(item browserItem, cellW, cellH int) (image.Image, error) {
+		key := thumbKey{path: item.path, w: cellW, h: cellH}
 		if img, ok := thumbCache[key]; ok {
 			return img, nil
 		}
-		img, err := halfblock.LoadImage(path)
+		if item.isDir {
+			img := createFolderIcon()
+			scaled := halfblock.ScaleToFit(img, cellW, cellH)
+			thumbCache[key] = scaled
+			return scaled, nil
+		}
+		img, err := halfblock.LoadImage(item.path)
 		if err != nil {
 			return nil, err
 		}
@@ -204,7 +358,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 	fd := int(os.Stdin.Fd())
 	oldState, err := term.MakeRaw(fd)
 	if err != nil {
-		oldState = nil // Not a terminal or mock tests
+		oldState = nil
 	}
 	defer func() {
 		if oldState != nil {
@@ -212,12 +366,10 @@ func browser(paths []string, initWidth, initHeight int) error {
 		}
 	}()
 
-	// Signal handling
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigs)
 
-	// Setup input channel with large buffer to avoid splitting escape sequences
 	inputs := make(chan string, 32)
 	go func() {
 		buf := make([]byte, 4096)
@@ -247,6 +399,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 	selectedIdx := 0
 	viewMode := "grid" // "grid", "about", or "settings"
 	var buttons []menuButton
+	hoveredButtonAction := ""
 
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
 
@@ -260,13 +413,13 @@ func browser(paths []string, initWidth, initHeight int) error {
 
 		if viewMode == "about" {
 			drawAboutPage(os.Stdout, termCols, effHeight)
-			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "about")
+			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "about", hoveredButtonAction)
 			return
 		}
 
 		if viewMode == "settings" {
 			drawSettingsPage(os.Stdout, termCols, effHeight, tempHeight)
-			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "settings")
+			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "settings", hoveredButtonAction)
 			return
 		}
 
@@ -294,19 +447,19 @@ func browser(paths []string, initWidth, initHeight int) error {
 		}
 
 		itemsPerPage := gridCols * gridRows
-		numPages := (len(paths) + itemsPerPage - 1) / itemsPerPage
+		numPages := (len(items) + itemsPerPage - 1) / itemsPerPage
 
 		if selectedIdx < 0 {
 			selectedIdx = 0
 		}
-		if selectedIdx >= len(paths) {
-			selectedIdx = len(paths) - 1
+		if selectedIdx >= len(items) {
+			selectedIdx = len(items) - 1
 		}
 		pageIdx := selectedIdx / itemsPerPage
 		startIdx := pageIdx * itemsPerPage
 		endIdx := startIdx + itemsPerPage
-		if endIdx > len(paths) {
-			endIdx = len(paths)
+		if endIdx > len(items) {
+			endIdx = len(items)
 		}
 
 		gapX := 4
@@ -322,7 +475,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 
 		compImg := image.NewRGBA(image.Rect(0, 0, termCols, gridRowsLimit*2))
 
-		// Render thumbnails onto the composite canvas
+		// Render thumbnails
 		for idx := startIdx; idx < endIdx; idx++ {
 			cellItemIdx := idx - startIdx
 			colIdx := cellItemIdx % gridCols
@@ -330,7 +483,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 			left := colIdx * (cellW + gapX)
 			top := rowIdx * (cellH + gapY)
 
-			thumb, err := getThumbnail(paths[idx], cellW, cellH-1)
+			thumb, err := getThumbnail(items[idx], cellW, cellH-1)
 			if err == nil && thumb != nil {
 				thumbW := thumb.Bounds().Dx()
 				thumbH := thumb.Bounds().Dy()
@@ -351,7 +504,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 			}
 		}
 
-		// Draw the page composite image
+		// Draw page composite image
 		halfblock.CursorHome(os.Stdout)
 		fmt.Fprintf(os.Stdout, "\x1b[%d;1H", marginTop+1)
 		_ = halfblock.Render(os.Stdout, compImg)
@@ -366,29 +519,33 @@ func browser(paths []string, initWidth, initHeight int) error {
 			top := rowIdx * (cellH + gapY)
 			rowAbs := marginTop + 1 + top + cellH - 1
 
-			name := filepath.Base(paths[idx])
+			name := items[idx].name
 			if len(name) > cellW {
 				name = name[:cellW-3] + "..."
 			}
 			colAbs := left + 1 + (cellW-len(name))/2
 
 			if idx == selectedIdx {
-				// Reverse video (bold black text on green chip background)
-				fmt.Fprintf(os.Stdout, "\x1b[%d;%dH\x1b[1;30;42m %s \x1b[m", rowAbs, colAbs, name)
+				// Subtle highlighting (Nord slate: bold white text on light slate/gray background)
+				fmt.Fprintf(os.Stdout, "\x1b[%d;%dH\x1b[1;38;2;255;255;255;48;2;71;85;105m %s \x1b[m", rowAbs, colAbs, name)
 			} else {
 				fmt.Fprintf(os.Stdout, "\x1b[%d;%dH%s", rowAbs, colAbs, name)
 			}
 		}
 
-		// Print title / pager header
-		fmt.Fprintf(os.Stdout, "\x1b[1;1H\x1b[K\x1b[1;36m cati Image Browser \x1b[m — Page %d/%d (%d-%d of %d)",
-			pageIdx+1, numPages, startIdx+1, endIdx, len(paths))
+		// Print header
+		dirInfo := "Root"
+		if currentDir != "" {
+			dirInfo = currentDir
+		}
+		fmt.Fprintf(os.Stdout, "\x1b[1;1H\x1b[K\x1b[1;36m Cati Browser \x1b[m [%s] — Page %d/%d (%d-%d of %d)",
+			dirInfo, pageIdx+1, numPages, startIdx+1, endIdx, len(items))
 
 		// Print bottom menu buttons
-		buttons = drawBottomMenu(os.Stdout, termCols, effHeight, pageIdx, numPages, "grid")
+		buttons = drawBottomMenu(os.Stdout, termCols, effHeight, pageIdx, numPages, "grid", hoveredButtonAction)
 
 		// Print status line
-		fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[K\x1b[7m [Enter/Click] View  [◀/▶/Scroll] Page  [s] Settings  [a] About  [q] Quit \x1b[m", effHeight)
+		fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[K\x1b[7m [Enter/Click] View/Enter  [◀/▶/Scroll] Page  [s] Settings  [a] About  [q] Quit \x1b[m", effHeight)
 	}
 
 	redraw()
@@ -423,6 +580,28 @@ func browser(paths []string, initWidth, initHeight int) error {
 
 			processInput := func(tok string) {
 				if btn, col, row, release, ok := parseSGRMouse(tok); ok {
+					// Detect button hovers/motion
+					if row == effHeight-1 {
+						found := false
+						for _, b := range buttons {
+							if col >= b.col && col < b.col+b.width {
+								if hoveredButtonAction != b.action {
+									hoveredButtonAction = b.action
+									changed = true
+								}
+								found = true
+								break
+							}
+						}
+						if !found && hoveredButtonAction != "" {
+							hoveredButtonAction = ""
+							changed = true
+						}
+					} else if hoveredButtonAction != "" {
+						hoveredButtonAction = ""
+						changed = true
+					}
+
 					if viewMode == "about" {
 						if row == effHeight-1 && release {
 							for _, b := range buttons {
@@ -469,12 +648,12 @@ func browser(paths []string, initWidth, initHeight int) error {
 						return
 					}
 
-					// Grid view mouse interactions: scroll, buttons, hover & click
+					// Grid view mouse interactions
 					if sgrIsScroll(btn) && !release {
 						if sgrScrollDir(btn) < 0 {
 							selectedIdx = max(0, selectedIdx-itemsPerPage)
 						} else {
-							selectedIdx = min(len(paths)-1, selectedIdx+itemsPerPage)
+							selectedIdx = min(len(items)-1, selectedIdx+itemsPerPage)
 						}
 						changed = true
 					} else if row == effHeight-1 && release {
@@ -486,7 +665,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 									selectedIdx = max(0, selectedIdx-itemsPerPage)
 									changed = true
 								case "next":
-									selectedIdx = min(len(paths)-1, selectedIdx+itemsPerPage)
+									selectedIdx = min(len(items)-1, selectedIdx+itemsPerPage)
 									changed = true
 								case "settings":
 									viewMode = "settings"
@@ -502,7 +681,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 							}
 						}
 					} else {
-						// Hover detection and single click view logic
+						// Hover and Click on grid items
 						marginTop := 1
 						c := col - 1
 						r := row - 1 - marginTop
@@ -522,8 +701,8 @@ func browser(paths []string, initWidth, initHeight int) error {
 						pageIdx := selectedIdx / itemsPerPage
 						startIdx := pageIdx * itemsPerPage
 						endIdx := startIdx + itemsPerPage
-						if endIdx > len(paths) {
-							endIdx = len(paths)
+						if endIdx > len(items) {
+							endIdx = len(items)
 						}
 
 						for cellItemIdx := 0; cellItemIdx < (endIdx - startIdx); cellItemIdx++ {
@@ -541,21 +720,45 @@ func browser(paths []string, initWidth, initHeight int) error {
 									changed = true
 								}
 
-								// Left-click to view item alone, using shared inputs channel to protect input focus
+								// Handle click
 								if !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release {
-									if oldState != nil {
-										_ = term.Restore(fd, oldState)
+									targetItem := items[selectedIdx]
+									if targetItem.isDir {
+										if targetItem.name == ".." {
+											// Navigate up
+											isInitialDir := false
+											for _, init := range initialItems {
+												if init.isDir && filepath.Clean(init.path) == filepath.Clean(currentDir) {
+													isInitialDir = true
+													break
+												}
+											}
+											if isInitialDir {
+												currentDir = ""
+											} else {
+												currentDir = filepath.Dir(currentDir)
+											}
+										} else {
+											currentDir = targetItem.path
+										}
+										items = loadBrowserItems(currentDir, initialItems)
+										selectedIdx = 0
+										halfblock.ClearScreen(os.Stdout)
+									} else {
+										// Show single file
+										if oldState != nil {
+											_ = term.Restore(fd, oldState)
+										}
+										fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l")
+										halfblock.ShowCursor(os.Stdout)
+
+										_ = interactiveWithChan(targetItem.path, initWidth, initHeight, inputs)
+
+										oldState, err = term.MakeRaw(fd)
+										halfblock.HideCursor(os.Stdout)
+										halfblock.ClearScreen(os.Stdout)
+										fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h")
 									}
-									fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l") // Disable mouse hover temporarily
-									halfblock.ShowCursor(os.Stdout)
-
-									_ = interactiveWithChan(paths[selectedIdx], initWidth, initHeight, inputs)
-
-									oldState, err = term.MakeRaw(fd)
-									halfblock.HideCursor(os.Stdout)
-									halfblock.ClearScreen(os.Stdout)
-									fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h") // Re-enable hover tracking
-
 									changed = true
 								}
 								break
@@ -570,7 +773,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 							viewMode = "grid"
 							halfblock.ClearScreen(os.Stdout)
 							changed = true
-						case "\x03": // Ctrl+C
+						case "\x03":
 							shouldQuit = true
 						}
 						return
@@ -595,7 +798,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 							viewMode = "grid"
 							halfblock.ClearScreen(os.Stdout)
 							changed = true
-						case "\x03": // Ctrl+C
+						case "\x03":
 							shouldQuit = true
 						}
 						return
@@ -622,7 +825,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 						}
 
 					case "\x1b[C": // Right arrow
-						if selectedIdx < len(paths)-1 {
+						if selectedIdx < len(items)-1 {
 							selectedIdx++
 							changed = true
 						}
@@ -634,25 +837,47 @@ func browser(paths []string, initWidth, initHeight int) error {
 						}
 
 					case "\x1b[B": // Down arrow
-						if selectedIdx+gridCols < len(paths) {
+						if selectedIdx+gridCols < len(items) {
 							selectedIdx += gridCols
 							changed = true
 						}
 
 					case "\x0d", "\x0a", " ": // Enter or Space
-						if oldState != nil {
-							_ = term.Restore(fd, oldState)
+						targetItem := items[selectedIdx]
+						if targetItem.isDir {
+							if targetItem.name == ".." {
+								isInitialDir := false
+								for _, init := range initialItems {
+									if init.isDir && filepath.Clean(init.path) == filepath.Clean(currentDir) {
+										isInitialDir = true
+										break
+									}
+								}
+								if isInitialDir {
+									currentDir = ""
+								} else {
+									currentDir = filepath.Dir(currentDir)
+								}
+							} else {
+								currentDir = targetItem.path
+							}
+							items = loadBrowserItems(currentDir, initialItems)
+							selectedIdx = 0
+							halfblock.ClearScreen(os.Stdout)
+						} else {
+							if oldState != nil {
+								_ = term.Restore(fd, oldState)
+							}
+							fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l")
+							halfblock.ShowCursor(os.Stdout)
+
+							_ = interactiveWithChan(targetItem.path, initWidth, initHeight, inputs)
+
+							oldState, err = term.MakeRaw(fd)
+							halfblock.HideCursor(os.Stdout)
+							halfblock.ClearScreen(os.Stdout)
+							fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h")
 						}
-						fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l")
-						halfblock.ShowCursor(os.Stdout)
-
-						_ = interactiveWithChan(paths[selectedIdx], initWidth, initHeight, inputs)
-
-						oldState, err = term.MakeRaw(fd)
-						halfblock.HideCursor(os.Stdout)
-						halfblock.ClearScreen(os.Stdout)
-						fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h")
-
 						changed = true
 
 					case "\x1b[5~", "[": // Page Up
@@ -660,7 +885,7 @@ func browser(paths []string, initWidth, initHeight int) error {
 						changed = true
 
 					case "\x1b[6~", "]": // Page Down
-						selectedIdx = min(len(paths)-1, selectedIdx+itemsPerPage)
+						selectedIdx = min(len(items)-1, selectedIdx+itemsPerPage)
 						changed = true
 					}
 				}
@@ -742,19 +967,20 @@ func drawSettingsPage(w io.Writer, termCols, termRows int, tempHeight int) {
 	}
 }
 
-func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, viewMode string) []menuButton {
+func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, viewMode string, activeAction string) []menuButton {
 	var buttons []menuButton
+	labels := loadLabels()
 
 	// Clear the button line first
 	fmt.Fprintf(w, "\x1b[%d;1H\x1b[K", termRows-1)
 
 	if viewMode == "about" {
 		btnBack := menuButton{
-			label:  "[◀ Back]",
+			label:  labels["back"],
 			action: "back",
 		}
 		btnQuit := menuButton{
-			label:  "[✖ Quit]",
+			label:  labels["quit"],
 			action: "quit",
 		}
 
@@ -767,19 +993,19 @@ func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, 
 		buttons = append(buttons, btnBack, btnQuit)
 	} else if viewMode == "settings" {
 		btnInc := menuButton{
-			label:  "[▲ Increase]",
+			label:  labels["inc"],
 			action: "inc",
 		}
 		btnDec := menuButton{
-			label:  "[▼ Decrease]",
+			label:  labels["dec"],
 			action: "dec",
 		}
 		btnSave := menuButton{
-			label:  "[✔ Save]",
+			label:  labels["save"],
 			action: "save",
 		}
 		btnCancel := menuButton{
-			label:  "[✖ Cancel]",
+			label:  labels["cancel"],
 			action: "cancel",
 		}
 
@@ -802,23 +1028,23 @@ func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, 
 		buttons = append(buttons, btnInc, btnDec, btnSave, btnCancel)
 	} else {
 		btnPrev := menuButton{
-			label:  "[◀ Prev]",
+			label:  labels["prev"],
 			action: "prev",
 		}
 		btnNext := menuButton{
-			label:  "[Next ▶]",
+			label:  labels["next"],
 			action: "next",
 		}
 		btnSettings := menuButton{
-			label:  "[⚙ Settings]",
+			label:  labels["settings"],
 			action: "settings",
 		}
 		btnAbout := menuButton{
-			label:  "[ℹ About]",
+			label:  labels["about"],
 			action: "about",
 		}
 		btnQuit := menuButton{
-			label:  "[✖ Quit]",
+			label:  labels["quit"],
 			action: "quit",
 		}
 
@@ -846,7 +1072,13 @@ func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, 
 	}
 
 	for _, btn := range buttons {
-		fmt.Fprintf(w, "\x1b[%d;%dH\x1b[7m%s\x1b[m", termRows-1, btn.col, btn.label)
+		if btn.action == activeAction {
+			// Hover/Active subtle styling (Slate-gray highlight: bold white text on gray-slate background)
+			fmt.Fprintf(w, "\x1b[%d;%dH\x1b[1;38;2;248;250;252;48;2;71;85;105m%s\x1b[m", termRows-1, btn.col, btn.label)
+		} else {
+			// Subtle Nord-style slate gray buttons
+			fmt.Fprintf(w, "\x1b[%d;%dH\x1b[38;2;148;163;184;48;2;30;41;59m%s\x1b[m", termRows-1, btn.col, btn.label)
+		}
 	}
 	return buttons
 }
