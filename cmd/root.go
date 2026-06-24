@@ -106,10 +106,10 @@ func run(o opts, args []string) error {
 	}
 
 	if o.interactive {
-		if len(paths) != 1 {
-			return fmt.Errorf("--interactive requires exactly one image (got %d)", len(paths))
+		if len(paths) == 1 {
+			return interactive(paths[0], o.width, o.height)
 		}
-		return interactive(paths[0], o.width, o.height)
+		return browser(paths, o.width, o.height)
 	}
 
 	// ── Static render ─────────────────────────────────────────────────────────

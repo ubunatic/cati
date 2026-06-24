@@ -183,6 +183,7 @@ func playVideos(paths []string, fps, width, height int) error {
 	defer cleanup()
 
 	var lastFrame image.Image
+	consecutiveFailures := 0
 
 	for {
 		select {
@@ -195,6 +196,10 @@ func playVideos(paths []string, fps, width, height int) error {
 			if !ok {
 				// Current video ended — advance to next (or loop back).
 				cleanup()
+				consecutiveFailures++
+				if consecutiveFailures >= len(paths) {
+					return fmt.Errorf("failed to decode any frames from video stream(s)")
+				}
 				videoIdx = (videoIdx + 1) % len(paths)
 				frames, cleanup, err = halfblock.OpenVideoStream(ctx, paths[videoIdx])
 				if err != nil {
@@ -202,6 +207,7 @@ func playVideos(paths []string, fps, width, height int) error {
 				}
 				continue
 			}
+			consecutiveFailures = 0
 			// Scale the incoming frame to fit the terminal.
 			if cols > 0 || rows > 0 {
 				img = halfblock.ScaleToFit(img, cols, rows)

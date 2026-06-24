@@ -284,29 +284,29 @@
         <p>Each terminal cell encodes two vertical pixels using ▀ ▄ █ and 24-bit true-color ANSI, doubling effective vertical resolution.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">📁</div>
-        <h3>Folder support</h3>
-        <p>Pass a directory to render all images inside, sorted. Use <code>-r</code> to recurse into subdirectories automatically.</p>
+        <div class="feature-icon">📹</div>
+        <h3>Video support</h3>
+        <p>Stream videos (mp4, webm, mkv, mov, avi) inside the terminal. Native frame rate detection automatically matches the video's FPS.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">▶</div>
-        <h3>Animation playback</h3>
-        <p><code>--play</code> loops through frames at <code>--fps</code> frames per second. Pre-loads everything for smooth, tear-free rendering.</p>
+        <div class="feature-icon">🔍</div>
+        <h3>Interactive viewer</h3>
+        <p>Interactive single-image mode (<code>-i</code>) with mouse-wheel zoom, click & drag panning, arrow-key navigation, and copy to clipboard.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🖼️</div>
+        <h3>Image browser</h3>
+        <p>Run <code>-i</code> on directories or multiple paths to launch a grid preview, page navigation, bottom menu, and full-screen detail views.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">⟷</div>
         <h3>Auto-scaling</h3>
-        <p>Detects terminal width via <code>TIOCGWINSZ</code> and scales images down to fit — images never overflow or break your layout.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon">🖼</div>
-        <h3>PNG & JPEG</h3>
-        <p>Supports PNG (including full transparency) and JPEG out of the box. More formats can be added by registering Go image decoders.</p>
+        <p>Detects terminal size via <code>TIOCGWINSZ</code> and scales media down to fit perfectly — content never breaks your layout.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">⌨</div>
-        <h3>Single-key quit</h3>
-        <p>Press <kbd>q</kbd>, <kbd>ESC</kbd>, or <kbd>Ctrl+C</kbd> to stop playback instantly. Terminal state is always restored cleanly.</p>
+        <h3>Standard keys</h3>
+        <p>Support for PgUp/PgDn, mouse clicks, arrow navigation, and a quick <kbd>q</kbd> or <kbd>ESC</kbd> to quit and clean up the terminal.</p>
       </div>
     </div>
   </div>
@@ -356,29 +356,29 @@
     </div>
     <div class="usage-grid">
       <div class="usage-card">
-        <div class="usage-card-head">Show an image</div>
+        <div class="usage-card-head">Show an image or video</div>
         <pre class="code"><span class="p">$</span> cati photo.png
-<span class="p">$</span> cati photo.jpg</pre>
+<span class="p">$</span> cati video.mp4</pre>
       </div>
       <div class="usage-card">
-        <div class="usage-card-head">Show a folder</div>
-        <pre class="code"><span class="p">$</span> cati ~/Pictures/
-<span class="p">$</span> cati <span class="f">-r</span> ~/Pictures/
-<span class="p">$</span> cati <span class="f">--no-header</span> dir/</pre>
+        <div class="usage-card-head">Interactive mode & browser</div>
+        <pre class="code"><span class="p">$</span> cati <span class="f">-i</span> photo.png
+<span class="p">$</span> cati <span class="f">-i</span> folder/
+<span class="p">$</span> cati <span class="f">-i</span> file1.png file2.jpg</pre>
       </div>
       <div class="usage-card">
-        <div class="usage-card-head">Animate frames</div>
+        <div class="usage-card-head">Animate / Play sequence</div>
         <pre class="code"><span class="p">$</span> cati <span class="f">--play</span> frames/
-<span class="p">$</span> cati <span class="f">-p --fps</span> <span class="v">24</span> frames/
-<span class="p">$</span> cati <span class="f">-p</span> frame_<span class="v">*.png</span></pre>
+<span class="p">$</span> cati <span class="f">-p --fps</span> <span class="v">30</span> video.webm
+<span class="p">$</span> cati <span class="f">-p</span> frames_*.png</pre>
       </div>
       <div class="usage-card">
         <div class="usage-card-head">All flags</div>
-        <pre class="code"><span class="f">--ansi</span>       24-bit true-color <span class="c">(default)</span>
-<span class="f">--play</span>  <span class="f">-p</span>   animate in a loop
-<span class="f">--fps</span>  <span class="v">N</span>     frames/sec <span class="c">(default 15)</span>
-<span class="f">-r</span>           recurse subdirs
-<span class="f">--no-header</span>  suppress filenames</pre>
+        <pre class="code"><span class="f">--ansi</span>            24-bit true-color <span class="c">(default)</span>
+<span class="f">--play</span>        <span class="f">-p</span>  animate in a loop
+<span class="f">--interactive</span> <span class="f">-i</span>  interactive viewer/browser
+<span class="f">--fps</span>         <span class="v">N</span>   frames/sec <span class="c">(0=auto for video)</span>
+<span class="f">-r</span>, <span class="f">--recursive</span>   recurse subdirectories</pre>
       </div>
     </div>
   </div>
