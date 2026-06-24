@@ -60,6 +60,179 @@ func createFolderIcon() image.Image {
 	return img
 }
 
+// ── Style Configuration ──────────────────────────────────────────────────────
+
+type StyleConfig struct {
+	AppBg           string
+	AppBorderStyle  string
+	AppBorderColor  string
+	BtnFg           string
+	BtnBg           string
+	BtnBorderColor  string
+	BtnLeftCap      string
+	BtnRightCap     string
+	BtnActiveFg     string
+	BtnActiveBg     string
+	PreviewBg       string
+	ControlBarBg    string
+	ScrollThumbChar string
+	ScrollRailChar  string
+	ScrollWidth     int
+	ScrollThumbFg   string
+	ScrollRailFg    string
+	ScrollRailBg    string
+}
+
+func parseHexColor(hex string) (color.RGBA, bool) {
+	hex = strings.TrimPrefix(hex, "#")
+	if len(hex) != 6 {
+		return color.RGBA{}, false
+	}
+	r, err := strconv.ParseUint(hex[0:2], 16, 8)
+	if err != nil {
+		return color.RGBA{}, false
+	}
+	g, err := strconv.ParseUint(hex[2:4], 16, 8)
+	if err != nil {
+		return color.RGBA{}, false
+	}
+	b, err := strconv.ParseUint(hex[4:6], 16, 8)
+	if err != nil {
+		return color.RGBA{}, false
+	}
+	return color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}, true
+}
+
+func styleFG(hex string, def string) string {
+	if hex == "" {
+		return def
+	}
+	c, ok := parseHexColor(hex)
+	if !ok {
+		return def
+	}
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
+}
+
+func styleBG(hex string, def string) string {
+	if hex == "" {
+		return def
+	}
+	c, ok := parseHexColor(hex)
+	if !ok {
+		return def
+	}
+	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
+}
+
+func loadStyle() *StyleConfig {
+	cfg := &StyleConfig{
+		AppBg:           "",
+		AppBorderStyle:  "box",
+		AppBorderColor:  "#475569",
+		BtnFg:           "#94a3b8",
+		BtnBg:           "#1e293b",
+		BtnBorderColor:  "#334155",
+		BtnLeftCap:      "[",
+		BtnRightCap:     "]",
+		BtnActiveFg:     "#f8fafc",
+		BtnActiveBg:     "#475569",
+		PreviewBg:       "",
+		ControlBarBg:    "#0f172a",
+		ScrollThumbChar: "█",
+		ScrollRailChar:  "▒",
+		ScrollWidth:     1,
+		ScrollThumbFg:   "#64748b",
+		ScrollRailFg:    "#334155",
+		ScrollRailBg:    "",
+	}
+
+	data, err := os.ReadFile("spec/style.yaml")
+	if err != nil {
+		return cfg
+	}
+
+	lines := strings.Split(string(data), "\n")
+	section := ""
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.HasSuffix(trimmed, ":") {
+			section = strings.TrimSuffix(trimmed, ":")
+			continue
+		}
+
+		parts := strings.SplitN(trimmed, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		val = strings.Trim(val, "\"'")
+		if val == "null" {
+			val = ""
+		}
+
+		switch section {
+		case "app":
+			switch key {
+			case "bg":
+				cfg.AppBg = val
+			case "border_style":
+				cfg.AppBorderStyle = val
+			case "border_color":
+				cfg.AppBorderColor = val
+			}
+		case "buttons":
+			switch key {
+			case "fg":
+				cfg.BtnFg = val
+			case "bg":
+				cfg.BtnBg = val
+			case "border_color":
+				cfg.BtnBorderColor = val
+			case "left_cap":
+				cfg.BtnLeftCap = val
+			case "right_cap":
+				cfg.BtnRightCap = val
+			case "active_fg":
+				cfg.BtnActiveFg = val
+			case "active_bg":
+				cfg.BtnActiveBg = val
+			}
+		case "preview":
+			if key == "bg" {
+				cfg.PreviewBg = val
+			}
+		case "control_bar":
+			if key == "bg" {
+				cfg.ControlBarBg = val
+			}
+		case "scroll_bar":
+			switch key {
+			case "thumb_char":
+				cfg.ScrollThumbChar = val
+			case "rail_char":
+				cfg.ScrollRailChar = val
+			case "width":
+				w, err := strconv.Atoi(val)
+				if err == nil && (w == 1 || w == 2) {
+					cfg.ScrollWidth = w
+				}
+			case "thumb_fg":
+				cfg.ScrollThumbFg = val
+			case "rail_fg":
+				cfg.ScrollRailFg = val
+			case "rail_bg":
+				cfg.ScrollRailBg = val
+			}
+		}
+	}
+	return cfg
+}
+
 // ── Customizable Labels ──────────────────────────────────────────────────────
 
 func loadLabels() map[string]string {
@@ -78,7 +251,7 @@ func loadLabels() map[string]string {
 
 	data, err := os.ReadFile("spec/labels.yaml")
 	if err != nil {
-		return labels // Fallback to default labels
+		return labels
 	}
 
 	lines := strings.Split(string(data), "\n")
@@ -172,7 +345,6 @@ func getAboutView() *YamlView {
 	if err == nil && view != nil {
 		return view
 	}
-	// Fallback
 	return &YamlView{
 		Type:  "view",
 		Name:  "about",
@@ -203,6 +375,11 @@ Controls (Interactive Single View):
 
 // ── Config loader & saver ───────────────────────────────────────────────────
 
+type Settings struct {
+	MaxPreviewHeight int
+	ViewMode         string
+}
+
 func getConfigDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -211,34 +388,43 @@ func getConfigDir() string {
 	return filepath.Join(home, ".config", "cati")
 }
 
-func loadSettings() int {
+func loadConfig() Settings {
+	cfg := Settings{MaxPreviewHeight: 20, ViewMode: "grid"}
 	dir := getConfigDir()
 	if dir == "" {
-		return 20
+		return cfg
 	}
 	path := filepath.Join(dir, "config")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return 20
+		return cfg
 	}
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "#") || line == "" {
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		parts := strings.SplitN(line, "=", 2)
-		if len(parts) == 2 && strings.TrimSpace(parts[0]) == "height" {
-			h, err := strconv.Atoi(strings.TrimSpace(parts[1]))
-			if err == nil && h > 0 {
-				return h
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			if key == "max_preview_height" || key == "height" {
+				h, err := strconv.Atoi(val)
+				if err == nil && h > 0 {
+					cfg.MaxPreviewHeight = h
+				}
+			} else if key == "view_mode" {
+				if val == "preview" || val == "grid" {
+					cfg.ViewMode = val
+				}
 			}
 		}
 	}
-	return 20
+	return cfg
 }
 
-func saveSettings(height int) error {
+func saveConfig(cfg Settings) error {
 	dir := getConfigDir()
 	if dir == "" {
 		return fmt.Errorf("could not determine home dir")
@@ -247,7 +433,7 @@ func saveSettings(height int) error {
 		return err
 	}
 	path := filepath.Join(dir, "config")
-	content := fmt.Sprintf("height=%d\n", height)
+	content := fmt.Sprintf("max_preview_height=%d\nview_mode=%s\n", cfg.MaxPreviewHeight, cfg.ViewMode)
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
@@ -259,7 +445,6 @@ func loadBrowserItems(currentDir string, initialItems []browserItem) []browserIt
 	}
 
 	var out []browserItem
-	// Parent folder entry
 	out = append(out, browserItem{
 		path:  filepath.Dir(currentDir),
 		isDir: true,
@@ -277,7 +462,7 @@ func loadBrowserItems(currentDir string, initialItems []browserItem) []browserIt
 	for _, f := range files {
 		name := f.Name()
 		if strings.HasPrefix(name, ".") {
-			continue // Skip hidden files
+			continue
 		}
 		path := filepath.Join(currentDir, name)
 		if f.IsDir() {
@@ -287,7 +472,7 @@ func loadBrowserItems(currentDir string, initialItems []browserItem) []browserIt
 				name:  name,
 			})
 		} else if isImageFile(path) {
-			imgs = append(imgs, browserItem{
+			dirs = append(dirs, browserItem{
 				path:  path,
 				isDir: false,
 				name:  name,
@@ -302,10 +487,17 @@ func loadBrowserItems(currentDir string, initialItems []browserItem) []browserIt
 
 // ── Browser ──────────────────────────────────────────────────────────────────
 
-// browser runs an interactive grid preview of files and subdirectories.
+type scrollDragState struct {
+	active bool
+	startY int
+}
+
 func browser(args []string, initWidth, initHeight int) error {
-	cfgHeight := loadSettings()
-	tempHeight := cfgHeight
+	cfg := loadConfig()
+	style := loadStyle()
+
+	cfgHeight := cfg.MaxPreviewHeight
+	viewMode := cfg.ViewMode // "grid" or "preview", toggled dynamically
 
 	var initialItems []browserItem
 	for _, p := range args {
@@ -387,7 +579,6 @@ func browser(args []string, initWidth, initHeight int) error {
 
 	halfblock.HideCursor(os.Stdout)
 	halfblock.ClearScreen(os.Stdout)
-	// Enable mouse reporting with any-event tracking (\x1b[?1003h) to capture hover/motion
 	fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h")
 	defer func() {
 		fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l")
@@ -397,9 +588,12 @@ func browser(args []string, initWidth, initHeight int) error {
 	}()
 
 	selectedIdx := 0
-	viewMode := "grid" // "grid", "about", or "settings"
+	activeSettingsField := 0 // For settings view navigation
+	tempHeight := cfgHeight
+	tempViewMode := viewMode
 	var buttons []menuButton
 	hoveredButtonAction := ""
+	var scrollDrag scrollDragState
 
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
 
@@ -413,13 +607,13 @@ func browser(args []string, initWidth, initHeight int) error {
 
 		if viewMode == "about" {
 			drawAboutPage(os.Stdout, termCols, effHeight)
-			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "about", hoveredButtonAction)
+			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "about", hoveredButtonAction, style)
 			return
 		}
 
 		if viewMode == "settings" {
-			drawSettingsPage(os.Stdout, termCols, effHeight, tempHeight)
-			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "settings", hoveredButtonAction)
+			drawSettingsPage(os.Stdout, termCols, effHeight, tempHeight, tempViewMode, activeSettingsField)
+			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "settings", hoveredButtonAction, style)
 			return
 		}
 
@@ -434,16 +628,55 @@ func browser(args []string, initWidth, initHeight int) error {
 			return
 		}
 
+		// Detect if we should use dense list mode
+		isDense := true
+		for _, item := range items {
+			if !item.isDir {
+				isDense = false
+				break
+			}
+		}
+
 		gridCols := 3
 		gridRows := 2
-		if termCols < 60 {
-			gridCols = 2
+		gapX := 4
+		gapY := 2
+		cellH := (gridRowsLimit - (gridRows-1)*gapY) / gridRows
+
+		if isDense {
+			gridCols = max(1, (termCols - 4)/22)
+			gridRows = gridRowsLimit
+			cellH = 1
+			gapY = 0
+			gapX = 2
+		} else {
+			if termCols < 60 {
+				gridCols = 2
+			}
+			if termCols < 40 {
+				gridCols = 1
+			}
+			if effHeight < 14 {
+				gridRows = 1
+				cellH = gridRowsLimit
+			}
 		}
-		if termCols < 40 {
+
+		// Adjust sizes if preview mode is active
+		leftW := termCols * 40 / 100
+		if leftW < 25 {
+			leftW = 25
+		}
+		if leftW > 50 {
+			leftW = 50
+		}
+
+		if viewMode == "preview" {
 			gridCols = 1
-		}
-		if effHeight < 14 {
-			gridRows = 1
+			gridRows = gridRowsLimit
+			cellH = 1
+			gapY = 0
+			gapX = 0
 		}
 
 		itemsPerPage := gridCols * gridRows
@@ -462,42 +695,91 @@ func browser(args []string, initWidth, initHeight int) error {
 			endIdx = len(items)
 		}
 
-		gapX := 4
-		gapY := 2
 		cellW := (termCols - (gridCols-1)*gapX) / gridCols
-		cellH := (gridRowsLimit - (gridRows-1)*gapY) / gridRows
+		if viewMode == "preview" {
+			cellW = leftW
+		}
 		if cellW < 10 {
 			cellW = 10
 		}
-		if cellH < 4 {
-			cellH = 4
+		if cellH < 1 {
+			cellH = 1
 		}
 
-		compImg := image.NewRGBA(image.Rect(0, 0, termCols, gridRowsLimit*2))
+		compW := termCols
+		compH := gridRowsLimit * 2
+		compImg := image.NewRGBA(image.Rect(0, 0, compW, compH))
+
+		// Apply background color from style
+		var bgCol color.RGBA
+		if c, ok := parseHexColor(style.PreviewBg); ok {
+			bgCol = c
+		}
+		if bgCol.A > 0 {
+			for y := 0; y < compH; y++ {
+				for x := 0; x < compW; x++ {
+					compImg.Set(x, y, bgCol)
+				}
+			}
+		}
 
 		// Render thumbnails
-		for idx := startIdx; idx < endIdx; idx++ {
-			cellItemIdx := idx - startIdx
-			colIdx := cellItemIdx % gridCols
-			rowIdx := cellItemIdx / gridCols
-			left := colIdx * (cellW + gapX)
-			top := rowIdx * (cellH + gapY)
+		if viewMode == "preview" {
+			// Draw divider line
+			for y := 0; y < gridRowsLimit; y++ {
+				rowAbs := marginTop + 1 + y
+				fmt.Fprintf(os.Stdout, "\x1b[%d;%dH│", rowAbs, leftW+1)
+			}
 
-			thumb, err := getThumbnail(items[idx], cellW, cellH-1)
-			if err == nil && thumb != nil {
-				thumbW := thumb.Bounds().Dx()
-				thumbH := thumb.Bounds().Dy()
-				offsetX := (cellW - thumbW) / 2
-				offsetY := ((cellH-1)*2 - thumbH) / 2
-				destX := left + offsetX
-				destY := top*2 + offsetY
+			// Render right pane preview
+			prevW := (termCols - style.ScrollWidth - 1) - (leftW + 2) + 1
+			if prevW > 0 {
+				targetItem := items[selectedIdx]
+				previewImg, err := getThumbnail(targetItem, prevW, gridRowsLimit)
+				if err == nil && previewImg != nil {
+					scaledW := previewImg.Bounds().Dx()
+					scaledH := previewImg.Bounds().Dy()
+					offsetX := (prevW - scaledW) / 2
+					offsetY := (gridRowsLimit*2 - scaledH) / 2
+					destX := leftW + 2 + offsetX
+					destY := offsetY
 
-				for ty := 0; ty < thumbH; ty++ {
-					for tx := 0; tx < thumbW; tx++ {
-						dx := destX + tx
-						dy := destY + ty
-						if dx >= 0 && dx < termCols && dy >= 0 && dy < gridRowsLimit*2 {
-							compImg.Set(dx, dy, thumb.At(tx, ty))
+					for ty := 0; ty < scaledH; ty++ {
+						for tx := 0; tx < scaledW; tx++ {
+							dx := destX + tx
+							dy := destY + ty
+							if dx >= 0 && dx < compW && dy >= 0 && dy < compH {
+								compImg.Set(dx, dy, previewImg.At(tx, ty))
+							}
+						}
+					}
+				}
+			}
+		} else if !isDense {
+			// Grid thumbnails
+			for idx := startIdx; idx < endIdx; idx++ {
+				cellItemIdx := idx - startIdx
+				colIdx := cellItemIdx % gridCols
+				rowIdx := cellItemIdx / gridCols
+				left := colIdx * (cellW + gapX)
+				top := rowIdx * (cellH + gapY)
+
+				thumb, err := getThumbnail(items[idx], cellW, cellH-1)
+				if err == nil && thumb != nil {
+					thumbW := thumb.Bounds().Dx()
+					thumbH := thumb.Bounds().Dy()
+					offsetX := (cellW - thumbW) / 2
+					offsetY := ((cellH-1)*2 - thumbH) / 2
+					destX := left + offsetX
+					destY := top*2 + offsetY
+
+					for ty := 0; ty < thumbH; ty++ {
+						for tx := 0; tx < thumbW; tx++ {
+							dx := destX + tx
+							dy := destY + ty
+							if dx >= 0 && dx < compW && dy >= 0 && dy < compH {
+								compImg.Set(dx, dy, thumb.At(tx, ty))
+							}
 						}
 					}
 				}
@@ -510,27 +792,118 @@ func browser(args []string, initWidth, initHeight int) error {
 		_ = halfblock.Render(os.Stdout, compImg)
 		halfblock.EraseDown(os.Stdout)
 
-		// Print filenames centered below thumbnails
-		for idx := startIdx; idx < endIdx; idx++ {
-			cellItemIdx := idx - startIdx
-			colIdx := cellItemIdx % gridCols
-			rowIdx := cellItemIdx / gridCols
-			left := colIdx * (cellW + gapX)
-			top := rowIdx * (cellH + gapY)
-			rowAbs := marginTop + 1 + top + cellH - 1
+		// Print filenames centered below thumbnails (Grid) or in dynamic vertical lists
+		if viewMode == "preview" {
+			for idx := startIdx; idx < endIdx; idx++ {
+				cellItemIdx := idx - startIdx
+				rowAbs := marginTop + 1 + cellItemIdx
 
-			name := items[idx].name
-			if len(name) > cellW {
-				name = name[:cellW-3] + "..."
+				name := items[idx].name
+				if items[idx].isDir {
+					name = "📁 " + name
+					if items[idx].name == ".." {
+						name = "📁 .."
+					}
+				} else {
+					name = "📄 " + name
+				}
+
+				if len(name) > leftW-3 {
+					name = name[:leftW-6] + "..."
+				}
+
+				if idx == selectedIdx {
+					spaces := strings.Repeat(" ", max(0, leftW-len(name)-1))
+					fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[1;38;2;255;255;255;48;2;71;85;105m %s%s\x1b[m", rowAbs, name, spaces)
+				} else {
+					spaces := strings.Repeat(" ", max(0, leftW-len(name)-1))
+					fmt.Fprintf(os.Stdout, "\x1b[%d;1H %s%s", rowAbs, name, spaces)
+				}
 			}
-			colAbs := left + 1 + (cellW-len(name))/2
+		} else if isDense {
+			for idx := startIdx; idx < endIdx; idx++ {
+				cellItemIdx := idx - startIdx
+				colIdx := cellItemIdx % gridCols
+				rowIdx := cellItemIdx / gridCols
+				left := colIdx * (cellW + gapX)
+				rowAbs := marginTop + 1 + rowIdx
 
-			if idx == selectedIdx {
-				// Subtle highlighting (Nord slate: bold white text on light slate/gray background)
-				fmt.Fprintf(os.Stdout, "\x1b[%d;%dH\x1b[1;38;2;255;255;255;48;2;71;85;105m %s \x1b[m", rowAbs, colAbs, name)
+				name := "📁 " + items[idx].name
+				if items[idx].name == ".." {
+					name = "📁 .."
+				}
+				if len(name) > cellW {
+					name = name[:cellW-3] + "..."
+				}
+				colAbs := left + 2
+
+				if idx == selectedIdx {
+					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH\x1b[1;38;2;255;255;255;48;2;71;85;105m %s \x1b[m", rowAbs, colAbs, name)
+				} else {
+					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH%s", rowAbs, colAbs, name)
+				}
+			}
+		} else {
+			for idx := startIdx; idx < endIdx; idx++ {
+				cellItemIdx := idx - startIdx
+				colIdx := cellItemIdx % gridCols
+				rowIdx := cellItemIdx / gridCols
+				left := colIdx * (cellW + gapX)
+				top := rowIdx * (cellH + gapY)
+				rowAbs := marginTop + 1 + top + cellH - 1
+
+				name := items[idx].name
+				if items[idx].isDir {
+					name = "📁 " + name
+					if items[idx].name == ".." {
+						name = "📁 .."
+					}
+				}
+				if len(name) > cellW {
+					name = name[:cellW-3] + "..."
+				}
+				colAbs := left + 1 + (cellW-len(name))/2
+
+				if idx == selectedIdx {
+					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH\x1b[1;38;2;255;255;255;48;2;71;85;105m %s \x1b[m", rowAbs, colAbs, name)
+				} else {
+					fmt.Fprintf(os.Stdout, "\x1b[%d;%dH%s", rowAbs, colAbs, name)
+				}
+			}
+		}
+
+		// Draw Paging / Scrollbar
+		totalRows := (len(items) + gridCols - 1) / gridCols
+		visibleRows := gridRows
+		var thumbHeight, thumbTop int
+		if totalRows <= visibleRows {
+			thumbHeight = gridRowsLimit
+			thumbTop = 0
+		} else {
+			thumbHeight = max(1, gridRowsLimit*visibleRows/totalRows)
+			currentRow := selectedIdx / gridCols
+			maxStartRow := totalRows - visibleRows
+			if maxStartRow > 0 {
+				thumbTop = (currentRow * (gridRowsLimit - thumbHeight)) / maxStartRow
+			}
+		}
+
+		scrollbarCol := termCols - style.ScrollWidth + 1
+		for y := 0; y < gridRowsLimit; y++ {
+			rowAbs := marginTop + 1 + y
+			var ch string
+			var clr string
+			if y >= thumbTop && y < thumbTop+thumbHeight {
+				ch = style.ScrollThumbChar
+				clr = styleFG(style.ScrollThumbFg, "")
 			} else {
-				fmt.Fprintf(os.Stdout, "\x1b[%d;%dH%s", rowAbs, colAbs, name)
+				ch = style.ScrollRailChar
+				clr = styleFG(style.ScrollRailFg, "")
 			}
+			if style.ScrollWidth == 2 {
+				ch = ch + ch
+			}
+			fmt.Fprintf(os.Stdout, "\x1b[%d;%dH%s%s\x1b[m", rowAbs, scrollbarCol, clr, ch)
 		}
 
 		// Print header
@@ -542,10 +915,10 @@ func browser(args []string, initWidth, initHeight int) error {
 			dirInfo, pageIdx+1, numPages, startIdx+1, endIdx, len(items))
 
 		// Print bottom menu buttons
-		buttons = drawBottomMenu(os.Stdout, termCols, effHeight, pageIdx, numPages, "grid", hoveredButtonAction)
+		buttons = drawBottomMenu(os.Stdout, termCols, effHeight, pageIdx, numPages, "grid", hoveredButtonAction, style)
 
 		// Print status line
-		fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[K\x1b[7m [Enter/Click] View/Enter  [◀/▶/Scroll] Page  [s] Settings  [a] About  [q] Quit \x1b[m", effHeight)
+		fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[K\x1b[7m [Enter/Click] View/Enter  [◀/▶/Scroll] Page  [s] Settings  [m] Toggle Mode  [q] Quit \x1b[m", effHeight)
 	}
 
 	redraw()
@@ -562,16 +935,47 @@ func browser(args []string, initWidth, initHeight int) error {
 				effHeight = cfgHeight
 			}
 
+			marginTop := 1
+			marginBottom := 3
+			gridRowsLimit := effHeight - marginTop - marginBottom
+			_ = marginBottom
+
+			isDense := true
+			for _, item := range items {
+				if !item.isDir {
+					isDense = false
+					break
+				}
+			}
+
 			gridCols := 3
 			gridRows := 2
-			if termCols < 60 {
-				gridCols = 2
+			if isDense {
+				gridCols = max(1, (termCols - 4)/22)
+				gridRows = gridRowsLimit
+			} else {
+				if termCols < 60 {
+					gridCols = 2
+				}
+				if termCols < 40 {
+					gridCols = 1
+				}
+				if effHeight < 14 {
+					gridRows = 1
+				}
 			}
-			if termCols < 40 {
+
+			leftW := termCols * 40 / 100
+			if leftW < 25 {
+				leftW = 25
+			}
+			if leftW > 50 {
+				leftW = 50
+			}
+
+			if viewMode == "preview" {
 				gridCols = 1
-			}
-			if effHeight < 14 {
-				gridRows = 1
+				gridRows = gridRowsLimit
 			}
 			itemsPerPage := gridCols * gridRows
 
@@ -580,7 +984,7 @@ func browser(args []string, initWidth, initHeight int) error {
 
 			processInput := func(tok string) {
 				if btn, col, row, release, ok := parseSGRMouse(tok); ok {
-					// Detect button hovers/motion
+					// Button hover / click
 					if row == effHeight-1 {
 						found := false
 						for _, b := range buttons {
@@ -602,6 +1006,7 @@ func browser(args []string, initWidth, initHeight int) error {
 						changed = true
 					}
 
+					// View mode handlers
 					if viewMode == "about" {
 						if row == effHeight-1 && release {
 							for _, b := range buttons {
@@ -625,19 +1030,28 @@ func browser(args []string, initWidth, initHeight int) error {
 								if col >= b.col && col < b.col+b.width {
 									switch b.action {
 									case "inc":
-										tempHeight = min(60, tempHeight+1)
+										if activeSettingsField == 0 {
+											tempHeight = min(60, tempHeight+1)
+										} else {
+											tempViewMode = "preview"
+										}
 										changed = true
 									case "dec":
-										tempHeight = max(10, tempHeight-1)
+										if activeSettingsField == 0 {
+											tempHeight = max(10, tempHeight-1)
+										} else {
+											tempViewMode = "grid"
+										}
 										changed = true
 									case "save":
 										cfgHeight = tempHeight
-										_ = saveSettings(cfgHeight)
-										viewMode = "grid"
+										viewMode = tempViewMode
+										_ = saveConfig(Settings{MaxPreviewHeight: cfgHeight, ViewMode: viewMode})
 										halfblock.ClearScreen(os.Stdout)
 										changed = true
 									case "cancel":
 										tempHeight = cfgHeight
+										tempViewMode = viewMode
 										viewMode = "grid"
 										halfblock.ClearScreen(os.Stdout)
 										changed = true
@@ -648,16 +1062,46 @@ func browser(args []string, initWidth, initHeight int) error {
 						return
 					}
 
-					// Grid view mouse interactions
+					// Scrollbar dragging logic
+					scrollbarCol := termCols - style.ScrollWidth + 1
+					if !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release {
+						if col >= scrollbarCol && col <= termCols && row >= marginTop+1 && row <= marginTop+gridRowsLimit {
+							scrollDrag.active = true
+							scrollDrag.startY = row
+						}
+					}
+					if sgrIsDrag(btn) && sgrButton(btn) == 0 && scrollDrag.active {
+						totalRows := (len(items) + gridCols - 1) / gridCols
+						if totalRows > gridRows {
+							relativeRow := row - (marginTop + 1)
+							targetRow := relativeRow * totalRows / gridRowsLimit
+							if targetRow < 0 {
+								targetRow = 0
+							}
+							if targetRow >= totalRows {
+								targetRow = totalRows - 1
+							}
+							selectedIdx = targetRow*gridCols + (selectedIdx % gridCols)
+							if selectedIdx >= len(items) {
+								selectedIdx = len(items) - 1
+							}
+							changed = true
+						}
+					}
+					if !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && release {
+						scrollDrag.active = false
+					}
+
+					// Grid scroll wheel - scrolls by one row
 					if sgrIsScroll(btn) && !release {
 						if sgrScrollDir(btn) < 0 {
-							selectedIdx = max(0, selectedIdx-itemsPerPage)
+							selectedIdx = max(0, selectedIdx-gridCols)
 						} else {
-							selectedIdx = min(len(items)-1, selectedIdx+itemsPerPage)
+							selectedIdx = min(len(items)-1, selectedIdx+gridCols)
 						}
 						changed = true
 					} else if row == effHeight-1 && release {
-						// Button click
+						// Controls button click
 						for _, b := range buttons {
 							if col >= b.col && col < b.col+b.width {
 								switch b.action {
@@ -670,6 +1114,8 @@ func browser(args []string, initWidth, initHeight int) error {
 								case "settings":
 									viewMode = "settings"
 									tempHeight = cfgHeight
+									tempViewMode = viewMode
+									activeSettingsField = 0
 									changed = true
 								case "about":
 									viewMode = "about"
@@ -680,8 +1126,8 @@ func browser(args []string, initWidth, initHeight int) error {
 								break
 							}
 						}
-					} else {
-						// Hover and Click on grid items
+					} else if !scrollDrag.active {
+						// Hover & click cells coordinates
 						marginTop := 1
 						c := col - 1
 						r := row - 1 - marginTop
@@ -694,8 +1140,19 @@ func browser(args []string, initWidth, initHeight int) error {
 						if cellW < 10 {
 							cellW = 10
 						}
-						if cellH < 4 {
-							cellH = 4
+						if cellH < 1 {
+							cellH = 1
+						}
+
+						if viewMode == "preview" {
+							cellW = leftW
+							cellH = 1
+							gapY = 0
+							gapX = 0
+						} else if isDense {
+							cellH = 1
+							gapY = 0
+							gapX = 2
 						}
 
 						pageIdx := selectedIdx / itemsPerPage
@@ -720,12 +1177,11 @@ func browser(args []string, initWidth, initHeight int) error {
 									changed = true
 								}
 
-								// Handle click
+								// Execute navigation or view single image
 								if !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release {
 									targetItem := items[selectedIdx]
 									if targetItem.isDir {
 										if targetItem.name == ".." {
-											// Navigate up
 											isInitialDir := false
 											for _, init := range initialItems {
 												if init.isDir && filepath.Clean(init.path) == filepath.Clean(currentDir) {
@@ -745,7 +1201,6 @@ func browser(args []string, initWidth, initHeight int) error {
 										selectedIdx = 0
 										halfblock.ClearScreen(os.Stdout)
 									} else {
-										// Show single file
 										if oldState != nil {
 											_ = term.Restore(fd, oldState)
 										}
@@ -781,20 +1236,32 @@ func browser(args []string, initWidth, initHeight int) error {
 
 					if viewMode == "settings" {
 						switch tok {
+						case "\t": // Tab selects settings field
+							activeSettingsField = (activeSettingsField + 1) % 2
+							changed = true
 						case "\x1b[A": // ↑
-							tempHeight = min(60, tempHeight+1)
+							if activeSettingsField == 0 {
+								tempHeight = min(60, tempHeight+1)
+							} else {
+								tempViewMode = "preview"
+							}
 							changed = true
 						case "\x1b[B": // ↓
-							tempHeight = max(10, tempHeight-1)
+							if activeSettingsField == 0 {
+								tempHeight = max(10, tempHeight-1)
+							} else {
+								tempViewMode = "grid"
+							}
 							changed = true
 						case "\x0d", "\x0a": // Enter
 							cfgHeight = tempHeight
-							_ = saveSettings(cfgHeight)
-							viewMode = "grid"
+							viewMode = tempViewMode
+							_ = saveConfig(Settings{MaxPreviewHeight: cfgHeight, ViewMode: viewMode})
 							halfblock.ClearScreen(os.Stdout)
 							changed = true
 						case "q", "Q", "\x1b", "c", "C": // Cancel
 							tempHeight = cfgHeight
+							tempViewMode = viewMode
 							viewMode = "grid"
 							halfblock.ClearScreen(os.Stdout)
 							changed = true
@@ -816,6 +1283,25 @@ func browser(args []string, initWidth, initHeight int) error {
 					case "s", "S":
 						viewMode = "settings"
 						tempHeight = cfgHeight
+						tempViewMode = viewMode
+						activeSettingsField = 0
+						changed = true
+
+					case "m", "M":
+						if viewMode == "grid" {
+							viewMode = "preview"
+						} else {
+							viewMode = "grid"
+						}
+						halfblock.ClearScreen(os.Stdout)
+						changed = true
+
+					case "+", "=":
+						cfgHeight = min(termRows, cfgHeight+1)
+						changed = true
+
+					case "-":
+						cfgHeight = max(10, cfgHeight-1)
 						changed = true
 
 					case "\x1b[D": // Left arrow
@@ -924,7 +1410,6 @@ func drawAboutPage(w io.Writer, termCols, termRows int) {
 	about := getAboutView()
 	lines := strings.Split(about.Content, "\n")
 
-	// Print Title
 	titleLine := "=== " + about.Title + " ==="
 	fmt.Fprintf(w, "\x1b[2;%dH\x1b[1;36m%s\x1b[m", max(1, (termCols-len(titleLine))/2), titleLine)
 
@@ -941,7 +1426,7 @@ func drawAboutPage(w io.Writer, termCols, termRows int) {
 	}
 }
 
-func drawSettingsPage(w io.Writer, termCols, termRows int, tempHeight int) {
+func drawSettingsPage(w io.Writer, termCols, termRows int, tempHeight int, tempViewMode string, activeField int) {
 	halfblock.ClearScreen(w)
 
 	lines := []string{
@@ -949,13 +1434,28 @@ func drawSettingsPage(w io.Writer, termCols, termRows int, tempHeight int) {
 		"          CATI SETTINGS          ",
 		"=================================",
 		"",
-		fmt.Sprintf("  Browser Height:  [ %d ] rows", tempHeight),
+	}
+
+	if activeField == 0 {
+		lines = append(lines,
+			fmt.Sprintf("  > Height:    [ %d ] rows  (Selected)", tempHeight),
+			fmt.Sprintf("    View Mode: [ %s ]", tempViewMode),
+		)
+	} else {
+		lines = append(lines,
+			fmt.Sprintf("    Height:    [ %d ] rows", tempHeight),
+			fmt.Sprintf("  > View Mode: [ %s ]  (Selected)", tempViewMode),
+		)
+	}
+
+	lines = append(lines,
 		"",
-		"  Use ↑ / ↓ to adjust height.",
+		"  Press Tab to switch active setting.",
+		"  Use ↑ / ↓ to change value.",
 		"  Press Enter to Save, Esc to Cancel.",
 		"",
 		"=================================",
-	}
+	)
 
 	for i, line := range lines {
 		row := (termRows-len(lines))/2 + i
@@ -967,12 +1467,15 @@ func drawSettingsPage(w io.Writer, termCols, termRows int, tempHeight int) {
 	}
 }
 
-func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, viewMode string, activeAction string) []menuButton {
+func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, viewMode string, activeAction string, style *StyleConfig) []menuButton {
+	if style == nil {
+		style = loadStyle()
+	}
 	var buttons []menuButton
 	labels := loadLabels()
 
-	// Clear the button line first
-	fmt.Fprintf(w, "\x1b[%d;1H\x1b[K", termRows-1)
+	// Clear the button line and apply control bar background from style
+	fmt.Fprintf(w, "\x1b[%d;1H\x1b[K%s", termRows-1, styleBG(style.ControlBarBg, ""))
 
 	if viewMode == "about" {
 		btnBack := menuButton{
@@ -1073,11 +1576,19 @@ func drawBottomMenu(w io.Writer, termCols, termRows int, pageIdx, numPages int, 
 
 	for _, btn := range buttons {
 		if btn.action == activeAction {
-			// Hover/Active subtle styling (Slate-gray highlight: bold white text on gray-slate background)
-			fmt.Fprintf(w, "\x1b[%d;%dH\x1b[1;38;2;248;250;252;48;2;71;85;105m%s\x1b[m", termRows-1, btn.col, btn.label)
+			// Subtle Highlight style: bold text on slate-gray background
+			fmt.Fprintf(w, "\x1b[%d;%dH\x1b[1m%s%s%s\x1b[m",
+				termRows-1, btn.col,
+				styleFG(style.BtnActiveFg, ""),
+				styleBG(style.BtnActiveBg, ""),
+				btn.label)
 		} else {
 			// Subtle Nord-style slate gray buttons
-			fmt.Fprintf(w, "\x1b[%d;%dH\x1b[38;2;148;163;184;48;2;30;41;59m%s\x1b[m", termRows-1, btn.col, btn.label)
+			fmt.Fprintf(w, "\x1b[%d;%dH%s%s%s\x1b[m",
+				termRows-1, btn.col,
+				styleFG(style.BtnFg, ""),
+				styleBG(style.BtnBg, ""),
+				btn.label)
 		}
 	}
 	return buttons

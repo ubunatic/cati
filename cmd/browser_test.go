@@ -10,7 +10,7 @@ func TestBrowser_DrawBottomMenu(t *testing.T) {
 	var buf bytes.Buffer
 
 	// Test standard grid buttons (5 buttons: prev, next, settings, about, quit)
-	btns := drawBottomMenu(&buf, 80, 24, 0, 1, "grid", "")
+	btns := drawBottomMenu(&buf, 80, 24, 0, 1, "grid", "", nil)
 	if len(btns) != 5 {
 		t.Errorf("expected 5 buttons in grid view, got %d", len(btns))
 	}
@@ -22,7 +22,7 @@ func TestBrowser_DrawBottomMenu(t *testing.T) {
 	}
 
 	// Test about page buttons (2 buttons: back, quit)
-	btnsAbout := drawBottomMenu(&buf, 80, 24, 0, 0, "about", "")
+	btnsAbout := drawBottomMenu(&buf, 80, 24, 0, 0, "about", "", nil)
 	if len(btnsAbout) != 2 {
 		t.Errorf("expected 2 buttons in about view, got %d", len(btnsAbout))
 	}
@@ -34,7 +34,7 @@ func TestBrowser_DrawBottomMenu(t *testing.T) {
 	}
 
 	// Test settings page buttons (4 buttons: inc, dec, save, cancel)
-	btnsSettings := drawBottomMenu(&buf, 80, 24, 0, 0, "settings", "")
+	btnsSettings := drawBottomMenu(&buf, 80, 24, 0, 0, "settings", "", nil)
 	if len(btnsSettings) != 4 {
 		t.Errorf("expected 4 buttons in settings view, got %d", len(btnsSettings))
 	}
