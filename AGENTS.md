@@ -25,6 +25,8 @@ Adhere to the following conventions.
 
 - Architecture, design decisions, and pitfalls live in `docs/` — read `docs/README.md` first to orient yourself.
 - Bugs, features, and design issues are tracked in `issues/` — read `issues/README.md` for the current status of known problems before starting work.
+- Before starting any feature or fix, skim any Open/In-Progress issues that touch the area you're working in — the index is short and pays for itself immediately.
+- When you change an interface, function signature, or data flow, update the relevant section of the Evergreen doc in the same logical step — not at the end of the session.
 
 ## General Rules
 - Run `go vet ./...` before `make install` — fix all vet errors; do not suppress them.
