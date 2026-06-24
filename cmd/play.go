@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"codeberg.org/ubunatic/cati/internal/audio"
 	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"golang.org/x/term"
 )
@@ -174,6 +175,27 @@ func playVideos(paths []string, fps, width, height int) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// openAudio starts audio playback for path, if the file has an audio stream
+	// and the required binaries are available.  Returns nil silently on failure
+	// so video playback continues without audio rather than aborting.
+	openAudio := func(path string) *audio.Player {
+		ok, err := audio.HasAudio(path)
+		if err != nil || !ok {
+			return nil
+		}
+		p, err := audio.Open(ctx, path)
+		if err != nil {
+			return nil
+		}
+		return p
+	}
+
+	stopAudio := func(p *audio.Player) {
+		if p != nil {
+			p.Stop()
+		}
+	}
+
 	// index into paths; restartStream opens a fresh stream for paths[videoIdx].
 	videoIdx := 0
 	frames, cleanup, err := halfblock.OpenVideoStream(ctx, paths[videoIdx])
@@ -182,8 +204,16 @@ func playVideos(paths []string, fps, width, height int) error {
 	}
 	defer cleanup()
 
+	audioPlayer := openAudio(paths[videoIdx])
+	defer stopAudio(audioPlayer)
+
 	var lastFrame image.Image
+	// consecutiveFailures counts streams that closed without producing any
+	// frames at all.  A stream that finishes normally resets the counter so
+	// playback loops indefinitely.  Only bail out when every path in the list
+	// has failed consecutively — this means all sources are broken.
 	consecutiveFailures := 0
+	currentVideoHadFrames := false
 
 	for {
 		select {
@@ -194,20 +224,27 @@ func playVideos(paths []string, fps, width, height int) error {
 
 		case img, ok := <-frames:
 			if !ok {
-				// Current video ended — advance to next (or loop back).
+				// Current stream ended (normally or with error).
 				cleanup()
-				consecutiveFailures++
-				if consecutiveFailures >= len(paths) {
-					return fmt.Errorf("failed to decode any frames from video stream(s)")
+				stopAudio(audioPlayer)
+				if currentVideoHadFrames {
+					consecutiveFailures = 0
+				} else {
+					consecutiveFailures++
+					if consecutiveFailures >= len(paths) {
+						return fmt.Errorf("failed to decode any frames from video stream(s)")
+					}
 				}
 				videoIdx = (videoIdx + 1) % len(paths)
+				currentVideoHadFrames = false
 				frames, cleanup, err = halfblock.OpenVideoStream(ctx, paths[videoIdx])
 				if err != nil {
 					return fmt.Errorf("open video stream: %w", err)
 				}
+				audioPlayer = openAudio(paths[videoIdx])
 				continue
 			}
-			consecutiveFailures = 0
+			currentVideoHadFrames = true
 			// Scale the incoming frame to fit the terminal.
 			if cols > 0 || rows > 0 {
 				img = halfblock.ScaleToFit(img, cols, rows)

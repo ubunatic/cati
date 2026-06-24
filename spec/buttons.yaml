@@ -36,6 +36,11 @@ buttons:
     style: secondary
     action: go_back
 
+  mode:
+    text: "{ 'M' | bold | light }ode"
+    style: secondary
+    action: toggle_mode
+
   zoom_in:
     text: "+ Zoom In"
     style: secondary
@@ -52,7 +57,7 @@ buttons:
     action: play_video
 
   pause:
-    text: "⏸︎ Play"
+    text: "⏸︎ Pause"
     style: primary
     action: pause_video
 

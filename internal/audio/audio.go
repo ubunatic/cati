@@ -67,77 +67,53 @@ func HasAudio(path string) (bool, error) {
 	return info != nil, nil
 }
 
-// Player manages an audio playback session backed by ffmpeg → aplay.
-// Audio is decoded by ffmpeg as signed 16-bit LE PCM and written to aplay's
-// stdin.  Call Stop to terminate early; Done is closed when playback ends.
+// Player manages an audio playback session backed by ffplay.
+// ffplay handles its own audio device routing without needing an intermediate
+// PCM pipe.  Call Stop to terminate early; Done is closed when playback ends.
 type Player struct {
-	ffmpeg *exec.Cmd
-	aplay  *exec.Cmd
-	done   chan struct{}
-	err    error
+	cmd  *exec.Cmd
+	done chan struct{}
+	err  error
 }
 
-// PCMRate and PCMChannels are the fixed PCM parameters used between ffmpeg and
-// aplay.  Changing them requires matching updates in both commands.
-const (
-	PCMRate     = 44100
-	PCMChannels = 2
-)
-
-// Open starts audio playback for path in the background.  The player reads
-// audio from path via ffmpeg and writes raw PCM to aplay.  Cancelling ctx
-// stops playback.  Returns an error immediately if either process fails to
-// start.
+// Open starts audio playback for path in the background using ffplay.
+// Cancelling ctx stops playback.  Returns an error immediately if ffplay
+// fails to start.
 func Open(ctx context.Context, path string) (*Player, error) {
 	if err := checkDeps(); err != nil {
 		return nil, err
 	}
 
-	// ffmpeg decodes audio to raw signed 16-bit LE stereo PCM on stdout.
-	ffmpegCmd := exec.CommandContext(ctx, "ffmpeg",
+	// ffplay plays audio directly; -nodisp suppresses the video window,
+	// -vn drops video decoding entirely, -autoexit quits when the stream ends.
+	var stderr strings.Builder
+	cmd := exec.CommandContext(ctx, "ffplay",
 		"-v", "quiet",
-		"-i", path,
-		"-vn", // drop video
-		"-f", "s16le",
-		"-ar", strconv.Itoa(PCMRate),
-		"-ac", strconv.Itoa(PCMChannels),
-		"pipe:1")
+		"-nodisp",
+		"-vn",
+		"-autoexit",
+		path)
+	cmd.Stderr = &stderr
 
-	// aplay reads raw PCM from stdin.
-	aplayCmd := exec.CommandContext(ctx, "aplay",
-		"-q",
-		"-f", "S16_LE",
-		"-r", strconv.Itoa(PCMRate),
-		"-c", strconv.Itoa(PCMChannels))
-
-	// Wire ffmpeg stdout → aplay stdin.
-	pipe, err := ffmpegCmd.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("audio: pipe: %w", err)
-	}
-	aplayCmd.Stdin = pipe
-
-	if err := ffmpegCmd.Start(); err != nil {
-		return nil, fmt.Errorf("audio: ffmpeg: %w", err)
-	}
-	if err := aplayCmd.Start(); err != nil {
-		_ = ffmpegCmd.Process.Kill()
-		return nil, fmt.Errorf("audio: aplay: %w", err)
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("audio: ffplay: %w", err)
 	}
 
 	p := &Player{
-		ffmpeg: ffmpegCmd,
-		aplay:  aplayCmd,
-		done:   make(chan struct{}),
+		cmd:  cmd,
+		done: make(chan struct{}),
 	}
 
 	go func() {
 		defer close(p.done)
-		// Wait for ffmpeg to finish (EOF or killed); aplay drains then exits.
-		if err := ffmpegCmd.Wait(); err != nil && ctx.Err() == nil {
-			p.err = fmt.Errorf("audio: ffmpeg: %w", err)
+		if err := cmd.Wait(); err != nil && ctx.Err() == nil {
+			msg := strings.TrimSpace(stderr.String())
+			if msg != "" {
+				p.err = fmt.Errorf("audio: ffplay: %w: %s", err, msg)
+			} else {
+				p.err = fmt.Errorf("audio: ffplay: %w", err)
+			}
 		}
-		_ = aplayCmd.Wait()
 	}()
 
 	return p, nil
@@ -145,8 +121,7 @@ func Open(ctx context.Context, path string) (*Player, error) {
 
 // Stop terminates playback immediately.
 func (p *Player) Stop() {
-	_ = p.ffmpeg.Process.Kill()
-	_ = p.aplay.Process.Kill()
+	_ = p.cmd.Process.Kill()
 	<-p.done
 }
 
@@ -163,7 +138,7 @@ func (p *Player) Err() error { return p.err }
 // checkDeps returns an error listing any missing binaries.
 func checkDeps() error {
 	var missing []string
-	for _, bin := range []string{"ffmpeg", "aplay"} {
+	for _, bin := range []string{"ffprobe", "ffplay"} {
 		if _, err := exec.LookPath(bin); err != nil {
 			missing = append(missing, bin)
 		}

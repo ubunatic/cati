@@ -16,7 +16,7 @@ $schema: "./schemas/views.schema.json"
 views:
   browser:
     - area: grid
-    - row: "{ prev } { next } | { settings } { about } | { quit }"
+    - row: "{ prev } { next } | { settings } { mode } { about } | { quit }"
     - row: "{ hint_browser }"
 
   image_viewer:
