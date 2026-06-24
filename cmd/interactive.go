@@ -662,6 +662,15 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 	}
 	defer cleanup()
 
+	// restartStream reopens the video stream so the video loops.
+	restartStream := func() {
+		cleanup()
+		frames, cleanup, err = halfblock.OpenVideoStream(ctx, path)
+		if err != nil {
+			frames = nil
+		}
+	}
+
 	var lastFrame image.Image
 
 	processToken := func(tok string) (quit bool) {
@@ -719,7 +728,8 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 
 		case img, ok := <-frames:
 			if !ok {
-				return nil // video ended
+				restartStream() // video ended — loop
+				continue
 			}
 			if !paused {
 				lastFrame = halfblock.ScaleToFit(img, termCols, max(1, termRows-2))

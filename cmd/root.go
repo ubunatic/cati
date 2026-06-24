@@ -119,6 +119,9 @@ func run(o opts, args []string) error {
 		if len(paths) == 0 {
 			return fmt.Errorf("no supported images found")
 		}
+		if halfblock.IsVideo(paths[0]) {
+			return interactiveVideo(paths[0], o.width, o.height, nil, nil, nil, nil)
+		}
 		return interactive(paths[0], o.width, o.height)
 	}
 
