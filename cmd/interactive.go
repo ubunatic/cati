@@ -83,9 +83,11 @@ type dragState struct {
 //
 //	scroll up/down     zoom in / out  at cursor position
 //	left-button drag   pan (grab-and-pull the image)
+//	Space + move       pan (any-motion pan mode; press Space again to exit)
 //
 // Keys:
 //
+//	Space        toggle pan mode (move mouse to pan, no button needed)
 //	+/=          zoom in  (centred on screen)
 //	-            zoom out (centred on screen)
 //	↑↓←→         pan
@@ -166,7 +168,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 	// ── Input reader (goroutine or shared) ────────────────────────────────────
 	inputs := sharedInputs
 	if inputs == nil {
-		inputs = make(chan string, 32)
+		inputs = make(chan string, 256)
 		go func() {
 			buf := make([]byte, 4096)
 			for {
@@ -174,9 +176,15 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 				if err != nil || n == 0 {
 					return
 				}
-				tokens := tokenizeInput(string(buf[:n]))
-				for _, tok := range tokens {
-					inputs <- tok
+				for _, tok := range tokenizeInput(string(buf[:n])) {
+					if strings.HasPrefix(tok, "\x1b[<") {
+						select {
+						case inputs <- tok:
+						default: // drop mouse events when buffer is full
+						}
+					} else {
+						inputs <- tok
+					}
 				}
 			}
 		}()
@@ -195,6 +203,8 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 
 	state := viewState{zoom: 1.0}
 	var drag dragState
+	var spacePan bool
+	var spacePanAnchor dragState
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
 
 	var status string
@@ -243,8 +253,23 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 							changed = true
 						}
 
+					// ── Space-pan: any mouse motion pans when Space is held ───────
+					case spacePan && sgrIsDrag(btn) && !sgrIsScroll(btn):
+						if !spacePanAnchor.active {
+							spacePanAnchor = dragState{
+								active:    true,
+								startCol:  c,
+								startRow:  r,
+								startPanX: state.panX,
+								startPanY: state.panY,
+							}
+						}
+						state.panX = spacePanAnchor.startPanX - (c - spacePanAnchor.startCol)
+						state.panY = spacePanAnchor.startPanY - (r-spacePanAnchor.startRow)*2
+						changed = true
+
 					// ── Left press: start drag ────────────────────────────────────
-					case !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release:
+					case !spacePan && !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release:
 						drag = dragState{
 							active:    true,
 							startCol:  c,
@@ -254,7 +279,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 						}
 
 					// ── Left drag: update pan ─────────────────────────────────────
-					case sgrIsDrag(btn) && sgrButton(btn) == 0 && drag.active:
+					case !spacePan && sgrIsDrag(btn) && sgrButton(btn) == 0 && drag.active:
 						// Grab-and-pull: dragging right shows more of the left side.
 						state.panX = drag.startPanX - (c - drag.startCol)
 						state.panY = drag.startPanY - (r-drag.startRow)*2
@@ -270,6 +295,20 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 					switch tok {
 					case "q", "Q", "\x1b", "\x03":
 						shouldQuit = true
+
+					case " ":
+						spacePan = !spacePan
+						spacePanAnchor = dragState{} // anchor resets on each toggle
+						if spacePan {
+							// Switch to any-motion tracking so bare mouse moves are reported.
+							fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h")
+							newStatus = "pan  —  move mouse to pan · Space to exit"
+						} else {
+							// Revert to button-event tracking.
+							fmt.Fprint(os.Stdout, "\x1b[?1002h\x1b[?1006h")
+							newStatus = ""
+						}
+						changed = true
 
 					case "+", "=":
 						newZoom := math.Min(state.zoom*zoomStep, maxZoom)
@@ -492,6 +531,19 @@ func cropImage(img image.Image, x, y, w, h int) image.Image {
 // interactiveVideo plays a video file in the terminal using the caller's shared
 // input channel so that keyboard events are routed through the browser's tokenizer.
 func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan string) error {
+	// The browser restores cooked-mode before calling us.  We must enter raw
+	// mode ourselves so single keypresses are readable without Enter.
+	fd := int(os.Stdin.Fd())
+	oldState, err := term.MakeRaw(fd)
+	if err != nil {
+		oldState = nil
+	}
+	defer func() {
+		if oldState != nil {
+			_ = term.Restore(fd, oldState)
+		}
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

@@ -6,12 +6,8 @@
 // the horizontal resolution of half-block rendering.  The two-colour-per-cell
 // constraint still applies: fg fills the marked quadrants, bg fills the rest.
 //
-// When a 2×2 block contains more than two distinct colours the renderer uses a
-// neighbour-aware quantisation pass: every candidate colour pair is scored by
-// coverage (how many pixels match exactly) and continuity (preference for
-// colours already present in the left and above cells).  The pair with the
-// highest combined score is chosen, keeping colour transitions smooth across
-// cell boundaries.
+// Use RenderOpts with an Options value to enable quality variants.
+// Apply ReduceColors to the scaled image before rendering for palette modes.
 package quadblock
 
 import (
@@ -62,6 +58,71 @@ func colorDist2(a, b color.RGBA) int {
 	return dr*dr + dg*dg + db*db
 }
 
+// avgRGB returns the arithmetic mean colour of the opaque pixels in the slice.
+func avgRGB(pixels ...color.RGBA) color.RGBA {
+	var r, g, b, n int
+	for _, p := range pixels {
+		if isTransparent(p) {
+			continue
+		}
+		r += int(p.R)
+		g += int(p.G)
+		b += int(p.B)
+		n++
+	}
+	if n == 0 {
+		return color.RGBA{}
+	}
+	return color.RGBA{R: uint8(r / n), G: uint8(g / n), B: uint8(b / n), A: 255}
+}
+
+// ── Options ───────────────────────────────────────────────────────────────────
+
+// BlendMode controls when and how sub-pixel neighbourhood blending is applied.
+type BlendMode int
+
+const (
+	// BlendNone samples each sub-pixel at its exact center (default).
+	BlendNone BlendMode = iota
+	// BlendAlways blends every sub-pixel with its 8 neighbours (3×3, weights 4:2:1).
+	BlendAlways
+	// BlendAmbiguous applies the 3×3 blend only when the cell has 3+ distinct colours.
+	// Clean cells are left untouched; only ambiguous boundaries are smoothed.
+	BlendAmbiguous
+	// BlendAmbiguousWide applies a 5×5 (radius-2) blend on ambiguous cells.
+	// Stronger smoothing over a larger neighbourhood; may soften fine edges.
+	BlendAmbiguousWide
+)
+
+// Options configures quality trade-offs of the quad-block renderer.
+type Options struct {
+	// HalfblockThreshold: when > 0, a cell whose best colour-pair exact
+	// coverage (how many of the 4 pixels match fg or bg exactly, 0–4) is
+	// below this value falls back to halfblock encoding (▀/▄ from top/bottom
+	// row averages).  Only applies when the cell has 3+ distinct colours.
+	HalfblockThreshold int
+
+	// Blend controls neighbourhood pixel blending.  See BlendMode constants.
+	Blend BlendMode
+
+	// SplitHalf derives the fg/bg colour pair from halfblock row-averages
+	// (top-2-pixel avg vs bottom-2-pixel avg) and then applies the quad mask
+	// for sub-cell precision.  Gives stable colours with higher spatial detail.
+	SplitHalf bool
+
+	// SplitHalfNeighbors extends SplitHalf: instead of always using the bottom
+	// row average as bg, it also tries the fg/bg colours of already-rendered
+	// left and above cells and picks whichever candidate yields the lowest
+	// total quantisation error.  Has no effect when SplitHalf is false.
+	SplitHalfNeighbors bool
+
+	// LumSplit splits the 4 sub-pixels at their mean luminance (BT.601):
+	// bright sub-pixels form the fg group, dark sub-pixels form the bg group.
+	// Each group's colour is the average of the original pixel colours in that
+	// group.  Gives stable colour regions driven by luminance structure.
+	LumSplit bool
+}
+
 // ── Quadrant character lookup ─────────────────────────────────────────────────
 
 // Quadrant bitmask: UL=bit3, UR=bit2, LL=bit1, LR=bit0.
@@ -101,7 +162,7 @@ type quadCell struct {
 	fg, bg      color.RGBA
 	hasFG       bool
 	hasBG       bool
-	transparent bool // no opaque pixels → plain space, no ANSI
+	transparent bool
 }
 
 // ── Colour quantisation ───────────────────────────────────────────────────────
@@ -143,7 +204,7 @@ func pickBestPair(pixels [4]color.RGBA, candidates []color.RGBA, left, above *qu
 	}
 	best := scored{a: candidates[0], b: candidates[1], score: -1}
 
-	for i := 0; i < len(candidates); i++ {
+	for i := range len(candidates) {
 		for j := i + 1; j < len(candidates); j++ {
 			ca, cb := candidates[i], candidates[j]
 
@@ -176,7 +237,6 @@ func pickBestPair(pixels [4]color.RGBA, candidates []color.RGBA, left, above *qu
 		}
 	}
 
-	// Assign the more-common colour as fg.
 	countA, countB := 0, 0
 	for _, p := range pixels {
 		if isTransparent(p) {
@@ -194,9 +254,192 @@ func pickBestPair(pixels [4]color.RGBA, candidates []color.RGBA, left, above *qu
 	return best.b, best.a, true
 }
 
+// exactCoverage counts how many of the 4 pixels match fg or bg exactly.
+func exactCoverage(pixels [4]color.RGBA, fg, bg color.RGBA, hasBG bool) int {
+	n := 0
+	for _, p := range pixels {
+		if isTransparent(p) {
+			continue
+		}
+		if eqRGB(p, fg) || (hasBG && eqRGB(p, bg)) {
+			n++
+		}
+	}
+	return n
+}
+
+// halfblockFallback encodes the cell using row-average colours and halfblock
+// chars, trading quad precision for clean colours at ambiguous boundaries.
+func halfblockFallback(pixels [4]color.RGBA) quadCell {
+	top := avgRGB(pixels[0], pixels[1])
+	bot := avgRGB(pixels[2], pixels[3])
+	topT := isTransparent(top)
+	botT := isTransparent(bot)
+	switch {
+	case topT && botT:
+		return quadCell{ch: ' ', transparent: true}
+	case topT:
+		return quadCell{ch: '▄', fg: bot, hasFG: true}
+	case botT:
+		return quadCell{ch: '▀', fg: top, hasFG: true}
+	default:
+		if eqRGB(top, bot) {
+			return quadCell{ch: '█', fg: top, hasFG: true}
+		}
+		return quadCell{ch: '▀', fg: top, bg: bot, hasFG: true, hasBG: true}
+	}
+}
+
+// splitHalfCell encodes the cell using halfblock row-averages as fg/bg colours,
+// then applies the quad mask for sub-cell precision.
+// When withNeighbors is true it also considers the fg/bg of left/above cells as
+// candidate bg colours, picking the one with the lowest total quantisation error.
+func splitHalfCell(pixels [4]color.RGBA, left, above *quadCell, withNeighbors bool) quadCell {
+	top := avgRGB(pixels[0], pixels[1]) // UL+UR average → top colour
+	bot := avgRGB(pixels[2], pixels[3]) // LL+LR average → bottom colour
+	topT := isTransparent(top)
+	botT := isTransparent(bot)
+
+	var fg, bg color.RGBA
+	hasBG := false
+	switch {
+	case topT && botT:
+		return quadCell{ch: ' ', transparent: true}
+	case topT:
+		fg = bot
+	case botT:
+		fg = top
+	case eqRGB(top, bot):
+		fg = top
+	default:
+		fg, bg, hasBG = top, bot, true
+	}
+
+	// When neighbor colors are requested, try each neighbor's fg/bg as an
+	// alternative bg candidate and keep the one with lowest quantisation error.
+	if withNeighbors && hasBG {
+		best := bg
+		bestErr := quantError(pixels, fg, bg)
+		for _, nb := range []*quadCell{left, above} {
+			if nb == nil || nb.transparent {
+				continue
+			}
+			for _, c := range []struct {
+				ok bool
+				c  color.RGBA
+			}{{nb.hasFG, nb.fg}, {nb.hasBG, nb.bg}} {
+				if !c.ok || eqRGB(c.c, fg) {
+					continue
+				}
+				if e := quantError(pixels, fg, c.c); e < bestErr {
+					best = c.c
+					bestErr = e
+				}
+			}
+		}
+		bg = best
+	}
+
+	mask := buildMask(pixels, fg, bg, hasBG)
+	if mask == 0 {
+		if !hasBG {
+			return quadCell{ch: ' ', transparent: true}
+		}
+		fg, bg = bg, fg
+		hasBG = false
+		mask = 0b1111
+	}
+	c := quadCell{ch: quadChar[mask], fg: fg, hasFG: true}
+	if hasBG {
+		c.bg = bg
+		c.hasBG = true
+	}
+	return c
+}
+
+// compileCellLumSplit splits sub-pixels at their mean BT.601 luminance:
+// bright pixels form the fg group, dark pixels form the bg group.
+// Each group's colour is the average of its original pixel colours.
+func compileCellLumSplit(pixels [4]color.RGBA) quadCell {
+	lum := func(p color.RGBA) float64 {
+		return 0.299*float64(p.R) + 0.587*float64(p.G) + 0.114*float64(p.B)
+	}
+
+	var sumL float64
+	n := 0
+	for _, p := range pixels {
+		if !isTransparent(p) {
+			sumL += lum(p)
+			n++
+		}
+	}
+	if n == 0 {
+		return quadCell{ch: ' ', transparent: true}
+	}
+	if n == 1 {
+		for _, p := range pixels {
+			if !isTransparent(p) {
+				return quadCell{ch: '█', fg: p, hasFG: true}
+			}
+		}
+	}
+
+	thresh := sumL / float64(n)
+
+	var high, low []color.RGBA
+	for _, p := range pixels {
+		if isTransparent(p) {
+			continue
+		}
+		if lum(p) >= thresh {
+			high = append(high, p)
+		} else {
+			low = append(low, p)
+		}
+	}
+
+	if len(high) == 0 {
+		high = low
+		low = nil
+	}
+	fg := avgRGB(high...)
+
+	if len(low) == 0 {
+		return quadCell{ch: '█', fg: fg, hasFG: true}
+	}
+
+	bg := avgRGB(low...)
+	if eqRGB(fg, bg) {
+		return quadCell{ch: '█', fg: fg, hasFG: true}
+	}
+
+	mask := buildMask(pixels, fg, bg, true)
+	if mask == 0 {
+		return quadCell{ch: '█', fg: bg, hasFG: true}
+	}
+	return quadCell{ch: quadChar[mask], fg: fg, bg: bg, hasFG: true, hasBG: true}
+}
+
+// quantError returns the sum of squared distances from each non-transparent
+// pixel to its nearest colour among fg and bg.  Lower is better.
+func quantError(pixels [4]color.RGBA, fg, bg color.RGBA) int {
+	total := 0
+	for _, p := range pixels {
+		if isTransparent(p) {
+			continue
+		}
+		dFG := colorDist2(p, fg)
+		dBG := colorDist2(p, bg)
+		if dFG < dBG {
+			total += dFG
+		} else {
+			total += dBG
+		}
+	}
+	return total
+}
+
 // buildMask computes the 4-bit quadrant mask (UL=bit3, UR=bit2, LL=bit1, LR=bit0).
-// Transparent pixels map to 0 (bg / terminal default).
-// Non-transparent pixels are assigned to the nearer of fg/bg.
 func buildMask(pixels [4]color.RGBA, fg, bg color.RGBA, hasBG bool) uint8 {
 	bits := [4]uint8{bitUL, bitUR, bitLL, bitLR}
 	var mask uint8
@@ -212,8 +455,14 @@ func buildMask(pixels [4]color.RGBA, fg, bg color.RGBA, hasBG bool) uint8 {
 }
 
 // compileCell converts a 2×2 pixel block into a terminal quadrant cell.
-// left and above are the already-rendered cells to the left and above (may be nil).
-func compileCell(pixels [4]color.RGBA, left, above *quadCell) quadCell {
+func compileCell(pixels [4]color.RGBA, left, above *quadCell, opts Options) quadCell {
+	if opts.LumSplit {
+		return compileCellLumSplit(pixels)
+	}
+	if opts.SplitHalf {
+		return splitHalfCell(pixels, left, above, opts.SplitHalfNeighbors)
+	}
+
 	unique := collectUnique(pixels)
 
 	if len(unique) == 0 {
@@ -231,6 +480,11 @@ func compileCell(pixels [4]color.RGBA, left, above *quadCell) quadCell {
 		hasBG = true
 	default:
 		fg, bg, hasBG = pickBestPair(pixels, unique, left, above)
+		if opts.HalfblockThreshold > 0 {
+			if exactCoverage(pixels, fg, bg, hasBG) < opts.HalfblockThreshold {
+				return halfblockFallback(pixels)
+			}
+		}
 	}
 
 	mask := buildMask(pixels, fg, bg, hasBG)
@@ -239,7 +493,6 @@ func compileCell(pixels [4]color.RGBA, left, above *quadCell) quadCell {
 		if !hasBG {
 			return quadCell{ch: ' ', transparent: true}
 		}
-		// All opaque pixels quantised to bg; swap so fg colour fills all quadrants.
 		fg, bg = bg, fg
 		hasBG = false
 		mask = 0b1111
@@ -256,13 +509,8 @@ func compileCell(pixels [4]color.RGBA, left, above *quadCell) quadCell {
 // ── Scaling ───────────────────────────────────────────────────────────────────
 
 // ScaleToFit scales img for quad rendering within the given terminal dimensions.
-//
-// Terminal cells are ~1:2 (W:H), so each quad pixel occupies cell_width/2 ×
-// cell_width on screen — a 1:2 rectangle.  To compensate, the source image
-// must be stretched 2× horizontally before rendering so that each source pixel
-// maps to a square region.  ScaleToFit applies that stretch and then scales
-// down to fit the pixel budget cols*2 × rows*2.  Upscaling the stretch is
-// intentional; only downscaling beyond it is avoided.
+// Applies a 2× horizontal stretch to compensate for the 1:2 quad-pixel aspect
+// ratio (terminal cells are ~1:2 W:H, so quad pixels are narrow).
 // Pass 0 for either dimension to leave it unconstrained.
 func ScaleToFit(img image.Image, cols, rows int) image.Image {
 	b := img.Bounds()
@@ -271,11 +519,8 @@ func ScaleToFit(img image.Image, cols, rows int) image.Image {
 		return img
 	}
 
-	maxW := cols * 2 // pixel budget: 2 px per terminal column
-	maxH := rows * 2 // pixel budget: 2 px per terminal row
-
-	// Treat the source as 2× wider when computing the scale factor so that the
-	// resulting target width includes the aspect-ratio correction.
+	maxW := cols * 2
+	maxH := rows * 2
 	stretchedW := srcW * 2
 	targetW, targetH := stretchedW, srcH
 
@@ -296,7 +541,7 @@ func ScaleToFit(img image.Image, cols, rows int) image.Image {
 	return halfblock.ScaleNN(img, targetW, targetH)
 }
 
-// ── Rendering ─────────────────────────────────────────────────────────────────
+// ── Pixel sampling ────────────────────────────────────────────────────────────
 
 // safePixel returns the RGBA value at (x,y), or transparent if out of bounds.
 func safePixel(img image.Image, x, y int, b image.Rectangle) color.RGBA {
@@ -306,9 +551,59 @@ func safePixel(img image.Image, x, y int, b image.Rectangle) color.RGBA {
 	return toRGBA(img.At(x, y))
 }
 
-// Render writes img to w as ANSI quadrant-block art followed by a trailing
-// newline per row.  Scale the image first with ScaleToFit if needed.
+// blendedPixelR returns a distance-weighted average of the pixel at (x,y)
+// and all pixels within the given radius.
+// Weights: center=4, dist²≤2 (cardinal at r=1)=2, all others=1.
+// Transparent pixels are excluded from the average.
+func blendedPixelR(img image.Image, x, y int, b image.Rectangle, radius int) color.RGBA {
+	var r, g, bl, tw int
+	for dy := -radius; dy <= radius; dy++ {
+		for dx := -radius; dx <= radius; dx++ {
+			dist2 := dx*dx + dy*dy
+			var w int
+			switch {
+			case dist2 == 0:
+				w = 4
+			case dist2 <= 2:
+				w = 2
+			default:
+				w = 1
+			}
+			px := safePixel(img, x+dx, y+dy, b)
+			if isTransparent(px) {
+				continue
+			}
+			r += int(px.R) * w
+			g += int(px.G) * w
+			bl += int(px.B) * w
+			tw += w
+		}
+	}
+	if tw == 0 {
+		return color.RGBA{}
+	}
+	return color.RGBA{R: uint8(r / tw), G: uint8(g / tw), B: uint8(bl / tw), A: 255}
+}
+
+// samplePixel returns the pixel colour at (x,y) according to opts.Blend.
+// BlendAmbiguous / BlendAmbiguousWide are not handled here; they are applied
+// in RenderOpts after the initial 4-pixel read detects ambiguity.
+func samplePixel(img image.Image, x, y int, b image.Rectangle, opts Options) color.RGBA {
+	if opts.Blend == BlendAlways {
+		return blendedPixelR(img, x, y, b, 1)
+	}
+	return safePixel(img, x, y, b)
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+
+// Render writes img to w as ANSI quadrant-block art with default options.
 func Render(w io.Writer, img image.Image) error {
+	return RenderOpts(w, img, Options{})
+}
+
+// RenderOpts writes img to w as ANSI quadrant-block art using the given options.
+func RenderOpts(w io.Writer, img image.Image, opts Options) error {
 	b := img.Bounds()
 	pixW := b.Dx()
 	pixH := b.Dy()
@@ -316,7 +611,6 @@ func Render(w io.Writer, img image.Image) error {
 	tcCols := (pixW + 1) / 2
 	trRows := (pixH + 1) / 2
 
-	// Cell grid for left/above neighbour lookup.
 	cells := make([]quadCell, tcCols*trRows)
 	cellAt := func(tr, tc int) *quadCell {
 		if tr < 0 || tc < 0 || tr >= trRows || tc >= tcCols {
@@ -325,23 +619,39 @@ func Render(w io.Writer, img image.Image) error {
 		return &cells[tr*tcCols+tc]
 	}
 
-	for tr := 0; tr < trRows; tr++ {
+	for tr := range trRows {
 		var sb strings.Builder
 		sb.WriteString(ansiLinePrefix)
 
-		for tc := 0; tc < tcCols; tc++ {
+		for tc := range tcCols {
 			py0 := b.Min.Y + tr*2
 			py1 := py0 + 1
 			px0 := b.Min.X + tc*2
 			px1 := px0 + 1
 
 			var pixels [4]color.RGBA
-			pixels[0] = safePixel(img, px0, py0, b) // UL
-			pixels[1] = safePixel(img, px1, py0, b) // UR
-			pixels[2] = safePixel(img, px0, py1, b) // LL
-			pixels[3] = safePixel(img, px1, py1, b) // LR
+			pixels[0] = samplePixel(img, px0, py0, b, opts) // UL
+			pixels[1] = samplePixel(img, px1, py0, b, opts) // UR
+			pixels[2] = samplePixel(img, px0, py1, b, opts) // LL
+			pixels[3] = samplePixel(img, px1, py1, b, opts) // LR
 
-			c := compileCell(pixels, cellAt(tr, tc-1), cellAt(tr-1, tc))
+			// For ambiguous-blend modes: if first sampling gives 3+ colours,
+			// re-sample with neighbourhood blending to reduce the colour count
+			// before quantisation.
+			if opts.Blend == BlendAmbiguous || opts.Blend == BlendAmbiguousWide {
+				if len(collectUnique(pixels)) >= 3 {
+					radius := 1
+					if opts.Blend == BlendAmbiguousWide {
+						radius = 2
+					}
+					pixels[0] = blendedPixelR(img, px0, py0, b, radius)
+					pixels[1] = blendedPixelR(img, px1, py0, b, radius)
+					pixels[2] = blendedPixelR(img, px0, py1, b, radius)
+					pixels[3] = blendedPixelR(img, px1, py1, b, radius)
+				}
+			}
+
+			c := compileCell(pixels, cellAt(tr, tc-1), cellAt(tr-1, tc), opts)
 			cells[tr*tcCols+tc] = c
 
 			if c.transparent {

@@ -12,6 +12,8 @@ import (
 	"codeberg.org/ubunatic/cati/internal/halfblock"
 )
 
+// ── side-by-side rendering helpers ───────────────────────────────────────────
+
 // visLen returns the visible display width of s, ignoring ANSI escape sequences.
 func visLen(s string) int {
 	inEsc := false
@@ -37,19 +39,7 @@ func padRight(s string, w int) string {
 	return s
 }
 
-// renderLines renders img via fn and returns one string per terminal row,
-// with the ansiLinePrefix (\x1b[2K\r) stripped so lines can be composed.
-func renderLines(t *testing.T, img image.Image, fn func(io.Writer, image.Image) error) []string {
-	t.Helper()
-	var sb strings.Builder
-	if err := fn(&sb, img); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	out := strings.ReplaceAll(sb.String(), ansiLinePrefix, "")
-	return strings.Split(strings.TrimRight(out, "\n"), "\n")
-}
-
-// maxVisLen returns the longest visible display width across lines.
+// maxVisLen returns the longest visible display width across all lines.
 func maxVisLen(lines []string) int {
 	w := 0
 	for _, l := range lines {
@@ -60,7 +50,57 @@ func maxVisLen(lines []string) int {
 	return w
 }
 
-// TestShowImages prints quad and half-block renders of each image side by side.
+// renderLines renders img via fn, strips the ansiLinePrefix from every line,
+// and returns one string per terminal row.
+func renderLines(t *testing.T, img image.Image, fn func(io.Writer, image.Image) error) []string {
+	t.Helper()
+	var sb strings.Builder
+	if err := fn(&sb, img); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := strings.ReplaceAll(sb.String(), ansiLinePrefix, "")
+	return strings.Split(strings.TrimRight(out, "\n"), "\n")
+}
+
+// ── variant definitions ───────────────────────────────────────────────────────
+
+type variant struct {
+	label    string         // shown in the column header (truncated to showCols)
+	opts     Options        // quad options; ignored when useHalf=true
+	useHalf  bool           // render with halfblock instead of quad
+	colorRed ColorReduction // palette applied before rendering (ColorFull = none)
+}
+
+// showVariants lists all rendering modes shown in TestShowImages.
+// Variants are printed in groups of maxVariantsPerRow columns.
+//
+// Row 1: algorithm variants
+// Row 2: colour-space reduction (all use default quad Options)
+var showVariants = []variant{
+	// ── Row 1: algorithm variants ─────────────────────────────────────────────
+	{label: "quad/default", opts: Options{}},
+	{label: "quad/hb≥2", opts: Options{HalfblockThreshold: 2}},
+	{label: "quad/split½", opts: Options{SplitHalf: true}},
+	{label: "split½+nb", opts: Options{SplitHalf: true, SplitHalfNeighbors: true}},
+	{label: "lum-split", opts: Options{LumSplit: true}},
+	{label: "halfblock", useHalf: true},
+
+	// ── Row 2: colour-space reduction ─────────────────────────────────────────
+	{label: "ansi256", colorRed: ColorANSI256},
+	{label: "ansi16", colorRed: ColorANSI16},
+	{label: "gray8", colorRed: ColorGray8},
+	{label: "gray16", colorRed: ColorGray16},
+	{label: "gray64", colorRed: ColorGray64},
+}
+
+const (
+	showCols          = 24 // fixed terminal columns per variant column
+	showSep           = "  "
+	maxVariantsPerRow = 6 // wrap to a new row of columns after this many variants
+)
+
+// TestShowImages renders each image in all quality variants side by side.
+// Variants are grouped into rows of maxVariantsPerRow columns.
 // Run with: go test ./internal/quadblock/ -v -run TestShowImages
 func TestShowImages(t *testing.T) {
 	if !testing.Verbose() {
@@ -69,14 +109,11 @@ func TestShowImages(t *testing.T) {
 
 	dirs := []struct {
 		dir  string
-		cols int
-		rows int
+		rows int // 0 = unconstrained (aspect-ratio derived)
 	}{
-		{"../../testdata", 20, 10},
-		{"../../assets/samples", 60, 20},
+		{"../../testdata", 0},
+		{"../../assets/samples", 0},
 	}
-
-	const sep = "   "
 
 	for _, d := range dirs {
 		entries, err := os.ReadDir(d.dir)
@@ -95,36 +132,90 @@ func TestShowImages(t *testing.T) {
 				continue
 			}
 
-			quadImg := ScaleToFit(orig, d.cols, d.rows)
-			halfImg := halfblock.ScaleToFit(orig, d.cols, d.rows)
+			// Pre-scale once per renderer type; all quad variants share one scaled image.
+			quadImg := ScaleToFit(orig, showCols, d.rows)
+			halfImg := halfblock.ScaleToFit(orig, showCols, d.rows)
 
-			quadLines := renderLines(t, quadImg, func(w io.Writer, img image.Image) error {
-				return Render(w, img)
-			})
-			halfLines := renderLines(t, halfImg, func(w io.Writer, img image.Image) error {
-				return halfblock.Render(w, img)
-			})
+			// Render all variants to line slices.
+			type rendered struct {
+				v     variant
+				lines []string
+				cols  int
+			}
+			var columns []rendered
+			for _, v := range showVariants {
+				var src image.Image
+				if v.useHalf {
+					src = halfImg
+				} else {
+					src = quadImg
+				}
+				if v.colorRed != ColorFull {
+					src = ReduceColors(src, v.colorRed)
+				}
 
-			quadW := maxVisLen(quadLines)
-			nRows := max(len(quadLines), len(halfLines))
+				var lines []string
+				if v.useHalf {
+					lines = renderLines(t, src, func(w io.Writer, img image.Image) error {
+						return halfblock.Render(w, img)
+					})
+				} else {
+					o := v.opts
+					lines = renderLines(t, src, func(w io.Writer, img image.Image) error {
+						return RenderOpts(w, img, o)
+					})
+				}
+				cols := maxVisLen(lines)
+				if cols == 0 {
+					cols = showCols
+				}
+				columns = append(columns, rendered{v: v, lines: lines, cols: cols})
+			}
 
-			qLabel := fmt.Sprintf("quad %dx%d px → %d cols",
-				quadImg.Bounds().Dx(), quadImg.Bounds().Dy(), quadImg.Bounds().Dx()/2)
-			hLabel := fmt.Sprintf("half %dx%d px → %d cols",
-				halfImg.Bounds().Dx(), halfImg.Bounds().Dy(), halfImg.Bounds().Dx())
-
+			// Print header (file path) once per image.
 			fmt.Printf("\n── %s ──\n", path)
-			fmt.Printf("%s%s%s\n", padRight(qLabel, quadW), sep, hLabel)
 
-			for i := range nRows {
-				var ql, hl string
-				if i < len(quadLines) {
-					ql = quadLines[i]
+			// Print variant groups (up to maxVariantsPerRow columns per group).
+			for start := 0; start < len(columns); start += maxVariantsPerRow {
+				end := start + maxVariantsPerRow
+				if end > len(columns) {
+					end = len(columns)
 				}
-				if i < len(halfLines) {
-					hl = halfLines[i]
+				group := columns[start:end]
+
+				// Variant labels.
+				for i, c := range group {
+					if i > 0 {
+						fmt.Print(showSep)
+					}
+					label := c.v.label
+					if visLen(label) > c.cols {
+						label = label[:c.cols]
+					}
+					fmt.Print(padRight(label, c.cols))
 				}
-				fmt.Printf("%s%s%s\n", padRight(ql, quadW), sep, hl)
+				fmt.Println()
+
+				// Image rows.
+				nRows := 0
+				for _, c := range group {
+					if len(c.lines) > nRows {
+						nRows = len(c.lines)
+					}
+				}
+				for row := range nRows {
+					for i, c := range group {
+						if i > 0 {
+							fmt.Print(showSep)
+						}
+						line := ""
+						if row < len(c.lines) {
+							line = c.lines[row]
+						}
+						fmt.Print(padRight(line, c.cols))
+					}
+					fmt.Println()
+				}
 			}
 		}
 	}

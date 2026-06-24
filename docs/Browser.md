@@ -84,7 +84,7 @@ If the terminal is resized, new thumbnail dimensions are calculated, and the cac
 
 ## 3. Double-Buffered Raw Mode
 
-The browser supports opening selected items directly in the full-screen interactive view. Because the interactive viewer manages its own terminal setup and restores original cooked mode on exit, Cati implements raw mode swapping:
+The browser supports opening selected items directly in the full-screen interactive view. Each viewer owns its own terminal mode — the browser restores cooked mode before handing off, and re-enters raw mode after:
 
 ```
   +------------------+
@@ -92,14 +92,17 @@ The browser supports opening selected items directly in the full-screen interact
   +------------------+
            │
            ▼ (Item Clicked / Enter Pressed)
-  1. Restore original terminal state (cooked mode)
+  1. term.Restore → cooked mode
   2. Disable mouse tracking & show cursor
-  3. Invoke interactive(selectedPath, ...)
+  3. Invoke interactiveWithChan() or interactiveVideo()
+     └─ Both call term.MakeRaw internally (raw mode during viewing)
+     └─ Both restore terminal state via defer on exit
            │
-           ▼ (Interactive View Runs & Cleans Up on Quit)
-  4. Restore raw mode for Grid Browser
-  5. Hide cursor & enable mouse tracking
-  6. Call redraw() to reconstruct the grid
+           ▼ (Viewer exits — q/ESC/^C/video-end)
+  4. Drain browser's sigs channel (propagate any SIGINT received during viewing)
+  5. term.MakeRaw → raw mode for Grid Browser
+  6. Hide cursor & enable mouse tracking
+  7. Call redraw() to reconstruct the grid
            │
            ▼
   +------------------+
@@ -107,7 +110,31 @@ The browser supports opening selected items directly in the full-screen interact
   +------------------+
 ```
 
-This guarantees that sub-views do not conflict with parent raw inputs or leave the terminal in a broken state if the application crashes.
+### Critical invariant: every viewer must call term.MakeRaw itself
+
+The browser calls `term.Restore` (cooked mode) before invoking any viewer, so the shared stdin
+goroutine is in cooked-mode blocking (waits for a full line before `Read` returns). If a viewer
+does **not** call `term.MakeRaw`, single-key presses like `q` and `ESC` appear non-functional
+because they are buffered by the line-discipline and never forwarded to the goroutine.
+
+Both `interactiveWithChan` and `interactiveVideo` call `term.MakeRaw` at their top and restore
+via `defer term.Restore` — this must be maintained for any future viewer added.
+
+### SIGINT propagation
+
+Go's `signal.Notify` delivers a signal to *all* registered channels. Both `browser()` and each
+viewer register for SIGINT. When the user presses `^C` inside a viewer, the viewer's channel
+fires and it returns — but the browser's `sigs` channel also buffered the signal. To ensure
+`^C` always exits the app, the Enter handler explicitly drains `sigs` after the viewer returns:
+
+```go
+select {
+case <-sigs:
+    shouldQuit = true
+    return
+default:
+}
+```
 
 ---
 
@@ -128,3 +155,93 @@ All mouse-driven actions have full keyboard equivalents to support headless/keyb
 *   `Enter`/`Space` opens the selected item.
 *   `[` / `]` / `Page Up` / `Page Down` trigger page transitions.
 *   `a` toggles the About page overlay.
+
+---
+
+## 5. Async Thumbnail Loading & Priority Queue
+
+Thumbnails (images and video preview frames) are loaded asynchronously so the browser grid
+renders immediately with placeholders and fills in progressively.
+
+### Architecture
+
+```
+  Browser goroutine                 thumbQueue            Worker goroutines (N = CPU/2)
+  ─────────────────                 ──────────            ─────────────────────────────
+  redraw()
+   └─ getThumbnail(item, w, h)
+       ├─ cache hit → return frame
+       └─ cache miss → tq.submit()──→ [job, job, job …]──→ thumbWorker
+                                                            ├─ LoadImage / LoadVideoFrameAt
+                                                            └─ results chan ──→ browser select
+                                                                               └─ cache + redraw
+```
+
+### Priority Re-ordering
+
+When the user scrolls, newly visible items move to the **front** of the job queue without
+interrupting in-progress workers:
+
+```go
+tq.prioritize(currentVisibleKeys)  // called inside redraw()
+```
+
+The queue is protected by a `sync.Mutex` + `sync.Cond`; workers block on `cond.Wait` and are
+woken by `cond.Signal` on each new submission.
+
+### Video Preview Frames
+
+For video items, `loadVideoThumbs` uses `ffprobe` to measure duration, then extracts `N`
+evenly-spaced frames via `ffmpeg -ss <offset>`. The frames are stored as a `[]image.Image`
+slice in the cache and cycled as a one-shot animation.
+
+### Settings
+
+| Config key | Default | Description |
+|---|---|---|
+| `preview_videos` | `true` | Whether to extract video preview frames |
+| `max_jobs` | `CPU/2` | Parallel thumbnail worker count (0 = auto) |
+| `video_frames` | `10` | Number of frames extracted per video thumbnail |
+
+### One-Shot Animation
+
+When a video thumbnail scrolls into view (or the cursor moves onto it), `startVisibleAnimations`
+triggers a one-shot playback of its cached frames at 300 ms/frame. The animation stops at the
+last frame and does not loop, keeping the UI calm when browsing.
+
+---
+
+## 6. Space-Pan Mode in the Image Viewer
+
+The full-screen image viewer (`interactiveWithChan`) supports a **Space-pan** mode as an
+alternative to left-button drag:
+
+| Action | Effect |
+|--------|--------|
+| `Space` (first press) | Enter pan mode — status bar shows hint |
+| Move mouse | Image follows cursor (grab-and-pull) |
+| `Space` (second press) | Exit pan mode |
+| Left-button drag | Always available regardless of pan mode |
+
+### Implementation
+
+Pressing `Space` toggles a `spacePan bool` flag and switches mouse tracking:
+
+```
+Space ON  → \x1b[?1003h\x1b[?1006h   (any-motion: reports bare mouse moves)
+Space OFF → \x1b[?1002h\x1b[?1006h   (button-event: reports moves only while button held)
+```
+
+The first motion event after entering pan mode sets an anchor (`dragState`). Subsequent events
+compute pan as an absolute delta from that anchor — identical math to left-button drag:
+
+```go
+state.panX = anchor.startPanX - (col - anchor.startCol)
+state.panY = anchor.startPanY - (row - anchor.startRow)*2
+```
+
+The anchor resets each time pan mode is toggled on, so re-entering always anchors to the
+current cursor position.
+
+`ANSIMouseOff` includes `?1003l` so cleanup correctly disables any-motion tracking even if the
+viewer exits while pan mode is active.

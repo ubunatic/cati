@@ -157,16 +157,82 @@ The higher-count colour of the winning pair becomes `fg`; the other becomes `bg`
 
 ---
 
+## Quality rendering variants
+
+The `Options` struct controls quality trade-offs available to the caller.
+Pre-processing steps (colour reduction) are applied to the scaled image before
+calling `RenderOpts`.
+
+### Rendering options (`Options`)
+
+| Field | Type | Effect |
+|-------|------|--------|
+| `HalfblockThreshold` | `int` | Fall back to `▀`/`▄` when exact coverage < N (only on 3+-colour cells) |
+| `Blend` | `BlendMode` | Neighbourhood pixel blending (see below) |
+| `SplitHalf` | `bool` | Derive fg/bg from halfblock row-averages; apply quad mask for sub-cell precision |
+| `SplitHalfNeighbors` | `bool` | Extends `SplitHalf`: also tries left/above cell colours as bg candidate, picks lowest quantisation error |
+| `LumSplit` | `bool` | Split sub-pixels at mean BT.601 luminance; colour each group's average |
+
+### Blend modes
+
+| Constant | Behaviour |
+|----------|-----------|
+| `BlendNone` | Sample each sub-pixel at its exact center (default) |
+| `BlendAlways` | 3×3 weighted blend (4:2:1) for every sub-pixel |
+| `BlendAmbiguous` | Same 3×3 blend, but only on cells with 3+ distinct colours |
+| `BlendAmbiguousWide` | 5×5 blend (radius 2) on ambiguous cells |
+
+**Practical note (2026-06-24):** `BlendAmbiguous` / `BlendAmbiguousWide` produce
+visible blurring on photographic content. `SplitHalf` and `SplitHalfNeighbors`
+give the cleanest results. Halfblock mode is perceptually most pleasant because
+its 1:1 "square pixels" are easier on the eye than quad's 1:2 sub-pixels.
+
+### Colour space reduction (`ReduceColors`)
+
+```go
+// Apply before ScaleToFit / RenderOpts:
+img = quadblock.ReduceColors(img, quadblock.ColorANSI256)
+```
+
+| Constant | Palette |
+|----------|---------|
+| `ColorFull` | 24-bit true colour (no reduction) |
+| `ColorANSI256` | ANSI xterm 256: 16 basic + 6×6×6 cube + 24 grays |
+| `ColorANSI16` | 16 basic ANSI terminal colours |
+| `ColorGray8` | 8-level grayscale (BT.601 luma) |
+| `ColorGray16` | 16-level grayscale |
+| `ColorGray64` | 64-level grayscale |
+
+Nearest-colour matching uses squared Euclidean distance in linear RGB.
+Transparent pixels are preserved.
+
+### LumSplit algorithm
+
+For each 2×2 cell:
+1. Compute BT.601 luma `L = 0.299·R + 0.587·G + 0.114·B` for each sub-pixel.
+2. Compute mean luma as the split threshold.
+3. Sub-pixels at or above threshold → **bright group** (fg); below → **dark group** (bg).
+4. fg colour = average of original colours in bright group.  
+   bg colour = average of original colours in dark group.
+5. Build the quad mask as usual.
+
+This is the "grayscale-as-base + colour overlay" approach: luminance drives the
+structure; colour is derived from the real pixel values.
+
+---
+
 ## Package structure
 
 ```
 internal/quadblock/
-  render.go       — quadChar table, compileCell, ScaleToFit, Render
+  render.go       — quadChar table, Options, compileCell, ScaleToFit, RenderOpts
+  colorspace.go   — ColorReduction type, ReduceColors, palette definitions
   render_test.go  — unit tests: char table, mask, quantisation, neighbour lookup
   show_test.go    — visual test: go test -v -run TestShowImages
 ```
 
-`ScaleToFit` and `Render` are the public surface; all internals are unexported.
+`ScaleToFit`, `Render`, `RenderOpts`, and `ReduceColors` are the public surface;
+all internals are unexported.
 The package imports `internal/halfblock` for `ScaleNN` and `LoadImage` (tests).
 
 ---

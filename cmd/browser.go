@@ -78,6 +78,7 @@ type StyleConfig struct {
 	BtnActiveBg     string
 	PreviewBg       string
 	ControlBarBg    string
+	ControlBarFg    string
 	ScrollThumbChar string
 	ScrollRailChar  string
 	ScrollWidth     int
@@ -86,42 +87,71 @@ type StyleConfig struct {
 	ScrollRailBg    string
 }
 
-func parseHexColor(hex string) (color.RGBA, bool) {
-	hex = strings.TrimPrefix(hex, "#")
-	if len(hex) != 6 {
+var namedColors = map[string]string{
+	"black": "#000000", "blk": "#000000",
+	"white": "#ffffff", "wht": "#ffffff",
+	"red": "#ff0000",
+	"green": "#008000", "grn": "#008000",
+	"blue": "#0000ff", "blu": "#0000ff",
+	"yellow": "#ffff00", "yel": "#ffff00",
+	"orange": "#ffa500", "org": "#ffa500",
+	"purple": "#800080", "pur": "#800080",
+	"pink": "#ffc0cb", "pnk": "#ffc0cb",
+	"cyan": "#00ffff", "cyn": "#00ffff",
+	"magenta": "#ff00ff", "mag": "#ff00ff",
+	"brown": "#a52a2a", "brn": "#a52a2a",
+	"gray": "#808080", "grey": "#808080", "gry": "#808080",
+	"navy": "#000080", "nav": "#000080",
+	"lime": "#00ff00",
+	"aqua": "#00ffff",
+	"teal": "#008080",
+	"maroon": "#800000",
+	"olive": "#808000",
+	"silver": "#c0c0c0", "slv": "#c0c0c0",
+}
+
+func parseColor(s string) (color.RGBA, bool) {
+	if resolved, ok := namedColors[strings.ToLower(s)]; ok {
+		s = resolved
+	}
+	h := strings.TrimPrefix(s, "#")
+	if len(h) == 3 {
+		h = string([]byte{h[0], h[0], h[1], h[1], h[2], h[2]})
+	}
+	if len(h) != 6 {
 		return color.RGBA{}, false
 	}
-	r, err := strconv.ParseUint(hex[0:2], 16, 8)
+	r, err := strconv.ParseUint(h[0:2], 16, 8)
 	if err != nil {
 		return color.RGBA{}, false
 	}
-	g, err := strconv.ParseUint(hex[2:4], 16, 8)
+	g, err := strconv.ParseUint(h[2:4], 16, 8)
 	if err != nil {
 		return color.RGBA{}, false
 	}
-	b, err := strconv.ParseUint(hex[4:6], 16, 8)
+	b, err := strconv.ParseUint(h[4:6], 16, 8)
 	if err != nil {
 		return color.RGBA{}, false
 	}
 	return color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255}, true
 }
 
-func styleFG(hex string, def string) string {
-	if hex == "" {
+func styleFG(s string, def string) string {
+	if s == "" {
 		return def
 	}
-	c, ok := parseHexColor(hex)
+	c, ok := parseColor(s)
 	if !ok {
 		return def
 	}
 	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
 }
 
-func styleBG(hex string, def string) string {
-	if hex == "" {
+func styleBG(s string, def string) string {
+	if s == "" {
 		return def
 	}
-	c, ok := parseHexColor(hex)
+	c, ok := parseColor(s)
 	if !ok {
 		return def
 	}
@@ -142,6 +172,7 @@ func loadStyle() *StyleConfig {
 		BtnActiveBg:     "#475569",
 		PreviewBg:       "",
 		ControlBarBg:    "#0f172a",
+		ControlBarFg:    "#94a3b8",
 		ScrollThumbChar: "█",
 		ScrollRailChar:  "▒",
 		ScrollWidth:     1,
@@ -210,8 +241,11 @@ func loadStyle() *StyleConfig {
 				cfg.PreviewBg = val
 			}
 		case "control_bar":
-			if key == "bg" {
+			switch key {
+			case "bg":
 				cfg.ControlBarBg = val
+			case "fg":
+				cfg.ControlBarFg = val
 			}
 		case "scroll_bar":
 			switch key {
@@ -829,7 +863,7 @@ func browser(args []string, initWidth, initHeight int) error {
 
 		// Apply background color from style
 		var bgCol color.RGBA
-		if c, ok := parseHexColor(style.PreviewBg); ok {
+		if c, ok := parseColor(style.PreviewBg); ok {
 			bgCol = c
 		}
 		if bgCol.A > 0 {
@@ -1046,7 +1080,8 @@ func browser(args []string, initWidth, initHeight int) error {
 		buttons = drawBottomMenu(os.Stdout, termCols, effHeight, pageIdx, numPages, "grid", hoveredButtonAction, style)
 
 		// Print status line
-		fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[K\x1b[7m [Enter/Click] View/Enter  [◀/▶/Scroll] Page  [s] Settings  [m] Toggle Mode  [q] Quit \x1b[m", effHeight)
+		fmt.Fprintf(os.Stdout, "\x1b[%d;1H\x1b[K%s%s [Enter/Click] View/Enter  [◀/▶/Scroll] Page  [s] Settings  [m] Toggle Mode  [q] Quit \x1b[m",
+			effHeight, styleBG(style.ControlBarBg, ""), styleFG(style.ControlBarFg, ""))
 	}
 
 	redraw()
@@ -1589,6 +1624,14 @@ func browser(args []string, initWidth, initHeight int) error {
 								_ = interactiveVideo(targetItem.path, initWidth, initHeight, inputs)
 							} else {
 								_ = interactiveWithChan(targetItem.path, initWidth, initHeight, inputs)
+							}
+
+							// Propagate any quit signal that arrived while the viewer ran.
+							select {
+							case <-sigs:
+								shouldQuit = true
+								return
+							default:
 							}
 
 							oldState, err = term.MakeRaw(fd)

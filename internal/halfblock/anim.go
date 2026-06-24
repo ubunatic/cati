@@ -28,8 +28,10 @@ const (
 	// ?1002h = button-event tracking (reports movement while a button is held).
 	// ?1006h = SGR extended coordinates.
 	ANSIMouseOn = "\x1b[?1002h\x1b[?1006h"
-	// ANSIMouseOff disables the modes enabled by ANSIMouseOn.
-	ANSIMouseOff = "\x1b[?1002l\x1b[?1006l"
+	// ANSIMouseOff disables both button-event and any-motion tracking.
+	// ?1003l is included so cleanup works even if any-motion mode was activated
+	// temporarily (e.g. during space-pan mode in the image viewer).
+	ANSIMouseOff = "\x1b[?1003l\x1b[?1002l\x1b[?1006l"
 )
 
 // HideCursor writes the hide-cursor escape to w.

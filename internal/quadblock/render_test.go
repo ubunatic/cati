@@ -167,14 +167,14 @@ func TestCollectUnique(t *testing.T) {
 // ── compileCell ───────────────────────────────────────────────────────────────
 
 func TestCompileCell_AllTransparent(t *testing.T) {
-	c := compileCell([4]color.RGBA{transp, transp, transp, transp}, nil, nil)
+	c := compileCell([4]color.RGBA{transp, transp, transp, transp}, nil, nil, Options{})
 	if !c.transparent {
 		t.Error("expected transparent cell")
 	}
 }
 
 func TestCompileCell_SolidColor(t *testing.T) {
-	c := compileCell([4]color.RGBA{red, red, red, red}, nil, nil)
+	c := compileCell([4]color.RGBA{red, red, red, red}, nil, nil, Options{})
 	if c.transparent {
 		t.Error("expected non-transparent")
 	}
@@ -191,7 +191,7 @@ func TestCompileCell_SolidColor(t *testing.T) {
 
 func TestCompileCell_TopHalf(t *testing.T) {
 	// UL+UR = red, LL+LR = transparent → top half red
-	c := compileCell([4]color.RGBA{red, red, transp, transp}, nil, nil)
+	c := compileCell([4]color.RGBA{red, red, transp, transp}, nil, nil, Options{})
 	if c.ch != '▀' {
 		t.Errorf("ch: got %q, want ▀", string(c.ch))
 	}
@@ -202,7 +202,7 @@ func TestCompileCell_TopHalf(t *testing.T) {
 
 func TestCompileCell_BottomHalf(t *testing.T) {
 	// UL+UR = transparent, LL+LR = blue → bottom half blue
-	c := compileCell([4]color.RGBA{transp, transp, blue, blue}, nil, nil)
+	c := compileCell([4]color.RGBA{transp, transp, blue, blue}, nil, nil, Options{})
 	if c.ch != '▄' {
 		t.Errorf("ch: got %q, want ▄", string(c.ch))
 	}
@@ -213,7 +213,7 @@ func TestCompileCell_BottomHalf(t *testing.T) {
 
 func TestCompileCell_TwoColours(t *testing.T) {
 	// top row = red, bottom row = blue → ▀ fg=red bg=blue
-	c := compileCell([4]color.RGBA{red, red, blue, blue}, nil, nil)
+	c := compileCell([4]color.RGBA{red, red, blue, blue}, nil, nil, Options{})
 	if c.ch != '▀' {
 		t.Errorf("ch: got %q, want ▀", string(c.ch))
 	}
@@ -227,7 +227,7 @@ func TestCompileCell_TwoColours(t *testing.T) {
 
 func TestCompileCell_Diagonal(t *testing.T) {
 	// UL+LR = red, UR+LL = blue → ▚ fg=red bg=blue
-	c := compileCell([4]color.RGBA{red, blue, blue, red}, nil, nil)
+	c := compileCell([4]color.RGBA{red, blue, blue, red}, nil, nil, Options{})
 	if c.ch != '▚' {
 		t.Errorf("ch: got %q, want ▚", string(c.ch))
 	}
@@ -235,7 +235,7 @@ func TestCompileCell_Diagonal(t *testing.T) {
 
 func TestCompileCell_Quantisation(t *testing.T) {
 	// 3 colours: red (2px), blue (1px), green (1px) → must pick red+one other
-	c := compileCell([4]color.RGBA{red, red, blue, green}, nil, nil)
+	c := compileCell([4]color.RGBA{red, red, blue, green}, nil, nil, Options{})
 	if c.transparent {
 		t.Error("expected non-transparent")
 	}
@@ -249,7 +249,7 @@ func TestCompileCell_NeighborContinuity(t *testing.T) {
 	// Cell has 3 colours: red (2), blue (1), green (1).
 	// Left neighbour uses (red, blue).  Continuity should favour blue over green.
 	leftCell := &quadCell{ch: '▀', fg: red, bg: blue, hasFG: true, hasBG: true}
-	c := compileCell([4]color.RGBA{red, red, blue, green}, leftCell, nil)
+	c := compileCell([4]color.RGBA{red, red, blue, green}, leftCell, nil, Options{})
 
 	if !eqRGB(c.fg, red) {
 		t.Errorf("fg: got %v, want red", c.fg)

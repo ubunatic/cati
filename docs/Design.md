@@ -56,8 +56,10 @@ preview:
   bg: null
 
 control_bar:
-  # Background for the whole bottom menu and status lines
+  # Background for the whole bottom area (button bar row + hint bar row)
   bg: "#0f172a"
+  # Text colour for the shortcut hint bar (row below the button bar)
+  fg: "#94a3b8"
 
 scroll_bar:
   # Scrollbar character properties
