@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"image/color"
@@ -8,9 +9,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"golang.org/x/term"
@@ -378,6 +381,9 @@ Controls (Interactive Single View):
 type Settings struct {
 	MaxPreviewHeight int
 	ViewMode         string
+	PreviewVideos    bool
+	MaxJobs          int
+	VideoFrames      int
 }
 
 func getConfigDir() string {
@@ -389,7 +395,7 @@ func getConfigDir() string {
 }
 
 func loadConfig() Settings {
-	cfg := Settings{MaxPreviewHeight: 20, ViewMode: "grid"}
+	cfg := Settings{MaxPreviewHeight: 20, ViewMode: "grid", PreviewVideos: true, MaxJobs: 0, VideoFrames: 10}
 	dir := getConfigDir()
 	if dir == "" {
 		return cfg
@@ -409,14 +415,24 @@ func loadConfig() Settings {
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
 			val := strings.TrimSpace(parts[1])
-			if key == "max_preview_height" || key == "height" {
-				h, err := strconv.Atoi(val)
-				if err == nil && h > 0 {
+			switch key {
+			case "max_preview_height", "height":
+				if h, err := strconv.Atoi(val); err == nil && h > 0 {
 					cfg.MaxPreviewHeight = h
 				}
-			} else if key == "view_mode" {
+			case "view_mode":
 				if val == "preview" || val == "grid" {
 					cfg.ViewMode = val
+				}
+			case "preview_videos":
+				cfg.PreviewVideos = val != "false"
+			case "max_jobs":
+				if n, err := strconv.Atoi(val); err == nil && n >= 0 {
+					cfg.MaxJobs = n
+				}
+			case "video_frames":
+				if n, err := strconv.Atoi(val); err == nil && n > 0 {
+					cfg.VideoFrames = n
 				}
 			}
 		}
@@ -433,7 +449,14 @@ func saveConfig(cfg Settings) error {
 		return err
 	}
 	path := filepath.Join(dir, "config")
-	content := fmt.Sprintf("max_preview_height=%d\nview_mode=%s\n", cfg.MaxPreviewHeight, cfg.ViewMode)
+	previewVideos := "true"
+	if !cfg.PreviewVideos {
+		previewVideos = "false"
+	}
+	content := fmt.Sprintf(
+		"max_preview_height=%d\nview_mode=%s\npreview_videos=%s\nmax_jobs=%d\nvideo_frames=%d\n",
+		cfg.MaxPreviewHeight, cfg.ViewMode, previewVideos, cfg.MaxJobs, cfg.VideoFrames,
+	)
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
@@ -498,6 +521,7 @@ func browser(args []string, initWidth, initHeight int) error {
 
 	cfgHeight := cfg.MaxPreviewHeight
 	viewMode := cfg.ViewMode // "grid" or "preview", toggled dynamically
+	previewVideos := cfg.PreviewVideos
 
 	var initialItems []browserItem
 	for _, p := range args {
@@ -521,31 +545,89 @@ func browser(args []string, initWidth, initHeight int) error {
 
 	items := loadBrowserItems(currentDir, initialItems)
 
-	type thumbKey struct {
-		path string
-		w, h int
-	}
-	thumbCache := make(map[thumbKey]image.Image)
+	thumbCache := make(map[thumbKey][]image.Image)
+	submitted := make(map[thumbKey]bool)
 
-	getThumbnail := func(item browserItem, cellW, cellH int) (image.Image, error) {
-		key := thumbKey{path: item.path, w: cellW, h: cellH}
-		if img, ok := thumbCache[key]; ok {
-			return img, nil
-		}
-		if item.isDir {
-			img := createFolderIcon()
-			scaled := halfblock.ScaleToFit(img, cellW, cellH)
-			thumbCache[key] = scaled
-			return scaled, nil
-		}
-		img, err := halfblock.LoadImage(item.path)
-		if err != nil {
-			return nil, err
-		}
-		scaled := halfblock.ScaleToFit(img, cellW, cellH)
-		thumbCache[key] = scaled
-		return scaled, nil
+	// Per-video one-shot animation: plays frames once when video scrolls into view
+	// or when the user moves the selection cursor onto a video.
+	type animState struct {
+		frameIdx int
+		playing  bool
 	}
+	animMap := make(map[string]*animState) // keyed by item path
+
+	// currentVisibleKeys is populated by redraw so the event loop can compare
+	// against prevVisibleKeys to detect newly-visible videos.
+	currentVisibleKeys := make(map[thumbKey]bool)
+	prevVisibleKeys := make(map[thumbKey]bool)
+	prevSelectedIdx := -1
+
+	// thumbnail job queue and async workers
+	tq := newThumbQueue()
+	thumbResults := make(chan thumbResult, 64)
+	workerCtx, cancelWorkers := context.WithCancel(context.Background())
+	defer cancelWorkers()
+	defer tq.stop()
+
+	nWorkers := cfg.MaxJobs
+	if nWorkers <= 0 {
+		nWorkers = max(1, runtime.NumCPU()/2)
+	}
+	nVideoFrames := cfg.VideoFrames
+	if nVideoFrames <= 0 {
+		nVideoFrames = 10
+	}
+	startThumbWorkers(workerCtx, nWorkers, tq, previewVideos, nVideoFrames, thumbResults)
+
+	getThumbnail := func(item browserItem, cellW, cellH int) image.Image {
+		if item.isDir {
+			key := thumbKey{path: item.path, w: cellW, h: cellH}
+			if frames, ok := thumbCache[key]; ok && len(frames) > 0 {
+				return frames[0]
+			}
+			scaled := halfblock.ScaleToFit(createFolderIcon(), cellW, cellH)
+			thumbCache[key] = []image.Image{scaled}
+			return scaled
+		}
+		key := thumbKey{path: item.path, w: cellW, h: cellH}
+		if frames, ok := thumbCache[key]; ok {
+			if len(frames) == 0 {
+				return nil
+			}
+			if anim := animMap[item.path]; anim != nil {
+				return frames[min(anim.frameIdx, len(frames)-1)]
+			}
+			return frames[0]
+		}
+		if !submitted[key] {
+			submitted[key] = true
+			isVideo := halfblock.IsVideo(item.path)
+			if !isVideo || previewVideos {
+				tq.submit(thumbJob{key: key, isVideo: isVideo})
+			}
+		}
+		return nil
+	}
+
+	// startVisibleAnimations triggers one-shot playback for videos that just
+	// scrolled into view (present in currentVisibleKeys but not prevVisibleKeys).
+	startVisibleAnimations := func() {
+		for key := range currentVisibleKeys {
+			if prevVisibleKeys[key] {
+				continue
+			}
+			if frames := thumbCache[key]; len(frames) > 1 {
+				if anim := animMap[key.path]; anim == nil || !anim.playing {
+					animMap[key.path] = &animState{frameIdx: 0, playing: true}
+				}
+			}
+		}
+		prevVisibleKeys = make(map[thumbKey]bool)
+		for k := range currentVisibleKeys {
+			prevVisibleKeys[k] = true
+		}
+	}
+
 
 	fd := int(os.Stdin.Fd())
 	oldState, err := term.MakeRaw(fd)
@@ -562,7 +644,7 @@ func browser(args []string, initWidth, initHeight int) error {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigs)
 
-	inputs := make(chan string, 32)
+	inputs := make(chan string, 256)
 	go func() {
 		buf := make([]byte, 4096)
 		for {
@@ -572,7 +654,18 @@ func browser(args []string, initWidth, initHeight int) error {
 			}
 			tokens := tokenizeInput(string(buf[:n]))
 			for _, tok := range tokens {
-				inputs <- tok
+				// Mouse SGR events (\x1b[<...) are dropped when the buffer is
+				// nearly full so they never prevent keyboard tokens from being
+				// queued. Keyboard tokens always block-send (they arrive rarely
+				// and must not be lost).
+				if strings.HasPrefix(tok, "\x1b[<") {
+					select {
+					case inputs <- tok:
+					default:
+					}
+				} else {
+					inputs <- tok
+				}
 			}
 		}
 	}()
@@ -588,9 +681,33 @@ func browser(args []string, initWidth, initHeight int) error {
 	}()
 
 	selectedIdx := 0
+
+	// triggerSelectedVideoAnim restarts the one-shot animation when the cursor
+	// moves onto a video that already has cached frames.
+	triggerSelectedVideoAnim := func() {
+		if selectedIdx < 0 || selectedIdx >= len(items) {
+			return
+		}
+		item := items[selectedIdx]
+		if item.isDir || !halfblock.IsVideo(item.path) {
+			return
+		}
+		for key := range currentVisibleKeys {
+			if key.path == item.path {
+				if frames := thumbCache[key]; len(frames) > 1 {
+					animMap[item.path] = &animState{frameIdx: 0, playing: true}
+					return
+				}
+			}
+		}
+	}
+
 	activeSettingsField := 0 // For settings view navigation
 	tempHeight := cfgHeight
 	tempViewMode := viewMode
+	tempPreviewVideos := previewVideos
+	tempMaxJobs := nWorkers
+	tempVideoFrames := nVideoFrames
 	var buttons []menuButton
 	hoveredButtonAction := ""
 	var scrollDrag scrollDragState
@@ -612,7 +729,7 @@ func browser(args []string, initWidth, initHeight int) error {
 		}
 
 		if viewMode == "settings" {
-			drawSettingsPage(os.Stdout, termCols, effHeight, tempHeight, tempViewMode, activeSettingsField)
+			drawSettingsPage(os.Stdout, termCols, effHeight, tempHeight, tempViewMode, tempPreviewVideos, tempMaxJobs, tempVideoFrames, activeSettingsField)
 			buttons = drawBottomMenu(os.Stdout, termCols, effHeight, 0, 0, "settings", hoveredButtonAction, style)
 			return
 		}
@@ -735,8 +852,8 @@ func browser(args []string, initWidth, initHeight int) error {
 			prevW := (termCols - style.ScrollWidth - 1) - (leftW + 2) + 1
 			if prevW > 0 {
 				targetItem := items[selectedIdx]
-				previewImg, err := getThumbnail(targetItem, prevW, gridRowsLimit)
-				if err == nil && previewImg != nil {
+				previewImg := getThumbnail(targetItem, prevW, gridRowsLimit)
+				if previewImg != nil {
 					scaledW := previewImg.Bounds().Dx()
 					scaledH := previewImg.Bounds().Dy()
 					offsetX := (prevW - scaledW) / 2
@@ -764,8 +881,8 @@ func browser(args []string, initWidth, initHeight int) error {
 				left := colIdx * (cellW + gapX)
 				top := rowIdx * (cellH + gapY)
 
-				thumb, err := getThumbnail(items[idx], cellW, cellH-1)
-				if err == nil && thumb != nil {
+				thumb := getThumbnail(items[idx], cellW, cellH-1)
+				if thumb != nil {
 					thumbW := thumb.Bounds().Dx()
 					thumbH := thumb.Bounds().Dy()
 					offsetX := (cellW - thumbW) / 2
@@ -785,6 +902,17 @@ func browser(args []string, initWidth, initHeight int) error {
 				}
 			}
 		}
+
+		// Prioritize visible items and expose current visible set for animation triggers.
+		visibleKeys := make(map[thumbKey]bool)
+		for idx := startIdx; idx < endIdx; idx++ {
+			if !items[idx].isDir {
+				key := thumbKey{path: items[idx].path, w: cellW, h: cellH - 1}
+				visibleKeys[key] = true
+			}
+		}
+		currentVisibleKeys = visibleKeys
+		tq.prioritize(visibleKeys)
 
 		// Draw page composite image
 		halfblock.CursorHome(os.Stdout)
@@ -923,10 +1051,47 @@ func browser(args []string, initWidth, initHeight int) error {
 
 	redraw()
 
+	animTicker := time.NewTicker(300 * time.Millisecond)
+	defer animTicker.Stop()
+
 	for {
 		select {
 		case <-sigs:
 			return nil
+
+		case result := <-thumbResults:
+			thumbCache[result.key] = result.frames
+			// Auto-start one-shot animation for newly loaded multi-frame videos
+			// that are currently visible.
+			if len(result.frames) > 1 && currentVisibleKeys[result.key] {
+				if anim := animMap[result.key.path]; anim == nil || !anim.playing {
+					animMap[result.key.path] = &animState{frameIdx: 0, playing: true}
+				}
+			}
+			redraw()
+			startVisibleAnimations()
+
+		case <-animTicker.C:
+			anyPlaying := false
+			for path, anim := range animMap {
+				if !anim.playing {
+					continue
+				}
+				anim.frameIdx++
+				// Find the cached frame count for this path to know when to stop.
+				for key := range currentVisibleKeys {
+					if key.path == path {
+						if frames := thumbCache[key]; anim.frameIdx >= len(frames) {
+							anim.playing = false
+						}
+						break
+					}
+				}
+				anyPlaying = true
+			}
+			if anyPlaying {
+				redraw()
+			}
 
 		case k := <-inputs:
 			termCols, termRows = resolveTermSize(initWidth, initHeight)
@@ -1030,27 +1195,57 @@ func browser(args []string, initWidth, initHeight int) error {
 								if col >= b.col && col < b.col+b.width {
 									switch b.action {
 									case "inc":
-										if activeSettingsField == 0 {
+										switch activeSettingsField {
+										case 0:
 											tempHeight = min(60, tempHeight+1)
-										} else {
+										case 1:
 											tempViewMode = "preview"
+										case 2:
+											tempPreviewVideos = true
+										case 3:
+											tempMaxJobs = min(64, tempMaxJobs+1)
+										case 4:
+											tempVideoFrames = min(30, tempVideoFrames+1)
 										}
 										changed = true
 									case "dec":
-										if activeSettingsField == 0 {
+										switch activeSettingsField {
+										case 0:
 											tempHeight = max(10, tempHeight-1)
-										} else {
+										case 1:
 											tempViewMode = "grid"
+										case 2:
+											tempPreviewVideos = false
+										case 3:
+											tempMaxJobs = max(1, tempMaxJobs-1)
+										case 4:
+											tempVideoFrames = max(1, tempVideoFrames-1)
 										}
 										changed = true
 									case "save":
 										cfgHeight = tempHeight
+										previewVideos = tempPreviewVideos
+										nVideoFrames = tempVideoFrames
 										viewMode = tempViewMode
-										_ = saveConfig(Settings{MaxPreviewHeight: cfgHeight, ViewMode: viewMode})
+										if viewMode == "settings" {
+											viewMode = "grid"
+										}
+										_ = saveConfig(Settings{
+											MaxPreviewHeight: cfgHeight,
+											ViewMode:         viewMode,
+											PreviewVideos:    previewVideos,
+											MaxJobs:          tempMaxJobs,
+											VideoFrames:      nVideoFrames,
+										})
 										halfblock.ClearScreen(os.Stdout)
 										changed = true
 									case "cancel":
 										tempHeight = cfgHeight
+										tempPreviewVideos = previewVideos
+										tempVideoFrames = nVideoFrames
+										if viewMode != "grid" && viewMode != "preview" {
+											viewMode = "grid"
+										}
 										tempViewMode = viewMode
 										viewMode = "grid"
 										halfblock.ClearScreen(os.Stdout)
@@ -1236,31 +1431,61 @@ func browser(args []string, initWidth, initHeight int) error {
 
 					if viewMode == "settings" {
 						switch tok {
-						case "\t": // Tab selects settings field
-							activeSettingsField = (activeSettingsField + 1) % 2
+						case "\t": // Tab cycles through 5 settings fields
+							activeSettingsField = (activeSettingsField + 1) % 5
 							changed = true
-						case "\x1b[A": // ↑
-							if activeSettingsField == 0 {
+						case "\x1b[A": // ↑ / increase
+							switch activeSettingsField {
+							case 0:
 								tempHeight = min(60, tempHeight+1)
-							} else {
+							case 1:
 								tempViewMode = "preview"
+							case 2:
+								tempPreviewVideos = true
+							case 3:
+								tempMaxJobs = min(64, tempMaxJobs+1)
+							case 4:
+								tempVideoFrames = min(30, tempVideoFrames+1)
 							}
 							changed = true
-						case "\x1b[B": // ↓
-							if activeSettingsField == 0 {
+						case "\x1b[B": // ↓ / decrease
+							switch activeSettingsField {
+							case 0:
 								tempHeight = max(10, tempHeight-1)
-							} else {
+							case 1:
 								tempViewMode = "grid"
+							case 2:
+								tempPreviewVideos = false
+							case 3:
+								tempMaxJobs = max(1, tempMaxJobs-1)
+							case 4:
+								tempVideoFrames = max(1, tempVideoFrames-1)
 							}
 							changed = true
-						case "\x0d", "\x0a": // Enter
+						case "\x0d", "\x0a": // Enter — save
 							cfgHeight = tempHeight
+							previewVideos = tempPreviewVideos
+							nVideoFrames = tempVideoFrames
 							viewMode = tempViewMode
-							_ = saveConfig(Settings{MaxPreviewHeight: cfgHeight, ViewMode: viewMode})
+							if viewMode == "settings" {
+								viewMode = "grid"
+							}
+							_ = saveConfig(Settings{
+								MaxPreviewHeight: cfgHeight,
+								ViewMode:         viewMode,
+								PreviewVideos:    previewVideos,
+								MaxJobs:          tempMaxJobs,
+								VideoFrames:      nVideoFrames,
+							})
 							halfblock.ClearScreen(os.Stdout)
 							changed = true
 						case "q", "Q", "\x1b", "c", "C": // Cancel
 							tempHeight = cfgHeight
+							tempPreviewVideos = previewVideos
+							tempVideoFrames = nVideoFrames
+							if viewMode != "grid" && viewMode != "preview" {
+								viewMode = "grid"
+							}
 							tempViewMode = viewMode
 							viewMode = "grid"
 							halfblock.ClearScreen(os.Stdout)
@@ -1281,9 +1506,12 @@ func browser(args []string, initWidth, initHeight int) error {
 						changed = true
 
 					case "s", "S":
-						viewMode = "settings"
 						tempHeight = cfgHeight
-						tempViewMode = viewMode
+						tempViewMode = viewMode // capture before changing to "settings"
+						tempPreviewVideos = previewVideos
+						tempMaxJobs = nWorkers
+						tempVideoFrames = nVideoFrames
+						viewMode = "settings"
 						activeSettingsField = 0
 						changed = true
 
@@ -1357,7 +1585,11 @@ func browser(args []string, initWidth, initHeight int) error {
 							fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l")
 							halfblock.ShowCursor(os.Stdout)
 
-							_ = interactiveWithChan(targetItem.path, initWidth, initHeight, inputs)
+							if halfblock.IsVideo(targetItem.path) {
+								_ = interactiveVideo(targetItem.path, initWidth, initHeight, inputs)
+							} else {
+								_ = interactiveWithChan(targetItem.path, initWidth, initHeight, inputs)
+							}
 
 							oldState, err = term.MakeRaw(fd)
 							halfblock.HideCursor(os.Stdout)
@@ -1399,6 +1631,11 @@ func browser(args []string, initWidth, initHeight int) error {
 
 			if changed {
 				redraw()
+				startVisibleAnimations()
+				if selectedIdx != prevSelectedIdx {
+					prevSelectedIdx = selectedIdx
+					triggerSelectedVideoAnim()
+				}
 			}
 		}
 	}
@@ -1426,8 +1663,22 @@ func drawAboutPage(w io.Writer, termCols, termRows int) {
 	}
 }
 
-func drawSettingsPage(w io.Writer, termCols, termRows int, tempHeight int, tempViewMode string, activeField int) {
+func drawSettingsPage(w io.Writer, termCols, termRows, tempHeight int, tempViewMode string, tempPreviewVideos bool, tempMaxJobs, tempVideoFrames, activeField int) {
 	halfblock.ClearScreen(w)
+
+	previewVideosStr := "true"
+	if !tempPreviewVideos {
+		previewVideosStr = "false"
+	}
+
+	type field struct{ label, value string }
+	fields := []field{
+		{"Height", fmt.Sprintf("%d rows", tempHeight)},
+		{"View Mode", tempViewMode},
+		{"Preview Videos", previewVideosStr},
+		{"Max Jobs", fmt.Sprintf("%d", tempMaxJobs)},
+		{"Video Frames", fmt.Sprintf("%d", tempVideoFrames)},
+	}
 
 	lines := []string{
 		"=================================",
@@ -1435,19 +1686,13 @@ func drawSettingsPage(w io.Writer, termCols, termRows int, tempHeight int, tempV
 		"=================================",
 		"",
 	}
-
-	if activeField == 0 {
-		lines = append(lines,
-			fmt.Sprintf("  > Height:    [ %d ] rows  (Selected)", tempHeight),
-			fmt.Sprintf("    View Mode: [ %s ]", tempViewMode),
-		)
-	} else {
-		lines = append(lines,
-			fmt.Sprintf("    Height:    [ %d ] rows", tempHeight),
-			fmt.Sprintf("  > View Mode: [ %s ]  (Selected)", tempViewMode),
-		)
+	for i, f := range fields {
+		if i == activeField {
+			lines = append(lines, fmt.Sprintf("  > %-16s [ %s ]  (Selected)", f.label+":", f.value))
+		} else {
+			lines = append(lines, fmt.Sprintf("    %-16s [ %s ]", f.label+":", f.value))
+		}
 	}
-
 	lines = append(lines,
 		"",
 		"  Press Tab to switch active setting.",

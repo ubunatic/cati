@@ -59,6 +59,26 @@ func ProbeVideoFPS(path string) (float64, error) {
 	return num / den, nil
 }
 
+// ProbeVideoDuration returns the total duration of the video in seconds.
+// It requires ffprobe to be on $PATH.
+func ProbeVideoDuration(path string) (float64, error) {
+	cmd := exec.Command("ffprobe",
+		"-v", "quiet",
+		"-show_entries", "format=duration",
+		"-of", "csv=p=0",
+		path)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("ffprobe %s: %w", path, err)
+	}
+	s := strings.TrimSpace(string(out))
+	dur, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, fmt.Errorf("ffprobe: unexpected duration %q", s)
+	}
+	return dur, nil
+}
+
 // ── single-frame load ─────────────────────────────────────────────────────────
 
 // LoadVideoFrame extracts the first frame of path as an image using ffmpeg.
@@ -74,6 +94,28 @@ func LoadVideoFrame(path string) (image.Image, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("ffmpeg %s: %w", path, err)
+	}
+	img, err := png.Decode(bytes.NewReader(out))
+	if err != nil {
+		return nil, fmt.Errorf("decode frame from %s: %w", path, err)
+	}
+	return img, nil
+}
+
+// LoadVideoFrameAt extracts one frame at offsetSec seconds from path.
+// It requires ffmpeg to be on $PATH.
+func LoadVideoFrameAt(path string, offsetSec float64) (image.Image, error) {
+	cmd := exec.Command("ffmpeg",
+		"-v", "quiet",
+		"-ss", strconv.FormatFloat(offsetSec, 'f', 3, 64),
+		"-i", path,
+		"-vframes", "1",
+		"-f", "image2pipe",
+		"-vcodec", "png",
+		"pipe:1")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("ffmpeg %s@%.3fs: %w", path, offsetSec, err)
 	}
 	img, err := png.Decode(bytes.NewReader(out))
 	if err != nil {

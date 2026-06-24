@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"math"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"golang.org/x/term"
@@ -485,4 +487,112 @@ func cropImage(img image.Image, x, y, w, h int) image.Image {
 		}
 	}
 	return dst
+}
+
+// interactiveVideo plays a video file in the terminal using the caller's shared
+// input channel so that keyboard events are routed through the browser's tokenizer.
+func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	inputs := sharedInputs
+	if inputs == nil {
+		inputs = make(chan string, 32)
+		go func() {
+			buf := make([]byte, 4096)
+			for {
+				n, err := os.Stdin.Read(buf)
+				if err != nil || n == 0 {
+					return
+				}
+				for _, tok := range tokenizeInput(string(buf[:n])) {
+					inputs <- tok
+				}
+			}
+		}()
+	}
+
+	halfblock.HideCursor(os.Stdout)
+	halfblock.ClearScreen(os.Stdout)
+	defer func() {
+		halfblock.EraseDown(os.Stdout)
+		halfblock.ShowCursor(os.Stdout)
+		fmt.Fprint(os.Stdout, "\r\n")
+	}()
+
+	termCols, termRows := resolveTermSize(initWidth, initHeight)
+
+	// Probe native fps for smooth playback.
+	displayFPS := 24.0
+	if native, err := halfblock.ProbeVideoFPS(path); err == nil && native > 0 {
+		displayFPS = native
+	}
+	interval := time.Duration(float64(time.Second) / displayFPS)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigs)
+
+	frames, cleanup, err := halfblock.OpenVideoStream(ctx, path)
+	if err != nil {
+		return fmt.Errorf("open video: %w", err)
+	}
+	defer cleanup()
+
+	var lastFrame image.Image
+
+	isQuitToken := func(tok string) bool {
+		switch tok {
+		case "q", "Q", "\x1b", "\x03":
+			return true
+		}
+		return false
+	}
+
+	for {
+		// Priority: drain any pending quit tokens before yielding to the high-
+		// frequency ticker/frames cases (which would otherwise starve input).
+		select {
+		case tok := <-inputs:
+			if isQuitToken(tok) {
+				return nil
+			}
+		default:
+		}
+
+		select {
+		case <-sigs:
+			return nil
+
+		case tok := <-inputs:
+			if isQuitToken(tok) {
+				return nil
+			}
+
+		case img, ok := <-frames:
+			if !ok {
+				return nil // video ended
+			}
+			lastFrame = halfblock.ScaleToFit(img, termCols, termRows)
+
+		case <-ticker.C:
+			if lastFrame == nil {
+				continue
+			}
+			halfblock.CursorHome(os.Stdout)
+			if err := halfblock.Render(os.Stdout, lastFrame); err != nil {
+				return err
+			}
+			halfblock.EraseDown(os.Stdout)
+			// Drop stale buffered frames to stay in sync with the ticker.
+			n := max(0, len(frames)-1)
+			for range n {
+				if img, ok := <-frames; ok {
+					lastFrame = halfblock.ScaleToFit(img, termCols, termRows)
+				}
+			}
+		}
+	}
 }
