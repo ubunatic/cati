@@ -32,6 +32,11 @@ This effectively doubles the vertical resolution of standard terminal dimensions
 
 This is combined with 24-bit ANSI true-color escape sequences (`\x1b[38;2;R;G;Bm` for foreground and `\x1b[48;2;R;G;Bm` for background) to render full color images.
 
+### Sub-System Documentation
+For detail on specific components, refer to:
+*   [Video Probing & Streaming Pipeline](Video.md) — Probes video streams, decodes PNGs asynchronously via ffmpeg pipes, and handles frame drops.
+*   [Interactive Grid Browser](Browser.md) — Renders paged thumbnails, decodes mouse/key navigation, and dynamically scales image grid layouts.
+
 ---
 
 ## 2. Crucial Design Decisions & Lessons Learned

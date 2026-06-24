@@ -123,7 +123,7 @@ func run(o opts, args []string) error {
 
 	for _, path := range paths {
 		if multi && !o.noHeader {
-			fmt.Printf("==> %s <==\n", path)
+			fmt.Printf("# %s\n", path)
 		}
 
 		img, err := halfblock.LoadImage(path)
