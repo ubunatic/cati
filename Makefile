@@ -50,3 +50,8 @@ clean: ⚙️  ## remove build artifacts
 browse: ⚙️  ## open website
 	open docs/index.html
 
+edit-baby: ⚙️  ## open baby vid in Kdenlive
+	open assets/baby.kdenlive
+
+open-assets: ⚙️  ## open assets in file browser
+	open assets
