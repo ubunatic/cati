@@ -44,5 +44,6 @@ Rules:
 - **Update spec and Go together** — new action = schema enum + buttons.yaml + views.yaml + Go handler + test, all in the same commit
 
 ## General Rules
-- Run `go vet ./...` before `make install` — fix all vet errors; do not suppress them.
-- Always run `make install` when a feature is ready.
+- Run `go vet ./... && make install` when a feature is ready — this is the authority on build correctness.
+- LSP diagnostics are hints only; `go build` / `make` output is authoritative. Do not fix or report errors that `go build` does not reproduce.
+- Issues found during work go in `issues/` immediately — don't save them for the end.
