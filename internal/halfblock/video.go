@@ -3,6 +3,7 @@ package halfblock
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/png"
@@ -228,4 +229,120 @@ func OpenVideoStream(ctx context.Context, path string, displayFPS float64) (<-ch
 	}()
 
 	return ch, cleanup, nil
+}
+
+// ── ffprobe JSON metadata ─────────────────────────────────────────────────────
+
+type ffprobeOut struct {
+	Streams []ffprobeStream `json:"streams"`
+	Format  ffprobeFormat   `json:"format"`
+}
+
+type ffprobeStream struct {
+	CodecType string `json:"codec_type"`
+	CodecName string `json:"codec_name"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	FrameRate string `json:"r_frame_rate"`
+}
+
+type ffprobeFormat struct {
+	Duration   string            `json:"duration"`
+	Size       string            `json:"size"`
+	BitRate    string            `json:"bit_rate"`
+	FormatName string            `json:"format_name"`
+	Tags       map[string]string `json:"tags"`
+}
+
+// ProbeResult holds parsed ffprobe output for a media file.
+type ProbeResult struct {
+	Width     int
+	Height    int
+	FPS       float64
+	VCodec    string
+	ACodec    string
+	Duration  float64 // seconds
+	FileSize  int64
+	Bitrate   int64  // bits/s
+	Container string // first format_name token
+	Title     string
+	Artist    string
+	Comment   string
+	Date      string // creation_time tag or DATE
+	Location  string // GPS string from tags
+	Camera    string // device model tag
+}
+
+// ProbeMediaMeta runs ffprobe once with JSON output and returns all available
+// metadata for path. Returns a zero-value ProbeResult on any error.
+func ProbeMediaMeta(path string) ProbeResult {
+	cmd := exec.Command("ffprobe",
+		"-v", "quiet",
+		"-print_format", "json",
+		"-show_format",
+		"-show_streams",
+		path)
+	out, err := cmd.Output()
+	if err != nil {
+		return ProbeResult{}
+	}
+	var raw ffprobeOut
+	if err := json.Unmarshal(out, &raw); err != nil {
+		return ProbeResult{}
+	}
+
+	var r ProbeResult
+
+	for _, s := range raw.Streams {
+		switch s.CodecType {
+		case "video":
+			if r.VCodec == "" {
+				r.VCodec = s.CodecName
+				r.Width = s.Width
+				r.Height = s.Height
+				if parts := strings.SplitN(s.FrameRate, "/", 2); len(parts) == 2 {
+					num, _ := strconv.ParseFloat(parts[0], 64)
+					den, _ := strconv.ParseFloat(parts[1], 64)
+					if den != 0 {
+						r.FPS = num / den
+					}
+				}
+			}
+		case "audio":
+			if r.ACodec == "" {
+				r.ACodec = s.CodecName
+			}
+		}
+	}
+
+	f := raw.Format
+	if v, _ := strconv.ParseFloat(f.Duration, 64); v > 0 {
+		r.Duration = v
+	}
+	if v, _ := strconv.ParseInt(f.Size, 10, 64); v > 0 {
+		r.FileSize = v
+	}
+	if v, _ := strconv.ParseInt(f.BitRate, 10, 64); v > 0 {
+		r.Bitrate = v
+	}
+	if f.FormatName != "" {
+		r.Container = strings.SplitN(f.FormatName, ",", 2)[0]
+	}
+
+	tag := func(keys ...string) string {
+		for _, k := range keys {
+			if v := f.Tags[k]; v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+	r.Title = tag("title", "TITLE")
+	r.Artist = tag("artist", "ARTIST", "author", "AUTHOR")
+	r.Comment = tag("comment", "COMMENT")
+	r.Date = tag("creation_time", "date", "DATE")
+	r.Location = tag("location", "com.apple.quicktime.location.ISO6709", "LOCATION")
+	r.Camera = tag("com.apple.quicktime.model", "model", "make", "MAKE")
+
+	return r
 }

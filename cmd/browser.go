@@ -1166,6 +1166,15 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 	thumbCache := make(map[thumbKey][]image.Image)
 	submitted := make(map[thumbKey]bool)
 
+	// Async metadata loading — one goroutine per path, results sent back here.
+	type metaResult struct {
+		path string
+		meta MediaMeta
+	}
+	metaCache   := make(map[string]*MediaMeta)
+	metaLoading := make(map[string]bool)
+	metaCh      := make(chan metaResult, 8)
+
 	// Per-video one-shot animation: plays frames once when video scrolls into view
 	// or when the user moves the selection cursor onto a video.
 	type animState struct {
@@ -1669,6 +1678,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 		activeFileName := ""
 		previewState := ""
 		queueSize := ""
+		var currentMeta MediaMeta
 		if selectedIdx >= 0 && selectedIdx < len(items) {
 			item := items[selectedIdx]
 			activeFileName = item.name
@@ -1685,17 +1695,34 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 				} else if submitted[key] {
 					previewState = "…"
 				}
+				// meta: use cached value or kick off async load
+				if m, ok := metaCache[item.path]; ok && m != nil {
+					currentMeta = *m
+				} else if !metaLoading[item.path] {
+					metaLoading[item.path] = true
+					go func(p string, isVid bool) {
+						m := loadMediaMeta(p, isVid)
+						metaCh <- metaResult{path: p, meta: m}
+					}(item.path, halfblock.IsVideo(item.path))
+				}
+				currentMeta.DispW = fmt.Sprintf("%d", cellW)
+				currentMeta.DispH = fmt.Sprintf("%d", cellH-1)
+				currentMeta.DispMode = "half"
 			}
 		}
 		if n := tq.Len(); n > 0 {
 			queueSize = fmt.Sprintf("↻%d", n)
 		}
-		drawHintBar(os.Stdout, effHeight, labels["hint_browser"], map[string]string{
+		hintVars := map[string]string{
 			"active_file":   activeFileName,
 			"preview_state": previewState,
 			"queue_size":    queueSize,
 			"last_key":      lastKey,
-		}, style)
+		}
+		for k, v := range currentMeta.Vars() {
+			hintVars[k] = v
+		}
+		drawHintBar(os.Stdout, effHeight, labels["hint_browser"], hintVars, style)
 	}
 
 	redraw()
@@ -1710,6 +1737,10 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 
 		case result := <-thumbResults:
 			thumbCache[result.key] = result.frames
+			redraw()
+
+		case mr := <-metaCh:
+			metaCache[mr.path] = &mr.meta
 			redraw()
 
 		case <-animTicker.C:

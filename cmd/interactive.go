@@ -194,6 +194,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	var lastKey string
 	modeName := rcModeName(rc)
 	var curSSIM float64
+	fileMeta := loadMediaMeta(path, false)
 	redraw := func() {
 		halfblock.CursorHome(os.Stdout)
 		vp := renderView(orig, &state, termCols, max(1, termRows-2), rc)
@@ -201,12 +202,22 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		curSSIM = renderSSIM(ref, vp, rc)
 		halfblock.EraseDown(os.Stdout)
 		buttons = drawBottomMenu(os.Stdout, termRows, "image_viewer", activeAction, style, labels, viewBtnRows, nil, btnActions)
-		suffix := fmt.Sprintf("   %s  SSIM:%.3f", modeName, curSSIM)
 		hint := labels["hint_viewer"]
 		if status != "" {
 			hint = status
 		}
-		drawHintBar(os.Stdout, termRows, hint+suffix, map[string]string{"last_key": lastKey}, style)
+		fileMeta.DispW = fmt.Sprintf("%d", termCols)
+		fileMeta.DispH = fmt.Sprintf("%d", max(1, termRows-2))
+		fileMeta.DispMode = "half"
+		hintVars := map[string]string{
+			"last_key":    lastKey,
+			"ssim":        fmt.Sprintf("%.3f", curSSIM),
+			"render_mode": modeName,
+		}
+		for k, v := range fileMeta.Vars() {
+			hintVars[k] = v
+		}
+		drawHintBar(os.Stdout, termRows, hint, hintVars, style)
 	}
 	redraw()
 
@@ -679,6 +690,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
 	modeName := rcModeName(rc)
 	var curSSIM float64
+	fileMeta := loadMediaMeta(path, true)
 
 	// Probe native fps for smooth playback.
 	displayFPS := 24.0
@@ -884,12 +896,22 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			if status != "" && time.Now().After(statusClearAt) {
 				status = ""
 			}
-			suffix := fmt.Sprintf("   %s  SSIM:%.3f", modeName, curSSIM)
 			hint := labels["hint_viewer"]
 			if status != "" {
 				hint = status
 			}
-			drawHintBar(os.Stdout, termRows, hint+suffix, map[string]string{"last_key": lastKey}, style)
+			fileMeta.DispW = fmt.Sprintf("%d", termCols)
+			fileMeta.DispH = fmt.Sprintf("%d", max(1, termRows-2))
+			fileMeta.DispMode = "half"
+			hintVars := map[string]string{
+				"last_key":    lastKey,
+				"ssim":        fmt.Sprintf("%.3f", curSSIM),
+				"render_mode": modeName,
+			}
+			for k, v := range fileMeta.Vars() {
+				hintVars[k] = v
+			}
+			drawHintBar(os.Stdout, termRows, hint, hintVars, style)
 		}
 	}
 }
