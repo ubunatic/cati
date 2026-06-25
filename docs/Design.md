@@ -69,8 +69,8 @@ app_name:           # used in header template as {app_name}
 header:             # header bar template (supports { key | mod } expressions)
 folder_icon:        # icon prefix for directory entries
 file_icon:          # icon prefix for files in list/preview mode
-hint_browser:       # hint bar text — supports {active_file} template var
-hint_settings:      # hint bar text — supports {active_setting} template var
+hint_browser:       # hint bar text for browser/grid view
+hint_settings:      # hint bar text for settings view
 hint_about:         # hint bar text for about view
 hint_viewer:        # hint bar text for image/video viewer
 settings_title:     # header shown at top of settings page
@@ -79,6 +79,43 @@ settings_hint_adjust: # settings page ↑/↓ instruction
 settings_hint_save: # settings page Enter/Esc instruction
 website_url:        # URL opened by the open_website action
 ```
+
+**Template variables available per hint:**
+
+| Variable | Available in | Description |
+|----------|-------------|-------------|
+| `active_file` | `hint_browser` | Filename of the currently selected item |
+| `active_setting` | `hint_settings` | Name of the focused settings field |
+| `preview_state` | `hint_browser` | Thumbnail status: `img`, `vid`, `Nf` (N frames), `…` (loading), `""` |
+| `queue_size` | `hint_browser` | Pending thumb-load jobs: `↻N` or `""` when idle |
+| `last_key` | all hints | Human-readable name of last input event (`"j"`, `"Up"`, `"Scroll Up"`, …) |
+| `ssim` | `hint_viewer` | SSIM quality score as `"0.823"` |
+| `render_mode` | `hint_viewer` | Current rendering mode name (`"halfblock"`, `"quad/pca2"`, …) |
+| `meta.name` | browser + viewer | Base filename |
+| `meta.ext` | browser + viewer | Lowercase extension without dot |
+| `meta.size` | browser + viewer | Human-readable file size (`"3.2 MB"`) |
+| `meta.modified` | browser + viewer | File modification date (`"2024-01-15"`) |
+| `meta.src_w` | browser + viewer | Source pixel width (`"1920"`) |
+| `meta.src_h` | browser + viewer | Source pixel height (`"1080"`) |
+| `meta.src_res` | browser + viewer | `"1920×1080"` or `""` if unknown |
+| `meta.disp_w` | browser + viewer | Display area width in chars |
+| `meta.disp_h` | browser + viewer | Display area height in chars |
+| `meta.disp_mode` | browser + viewer | `"half"` or `"quad"` |
+| `meta.disp_res` | browser + viewer | `"80×24 half"` or `""` |
+| `meta.duration` | browser + viewer | `"1:23"`, `"45s"`, or `""` |
+| `meta.fps` | browser + viewer | Frame rate (`"29.97"`) or `""` |
+| `meta.vcodec` | browser + viewer | Video codec (`"h264"`) or `""` |
+| `meta.acodec` | browser + viewer | Audio codec (`"aac"`) or `""` |
+| `meta.bitrate` | browser + viewer | `"5.2 Mbps"` or `""` |
+| `meta.container` | browser + viewer | Container format (`"mp4"`) or `""` |
+| `meta.title` | browser + viewer | Title tag from file metadata |
+| `meta.author` | browser + viewer | Artist/author tag |
+| `meta.date` | browser + viewer | Capture date from tags |
+| `meta.location` | browser + viewer | GPS string from tags |
+| `meta.camera` | browser + viewer | Device/camera model from tags |
+| `meta.comment` | browser + viewer | Comment tag |
+
+All `meta.*` keys are always present in the vars map (empty string when unknown), so templates never fall back to showing the raw key name. In the browser, `meta.*` values are loaded asynchronously per-path — the hint shows whatever is cached so far, updating on the next redraw after the load completes. In viewers, meta is loaded synchronously at file open.
 
 ### 3.5 `spec/buttons.yaml` — button definitions (single source)
 
@@ -156,9 +193,7 @@ tplResolve(key, vars) string     — resolves key: quoted literal, vars map, or 
   → if true: renders labels["pause"], if false: renders labels["play"]
 ```
 
-**Hint bar vars** — passed by the redraw function:
-- `hint_browser` receives `{ active_file: items[selectedIdx].name }`
-- `hint_settings` receives `{ active_setting: settingsFieldNames[activeSettingsField] }`
+**Hint bar vars** — passed by the redraw function. See §3.4 for the full table per view.
 
 ### 3.9 `spec/controls.yaml` — runtime controls
 

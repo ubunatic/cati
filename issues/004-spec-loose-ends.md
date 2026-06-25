@@ -28,7 +28,7 @@
 
 `buttons.yaml` has `style: danger` / `style: primary` etc. referencing `spec/theme.yaml` tokens. `loadButtons` parses the `text:` field but ignores `style:`. The theme tokens are never applied to button rendering.
 
-**Fix:** in `loadButtons` (or `drawBottomMenu`), resolve `style` → theme token → `fg`/`bg` overrides for that button.
+**Status:** 🔴 Still open. Fix: in `loadButtons` (or `drawBottomMenu`), resolve `style` → theme token → `fg`/`bg` overrides for that button.
 
 ---
 
@@ -42,4 +42,4 @@
 
 The old `{ inc } { dec } { save } { cancel }` layout was replaced with `{ save } { cancel } | { quit }`. The `inc`/`dec` mouse-clickable buttons are gone. Settings can only be adjusted via keyboard (`↑`/`↓`/`Tab`). This is intentional per spec (controls.yaml is the future path) but may surprise users expecting to click.
 
-**Decision needed:** keep keyboard-only for now (consistent with controls.yaml plan), or re-add `inc`/`dec` as a temporary bridge.
+**Status:** 🔴 Decision deferred — keyboard-only for now is consistent with controls.yaml plan.
