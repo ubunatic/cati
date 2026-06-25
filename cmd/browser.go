@@ -1667,10 +1667,35 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 
 		// Print hint bar
 		activeFileName := ""
+		previewState := ""
+		queueSize := ""
 		if selectedIdx >= 0 && selectedIdx < len(items) {
-			activeFileName = items[selectedIdx].name
+			item := items[selectedIdx]
+			activeFileName = item.name
+			if !item.isDir {
+				key := thumbKey{path: item.path, w: cellW, h: cellH - 1}
+				if frames, ok := thumbCache[key]; ok {
+					if len(frames) > 1 {
+						previewState = fmt.Sprintf("%df", len(frames))
+					} else if halfblock.IsVideo(item.path) {
+						previewState = "vid"
+					} else {
+						previewState = "img"
+					}
+				} else if submitted[key] {
+					previewState = "…"
+				}
+			}
 		}
-		drawHintBar(os.Stdout, effHeight, labels["hint_browser"], map[string]string{"active_file": activeFileName, "last_key": lastKey}, style)
+		if n := tq.Len(); n > 0 {
+			queueSize = fmt.Sprintf("↻%d", n)
+		}
+		drawHintBar(os.Stdout, effHeight, labels["hint_browser"], map[string]string{
+			"active_file":   activeFileName,
+			"preview_state": previewState,
+			"queue_size":    queueSize,
+			"last_key":      lastKey,
+		}, style)
 	}
 
 	redraw()

@@ -82,6 +82,12 @@ func (q *thumbQueue) next() (thumbJob, bool) {
 	return j, true
 }
 
+func (q *thumbQueue) Len() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.jobs)
+}
+
 func (q *thumbQueue) stop() {
 	q.mu.Lock()
 	q.done = true

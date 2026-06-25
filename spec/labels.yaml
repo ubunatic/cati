@@ -14,7 +14,7 @@ folder_icon: "📁"
 file_icon: "📄"
 
 # Hint bars (bottom row, below the button row)
-hint_browser: "File: { active_file } — open:↵/🖱︎  navigate:↕↔/⬆︎⬇︎/🖱︎  { last_key | dim }"
+hint_browser: "File: { active_file } — open:↵/🖱︎  navigate:↕↔/⬆︎⬇︎/🖱︎  { preview_state | dim }  { queue_size | dim }  { last_key | dim }"
 hint_settings: "Setting: { active_setting } — adjust:◀/▶  save:↵  cancel:Esc  { last_key | dim }"
 hint_about: "{ last_key | dim }"
 hint_viewer: "{ last_key | dim }"
