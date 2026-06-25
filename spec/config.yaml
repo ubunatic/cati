@@ -9,3 +9,4 @@ config:
   max_jobs: 4
   video_frames: 8
   preview_videos: true
+  video_preview_delay: 1000

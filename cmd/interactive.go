@@ -4,17 +4,71 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"io"
+	"io/fs"
 	"math"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"codeberg.org/ubunatic/cati/internal/audio"
 	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/internal/input"
+	"codeberg.org/ubunatic/cati/internal/quadblock"
+	spec "codeberg.org/ubunatic/cati/spec"
 	"golang.org/x/term"
 )
+
+// ── renderCfg ─────────────────────────────────────────────────────────────────
+
+// renderCfg carries the active render mode (halfblock or quad variant).
+// The zero value uses halfblock, matching the historic default.
+type renderCfg struct {
+	useQuad  bool
+	quadOpts quadblock.Options
+}
+
+func (rc renderCfg) scaleToFit(img image.Image, cols, rows int) image.Image {
+	if rc.useQuad {
+		return quadblock.ScaleToFit(img, cols, rows)
+	}
+	return halfblock.ScaleToFit(img, cols, rows)
+}
+
+func (rc renderCfg) render(w io.Writer, img image.Image) error {
+	if rc.useQuad {
+		return quadblock.RenderOpts(w, img, rc.quadOpts)
+	}
+	return halfblock.Render(w, img)
+}
+
+// renderModes is the cycle order for the R key.
+var renderModes = []struct {
+	name string
+	cfg  renderCfg
+}{
+	{"halfblock", renderCfg{}},
+	{"quad/lum+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{LumSplit: true, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/pca2+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/splithalf+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/splithalf", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}}},
+	{"quad/lum-split", renderCfg{useQuad: true, quadOpts: quadblock.Options{LumSplit: true}}},
+	{"quad/pca2", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true}}},
+	{"quad/default", renderCfg{useQuad: true}},
+}
+
+// cycleRenderCfg returns the next renderCfg in the cycle and its display name.
+func cycleRenderCfg(rc renderCfg) (renderCfg, string) {
+	for i, m := range renderModes {
+		if m.cfg == rc {
+			next := renderModes[(i+1)%len(renderModes)]
+			return next.cfg, next.name
+		}
+	}
+	return renderModes[0].cfg, renderModes[0].name
+}
 
 // ── constants ─────────────────────────────────────────────────────────────────
 
@@ -23,37 +77,6 @@ const (
 	minZoom  = 0.125 // 1/8×
 	maxZoom  = 8.0   // 8×
 )
-
-// SGR button-code bit layout:
-//
-//	bits 0–1  button number (0=left, 1=middle, 2=right)
-//	bit  2    Shift modifier
-//	bit  3    Meta/Alt modifier
-//	bit  4    Ctrl modifier
-//	bit  5    motion flag  – set when the event is a drag (button held + move)
-//	bit  6    scroll flag  – set for scroll-wheel events
-const (
-	sgrFlagMotion = 1 << 5 // 0x20
-	sgrFlagScroll = 1 << 6 // 0x40
-)
-
-// sgrIsScroll reports whether the event is a scroll-wheel event.
-func sgrIsScroll(btn int) bool { return btn&sgrFlagScroll != 0 }
-
-// sgrIsDrag reports whether the event is a button-motion (drag) event.
-func sgrIsDrag(btn int) bool { return btn&sgrFlagScroll == 0 && btn&sgrFlagMotion != 0 }
-
-// sgrButton returns the button number (0 = left, 1 = middle, 2 = right).
-func sgrButton(btn int) int { return btn & 3 }
-
-// sgrScrollDir returns -1 for scroll-up (zoom in) and +1 for scroll-down (zoom out).
-// Valid only when sgrIsScroll(btn) is true.
-func sgrScrollDir(btn int) int {
-	if btn&1 == 0 {
-		return -1 // scroll up
-	}
-	return 1 // scroll down
-}
 
 // ── viewState ────────────────────────────────────────────────────────────────
 
@@ -77,71 +100,15 @@ type dragState struct {
 
 // ── interactive ──────────────────────────────────────────────────────────────
 
-// interactive opens a single image in a full-screen interactive viewer.
-//
-// Mouse:
-//
-//	scroll up/down     zoom in / out  at cursor position
-//	left-button drag   pan (grab-and-pull the image)
-//	Space + move       pan (any-motion pan mode; press Space again to exit)
-//
-// Keys:
-//
-//	Space        toggle pan mode (move mouse to pan, no button needed)
-//	+/=          zoom in  (centred on screen)
-//	-            zoom out (centred on screen)
-//	↑↓←→         pan
-//	c / C        copy current viewport to clipboard (PNG)
-//	q/Q/Esc/^C   quit
-func tokenizeInput(s string) []string {
-	var tokens []string
-	i := 0
-	for i < len(s) {
-		if s[i] == '\x1b' {
-			if i+3 < len(s) && s[i:i+3] == "\x1b[<" {
-				idx := -1
-				for j := i + 3; j < len(s); j++ {
-					if s[j] == 'M' || s[j] == 'm' {
-						idx = j
-						break
-					}
-				}
-				if idx != -1 {
-					tokens = append(tokens, s[i:idx+1])
-					i = idx + 1
-					continue
-				}
-			}
-			if i+2 < len(s) && s[i+1] == '[' {
-				idx := -1
-				for j := i + 2; j < len(s); j++ {
-					c := s[j]
-					if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '~' {
-						idx = j
-						break
-					}
-				}
-				if idx != -1 {
-					tokens = append(tokens, s[i:idx+1])
-					i = idx + 1
-					continue
-				}
-			}
-			tokens = append(tokens, "\x1b")
-			i++
-		} else {
-			tokens = append(tokens, string(s[i]))
-			i++
-		}
+func interactive(path string, initWidth, initHeight int, rc renderCfg) error {
+	return interactiveWithChan(path, initWidth, initHeight, rc, nil, nil, nil, nil, nil, nil)
+}
+
+func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec) error {
+	if inputSpec == nil {
+		inputSpec, _ = input.Load(fs.FS(spec.FS))
 	}
-	return tokens
-}
 
-func interactive(path string, initWidth, initHeight int) error {
-	return interactiveWithChan(path, initWidth, initHeight, nil, nil, nil, nil)
-}
-
-func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string) error {
 	// Load the original image once; it is never mutated.
 	orig, err := halfblock.LoadImage(path)
 	if err != nil {
@@ -182,7 +149,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 	// ── Input reader (goroutine or shared) ────────────────────────────────────
 	inputs := sharedInputs
 	if inputs == nil {
-		inputs = make(chan string, 256)
+		inputs = make(chan string, 32)
 		go func() {
 			buf := make([]byte, 4096)
 			for {
@@ -190,7 +157,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 				if err != nil || n == 0 {
 					return
 				}
-				for _, tok := range tokenizeInput(string(buf[:n])) {
+				for _, tok := range inputSpec.Tokenize(string(buf[:n])) {
 					if strings.HasPrefix(tok, "\x1b[<") {
 						select {
 						case inputs <- tok:
@@ -224,16 +191,22 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 	var buttons []menuButton
 	activeAction := ""
 	var status string
+	var lastKey string
+	modeName := rcModeName(rc)
+	var curSSIM float64
 	redraw := func() {
 		halfblock.CursorHome(os.Stdout)
-		renderView(orig, &state, termCols, max(1, termRows-2))
+		vp := renderView(orig, &state, termCols, max(1, termRows-2), rc)
+		ref := buildRef(orig, state, termCols, max(1, termRows-2), rc)
+		curSSIM = renderSSIM(ref, vp, rc)
 		halfblock.EraseDown(os.Stdout)
 		buttons = drawBottomMenu(os.Stdout, termRows, "image_viewer", activeAction, style, labels, viewBtnRows, nil, btnActions)
+		suffix := fmt.Sprintf("   %s  SSIM:%.3f", modeName, curSSIM)
+		hint := labels["hint_viewer"]
 		if status != "" {
-			drawHintBar(os.Stdout, termRows, status, nil, style)
-		} else {
-			drawHintBar(os.Stdout, termRows, labels["hint_viewer"], nil, style)
+			hint = status
 		}
+		drawHintBar(os.Stdout, termRows, hint+suffix, map[string]string{"last_key": lastKey}, style)
 	}
 	redraw()
 
@@ -252,16 +225,17 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 			shouldQuit := false
 
 			processInput := func(tok string) {
+				lastKey = inputSpec.EventName(inputSpec.Classify(tok))
 				// ── SGR mouse event ───────────────────────────────────────────────
-				if btn, col, row, release, ok := parseSGRMouse(tok); ok {
-					// col/row are 1-indexed terminal coordinates → convert to 0-indexed.
-					c, r := col-1, row-1
+				if m, ok := inputSpec.ParseMouse(tok); ok {
+					// Col/Row are 1-indexed terminal coordinates → convert to 0-indexed.
+					c, r := m.Col-1, m.Row-1
 
 					// ── Button bar (row termRows-1) ───────────────────────────────
-					if row == termRows-1 {
+					if m.Row == termRows-1 {
 						newAction := ""
 						for _, b := range buttons {
-							if col >= b.col && col < b.col+b.width {
+							if m.Col >= b.col && m.Col < b.col+b.width {
 								newAction = b.action
 								break
 							}
@@ -270,13 +244,16 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 							activeAction = newAction
 							changed = true
 						}
-						if release && newAction != "" {
+						if m.Release && newAction != "" {
 							switch newAction {
 							case "inc_zoom":
 								state.zoom = math.Min(state.zoom*zoomStep, maxZoom)
 								changed = true
 							case "dec_zoom":
 								state.zoom = math.Max(state.zoom/zoomStep, minZoom)
+								changed = true
+							case "cycle_render":
+								rc, modeName = cycleRenderCfg(rc)
 								changed = true
 							case "go_back", "quit":
 								shouldQuit = true
@@ -291,9 +268,9 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 
 					switch {
 					// ── Scroll wheel: zoom at cursor ──────────────────────────────
-					case sgrIsScroll(btn) && !release:
+					case m.IsScroll() && !m.Release:
 						var newZoom float64
-						if sgrScrollDir(btn) < 0 {
+						if m.ScrollDir() < 0 {
 							newZoom = math.Min(state.zoom*zoomStep, maxZoom)
 						} else {
 							newZoom = math.Max(state.zoom/zoomStep, minZoom)
@@ -304,7 +281,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 						}
 
 					// ── Space-pan: any mouse motion pans when Space is held ───────
-					case spacePan && sgrIsDrag(btn) && !sgrIsScroll(btn):
+					case spacePan && m.IsDrag() && !m.IsScroll():
 						if !spacePanAnchor.active {
 							spacePanAnchor = dragState{
 								active:    true,
@@ -319,7 +296,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 						changed = true
 
 					// ── Left press: start drag ────────────────────────────────────
-					case !spacePan && !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release:
+					case !spacePan && !m.IsScroll() && !m.IsDrag() && m.Button == 0 && !m.Release:
 						drag = dragState{
 							active:    true,
 							startCol:  c,
@@ -329,75 +306,74 @@ func interactiveWithChan(path string, initWidth, initHeight int, sharedInputs ch
 						}
 
 					// ── Left drag: update pan ─────────────────────────────────────
-					case !spacePan && sgrIsDrag(btn) && sgrButton(btn) == 0 && drag.active:
+					case !spacePan && m.IsDrag() && m.Button == 0 && drag.active:
 						// Grab-and-pull: dragging right shows more of the left side.
 						state.panX = drag.startPanX - (c - drag.startCol)
 						state.panY = drag.startPanY - (r-drag.startRow)*2
 						changed = true
 
 					// ── Left release: end drag ────────────────────────────────────
-					case !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && release:
+					case !m.IsScroll() && !m.IsDrag() && m.Button == 0 && m.Release:
 						drag.active = false
 					}
 
 				} else {
 					// ── Keyboard event ────────────────────────────────────────────
 					switch tok {
-					case "q", "Q", "\x1b", "\x03":
+					case "\x03": // ctrl-c always quits regardless of spec
 						shouldQuit = true
 
-					case " ":
-						spacePan = !spacePan
-						spacePanAnchor = dragState{} // anchor resets on each toggle
-						if spacePan {
-							// Switch to any-motion tracking so bare mouse moves are reported.
-							fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h")
-							newStatus = "pan  —  move mouse to pan · Space to exit"
-						} else {
-							// Revert to button-event tracking.
-							fmt.Fprint(os.Stdout, "\x1b[?1002h\x1b[?1006h")
-							newStatus = ""
-						}
-						changed = true
-
-					case "+", "=":
-						newZoom := math.Min(state.zoom*zoomStep, maxZoom)
-						if newZoom != state.zoom {
-							state.zoom = newZoom
-							changed = true
-						}
-
-					case "-":
-						newZoom := math.Max(state.zoom/zoomStep, minZoom)
-						if newZoom != state.zoom {
-							state.zoom = newZoom
-							changed = true
-						}
-
-					case "\x1b[A": // ↑
+					case "\x1b[A": // ↑ — structural pan (no button equiv)
 						state.panY -= vStep
 						changed = true
 
-					case "\x1b[B": // ↓
+					case "\x1b[B": // ↓ — structural pan
 						state.panY += vStep
 						changed = true
 
-					case "\x1b[C": // →
+					case "\x1b[C": // → — structural pan
 						state.panX += hStep
 						changed = true
 
-					case "\x1b[D": // ←
+					case "\x1b[D": // ← — structural pan
 						state.panX -= hStep
 						changed = true
 
-					case "c", "C":
-						vp := buildViewport(orig, &state, termCols, termRows)
-						if copyErr := copyImageToClipboard(vp); copyErr != nil {
-							newStatus = "⚠ copy failed: " + copyErr.Error()
-						} else {
-							newStatus = "✓ copied to clipboard"
+					default:
+						if action, ok := viewKeyMaps["image_viewer"][tok]; ok {
+							switch action {
+							case "go_back", "quit":
+								shouldQuit = true
+							case "inc_zoom":
+								state.zoom = math.Min(state.zoom*zoomStep, maxZoom)
+								changed = true
+							case "dec_zoom":
+								state.zoom = math.Max(state.zoom/zoomStep, minZoom)
+								changed = true
+							case "toggle_pan":
+								spacePan = !spacePan
+								spacePanAnchor = dragState{}
+								if spacePan {
+									fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h")
+									newStatus = "pan  —  move mouse to pan · Space to exit"
+								} else {
+									fmt.Fprint(os.Stdout, "\x1b[?1002h\x1b[?1006h")
+									newStatus = ""
+								}
+								changed = true
+							case "copy_viewport":
+								vp := buildViewport(orig, &state, termCols, termRows, rc)
+								if copyErr := copyImageToClipboard(vp); copyErr != nil {
+									newStatus = "⚠ copy failed: " + copyErr.Error()
+								} else {
+									newStatus = "✓ copied to clipboard"
+								}
+								changed = true
+							case "cycle_render":
+								rc, modeName = cycleRenderCfg(rc)
+								changed = true
+							}
 						}
-						changed = true
 					}
 				}
 			}
@@ -471,15 +447,30 @@ func zoomAtCursor(state *viewState, newZoom float64, col, row int) {
 
 // buildViewport returns the cropped+scaled image for the current view state.
 // It also clamps state.panX/panY in-place so they never exceed image bounds.
-func buildViewport(orig image.Image, state *viewState, termCols, termRows int) image.Image {
+// rc is needed to compute the correct pixel budget: quad uses 2 pixels per
+// terminal column horizontally (half-block uses 1).
+func buildViewport(orig image.Image, state *viewState, termCols, termRows int, rc renderCfg) image.Image {
 	b := orig.Bounds()
 	srcW, srcH := b.Dx(), b.Dy()
 	if srcW == 0 || srcH == 0 {
 		return orig
 	}
 
+	// Pixel budget per terminal column: 2 for quad, 1 for halfblock.
+	pixCols := termCols
+	if rc.useQuad {
+		pixCols = termCols * 2
+	}
+
+	// For quad, treat source as 2× wider to compensate for the 1:2 pixel
+	// aspect ratio (each quad pixel is narrow-and-tall, like halfblock pixels).
+	fitSrcW := srcW
+	if rc.useQuad {
+		fitSrcW = srcW * 2
+	}
+
 	// Compute the "fit" pixel dims (what the image looks like at zoom 1.0).
-	fitW, fitH := fitPixelDims(srcW, srcH, termCols, termRows*2)
+	fitW, fitH := fitPixelDims(fitSrcW, srcH, pixCols, termRows*2)
 
 	// Apply zoom to get the full scaled image size.
 	scaledW := max(1, int(math.Round(float64(fitW)*state.zoom)))
@@ -489,53 +480,21 @@ func buildViewport(orig image.Image, state *viewState, termCols, termRows int) i
 	scaled := halfblock.ScaleNN(orig, scaledW, scaledH)
 
 	// Clamp pan.
-	state.panX = max(0, min(state.panX, max(0, scaledW-termCols)))
+	state.panX = max(0, min(state.panX, max(0, scaledW-pixCols)))
 	state.panY = max(0, min(state.panY, max(0, scaledH-termRows*2)))
 
 	// Crop to viewport.
-	viewW := min(termCols, scaledW)
+	viewW := min(pixCols, scaledW)
 	viewH := min(termRows*2, scaledH)
 	return cropImage(scaled, state.panX, state.panY, viewW, viewH)
 }
 
-// renderView renders the current viewport to stdout.
-func renderView(orig image.Image, state *viewState, termCols, termRows int) {
-	vp := buildViewport(orig, state, termCols, termRows)
-	_ = halfblock.Render(os.Stdout, vp)
-}
-
-// ── SGR mouse parsing ─────────────────────────────────────────────────────────
-
-// parseSGRMouse parses an SGR extended mouse event of the form:
-//
-//	\x1b[<btn;col;rowM   (press / drag)
-//	\x1b[<btn;col;rowm   (release)
-//
-// col and row are 1-indexed terminal coordinates.
-// Returns ok=false for any other input sequence.
-func parseSGRMouse(s string) (btn, col, row int, release bool, ok bool) {
-	if !strings.HasPrefix(s, "\x1b[<") {
-		return
-	}
-	body := s[3:]
-	switch {
-	case strings.HasSuffix(body, "M"):
-		body = body[:len(body)-1]
-	case strings.HasSuffix(body, "m"):
-		release = true
-		body = body[:len(body)-1]
-	default:
-		return
-	}
-	parts := strings.SplitN(body, ";", 3)
-	if len(parts) != 3 {
-		return
-	}
-	btn, _ = strconv.Atoi(parts[0])
-	col, _ = strconv.Atoi(parts[1])
-	row, _ = strconv.Atoi(parts[2])
-	ok = true
-	return
+// renderView renders the current viewport to stdout and returns it for callers
+// that need the pixel data (e.g. to compute SSIM).
+func renderView(orig image.Image, state *viewState, termCols, termRows int, rc renderCfg) image.Image {
+	vp := buildViewport(orig, state, termCols, termRows, rc)
+	_ = rc.render(os.Stdout, vp)
+	return vp
 }
 
 // ── pixel helpers ─────────────────────────────────────────────────────────────
@@ -580,7 +539,28 @@ func cropImage(img image.Image, x, y, w, h int) image.Image {
 
 // interactiveVideo plays a video file in the terminal using the caller's shared
 // input channel so that keyboard events are routed through the browser's tokenizer.
-func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string) error {
+// openAudio starts audio playback for path if the file has an audio stream.
+// Returns nil silently on any failure so video continues without audio.
+func openAudio(ctx context.Context, path string) *audio.Player {
+	ok, err := audio.HasAudio(path)
+	if err != nil || !ok {
+		return nil
+	}
+	p, err := audio.Open(ctx, path)
+	if err != nil {
+		return nil
+	}
+	return p
+}
+
+// stopAudio stops audio playback if a player is running.
+func stopAudio(p *audio.Player) {
+	if p != nil {
+		p.Stop()
+	}
+}
+
+func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec) error {
 	// The browser restores cooked-mode before calling us.  We must enter raw
 	// mode ourselves so single keypresses are readable without Enter.
 	fd := int(os.Stdin.Fd())
@@ -597,6 +577,10 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if inputSpec == nil {
+		inputSpec, _ = input.Load(fs.FS(spec.FS))
+	}
+
 	if style == nil {
 		style = loadStyle()
 	}
@@ -609,11 +593,22 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 	if viewBtnRows == nil {
 		viewBtnRows = loadViewButtonRows()
 	}
+	if viewKeyMaps == nil {
+		viewKeyMaps = buildViewKeyMaps(viewBtnRows, loadButtonKeyDefs(inputSpec))
+	}
 	btnActions := loadButtonActions()
 
-	inputs := sharedInputs
-	if inputs == nil {
-		inputs = make(chan string, 32)
+	// keyInputs carries keyboard tokens and sits in the blocking select so keys
+	// are processed immediately.  mouseInputs carries SGR mouse tokens and is
+	// drained (with drop-on-full) before the select so mouse events never block
+	// keyboard delivery.
+	//
+	// When a shared channel is provided (browser mode) we split it into the same
+	// two logical streams by type-sniffing on receive.
+	keyInputs := make(chan string, 4)
+	mouseInputs := make(chan string, 32)
+
+	if sharedInputs == nil {
 		go func() {
 			buf := make([]byte, 4096)
 			for {
@@ -621,8 +616,44 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 				if err != nil || n == 0 {
 					return
 				}
-				for _, tok := range tokenizeInput(string(buf[:n])) {
-					inputs <- tok
+				for _, tok := range inputSpec.Tokenize(string(buf[:n])) {
+					if strings.HasPrefix(tok, "\x1b[<") {
+						select {
+						case mouseInputs <- tok:
+						default: // drop mouse events when buffer is full
+						}
+					} else {
+						select {
+						case keyInputs <- tok:
+						default: // drop keys only when key buffer is also full (rare)
+						}
+					}
+				}
+			}
+		}()
+	} else {
+		// Re-route tokens from the shared channel into the two typed channels.
+		// The goroutine exits when ctx is cancelled (video viewer returns).
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case tok, ok := <-sharedInputs:
+					if !ok {
+						return
+					}
+					if strings.HasPrefix(tok, "\x1b[<") {
+						select {
+						case mouseInputs <- tok:
+						default:
+						}
+					} else {
+						select {
+						case keyInputs <- tok:
+						default:
+						}
+					}
 				}
 			}
 		}()
@@ -639,9 +670,15 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 	}()
 
 	paused := false
+	videoEnded := false
 	var buttons []menuButton
 	activeAction := ""
+	var status string
+	var lastKey string
+	var statusClearAt time.Time
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
+	modeName := rcModeName(rc)
+	var curSSIM float64
 
 	// Probe native fps for smooth playback.
 	displayFPS := 24.0
@@ -656,40 +693,79 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigs)
 
-	frames, cleanup, err := halfblock.OpenVideoStream(ctx, path)
+	frames, cleanup, err := halfblock.OpenVideoStream(ctx, path, displayFPS)
 	if err != nil {
 		return fmt.Errorf("open video: %w", err)
 	}
 	defer cleanup()
 
-	// restartStream reopens the video stream so the video loops.
+	var audioPlayer *audio.Player
+
+	// restartStream reopens the video and audio streams from the beginning.
 	restartStream := func() {
 		cleanup()
-		frames, cleanup, err = halfblock.OpenVideoStream(ctx, path)
+		frames, cleanup, err = halfblock.OpenVideoStream(ctx, path, displayFPS)
 		if err != nil {
 			frames = nil
 		}
+		stopAudio(audioPlayer)
+		audioPlayer = openAudio(ctx, path)
 	}
 
 	var lastFrame image.Image
+	var lastRawFrame image.Image
+
+	// setPaused updates the paused flag and suspends/resumes audio accordingly.
+	setPaused := func(p bool) {
+		paused = p
+		if p {
+			audioPlayer.Pause()
+		} else {
+			audioPlayer.Resume()
+		}
+	}
 
 	processToken := func(tok string) (quit bool) {
-		if _, col, row, release, ok := parseSGRMouse(tok); ok {
-			if row == termRows-1 {
+		lastKey = inputSpec.EventName(inputSpec.Classify(tok))
+		if m, ok := inputSpec.ParseMouse(tok); ok {
+			if m.Row == termRows-1 {
 				newAction := ""
 				for _, b := range buttons {
-					if col >= b.col && col < b.col+b.width {
+					if m.Col >= b.col && m.Col < b.col+b.width {
 						newAction = b.action
 						break
 					}
 				}
 				activeAction = newAction
-				if release && newAction != "" {
+				if m.Release && newAction != "" {
 					switch newAction {
-					case "play_video":
-						paused = false
-					case "pause_video":
-						paused = true
+					case "toggle_play_pause":
+						if videoEnded {
+							restartStream()
+							videoEnded = false
+							setPaused(false)
+						} else {
+							setPaused(!paused)
+						}
+					case "copy_viewport":
+						if lastFrame != nil {
+							if copyErr := copyImageToClipboard(lastFrame); copyErr != nil {
+								status = "⚠ copy failed: " + copyErr.Error()
+							} else {
+								status = "✓ copied to clipboard"
+							}
+							statusClearAt = time.Now().Add(3 * time.Second)
+						}
+					case "cycle_render":
+						rc, modeName = cycleRenderCfg(rc)
+						if lastRawFrame != nil {
+							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+						}
+						{
+							b := lastFrame.Bounds()
+							ref := boxDownscale(lastRawFrame, b.Dx(), b.Dy())
+							curSSIM = renderSSIM(ref, lastFrame, rc)
+						}
 					case "go_back", "quit":
 						return true
 					}
@@ -698,66 +774,122 @@ func interactiveVideo(path string, initWidth, initHeight int, sharedInputs chan 
 			return false
 		}
 		switch tok {
-		case "q", "Q", "\x1b", "\x03":
+		case "\x03": // ctrl-c always quits regardless of spec
 			return true
-		case " ":
-			paused = !paused
+		default:
+			if action, ok := viewKeyMaps["video_player"][tok]; ok {
+				switch action {
+				case "go_back", "quit":
+					return true
+				case "toggle_play_pause":
+					if videoEnded {
+						restartStream()
+						videoEnded = false
+						setPaused(false)
+					} else {
+						setPaused(!paused)
+					}
+				case "copy_viewport":
+					if lastFrame != nil {
+						if copyErr := copyImageToClipboard(lastFrame); copyErr != nil {
+							status = "⚠ copy failed: " + copyErr.Error()
+						} else {
+							status = "✓ copied to clipboard"
+						}
+						statusClearAt = time.Now().Add(3 * time.Second)
+					}
+				case "cycle_render":
+					rc, modeName = cycleRenderCfg(rc)
+					if lastRawFrame != nil {
+						lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+					}
+					{
+						b := lastFrame.Bounds()
+						ref := boxDownscale(lastRawFrame, b.Dx(), b.Dy())
+						curSSIM = renderSSIM(ref, lastFrame, rc)
+					}
+				}
+			}
 		}
 		return false
 	}
 
+	// Audio: start playback alongside video.
+	audioPlayer = openAudio(ctx, path)
+	defer stopAudio(audioPlayer)
+
 	for {
-		// Priority: drain any pending quit/input tokens before yielding to the
-		// high-frequency ticker/frames cases (which would otherwise starve input).
-		select {
-		case tok := <-inputs:
-			if processToken(tok) {
-				return nil
+		// Drain pending mouse events (drop-on-full already handled at source).
+	drainMouse:
+		for {
+			select {
+			case tok := <-mouseInputs:
+				if processToken(tok) {
+					return nil
+				}
+			default:
+				break drainMouse
 			}
-		default:
 		}
 
 		select {
 		case <-sigs:
 			return nil
 
-		case tok := <-inputs:
+		case tok := <-keyInputs:
+			// Keys are in the blocking select so they are processed immediately,
+			// not deferred to the next ticker tick.
 			if processToken(tok) {
 				return nil
 			}
 
-		case img, ok := <-frames:
-			if !ok {
-				restartStream() // video ended — loop
-				continue
-			}
+		case <-ticker.C:
+			// Pull exactly one frame per tick (non-blocking) so playback advances
+			// at displayFPS without fast-forwarding between ticks.
 			if !paused {
-				lastFrame = halfblock.ScaleToFit(img, termCols, max(1, termRows-2))
+				select {
+				case img, ok := <-frames:
+					if !ok {
+						frames = nil
+						paused = true
+						videoEnded = true
+						stopAudio(audioPlayer)
+						audioPlayer = nil
+					} else {
+						lastRawFrame = img
+						lastFrame = rc.scaleToFit(img, termCols, max(1, termRows-2))
+						{
+							b := lastFrame.Bounds()
+							ref := boxDownscale(lastRawFrame, b.Dx(), b.Dy())
+							curSSIM = renderSSIM(ref, lastFrame, rc)
+						}
+					}
+				default:
+					// no frame ready — keep showing lastFrame
+				}
 			}
 
-		case <-ticker.C:
 			if lastFrame == nil {
 				continue
 			}
 			if !paused {
 				halfblock.CursorHome(os.Stdout)
-				if err := halfblock.Render(os.Stdout, lastFrame); err != nil {
+				if err := rc.render(os.Stdout, lastFrame); err != nil {
 					return err
 				}
 				halfblock.EraseDown(os.Stdout)
 			}
 			conditions := map[string]bool{"playing": !paused}
 			buttons = drawBottomMenu(os.Stdout, termRows, "video_player", activeAction, style, labels, viewBtnRows, conditions, btnActions)
-			drawHintBar(os.Stdout, termRows, labels["hint_viewer"], nil, style)
-			if !paused {
-				// Drop stale buffered frames to stay in sync with the ticker.
-				n := max(0, len(frames)-1)
-				for range n {
-					if img, ok := <-frames; ok {
-						lastFrame = halfblock.ScaleToFit(img, termCols, max(1, termRows-2))
-					}
-				}
+			if status != "" && time.Now().After(statusClearAt) {
+				status = ""
 			}
+			suffix := fmt.Sprintf("   %s  SSIM:%.3f", modeName, curSSIM)
+			hint := labels["hint_viewer"]
+			if status != "" {
+				hint = status
+			}
+			drawHintBar(os.Stdout, termRows, hint+suffix, map[string]string{"last_key": lastKey}, style)
 		}
 	}
 }

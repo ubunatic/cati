@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "input.schema.json",
+  "title": "Cati Input Spec",
+  "description": "Terminal input state machine — tokenizer rules, key aliases, mouse protocol, signals",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key_aliases", "ctrl_pattern", "signals", "terminal_sequences", "mouse", "tokenizer"],
+      "properties": {
+        "key_aliases": {
+          "type": "object",
+          "description": "Human-readable alias → terminal escape sequence (\\xNN notation)",
+          "additionalProperties": { "type": "string" }
+        },
+        "ctrl_pattern": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prefix", "base_char", "base_code"],
+          "properties": {
+            "prefix":    { "type": "string", "description": "Prefix that identifies a ctrl alias, e.g. 'c-'" },
+            "base_char": { "type": "string", "description": "Lowest ctrl character letter, e.g. 'a'" },
+            "base_code": { "type": "integer", "description": "Byte value for base_char ctrl sequence, e.g. 1 for ctrl-a" }
+          }
+        },
+        "signals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "number", "event"],
+            "properties": {
+              "name":   { "type": "string", "description": "Signal name, e.g. SIGINT" },
+              "number": { "type": "integer", "description": "Signal number" },
+              "event":  { "type": "string", "enum": ["quit", "resize"], "description": "Event produced by this signal" }
+            }
+          }
+        },
+        "terminal_sequences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["seq", "event"],
+            "properties": {
+              "seq":   { "type": "string", "description": "Escape sequence (\\xNN notation)" },
+              "event": { "type": "string", "enum": ["focus", "defocus", "resize", "key", "mouse"], "description": "Event type" }
+            }
+          }
+        },
+        "mouse": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["prefix", "press_suffix", "release_suffix", "enable_button", "enable_motion",
+                       "disable_button", "disable_motion",
+                       "btn_button_mask", "btn_shift_mask", "btn_meta_mask", "btn_ctrl_mask",
+                       "btn_motion_flag", "btn_scroll_flag"],
+          "properties": {
+            "prefix":          { "type": "string" },
+            "press_suffix":    { "type": "string" },
+            "release_suffix":  { "type": "string" },
+            "enable_button":   { "type": "string" },
+            "enable_motion":   { "type": "string" },
+            "disable_button":  { "type": "string" },
+            "disable_motion":  { "type": "string" },
+            "btn_button_mask": { "type": "integer" },
+            "btn_shift_mask":  { "type": "integer" },
+            "btn_meta_mask":   { "type": "integer" },
+            "btn_ctrl_mask":   { "type": "integer" },
+            "btn_motion_flag": { "type": "integer" },
+            "btn_scroll_flag": { "type": "integer" }
+          }
+        },
+        "tokenizer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["rules"],
+          "properties": {
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "match", "emit"],
+                "properties": {
+                  "name":       { "type": "string" },
+                  "match":      { "type": "string", "enum": ["starts_with", "any"] },
+                  "prefix":     { "type": "string" },
+                  "scan_until": { "type": "string", "description": "Set of terminator bytes for scan" },
+                  "scan_class": {
+                    "type": "string",
+                    "enum": ["alpha_tilde"],
+                    "description": "Named character class for CSI sequence terminator"
+                  },
+                  "emit": {
+                    "type": "string",
+                    "enum": ["key", "mouse", "focus", "defocus", "resize", "quit", "unknown"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

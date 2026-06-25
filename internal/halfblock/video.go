@@ -29,6 +29,36 @@ func IsVideo(path string) bool {
 
 // ── ffprobe ───────────────────────────────────────────────────────────────────
 
+// ProbeVideoDimensions returns the pixel width and height of the first video
+// stream in path.  It requires ffprobe to be on $PATH.
+func ProbeVideoDimensions(path string) (width, height int, err error) {
+	cmd := exec.Command("ffprobe",
+		"-v", "quiet",
+		"-select_streams", "v:0",
+		"-show_entries", "stream=width,height",
+		"-of", "csv=p=0",
+		path)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0, fmt.Errorf("ffprobe %s: %w", path, err)
+	}
+	// Output: "width,height\n"  e.g. "1920,1080\n"
+	s := strings.TrimSpace(string(out))
+	parts := strings.SplitN(s, ",", 2)
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("ffprobe: unexpected dimensions %q", s)
+	}
+	w, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil {
+		return 0, 0, fmt.Errorf("ffprobe: parse width %q: %w", parts[0], err)
+	}
+	h, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil {
+		return 0, 0, fmt.Errorf("ffprobe: parse height %q: %w", parts[1], err)
+	}
+	return w, h, nil
+}
+
 // ProbeVideoFPS returns the native frame rate of the first video stream.
 // It requires ffprobe to be on $PATH.
 func ProbeVideoFPS(path string) (float64, error) {
@@ -130,17 +160,31 @@ func LoadVideoFrameAt(path string, offsetSec float64) (image.Image, error) {
 // on the returned channel.  The channel is closed when the video ends, the
 // context is cancelled, or a decode error occurs.
 //
+// displayFPS controls the output frame rate passed to ffmpeg via -vf fps=N.
+// ffmpeg drops or duplicates source frames to hit the target rate while
+// preserving natural wallclock speed — a 30 fps source at displayFPS=15
+// outputs every 2nd frame but plays in the same real time.
+// Pass displayFPS ≤ 0 to disable rate limiting (decodes as fast as possible).
+//
 // The caller must invoke the returned cleanup function to release resources
 // (safe to call more than once).
 //
 // It requires ffmpeg to be on $PATH.
-func OpenVideoStream(ctx context.Context, path string) (<-chan image.Image, func(), error) {
-	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-v", "quiet",
-		"-i", path,
-		"-f", "image2pipe",
-		"-vcodec", "png",
-		"pipe:1")
+func OpenVideoStream(ctx context.Context, path string, displayFPS float64) (<-chan image.Image, func(), error) {
+	// Probe source dimensions so we can read fixed-size raw frames.
+	w, h, err := ProbeVideoDimensions(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("probe video dimensions: %w", err)
+	}
+
+	args := []string{"-v", "quiet", "-i", path}
+	if displayFPS > 0 {
+		args = append(args, "-vf", fmt.Sprintf("fps=%.6g", displayFPS))
+		args = append(args, "-threads", "4")
+	}
+	// Raw RGBA output: no PNG encode/decode overhead.  Frame size = w*h*4 bytes.
+	args = append(args, "-f", "rawvideo", "-pix_fmt", "rgba", "pipe:1")
+	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -162,17 +206,19 @@ func OpenVideoStream(ctx context.Context, path string) (<-chan image.Image, func
 		_ = cmd.Wait()
 	}
 
-	ch := make(chan image.Image, 8) // buffer a handful of frames
+	ch := make(chan image.Image, 8)
+	frameSize := w * h * 4
 	go func() {
 		defer close(ch)
 		defer close(done)
 		defer cmd.Wait() //nolint:errcheck
-		r := io.Reader(stdout)
+		buf := make([]byte, frameSize)
 		for {
-			img, err := png.Decode(r)
-			if err != nil {
-				return // EOF or decode error — stop streaming
+			if _, err := io.ReadFull(stdout, buf); err != nil {
+				return // EOF or partial read — video ended or ffmpeg exited
 			}
+			img := image.NewRGBA(image.Rect(0, 0, w, h))
+			copy(img.Pix, buf)
 			select {
 			case ch <- img:
 			case <-ctx.Done():

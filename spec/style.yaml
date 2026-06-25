@@ -45,3 +45,7 @@ scroll_bar:
   rail_fg: null
   rail_bg: null
 
+page_title:
+  fg: cyn
+  bold: true
+

@@ -3,8 +3,9 @@
 Welcome to the Cati developer documentation. The following resources cover our project guides, code rules, and architecture:
 
 *   [System Documentation](System.md) — Comprehensive guide on rendering pipeline, design decisions, offline website asset generation, and licensing.
-    *   [Video Probing & Streaming Pipeline](Video.md) — Details on native FPS probing, ffmpeg piping, asynchronous decoding, and queue frame dropping.
+    *   [Video & Audio Pipeline](Video.md) — FPS/dimension probing, rawvideo pipe, one-frame-per-tick loop, play-once vs loop, input resilience, audio via ffplay.
     *   [Interactive Grid Browser](Browser.md) — Page layouts, composite thumbnail grids, mouse tracking, async thumb loading, space-pan, raw terminal swaps.
+*   [Spec System — Authoritative Reference](Spec.md) — Spec-as-code philosophy, file map, key dispatch pipeline, quality invariants, agent rules, integrity tests, and change checklist. **Read this before touching any `spec/` file or its Go loaders.**
 *   [Spec System & Browser Design](Design.md) — The `spec/` YAML-driven config system: template engine (`renderTpl`/`if()`), color system (`dark`/`light`/named/hex), button/label/view pipeline, hint bar vars, scrollbar, dense-mode grid, split-screen preview.
 *   [Quad-Block Pixel Art](QuadPixelArt.md) — Half-block vs. quad-block layout math, the 2× horizontal stretch aspect-ratio correction, neighbour-aware colour quantisation, and the quadrant character lookup table.
 *   [Go Conventions](Go.md) — Development guidelines for writing Go code, state management, error handling, CLI verbs, and testing.

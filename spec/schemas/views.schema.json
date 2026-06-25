@@ -29,12 +29,24 @@
         }
       }
     },
+    "hidden_keys_row": {
+      "type": "object",
+      "required": ["hidden_keys"],
+      "additionalProperties": false,
+      "properties": {
+        "hidden_keys": {
+          "type": "string",
+          "description": "Like row, but for key-binding-only buttons: they contribute to key maps but are not rendered in the button bar."
+        }
+      }
+    },
     "view": {
       "type": "array",
       "items": {
         "oneOf": [
           { "$ref": "#/definitions/area_row" },
-          { "$ref": "#/definitions/template_row" }
+          { "$ref": "#/definitions/template_row" },
+          { "$ref": "#/definitions/hidden_keys_row" }
         ]
       }
     }

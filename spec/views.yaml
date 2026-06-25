@@ -16,17 +16,18 @@ $schema: "./schemas/views.schema.json"
 views:
   browser:
     - area: grid
-    - row: "{ prev } { next } | { settings } { mode } { about } | { quit }"
+    - row: "{ prev } { next } { back } | { settings } { mode } { about } | { quit }"
+    - hidden_keys: "{ nav_up } { nav_down } { page_prev } { page_next }"
     - row: "{ hint_browser }"
 
   image_viewer:
     - area: canvas
-    - row: "{ zoom_in } { zoom_out } { back } { quit }"
+    - row: "{ zoom_in } { zoom_out } { toggle_pan } { copy_viewport } { render } { back } { quit }"
     - row: "{ hint_viewer }"
 
   video_player:
     - area: canvas
-    - row: "{ zoom_in } { zoom_out } { if(playing, pause, play) } { back } { quit }"
+    - row: "{ zoom_in } { zoom_out } { if(playing, pause, play) } { copy_viewport } { render } { back } { quit }"
     - row: "{ hint_viewer }"
 
   settings:

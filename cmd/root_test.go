@@ -37,8 +37,8 @@ func TestIsImageFile(t *testing.T) {
 func TestExpandArgs_Files(t *testing.T) {
 	// Explicit file paths are returned as-is (stat must succeed → use real files).
 	files := []string{
-		"../testdata/solid_red_4x4.png",
-		"../testdata/checkerboard_4x4.png",
+		"testdata/solid_red_4x4.png",
+		"testdata/checkerboard_4x4.png",
 	}
 	got, err := expandArgs(files, false)
 	if err != nil {
@@ -50,7 +50,7 @@ func TestExpandArgs_Files(t *testing.T) {
 }
 
 func TestExpandArgs_Directory_Flat(t *testing.T) {
-	got, err := expandArgs([]string{"../testdata"}, false)
+	got, err := expandArgs([]string{"testdata"}, false)
 	if err != nil {
 		t.Fatalf("expandArgs: %v", err)
 	}
@@ -83,8 +83,8 @@ func TestExpandArgs_Directory_Recursive(t *testing.T) {
 			t.Fatalf("write %s: %v", dst, err)
 		}
 	}
-	copyFile("../testdata/solid_red_4x4.png", filepath.Join(root, "top.png"))
-	copyFile("../testdata/solid_red_4x4.png", filepath.Join(sub, "deep.png"))
+	copyFile("testdata/solid_red_4x4.png", filepath.Join(root, "top.png"))
+	copyFile("testdata/solid_red_4x4.png", filepath.Join(sub, "deep.png"))
 
 	// Flat: should only return root-level file.
 	flat, err := expandArgs([]string{root}, false)
@@ -106,7 +106,7 @@ func TestExpandArgs_Directory_Recursive(t *testing.T) {
 }
 
 func TestExpandArgs_Deduplication(t *testing.T) {
-	path := "../testdata/solid_red_4x4.png"
+	path := "testdata/solid_red_4x4.png"
 	got, err := expandArgs([]string{path, path}, false)
 	if err != nil {
 		t.Fatalf("expandArgs: %v", err)

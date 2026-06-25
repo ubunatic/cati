@@ -34,7 +34,7 @@ This is combined with 24-bit ANSI true-color escape sequences (`\x1b[38;2;R;G;Bm
 
 ### Sub-System Documentation
 For detail on specific components, refer to:
-*   [Video Probing & Streaming Pipeline](Video.md) — Probes video streams, decodes PNGs asynchronously via ffmpeg pipes, and handles frame drops.
+*   [Video & Audio Pipeline](Video.md) — Probes video streams, decodes rawvideo frames via ffmpeg pipe at display FPS, audio via ffplay.
 *   [Interactive Grid Browser](Browser.md) — Renders paged thumbnails, decodes mouse/key navigation, and dynamically scales image grid layouts.
 
 ---

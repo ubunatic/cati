@@ -15,6 +15,7 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"math"
 	"strings"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
@@ -121,6 +122,23 @@ type Options struct {
 	// Each group's colour is the average of the original pixel colours in that
 	// group.  Gives stable colour regions driven by luminance structure.
 	LumSplit bool
+
+	// PCA2 selects fg/bg by projecting the 4 pixels onto the principal axis of
+	// colour variance (power-iteration PCA on the 3×3 RGB covariance matrix).
+	// Pixels above the mean projection form one group, below form the other.
+	// Each group's colour is the mean of its member pixels.  This gives the
+	// least-squares-optimal 2-colour linear partition for each cell.
+	PCA2 bool
+
+	// Diameter picks fg/bg by finding the two most distant pixels in RGB space,
+	// grouping by nearest endpoint, and averaging each group. Equivalent to a
+	// single-step k-means from the extremal initialisation. Fast and robust.
+	Diameter bool
+
+	// KMeans runs 2-centre k-means (initialised from the diameter endpoints)
+	// for the given number of iterations. KMeans: 3 is usually sufficient for
+	// convergence on 4 pixels. Finds the minimum-MSE 2-colour partition.
+	KMeans int
 }
 
 // ── Quadrant character lookup ─────────────────────────────────────────────────
@@ -454,8 +472,124 @@ func buildMask(pixels [4]color.RGBA, fg, bg color.RGBA, hasBG bool) uint8 {
 	return mask
 }
 
+// compileCellPCA2 finds the least-squares-optimal 2-colour partition of the
+// cell's pixels. It projects each pixel onto the first principal axis of the
+// RGB covariance matrix (power iteration, 8 steps), splits at the mean
+// projection, and uses per-group averages as fg/bg colours.
+func compileCellPCA2(pixels [4]color.RGBA) quadCell {
+	// Collect non-transparent pixels, tracking their quadrant index.
+	var opaque [4]bool
+	var n int
+	for i, p := range pixels {
+		if !isTransparent(p) {
+			opaque[i] = true
+			n++
+		}
+	}
+	switch n {
+	case 0:
+		return quadCell{ch: ' ', transparent: true}
+	case 1:
+		for i, p := range pixels {
+			if opaque[i] {
+				bits := [4]uint8{bitUL, bitUR, bitLL, bitLR}
+				return quadCell{ch: quadChar[bits[i]], fg: p, hasFG: true}
+			}
+		}
+	}
+
+	// Mean RGB.
+	var mu [3]float64
+	for i, p := range pixels {
+		if opaque[i] {
+			mu[0] += float64(p.R)
+			mu[1] += float64(p.G)
+			mu[2] += float64(p.B)
+		}
+	}
+	fn := float64(n)
+	mu[0] /= fn
+	mu[1] /= fn
+	mu[2] /= fn
+
+	// 3×3 RGB covariance matrix.
+	var cov [3][3]float64
+	for i, p := range pixels {
+		if !opaque[i] {
+			continue
+		}
+		d := [3]float64{float64(p.R) - mu[0], float64(p.G) - mu[1], float64(p.B) - mu[2]}
+		for r := range 3 {
+			for c := range 3 {
+				cov[r][c] += d[r] * d[c]
+			}
+		}
+	}
+
+	// Power iteration for the principal eigenvector (8 steps, starts at (1,1,1)).
+	v := [3]float64{1, 1, 1}
+	for range 8 {
+		nv := [3]float64{
+			cov[0][0]*v[0] + cov[0][1]*v[1] + cov[0][2]*v[2],
+			cov[1][0]*v[0] + cov[1][1]*v[1] + cov[1][2]*v[2],
+			cov[2][0]*v[0] + cov[2][1]*v[1] + cov[2][2]*v[2],
+		}
+		l := math.Sqrt(nv[0]*nv[0] + nv[1]*nv[1] + nv[2]*nv[2])
+		if l < 1e-8 {
+			break
+		}
+		v = [3]float64{nv[0] / l, nv[1] / l, nv[2] / l}
+	}
+
+	// Project each pixel onto v and split at mean projection.
+	var projs [4]float64
+	var projSum float64
+	for i, p := range pixels {
+		if opaque[i] {
+			pr := v[0]*float64(p.R) + v[1]*float64(p.G) + v[2]*float64(p.B)
+			projs[i] = pr
+			projSum += pr
+		}
+	}
+	mid := projSum / fn
+
+	bits := [4]uint8{bitUL, bitUR, bitLL, bitLR}
+	var mask uint8
+	var fgPx, bgPx []color.RGBA
+	for i, p := range pixels {
+		if !opaque[i] {
+			continue
+		}
+		if projs[i] >= mid {
+			mask |= bits[i]
+			fgPx = append(fgPx, p)
+		} else {
+			bgPx = append(bgPx, p)
+		}
+	}
+
+	fg := avgRGB(fgPx...)
+	if len(bgPx) == 0 {
+		return quadCell{ch: quadChar[0b1111], fg: fg, hasFG: true}
+	}
+	bg := avgRGB(bgPx...)
+	if eqRGB(fg, bg) {
+		return quadCell{ch: quadChar[0b1111], fg: fg, hasFG: true}
+	}
+	return quadCell{ch: quadChar[mask], fg: fg, bg: bg, hasFG: true, hasBG: true}
+}
+
 // compileCell converts a 2×2 pixel block into a terminal quadrant cell.
 func compileCell(pixels [4]color.RGBA, left, above *quadCell, opts Options) quadCell {
+	if opts.KMeans > 0 {
+		return compileCellKMeans(pixels, opts.KMeans)
+	}
+	if opts.Diameter {
+		return compileCellDiameter(pixels)
+	}
+	if opts.PCA2 {
+		return compileCellPCA2(pixels)
+	}
 	if opts.LumSplit {
 		return compileCellLumSplit(pixels)
 	}
@@ -671,4 +805,96 @@ func RenderOpts(w io.Writer, img image.Image, opts Options) error {
 		}
 	}
 	return nil
+}
+
+// charToMask reverses quadChar: given the Unicode character chosen by
+// compileCell, return the 4-bit mask (UL=bit3, UR=bit2, LL=bit1, LR=bit0)
+// that says which quadrants are fg.
+var charToMask func(ch rune) uint8
+
+func init() {
+	m := make(map[rune]uint8, 16)
+	for mask, ch := range quadChar {
+		m[ch] = uint8(mask)
+	}
+	charToMask = func(ch rune) uint8 { return m[ch] }
+}
+
+// RenderToImage runs the same cell-compilation as RenderOpts but writes the
+// result into an image.RGBA instead of ANSI escape codes. Each 2×2 pixel block
+// in the output shows the fg/bg colours assigned by compileCell, so the image
+// is a faithful reconstruction of exactly what the terminal would display.
+// This is the correct test signal for SSIM computation.
+func RenderToImage(img image.Image, opts Options) *image.RGBA {
+	b := img.Bounds()
+	pixW, pixH := b.Dx(), b.Dy()
+	dst := image.NewRGBA(image.Rect(0, 0, pixW, pixH))
+
+	tcCols := (pixW + 1) / 2
+	trRows := (pixH + 1) / 2
+	cells := make([]quadCell, tcCols*trRows)
+	cellAt := func(tr, tc int) *quadCell {
+		if tr < 0 || tc < 0 || tr >= trRows || tc >= tcCols {
+			return nil
+		}
+		return &cells[tr*tcCols+tc]
+	}
+
+	// Quadrant pixel offsets within a 2×2 block: UL=0, UR=1, LL=2, LR=3.
+	// Maps to bit positions: UL=bit3, UR=bit2, LL=bit1, LR=bit0.
+	quadBit := [4]uint8{bitUL, bitUR, bitLL, bitLR}
+	// dx,dy offsets for each quadrant index.
+	qDX := [4]int{0, 1, 0, 1}
+	qDY := [4]int{0, 0, 1, 1}
+
+	for tr := range trRows {
+		for tc := range tcCols {
+			py0 := b.Min.Y + tr*2
+			px0 := b.Min.X + tc*2
+
+			var pixels [4]color.RGBA
+			pixels[0] = samplePixel(img, px0, py0, b, opts)
+			pixels[1] = samplePixel(img, px0+1, py0, b, opts)
+			pixels[2] = samplePixel(img, px0, py0+1, b, opts)
+			pixels[3] = samplePixel(img, px0+1, py0+1, b, opts)
+
+			if opts.Blend == BlendAmbiguous || opts.Blend == BlendAmbiguousWide {
+				if len(collectUnique(pixels)) >= 3 {
+					radius := 1
+					if opts.Blend == BlendAmbiguousWide {
+						radius = 2
+					}
+					pixels[0] = blendedPixelR(img, px0, py0, b, radius)
+					pixels[1] = blendedPixelR(img, px0+1, py0, b, radius)
+					pixels[2] = blendedPixelR(img, px0, py0+1, b, radius)
+					pixels[3] = blendedPixelR(img, px0+1, py0+1, b, radius)
+				}
+			}
+
+			c := compileCell(pixels, cellAt(tr, tc-1), cellAt(tr-1, tc), opts)
+			cells[tr*tcCols+tc] = c
+
+			mask := charToMask(c.ch)
+			bg := c.bg
+			if !c.hasBG {
+				bg = color.RGBA{A: 255} // terminal default bg (black)
+			}
+			fg := c.fg
+			if !c.hasFG {
+				fg = bg
+			}
+			for q, bit := range quadBit {
+				dx, dy := qDX[q], qDY[q]
+				px, py := tc*2+dx, tr*2+dy
+				if px < pixW && py < pixH {
+					if mask&bit != 0 {
+						dst.SetRGBA(px, py, fg)
+					} else {
+						dst.SetRGBA(px, py, bg)
+					}
+				}
+			}
+		}
+	}
+	return dst
 }

@@ -7,23 +7,7 @@
 
 ## A. `website` button — undefined in `buttons.yaml`
 
-`spec/views.yaml` about view references `{ website }`:
-```yaml
-about:
-  - row: "{ back } { website } | { quit }"
-```
-But `spec/buttons.yaml` has no `website` entry and `loadButtons` has no default for it.
-
-**Effect at runtime:** button label falls back to the raw key string `"website"`, no action fires on click.
-
-**Fix:** add to `buttons.yaml`:
-```yaml
-  website:
-    text: "🌐 Website"
-    style: secondary
-    action: open_website
-```
-And wire `open_website` action in the browser click handler (opens `https://codeberg.org/ubunatic/cati`).
+✅ **Fixed** — `website` button added to `buttons.yaml` with `action: open_website`. URL stored in `labels.yaml` as `website_url`. `openWebsite(url)` calls `xdg-open`/`open`/`start` depending on OS. Wired in the about-view click handler and in the spec-driven grid keyboard dispatch.
 
 ---
 

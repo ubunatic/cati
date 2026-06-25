@@ -6,19 +6,27 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"io/fs"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/internal/input"
+	spec "codeberg.org/ubunatic/cati/spec"
 	"golang.org/x/term"
 )
+
+func specRead(name string) ([]byte, error) {
+	return fs.ReadFile(spec.FS, name)
+}
 
 type menuButton struct {
 	label  string
@@ -109,6 +117,8 @@ func applySettingsDelta(c ControlSpec, delta int, s *Settings) {
 		s.MaxJobs = max(c.Min, min(c.Max, s.MaxJobs+delta))
 	case "video_frames":
 		s.VideoFrames = max(c.Min, min(c.Max, s.VideoFrames+delta))
+	case "video_preview_delay":
+		s.VideoPreviewDelay = max(c.Min, min(c.Max, s.VideoPreviewDelay+delta*100))
 	}
 }
 
@@ -145,6 +155,9 @@ type StyleConfig struct {
 	ScrollThumbFg   string
 	ScrollRailFg    string
 	ScrollRailBg    string
+	// Page title (about/settings headers)
+	PageTitleFg   string
+	PageTitleBold bool
 }
 
 var namedColors = map[string]string{
@@ -368,7 +381,7 @@ func loadStyle() *StyleConfig {
 		ScrollRailBg:    "",
 	}
 
-	data, err := os.ReadFile("spec/style.yaml")
+	data, err := specRead("style.yaml")
 	if err != nil {
 		return cfg
 	}
@@ -480,6 +493,13 @@ func loadStyle() *StyleConfig {
 			case "rail_bg":
 				cfg.ScrollRailBg = val
 			}
+		case "page_title":
+			switch key {
+			case "fg":
+				cfg.PageTitleFg = val
+			case "bold":
+				cfg.PageTitleBold = val == "true"
+			}
 		}
 	}
 	return cfg
@@ -499,7 +519,7 @@ func loadLabels() map[string]string {
 		"hint_viewer":    "[q/Esc] Back  [+/-] Zoom",
 	}
 
-	data, err := os.ReadFile("spec/labels.yaml")
+	data, err := specRead("labels.yaml")
 	if err != nil {
 		return labels
 	}
@@ -521,25 +541,10 @@ func loadLabels() map[string]string {
 	return labels
 }
 
-// loadButtonActions reads spec/buttons.yaml and returns key → action name.
-// The defaults mirror the built-in action strings wired in click handlers.
+// loadButtonActions reads spec/buttons.yaml and returns button_name → action name.
 func loadButtonActions() map[string]string {
-	actions := map[string]string{
-		"prev":     "nav_prev",
-		"next":     "nav_next",
-		"settings": "open_settings",
-		"about":    "open_about",
-		"mode":     "toggle_mode",
-		"quit":     "quit",
-		"back":     "go_back",
-		"zoom_in":  "inc_zoom",
-		"zoom_out": "dec_zoom",
-		"play":     "play_video",
-		"pause":    "pause_video",
-		"save":     "save_settings",
-		"cancel":   "cancel_settings",
-	}
-	data, err := os.ReadFile("spec/buttons.yaml")
+	actions := map[string]string{}
+	data, err := specRead("buttons.yaml")
 	if err != nil {
 		return actions
 	}
@@ -569,26 +574,156 @@ func loadButtonActions() map[string]string {
 	return actions
 }
 
+// parseYamlStringList parses an inline YAML array like ["q", "Q", "<esc>"] into Go strings.
+// Each entry is unquoted then passed through inputSpec.ResolveKeyAlias so human-readable
+// aliases like <esc>, <cr>, <c-c> resolve to their terminal sequences.
+func parseYamlStringList(val string, inputSpec *input.Spec) []string {
+	val = strings.TrimSpace(val)
+	val = strings.TrimPrefix(val, "[")
+	val = strings.TrimSuffix(val, "]")
+	var result []string
+	for _, part := range strings.Split(val, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		var s string
+		if unquoted, err := strconv.Unquote(part); err == nil {
+			s = unquoted
+		} else {
+			s = strings.Trim(part, "\"'")
+		}
+		result = append(result, inputSpec.ResolveKeyAlias(s))
+	}
+	return result
+}
+
+// buttonKeyDef holds the action name and bound key sequences for one button entry.
+type buttonKeyDef struct {
+	action string
+	keys   []string
+}
+
+// loadButtonKeyDefs reads spec/buttons.yaml and returns button_name → {action, keys}.
+func loadButtonKeyDefs(inputSpec *input.Spec) map[string]buttonKeyDef {
+	defs := map[string]buttonKeyDef{}
+	data, err := specRead("buttons.yaml")
+	if err != nil {
+		return defs
+	}
+	inButtons := false
+	currentName := ""
+	cur := buttonKeyDef{}
+	commit := func() {
+		if currentName != "" && cur.action != "" {
+			defs[currentName] = cur
+		}
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
+			continue
+		}
+		if trimmed == "buttons:" {
+			inButtons = true
+			continue
+		}
+		if !inButtons {
+			continue
+		}
+		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
+			commit()
+			currentName = strings.TrimSuffix(trimmed, ":")
+			cur = buttonKeyDef{}
+			continue
+		}
+		if currentName != "" {
+			if strings.HasPrefix(line, "    action: ") {
+				cur.action = strings.TrimSpace(strings.TrimPrefix(line, "    action: "))
+			} else if strings.HasPrefix(line, "    keys: ") {
+				cur.keys = parseYamlStringList(strings.TrimPrefix(line, "    keys: "), inputSpec)
+			}
+		}
+	}
+	commit()
+	return defs
+}
+
+// extractViewButtonNames returns all button names referenced in a view row template.
+// Handles { name }, { name | mod }, and { if(cond, name1, name2) } forms.
+func extractViewButtonNames(tpl string) []string {
+	var names []string
+	i := 0
+	for i < len(tpl) {
+		open := strings.Index(tpl[i:], "{")
+		if open == -1 {
+			break
+		}
+		i += open + 1
+		close := strings.Index(tpl[i:], "}")
+		if close == -1 {
+			break
+		}
+		expr := strings.TrimSpace(tpl[i : i+close])
+		i += close + 1
+		if strings.HasPrefix(expr, "if(") {
+			inner := strings.TrimSuffix(strings.TrimPrefix(expr, "if("), ")")
+			parts := strings.SplitN(inner, ",", 3)
+			if len(parts) == 3 {
+				names = append(names, strings.TrimSpace(parts[1]), strings.TrimSpace(parts[2]))
+			}
+		} else {
+			name := strings.TrimSpace(strings.SplitN(expr, "|", 2)[0])
+			if name != "" && !strings.HasPrefix(name, "'") && !strings.HasPrefix(name, "hint_") {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
+}
+
+// buildViewKeyMaps returns view → key → action, derived from which buttons each view shows.
+// Context is correct: pressing <esc> in browser triggers go_back; in settings it triggers cancel_settings.
+func buildViewKeyMaps(viewBtnRows map[string]string, defs map[string]buttonKeyDef) map[string]map[string]string {
+	result := map[string]map[string]string{}
+	for viewName, tpl := range viewBtnRows {
+		km := map[string]string{}
+		for _, btnName := range extractViewButtonNames(tpl) {
+			if def, ok := defs[btnName]; ok {
+				for _, k := range def.keys {
+					km[k] = def.action
+				}
+			}
+		}
+		result[viewName] = km
+	}
+	return result
+}
+
+// openWebsite opens url in the system default browser.
+func openWebsite(url string) {
+	if url == "" {
+		return
+	}
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		args = []string{"open", url}
+	case "windows":
+		args = []string{"cmd", "/c", "start", url}
+	default:
+		args = []string{"xdg-open", url}
+	}
+	// Fire-and-forget; ignore errors (no terminal to report them).
+	_ = exec.Command(args[0], args[1:]...).Start() //nolint
+}
+
 // loadButtons reads spec/buttons.yaml and returns key → rendered label (caps applied).
 func loadButtons(leftCap, rightCap string) map[string]string {
 	wrap := func(text string) string { return leftCap + text + rightCap }
-	buttons := map[string]string{
-		"prev":     wrap("◀ Prev"),
-		"next":     wrap("Next ▶"),
-		"settings": wrap("⚙ Settings"),
-		"about":    wrap("ℹ About"),
-		"mode":     wrap("Mode"),
-		"quit":     wrap("✖ Quit"),
-		"back":     wrap("◀ Back"),
-		"zoom_in":  wrap("+ Zoom In"),
-		"zoom_out": wrap("- Zoom Out"),
-		"play":     wrap("▶ Play"),
-		"pause":    wrap("⏸ Pause"),
-		"save":     wrap("✔ Save"),
-		"cancel":   wrap("✖ Cancel"),
-	}
+	buttons := map[string]string{}
 
-	data, err := os.ReadFile("spec/buttons.yaml")
+	data, err := specRead("buttons.yaml")
 	if err != nil {
 		return buttons
 	}
@@ -613,7 +748,9 @@ func loadButtons(leftCap, rightCap string) map[string]string {
 		}
 		if currentKey != "" && strings.HasPrefix(line, "    text: ") {
 			text := strings.Trim(strings.TrimPrefix(line, "    text: "), "\"'")
-			buttons[currentKey] = wrap(text)
+			if text != "" {
+				buttons[currentKey] = wrap(text)
+			}
 		}
 	}
 	return buttons
@@ -629,8 +766,8 @@ type YamlView struct {
 	Controls []string
 }
 
-func parseYamlView(path string) (*YamlView, error) {
-	data, err := os.ReadFile(path)
+func parseYamlView(name string) (*YamlView, error) {
+	data, err := specRead(name)
 	if err != nil {
 		return nil, err
 	}
@@ -687,7 +824,7 @@ func parseYamlView(path string) (*YamlView, error) {
 }
 
 func getAboutView() *YamlView {
-	view, err := parseYamlView("spec/about.yaml")
+	view, err := parseYamlView("about.yaml")
 	if err == nil && view != nil {
 		return view
 	}
@@ -722,11 +859,12 @@ Controls (Interactive Single View):
 // ── Config loader & saver ───────────────────────────────────────────────────
 
 type Settings struct {
-	MaxPreviewHeight int
-	ViewMode         string
-	PreviewVideos    bool
-	MaxJobs          int
-	VideoFrames      int
+	MaxPreviewHeight  int
+	ViewMode          string
+	PreviewVideos     bool
+	MaxJobs           int
+	VideoFrames       int
+	VideoPreviewDelay int // milliseconds; 0 = immediate
 }
 
 func getConfigDir() string {
@@ -737,8 +875,61 @@ func getConfigDir() string {
 	return filepath.Join(home, ".config", "cati")
 }
 
+func loadSpecConfigDefaults() Settings {
+	cfg := Settings{MaxPreviewHeight: 20, ViewMode: "grid", PreviewVideos: true, MaxJobs: 0, VideoFrames: 10, VideoPreviewDelay: 1000}
+	data, err := specRead("config.yaml")
+	if err != nil {
+		return cfg
+	}
+	inConfig := false
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
+			continue
+		}
+		if trimmed == "config:" {
+			inConfig = true
+			continue
+		}
+		if !inConfig {
+			continue
+		}
+		parts := strings.SplitN(trimmed, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(parts[0])
+		val := strings.TrimSpace(parts[1])
+		switch key {
+		case "preview_height":
+			if h, err := strconv.Atoi(val); err == nil && h > 0 {
+				cfg.MaxPreviewHeight = h
+			}
+		case "view_mode":
+			if val == "preview" || val == "grid" {
+				cfg.ViewMode = val
+			}
+		case "preview_videos":
+			cfg.PreviewVideos = val != "false"
+		case "max_jobs":
+			if n, err := strconv.Atoi(val); err == nil && n >= 0 {
+				cfg.MaxJobs = n
+			}
+		case "video_frames":
+			if n, err := strconv.Atoi(val); err == nil && n > 0 {
+				cfg.VideoFrames = n
+			}
+		case "video_preview_delay":
+			if n, err := strconv.Atoi(val); err == nil && n >= 0 {
+				cfg.VideoPreviewDelay = n
+			}
+		}
+	}
+	return cfg
+}
+
 func loadConfig() Settings {
-	cfg := Settings{MaxPreviewHeight: 20, ViewMode: "grid", PreviewVideos: true, MaxJobs: 0, VideoFrames: 10}
+	cfg := loadSpecConfigDefaults()
 	dir := getConfigDir()
 	if dir == "" {
 		return cfg
@@ -777,6 +968,10 @@ func loadConfig() Settings {
 				if n, err := strconv.Atoi(val); err == nil && n > 0 {
 					cfg.VideoFrames = n
 				}
+			case "video_preview_delay":
+				if n, err := strconv.Atoi(val); err == nil && n >= 0 {
+					cfg.VideoPreviewDelay = n
+				}
 			}
 		}
 	}
@@ -797,8 +992,8 @@ func saveConfig(cfg Settings) error {
 		previewVideos = "false"
 	}
 	content := fmt.Sprintf(
-		"max_preview_height=%d\nview_mode=%s\npreview_videos=%s\nmax_jobs=%d\nvideo_frames=%d\n",
-		cfg.MaxPreviewHeight, cfg.ViewMode, previewVideos, cfg.MaxJobs, cfg.VideoFrames,
+		"max_preview_height=%d\nview_mode=%s\npreview_videos=%s\nmax_jobs=%d\nvideo_frames=%d\nvideo_preview_delay=%d\n",
+		cfg.MaxPreviewHeight, cfg.ViewMode, previewVideos, cfg.MaxJobs, cfg.VideoFrames, cfg.VideoPreviewDelay,
 	)
 	return os.WriteFile(path, []byte(content), 0o644)
 }
@@ -809,9 +1004,10 @@ func loadControls() []ControlSpec {
 		{Key: "view_mode",      Type: "enum", Values: []string{"grid", "preview"}},
 		{Key: "preview_videos", Type: "bool"},
 		{Key: "max_jobs",       Type: "int", Min: 1, Max: 32},
-		{Key: "video_frames",   Type: "int", Min: 1, Max: 60},
+		{Key: "video_frames",         Type: "int", Min: 1, Max: 60},
+		{Key: "video_preview_delay",  Type: "int", Min: 0, Max: 5000},
 	}
-	data, err := os.ReadFile("spec/controls.yaml")
+	data, err := specRead("controls.yaml")
 	if err != nil {
 		return specs
 	}
@@ -926,20 +1122,24 @@ type scrollDragState struct {
 	startY int
 }
 
-func browser(args []string, initWidth, initHeight int) error {
+func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 	cfg := loadConfig()
+	inputSpec, _ := input.Load(fs.FS(spec.FS))
 	style := loadStyle()
 	labels := loadLabels()
 	for k, v := range loadButtons(style.BtnLeftCap, style.BtnRightCap) {
 		labels[k] = v
 	}
 	viewBtnRows := loadViewButtonRows()
+	viewKeyRows := loadViewKeyRows()
 	controls := loadControls()
 	btnActions := loadButtonActions()
+	viewKeyMaps := buildViewKeyMaps(viewKeyRows, loadButtonKeyDefs(inputSpec))
 
 	cfgHeight := cfg.MaxPreviewHeight
 	viewMode := cfg.ViewMode // "grid" or "preview", toggled dynamically
 	previewVideos := cfg.PreviewVideos
+	videoPreviewDelay := time.Duration(cfg.VideoPreviewDelay) * time.Millisecond
 
 	var initialItems []browserItem
 	for _, p := range args {
@@ -974,10 +1174,9 @@ func browser(args []string, initWidth, initHeight int) error {
 	}
 	animMap := make(map[string]*animState) // keyed by item path
 
-	// currentVisibleKeys is populated by redraw so the event loop can compare
-	// against prevVisibleKeys to detect newly-visible videos.
+	// currentVisibleKeys is populated by redraw so the animTicker can find
+	// cached frames for the selected item.
 	currentVisibleKeys := make(map[thumbKey]bool)
-	prevVisibleKeys := make(map[thumbKey]bool)
 	prevSelectedIdx := -1
 
 	// thumbnail job queue and async workers
@@ -1027,26 +1226,6 @@ func browser(args []string, initWidth, initHeight int) error {
 		return nil
 	}
 
-	// startVisibleAnimations triggers one-shot playback for videos that just
-	// scrolled into view (present in currentVisibleKeys but not prevVisibleKeys).
-	startVisibleAnimations := func() {
-		for key := range currentVisibleKeys {
-			if prevVisibleKeys[key] {
-				continue
-			}
-			if frames := thumbCache[key]; len(frames) > 1 {
-				if anim := animMap[key.path]; anim == nil || !anim.playing {
-					animMap[key.path] = &animState{frameIdx: 0, playing: true}
-				}
-			}
-		}
-		prevVisibleKeys = make(map[thumbKey]bool)
-		for k := range currentVisibleKeys {
-			prevVisibleKeys[k] = true
-		}
-	}
-
-
 	fd := int(os.Stdin.Fd())
 	oldState, err := term.MakeRaw(fd)
 	if err != nil {
@@ -1070,7 +1249,7 @@ func browser(args []string, initWidth, initHeight int) error {
 			if err != nil || n == 0 {
 				return
 			}
-			tokens := tokenizeInput(string(buf[:n]))
+			tokens := inputSpec.Tokenize(string(buf[:n]))
 			for _, tok := range tokens {
 				// Mouse SGR events (\x1b[<...) are dropped when the buffer is
 				// nearly full so they never prevent keyboard tokens from being
@@ -1099,10 +1278,11 @@ func browser(args []string, initWidth, initHeight int) error {
 	}()
 
 	selectedIdx := 0
+	selectionChangedAt := time.Now().Add(-videoPreviewDelay) // ready immediately on start
 
-	// triggerSelectedVideoAnim restarts the one-shot animation when the cursor
-	// moves onto a video that already has cached frames.
-	triggerSelectedVideoAnim := func() {
+	// startSelectedVideoAnim starts the one-shot animation for the currently
+	// selected video.  Called only after the hover delay has elapsed.
+	startSelectedVideoAnim := func() {
 		if selectedIdx < 0 || selectedIdx >= len(items) {
 			return
 		}
@@ -1125,6 +1305,7 @@ func browser(args []string, initWidth, initHeight int) error {
 	var buttons []menuButton
 	hoveredButtonAction := ""
 	var scrollDrag scrollDragState
+	var lastKey string
 
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
 
@@ -1137,20 +1318,20 @@ func browser(args []string, initWidth, initHeight int) error {
 		}
 
 		if viewMode == "about" {
-			drawAboutPage(os.Stdout, termCols, effHeight)
+			drawAboutPage(os.Stdout, termCols, effHeight, style)
 			buttons = drawBottomMenu(os.Stdout, effHeight, "about", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions)
-			drawHintBar(os.Stdout, effHeight, labels["hint_about"], nil, style)
+			drawHintBar(os.Stdout, effHeight, labels["hint_about"], map[string]string{"last_key": lastKey}, style)
 			return
 		}
 
 		if viewMode == "settings" {
-			drawSettingsPage(os.Stdout, termCols, effHeight, controls, tempCfg, activeSettingsField)
+			drawSettingsPage(os.Stdout, termCols, effHeight, controls, tempCfg, activeSettingsField, labels)
 			buttons = drawBottomMenu(os.Stdout, effHeight, "settings", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions)
 			activeSetting := ""
 			if activeSettingsField >= 0 && activeSettingsField < len(controls) {
 				activeSetting = settingsFieldLabel(controls[activeSettingsField].Key)
 			}
-			drawHintBar(os.Stdout, effHeight, labels["hint_settings"], map[string]string{"active_setting": activeSetting}, style)
+			drawHintBar(os.Stdout, effHeight, labels["hint_settings"], map[string]string{"active_setting": activeSetting, "last_key": lastKey}, style)
 			return
 		}
 
@@ -1489,7 +1670,7 @@ func browser(args []string, initWidth, initHeight int) error {
 		if selectedIdx >= 0 && selectedIdx < len(items) {
 			activeFileName = items[selectedIdx].name
 		}
-		drawHintBar(os.Stdout, effHeight, labels["hint_browser"], map[string]string{"active_file": activeFileName}, style)
+		drawHintBar(os.Stdout, effHeight, labels["hint_browser"], map[string]string{"active_file": activeFileName, "last_key": lastKey}, style)
 	}
 
 	redraw()
@@ -1504,24 +1685,19 @@ func browser(args []string, initWidth, initHeight int) error {
 
 		case result := <-thumbResults:
 			thumbCache[result.key] = result.frames
-			// Auto-start one-shot animation for newly loaded multi-frame videos
-			// that are currently visible.
-			if len(result.frames) > 1 && currentVisibleKeys[result.key] {
-				if anim := animMap[result.key.path]; anim == nil || !anim.playing {
-					animMap[result.key.path] = &animState{frameIdx: 0, playing: true}
-				}
-			}
 			redraw()
-			startVisibleAnimations()
 
 		case <-animTicker.C:
+			// Start preview for the selected video after the hover delay.
+			if time.Since(selectionChangedAt) >= videoPreviewDelay {
+				startSelectedVideoAnim()
+			}
 			anyPlaying := false
 			for path, anim := range animMap {
 				if !anim.playing {
 					continue
 				}
 				anim.frameIdx++
-				// Find the cached frame count for this path to know when to stop.
 				for key := range currentVisibleKeys {
 					if key.path == path {
 						if frames := thumbCache[key]; anim.frameIdx >= len(frames) {
@@ -1590,13 +1766,48 @@ func browser(args []string, initWidth, initHeight int) error {
 			changed := false
 			shouldQuit := false
 
+			// viewKeyAction returns the action bound to tok in the current view's key map, if any.
+			viewKeyAction := func(tok string) (string, bool) {
+				name := viewMode
+				if viewMode == "grid" || viewMode == "preview" {
+					name = "browser"
+				}
+				action, ok := viewKeyMaps[name][tok]
+				return action, ok
+			}
+
+			// navigateToParent goes up one directory level, or quits if already at root.
+			navigateToParent := func() {
+				if currentDir == "" {
+					shouldQuit = true
+					return
+				}
+				isInitialDir := false
+				for _, init := range initialItems {
+					if init.isDir && filepath.Clean(init.path) == filepath.Clean(currentDir) {
+						isInitialDir = true
+						break
+					}
+				}
+				if isInitialDir {
+					currentDir = ""
+				} else {
+					currentDir = filepath.Dir(currentDir)
+				}
+				items = loadBrowserItems(currentDir, initialItems)
+				selectedIdx = 0
+				halfblock.ClearScreen(os.Stdout)
+				changed = true
+			}
+
 			processInput := func(tok string) {
-				if btn, col, row, release, ok := parseSGRMouse(tok); ok {
+				lastKey = inputSpec.EventName(inputSpec.Classify(tok))
+				if m, ok := inputSpec.ParseMouse(tok); ok {
 					// Button hover / click
-					if row == effHeight-1 {
+					if m.Row == effHeight-1 {
 						found := false
 						for _, b := range buttons {
-							if col >= b.col && col < b.col+b.width {
+							if m.Col >= b.col && m.Col < b.col+b.width {
 								if hoveredButtonAction != b.action {
 									hoveredButtonAction = b.action
 									changed = true
@@ -1616,16 +1827,16 @@ func browser(args []string, initWidth, initHeight int) error {
 
 					// View mode handlers
 					if viewMode == "about" {
-						if row == effHeight-1 && release {
+						if m.Row == effHeight-1 && m.Release {
 							for _, b := range buttons {
-								if col >= b.col && col < b.col+b.width {
+								if m.Col >= b.col && m.Col < b.col+b.width {
 									switch b.action {
 									case "go_back":
 										viewMode = "grid"
 										halfblock.ClearScreen(os.Stdout)
 										changed = true
 									case "open_website":
-										// not yet implemented
+										openWebsite(labels["website_url"])
 									case "quit":
 										shouldQuit = true
 									}
@@ -1636,24 +1847,26 @@ func browser(args []string, initWidth, initHeight int) error {
 					}
 
 					if viewMode == "settings" {
-						if row == effHeight-1 && release {
+						if m.Row == effHeight-1 && m.Release {
 							for _, b := range buttons {
-								if col >= b.col && col < b.col+b.width {
+								if m.Col >= b.col && m.Col < b.col+b.width {
 									switch b.action {
 									case "save_settings":
 										cfgHeight = tempCfg.MaxPreviewHeight
 										previewVideos = tempCfg.PreviewVideos
 										nVideoFrames = tempCfg.VideoFrames
+										videoPreviewDelay = time.Duration(tempCfg.VideoPreviewDelay) * time.Millisecond
 										viewMode = tempCfg.ViewMode
 										if viewMode == "settings" {
 											viewMode = "grid"
 										}
 										_ = saveConfig(Settings{
-											MaxPreviewHeight: cfgHeight,
-											ViewMode:         viewMode,
-											PreviewVideos:    previewVideos,
-											MaxJobs:          tempCfg.MaxJobs,
-											VideoFrames:      nVideoFrames,
+											MaxPreviewHeight:  cfgHeight,
+											ViewMode:          viewMode,
+											PreviewVideos:     previewVideos,
+											MaxJobs:           tempCfg.MaxJobs,
+											VideoFrames:       nVideoFrames,
+											VideoPreviewDelay: tempCfg.VideoPreviewDelay,
 										})
 										halfblock.ClearScreen(os.Stdout)
 										changed = true
@@ -1672,16 +1885,16 @@ func browser(args []string, initWidth, initHeight int) error {
 
 					// Scrollbar dragging logic
 					scrollbarCol := termCols - style.ScrollWidth + 1
-					if !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release {
-						if col >= scrollbarCol && col <= termCols && row >= marginTop+1 && row <= marginTop+gridRowsLimit {
+					if !m.IsScroll() && !m.IsDrag() && m.Button == 0 && !m.Release {
+						if m.Col >= scrollbarCol && m.Col <= termCols && m.Row >= marginTop+1 && m.Row <= marginTop+gridRowsLimit {
 							scrollDrag.active = true
-							scrollDrag.startY = row
+							scrollDrag.startY = m.Row
 						}
 					}
-					if sgrIsDrag(btn) && sgrButton(btn) == 0 && scrollDrag.active {
+					if m.IsDrag() && m.Button == 0 && scrollDrag.active {
 						totalRows := (len(items) + gridCols - 1) / gridCols
 						if totalRows > gridRows {
-							relativeRow := row - (marginTop + 1)
+							relativeRow := m.Row - (marginTop + 1)
 							targetRow := relativeRow * totalRows / gridRowsLimit
 							if targetRow < 0 {
 								targetRow = 0
@@ -1696,23 +1909,25 @@ func browser(args []string, initWidth, initHeight int) error {
 							changed = true
 						}
 					}
-					if !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && release {
+					if !m.IsScroll() && !m.IsDrag() && m.Button == 0 && m.Release {
 						scrollDrag.active = false
 					}
 
 					// Grid scroll wheel - scrolls by one row
-					if sgrIsScroll(btn) && !release {
-						if sgrScrollDir(btn) < 0 {
+					if m.IsScroll() && !m.Release {
+						if m.ScrollDir() < 0 {
 							selectedIdx = max(0, selectedIdx-gridCols)
 						} else {
 							selectedIdx = min(len(items)-1, selectedIdx+gridCols)
 						}
 						changed = true
-					} else if row == effHeight-1 && release {
+					} else if m.Row == effHeight-1 && m.Release {
 						// Controls button click
 						for _, b := range buttons {
-							if col >= b.col && col < b.col+b.width {
+							if m.Col >= b.col && m.Col < b.col+b.width {
 								switch b.action {
+								case "go_back":
+									navigateToParent()
 								case "nav_prev":
 									selectedIdx = max(0, selectedIdx-itemsPerPage)
 									changed = true
@@ -1756,8 +1971,8 @@ func browser(args []string, initWidth, initHeight int) error {
 					} else if !scrollDrag.active {
 						// Hover & click cells coordinates
 						marginTop := 1
-						c := col - 1
-						r := row - 1 - marginTop
+						c := m.Col - 1
+						r := m.Row - 1 - marginTop
 
 						gapX := 4
 						gapY := 2
@@ -1805,28 +2020,17 @@ func browser(args []string, initWidth, initHeight int) error {
 								}
 
 								// Execute navigation or view single image
-								if !sgrIsScroll(btn) && !sgrIsDrag(btn) && sgrButton(btn) == 0 && !release {
+								if !m.IsScroll() && !m.IsDrag() && m.Button == 0 && !m.Release {
 									targetItem := items[selectedIdx]
 									if targetItem.isDir {
 										if targetItem.name == ".." {
-											isInitialDir := false
-											for _, init := range initialItems {
-												if init.isDir && filepath.Clean(init.path) == filepath.Clean(currentDir) {
-													isInitialDir = true
-													break
-												}
-											}
-											if isInitialDir {
-												currentDir = ""
-											} else {
-												currentDir = filepath.Dir(currentDir)
-											}
+											navigateToParent()
 										} else {
 											currentDir = targetItem.path
+											items = loadBrowserItems(currentDir, initialItems)
+											selectedIdx = 0
+											halfblock.ClearScreen(os.Stdout)
 										}
-										items = loadBrowserItems(currentDir, initialItems)
-										selectedIdx = 0
-										halfblock.ClearScreen(os.Stdout)
 									} else {
 										if oldState != nil {
 											_ = term.Restore(fd, oldState)
@@ -1834,7 +2038,19 @@ func browser(args []string, initWidth, initHeight int) error {
 										fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l")
 										halfblock.ShowCursor(os.Stdout)
 
-										_ = interactiveWithChan(targetItem.path, initWidth, initHeight, inputs, style, labels, viewBtnRows)
+										if halfblock.IsVideo(targetItem.path) {
+											_ = interactiveVideo(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec)
+										} else {
+											_ = interactiveWithChan(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec)
+										}
+
+										// Propagate any quit signal that arrived while the viewer ran.
+										select {
+										case <-sigs:
+											shouldQuit = true
+											return
+										default:
+										}
 
 										oldState, err = term.MakeRaw(fd)
 										halfblock.HideCursor(os.Stdout)
@@ -1851,19 +2067,26 @@ func browser(args []string, initWidth, initHeight int) error {
 					// Keyboard events
 					if viewMode == "about" {
 						switch tok {
-						case "q", "Q", "\x1b", "a", "A":
-							viewMode = "grid"
-							halfblock.ClearScreen(os.Stdout)
-							changed = true
 						case "\x03":
 							shouldQuit = true
+						default:
+							if action, ok := viewKeyAction(tok); ok {
+								switch action {
+								case "go_back", "open_about":
+									viewMode = "grid"
+									halfblock.ClearScreen(os.Stdout)
+									changed = true
+								case "quit":
+									shouldQuit = true
+								}
+							}
 						}
 						return
 					}
 
 					if viewMode == "settings" {
 						switch tok {
-						case "\t":
+						case "\t": // Tab — cycle field (structural, not in spec)
 							activeSettingsField = (activeSettingsField + 1) % len(controls)
 							changed = true
 						case "\x1b[A": // ↑ increase
@@ -1876,117 +2099,53 @@ func browser(args []string, initWidth, initHeight int) error {
 								applySettingsDelta(controls[activeSettingsField], -1, &tempCfg)
 							}
 							changed = true
-						case "\x0d", "\x0a": // Enter — save
-							cfgHeight = tempCfg.MaxPreviewHeight
-							previewVideos = tempCfg.PreviewVideos
-							nVideoFrames = tempCfg.VideoFrames
-							viewMode = tempCfg.ViewMode
-							if viewMode == "settings" {
-								viewMode = "grid"
-							}
-							_ = saveConfig(Settings{
-								MaxPreviewHeight: cfgHeight,
-								ViewMode:         viewMode,
-								PreviewVideos:    previewVideos,
-								MaxJobs:          tempCfg.MaxJobs,
-								VideoFrames:      nVideoFrames,
-							})
-							halfblock.ClearScreen(os.Stdout)
-							changed = true
-						case "q", "Q", "\x1b", "c", "C": // Cancel
-							viewMode = "grid"
-							halfblock.ClearScreen(os.Stdout)
-							changed = true
 						case "\x03":
 							shouldQuit = true
+						default:
+							if action, ok := viewKeyAction(tok); ok {
+								switch action {
+								case "save_settings":
+									cfgHeight = tempCfg.MaxPreviewHeight
+									previewVideos = tempCfg.PreviewVideos
+									nVideoFrames = tempCfg.VideoFrames
+									viewMode = tempCfg.ViewMode
+									if viewMode == "settings" {
+										viewMode = "grid"
+									}
+									_ = saveConfig(Settings{
+										MaxPreviewHeight: cfgHeight,
+										ViewMode:         viewMode,
+										PreviewVideos:    previewVideos,
+										MaxJobs:          tempCfg.MaxJobs,
+										VideoFrames:      nVideoFrames,
+									})
+									halfblock.ClearScreen(os.Stdout)
+									changed = true
+								case "cancel_settings", "go_back":
+									viewMode = "grid"
+									halfblock.ClearScreen(os.Stdout)
+									changed = true
+								case "quit":
+									shouldQuit = true
+								}
+							}
 						}
 						return
 					}
 
 					// Grid view keyboard inputs
 					switch tok {
-					case "q", "Q", "\x1b", "\x03":
-						shouldQuit = true
-
-					case "a", "A":
-						viewMode = "about"
-						changed = true
-
-					case "s", "S":
-						tempCfg = Settings{
-							MaxPreviewHeight: cfgHeight,
-							ViewMode:         viewMode,
-							PreviewVideos:    previewVideos,
-							MaxJobs:          nWorkers,
-							VideoFrames:      nVideoFrames,
-						}
-						viewMode = "settings"
-						activeSettingsField = 0
-						changed = true
-
-					case "m", "M":
-						if viewMode == "grid" {
-							viewMode = "preview"
-						} else {
-							viewMode = "grid"
-						}
-						halfblock.ClearScreen(os.Stdout)
-						changed = true
-
-					case "+", "=":
-						cfgHeight = min(termRows, cfgHeight+1)
-						changed = true
-
-					case "-":
-						cfgHeight = max(10, cfgHeight-1)
-						changed = true
-
-					case "\x1b[D": // Left arrow
-						if selectedIdx > 0 {
-							selectedIdx--
-							changed = true
-						}
-
-					case "\x1b[C": // Right arrow
-						if selectedIdx < len(items)-1 {
-							selectedIdx++
-							changed = true
-						}
-
-					case "\x1b[A": // Up arrow
-						if selectedIdx >= gridCols {
-							selectedIdx -= gridCols
-							changed = true
-						}
-
-					case "\x1b[B": // Down arrow
-						if selectedIdx+gridCols < len(items) {
-							selectedIdx += gridCols
-							changed = true
-						}
-
-					case "\x0d", "\x0a", " ": // Enter or Space
+					case "\x0d", "\x0a", " ": // Enter or Space — open selected item (structural)
 						targetItem := items[selectedIdx]
 						if targetItem.isDir {
 							if targetItem.name == ".." {
-								isInitialDir := false
-								for _, init := range initialItems {
-									if init.isDir && filepath.Clean(init.path) == filepath.Clean(currentDir) {
-										isInitialDir = true
-										break
-									}
-								}
-								if isInitialDir {
-									currentDir = ""
-								} else {
-									currentDir = filepath.Dir(currentDir)
-								}
+								navigateToParent()
 							} else {
 								currentDir = targetItem.path
+								items = loadBrowserItems(currentDir, initialItems)
+								selectedIdx = 0
+								halfblock.ClearScreen(os.Stdout)
 							}
-							items = loadBrowserItems(currentDir, initialItems)
-							selectedIdx = 0
-							halfblock.ClearScreen(os.Stdout)
 						} else {
 							if oldState != nil {
 								_ = term.Restore(fd, oldState)
@@ -1995,9 +2154,9 @@ func browser(args []string, initWidth, initHeight int) error {
 							halfblock.ShowCursor(os.Stdout)
 
 							if halfblock.IsVideo(targetItem.path) {
-								_ = interactiveVideo(targetItem.path, initWidth, initHeight, inputs, style, labels, viewBtnRows)
+								_ = interactiveVideo(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec)
 							} else {
-								_ = interactiveWithChan(targetItem.path, initWidth, initHeight, inputs, style, labels, viewBtnRows)
+								_ = interactiveWithChan(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec)
 							}
 
 							// Propagate any quit signal that arrived while the viewer ran.
@@ -2015,13 +2174,74 @@ func browser(args []string, initWidth, initHeight int) error {
 						}
 						changed = true
 
-					case "\x1b[5~", "[": // Page Up
-						selectedIdx = max(0, selectedIdx-itemsPerPage)
-						changed = true
-
-					case "\x1b[6~", "]": // Page Down
-						selectedIdx = min(len(items)-1, selectedIdx+itemsPerPage)
-						changed = true
+					default:
+						// Spec-driven key dispatch — action names from spec/buttons.yaml keys: field.
+						action, ok := viewKeyAction(tok)
+						if !ok {
+							break
+						}
+						switch action {
+						case "quit":
+							shouldQuit = true
+						case "go_back":
+							navigateToParent()
+						case "open_about":
+							viewMode = "about"
+							changed = true
+						case "open_settings":
+							tempCfg = Settings{
+								MaxPreviewHeight: cfgHeight,
+								ViewMode:         viewMode,
+								PreviewVideos:    previewVideos,
+								MaxJobs:          nWorkers,
+								VideoFrames:      nVideoFrames,
+							}
+							viewMode = "settings"
+							activeSettingsField = 0
+							changed = true
+						case "toggle_mode":
+							if viewMode == "grid" {
+								viewMode = "preview"
+							} else {
+								viewMode = "grid"
+							}
+							halfblock.ClearScreen(os.Stdout)
+							changed = true
+						case "inc_zoom":
+							cfgHeight = min(termRows, cfgHeight+1)
+							changed = true
+						case "dec_zoom":
+							cfgHeight = max(10, cfgHeight-1)
+							changed = true
+						case "nav_prev":
+							if selectedIdx > 0 {
+								selectedIdx--
+								changed = true
+							}
+						case "nav_next":
+							if selectedIdx < len(items)-1 {
+								selectedIdx++
+								changed = true
+							}
+						case "nav_page_prev":
+							selectedIdx = max(0, selectedIdx-itemsPerPage)
+							changed = true
+						case "nav_page_next":
+							selectedIdx = min(len(items)-1, selectedIdx+itemsPerPage)
+							changed = true
+						case "nav_up":
+							if selectedIdx >= gridCols {
+								selectedIdx -= gridCols
+								changed = true
+							}
+						case "nav_down":
+							if selectedIdx+gridCols < len(items) {
+								selectedIdx += gridCols
+								changed = true
+							}
+						case "open_website":
+							openWebsite(labels["website_url"])
+						}
 					}
 				}
 			}
@@ -2048,24 +2268,27 @@ func browser(args []string, initWidth, initHeight int) error {
 
 			if changed {
 				redraw()
-				startVisibleAnimations()
 				if selectedIdx != prevSelectedIdx {
 					prevSelectedIdx = selectedIdx
-					triggerSelectedVideoAnim()
+					selectionChangedAt = time.Now()
 				}
 			}
 		}
 	}
 }
 
-func drawAboutPage(w io.Writer, termCols, termRows int) {
+func drawAboutPage(w io.Writer, termCols, termRows int, style *StyleConfig) {
 	halfblock.ClearScreen(w)
 
 	about := getAboutView()
 	lines := strings.Split(about.Content, "\n")
 
+	titleAnsi := styleFG(style.PageTitleFg, "\x1b[36m")
+	if style.PageTitleBold {
+		titleAnsi = "\x1b[1m" + titleAnsi
+	}
 	titleLine := "=== " + about.Title + " ==="
-	fmt.Fprintf(w, "\x1b[2;%dH\x1b[1;36m%s\x1b[m", max(1, (termCols-len(titleLine))/2), titleLine)
+	fmt.Fprintf(w, "\x1b[2;%dH%s%s\x1b[m", max(1, (termCols-len(titleLine))/2), titleAnsi, titleLine)
 
 	for i, line := range lines {
 		row := 4 + i
@@ -2080,7 +2303,7 @@ func drawAboutPage(w io.Writer, termCols, termRows int) {
 	}
 }
 
-func drawSettingsPage(w io.Writer, termCols, termRows int, controls []ControlSpec, temp Settings, activeField int) {
+func drawSettingsPage(w io.Writer, termCols, termRows int, controls []ControlSpec, temp Settings, activeField int, labels map[string]string) {
 	halfblock.ClearScreen(w)
 
 	type field struct{ label, value string }
@@ -2108,12 +2331,16 @@ func drawSettingsPage(w io.Writer, termCols, termRows int, controls []ControlSpe
 		fields[i] = field{settingsFieldLabel(c.Key), value}
 	}
 
-	lines := []string{
-		"=================================",
-		"          CATI SETTINGS          ",
-		"=================================",
-		"",
+	lbl := func(key, fallback string) string {
+		if v := labels[key]; v != "" {
+			return v
+		}
+		return fallback
 	}
+	title := lbl("settings_title", "CATI SETTINGS")
+	sep := strings.Repeat("=", max(len(title)+4, 33))
+	centeredTitle := fmt.Sprintf("%*s%s", (len(sep)-len(title))/2, "", title)
+	lines := []string{sep, centeredTitle, sep, ""}
 	for i, f := range fields {
 		if i == activeField {
 			lines = append(lines, fmt.Sprintf("  > %-16s [ %s ]  (Selected)", f.label+":", f.value))
@@ -2123,11 +2350,11 @@ func drawSettingsPage(w io.Writer, termCols, termRows int, controls []ControlSpe
 	}
 	lines = append(lines,
 		"",
-		"  Press Tab to switch active setting.",
-		"  Use ↑ / ↓ to change value.",
-		"  Press Enter to Save, Esc to Cancel.",
+		"  "+lbl("settings_hint_tab", "Press Tab to switch active setting."),
+		"  "+lbl("settings_hint_adjust", "Use ↑ / ↓ to change value."),
+		"  "+lbl("settings_hint_save", "Press Enter to Save, Esc to Cancel."),
 		"",
-		"=================================",
+		sep,
 	)
 
 	for i, line := range lines {
@@ -2140,21 +2367,48 @@ func drawSettingsPage(w io.Writer, termCols, termRows int, controls []ControlSpe
 	}
 }
 
-// loadViewButtonRows reads the button-bar row template for each view from spec/views.yaml.
-// A row is treated as a button row when it contains { } expressions but no hint_ references.
+// loadViewButtonRows reads the visible button-bar row template for each view from spec/views.yaml.
+// Only `row:` entries are included; `hidden_keys:` entries are excluded (use loadViewKeyRows for those).
 func loadViewButtonRows() map[string]string {
-	defaults := map[string]string{
-		"browser":      "{ prev } { next } | { settings } { about } | { quit }",
+	return loadViewRowYaml(false)
+}
+
+// loadViewKeyRows reads both visible and hidden button rows for key-map building.
+// Includes both `row:` and `hidden_keys:` entries concatenated per view.
+func loadViewKeyRows() map[string]string {
+	return loadViewRowYaml(true)
+}
+
+func loadViewRowYaml(includeHidden bool) map[string]string {
+	visibleDefaults := map[string]string{
+		"browser":      "{ prev } { next } { back } | { settings } { mode } { about } | { quit }",
 		"settings":     "{ save } { cancel } | { quit }",
-		"about":        "{ back } | { quit }",
-		"image_viewer": "{ zoom_in } { zoom_out } { back } { quit }",
-		"video_player": "{ zoom_in } { zoom_out } { if(playing, pause, play) } { back } { quit }",
+		"about":        "{ back } { website } | { quit }",
+		"image_viewer": "{ zoom_in } { zoom_out } { toggle_pan } { copy_viewport } { back } { quit }",
+		"video_player": "{ zoom_in } { zoom_out } { if(playing, pause, play) } { copy_viewport } { back } { quit }",
 	}
-	data, err := os.ReadFile("spec/views.yaml")
+	hiddenDefaults := map[string]string{
+		"browser": "{ nav_up } { nav_down } { page_prev } { page_next }",
+	}
+	data, err := specRead("views.yaml")
 	if err != nil {
-		return defaults
+		result := map[string]string{}
+		for k, v := range visibleDefaults {
+			result[k] = v
+		}
+		if includeHidden {
+			for k, v := range hiddenDefaults {
+				if existing, ok := result[k]; ok {
+					result[k] = existing + " " + v
+				} else {
+					result[k] = v
+				}
+			}
+		}
+		return result
 	}
-	result := map[string]string{}
+	visible := map[string]string{}
+	hidden := map[string]string{}
 	currentView := ""
 	inViews := false
 	for _, line := range strings.Split(string(data), "\n") {
@@ -2169,24 +2423,49 @@ func loadViewButtonRows() map[string]string {
 		if !inViews {
 			continue
 		}
-		// View name: exactly 2-space indent, ends with ":"
 		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
 			currentView = strings.TrimSuffix(trimmed, ":")
 			continue
 		}
-		// Row entry: 4-space indent + "- row: "
-		if currentView != "" && strings.HasPrefix(line, "    - row: ") {
-			tpl := strings.Trim(strings.TrimPrefix(line, "    - row: "), "\"'")
-			if !strings.Contains(tpl, "hint_") {
-				if _, exists := result[currentView]; !exists {
-					result[currentView] = tpl
+		if currentView != "" {
+			if strings.HasPrefix(line, "    - row: ") {
+				tpl := strings.Trim(strings.TrimPrefix(line, "    - row: "), "\"'")
+				if !strings.Contains(tpl, "hint_") {
+					if _, exists := visible[currentView]; !exists {
+						visible[currentView] = tpl
+					}
+				}
+			} else if includeHidden && strings.HasPrefix(line, "    - hidden_keys: ") {
+				tpl := strings.Trim(strings.TrimPrefix(line, "    - hidden_keys: "), "\"'")
+				if existing, ok := hidden[currentView]; ok {
+					hidden[currentView] = existing + " " + tpl
+				} else {
+					hidden[currentView] = tpl
 				}
 			}
 		}
 	}
-	for k, v := range defaults {
-		if _, exists := result[k]; !exists {
-			result[k] = v
+	for k, v := range visibleDefaults {
+		if _, exists := visible[k]; !exists {
+			visible[k] = v
+		}
+	}
+	result := map[string]string{}
+	for k, v := range visible {
+		result[k] = v
+	}
+	if includeHidden {
+		for k, v := range hiddenDefaults {
+			if _, exists := hidden[k]; !exists {
+				hidden[k] = v
+			}
+		}
+		for k, v := range hidden {
+			if existing, ok := result[k]; ok {
+				result[k] = existing + " " + v
+			} else {
+				result[k] = v
+			}
 		}
 	}
 	return result

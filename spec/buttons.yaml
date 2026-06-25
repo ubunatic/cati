@@ -10,63 +10,124 @@ buttons:
     text: "◀ Prev"
     style: secondary
     action: nav_prev
+    keys: ["<left>"]
 
   next:
     text: "Next ▶"
     style: secondary
     action: nav_next
+    keys: ["<right>"]
+
+  page_prev:
+    text: ""
+    style: secondary
+    action: nav_page_prev
+    keys: ["<pgup>"]
+
+  page_next:
+    text: ""
+    style: secondary
+    action: nav_page_next
+    keys: ["<pgdn>"]
 
   settings:
     text: "{ 'S' | bold | light }ettings"
     style: secondary
     action: open_settings
+    keys: ["s", "S"]
 
   about:
     text: "{ 'A' | bold | light }bout"
     style: secondary
     action: open_about
+    keys: ["a", "A"]
 
   quit:
     text: "{ 'Q' | bold | light }uit"
     style: danger
     action: quit
+    keys: ["q", "Q", "<c-c>"]
 
   back:
-    text: "◀ Back"
+    text: "↩ Back"
     style: secondary
     action: go_back
+    keys: ["<esc>", "<bs>"]
 
   mode:
     text: "{ 'M' | bold | light }ode"
     style: secondary
     action: toggle_mode
+    keys: ["m", "M"]
 
   zoom_in:
     text: "+ Zoom In"
     style: secondary
     action: inc_zoom
+    keys: ["+", "="]
 
   zoom_out:
     text: "- Zoom Out"
     style: secondary
     action: dec_zoom
+    keys: ["-"]
 
   play:
     text: "▶︎ Play"
     style: primary
-    action: play_video
+    action: toggle_play_pause
+    keys: ["<space>"]
 
   pause:
     text: "⏸︎ Pause"
     style: primary
-    action: pause_video
+    action: toggle_play_pause
+    keys: ["<space>"]
 
   save:
     text: "✔ Save"
     style: primary
     action: save_settings
+    keys: ["<cr>"]
 
   cancel:
     text: "✖ Cancel"
     style: secondary
     action: cancel_settings
+    keys: ["<esc>", "<bs>"]
+
+  website:
+    text: "🌐 Website"
+    style: secondary
+    action: open_website
+    keys: []
+
+  nav_up:
+    text: ""
+    style: secondary
+    action: nav_up
+    keys: ["<up>"]
+
+  nav_down:
+    text: ""
+    style: secondary
+    action: nav_down
+    keys: ["<down>"]
+
+  toggle_pan:
+    text: "⊹ Pan"
+    style: secondary
+    action: toggle_pan
+    keys: ["<space>"]
+
+  copy_viewport:
+    text: "⎘ Copy"
+    style: secondary
+    action: copy_viewport
+    keys: ["c", "C"]
+
+  render:
+    text: "{ 'R' | bold | light }ender"
+    style: secondary
+    action: cycle_render
+    keys: ["r", "R"]

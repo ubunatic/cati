@@ -4,12 +4,14 @@ import (
 	"image"
 	"image/color"
 	"testing"
+
+	"codeberg.org/ubunatic/cati/internal/input"
 )
 
 // ── interactive (error paths) ─────────────────────────────────────────────────
 
 func TestInteractive_MissingFile(t *testing.T) {
-	err := interactive("nonexistent.png", 0, 0)
+	err := interactive("nonexistent.png", 0, 0, renderCfg{})
 	if err == nil {
 		t.Error("expected error for missing file, got nil")
 	}
@@ -41,9 +43,10 @@ func TestFitPixelDims(t *testing.T) {
 	}
 }
 
-// ── parseSGRMouse ─────────────────────────────────────────────────────────────
+// ── mouse parsing (via input.Spec) ───────────────────────────────────────────
 
 func TestParseSGRMouse(t *testing.T) {
+	s := input.DefaultSpec()
 	tests := []struct {
 		name             string
 		input            string
@@ -68,51 +71,57 @@ func TestParseSGRMouse(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			btn, col, row, release, ok := parseSGRMouse(tc.input)
+			m, ok := s.ParseMouse(tc.input)
 			if ok != tc.wantOK {
 				t.Fatalf("ok=%v want %v", ok, tc.wantOK)
 			}
 			if !ok {
 				return
 			}
-			if btn != tc.wantBtn || col != tc.wantCol || row != tc.wantRow || release != tc.wantRelease {
+			if m.Btn != tc.wantBtn || m.Col != tc.wantCol || m.Row != tc.wantRow || m.Release != tc.wantRelease {
 				t.Errorf("got btn=%d col=%d row=%d release=%v, want btn=%d col=%d row=%d release=%v",
-					btn, col, row, release, tc.wantBtn, tc.wantCol, tc.wantRow, tc.wantRelease)
+					m.Btn, m.Col, m.Row, m.Release, tc.wantBtn, tc.wantCol, tc.wantRow, tc.wantRelease)
 			}
 		})
 	}
 }
 
-// ── SGR button predicates ─────────────────────────────────────────────────────
+// ── SGR button predicates (via input.MouseEvent methods) ─────────────────────
 
 func TestSGRPredicates(t *testing.T) {
+	s := input.DefaultSpec()
 	type row struct {
-		btn      int
+		tok      string
 		isScroll bool
 		isDrag   bool
 		button   int
 	}
 	tests := []row{
-		{0, false, false, 0},   // left click
-		{1, false, false, 1},   // middle click
-		{2, false, false, 2},   // right click
-		{32, false, true, 0},   // left drag
-		{33, false, true, 1},   // middle drag
-		{34, false, true, 2},   // right drag
-		{64, true, false, 0},   // scroll up
-		{65, true, false, 1},   // scroll down
-		{68, true, false, 0},   // scroll up + shift
-		{36, false, true, 0},   // left drag + shift (32+4)
+		{"\x1b[<0;1;1M", false, false, 0},    // left click
+		{"\x1b[<1;1;1M", false, false, 1},    // middle click
+		{"\x1b[<2;1;1M", false, false, 2},    // right click
+		{"\x1b[<32;1;1M", false, true, 0},    // left drag
+		{"\x1b[<33;1;1M", false, true, 1},    // middle drag
+		{"\x1b[<34;1;1M", false, true, 2},    // right drag
+		{"\x1b[<64;1;1M", true, false, 0},    // scroll up
+		{"\x1b[<65;1;1M", true, false, 1},    // scroll down
+		{"\x1b[<68;1;1M", true, false, 0},    // scroll up + shift
+		{"\x1b[<36;1;1M", false, true, 0},    // left drag + shift (32+4)
 	}
 	for _, tc := range tests {
-		if got := sgrIsScroll(tc.btn); got != tc.isScroll {
-			t.Errorf("sgrIsScroll(%d) = %v, want %v", tc.btn, got, tc.isScroll)
+		m, ok := s.ParseMouse(tc.tok)
+		if !ok {
+			t.Errorf("ParseMouse(%q) failed", tc.tok)
+			continue
 		}
-		if got := sgrIsDrag(tc.btn); got != tc.isDrag {
-			t.Errorf("sgrIsDrag(%d) = %v, want %v", tc.btn, got, tc.isDrag)
+		if got := m.IsScroll(); got != tc.isScroll {
+			t.Errorf("IsScroll(%q) = %v, want %v", tc.tok, got, tc.isScroll)
 		}
-		if got := sgrButton(tc.btn); got != tc.button {
-			t.Errorf("sgrButton(%d) = %v, want %v", tc.btn, got, tc.button)
+		if got := m.IsDrag(); got != tc.isDrag {
+			t.Errorf("IsDrag(%q) = %v, want %v", tc.tok, got, tc.isDrag)
+		}
+		if got := m.Button; got != tc.button {
+			t.Errorf("Button(%q) = %v, want %v", tc.tok, got, tc.button)
 		}
 	}
 }

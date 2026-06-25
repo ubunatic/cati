@@ -34,7 +34,7 @@ All user-facing configuration, styling, labelling, and layout lives in `spec/`. 
 | `spec/views.yaml` | `schemas/views.schema.json` | Declarative button-row layouts per view |
 | `spec/theme.yaml` | `schemas/theme.schema.json` | Semantic style tokens (primary, secondary, active, …) |
 | `spec/controls.yaml` | `schemas/controls.schema.json` | Tunable runtime controls with get/set action names |
-| `spec/config.yaml` | `schemas/config.schema.json` | App config defaults |
+| `spec/config.yaml` | `schemas/config.schema.json` | App config defaults — read by `loadSpecConfigDefaults()` as the base layer before user config |
 | `spec/about.yaml` | — | About page content (parsed by `parseYamlView`) |
 
 ### 3.2 Color values
@@ -58,21 +58,26 @@ grid:          # item_fg/bg, selected_fg/bg/bold/marker, image_border
 scroll_bar:    # thumb_char, rail_char, width, thumb_fg, rail_fg, rail_bg
 ```
 
-No hex colors are hardwired in Go. `loadStyle()` only has structural defaults (chars, booleans). Every color comes from `spec/style.yaml`.
+No hex colors are hardwired in Go. `loadStyle()` only has structural defaults (chars, booleans). Every color comes from `spec/style.yaml`. The `page_title` section (fg/bold) styles the title line in `drawAboutPage` and `drawSettingsPage`.
 
 ### 3.4 `spec/labels.yaml` — non-button strings only
 
 Button text **does not** live here. It lives in `spec/buttons.yaml`.
 
 ```yaml
-app_name:       # used in header template as {app_name}
-header:         # header bar template (supports { key | mod } expressions)
-folder_icon:    # icon prefix for directory entries
-file_icon:      # icon prefix for files in list/preview mode
-hint_browser:   # hint bar text — supports {active_file} template var
-hint_settings:  # hint bar text — supports {active_setting} template var
-hint_about:     # hint bar text for about view
-hint_viewer:    # hint bar text for image/video viewer
+app_name:           # used in header template as {app_name}
+header:             # header bar template (supports { key | mod } expressions)
+folder_icon:        # icon prefix for directory entries
+file_icon:          # icon prefix for files in list/preview mode
+hint_browser:       # hint bar text — supports {active_file} template var
+hint_settings:      # hint bar text — supports {active_setting} template var
+hint_about:         # hint bar text for about view
+hint_viewer:        # hint bar text for image/video viewer
+settings_title:     # header shown at top of settings page
+settings_hint_tab:  # settings page Tab-to-cycle instruction
+settings_hint_adjust: # settings page ↑/↓ instruction
+settings_hint_save: # settings page Enter/Esc instruction
+website_url:        # URL opened by the open_website action
 ```
 
 ### 3.5 `spec/buttons.yaml` — button definitions (single source)
@@ -82,14 +87,20 @@ Cap characters come from `style.yaml buttons.left_cap`/`right_cap` and are appli
 ```yaml
 buttons:
   quit:
-    text: "✖ Quit"
+    text: "{ 'Q' | bold | light }uit"
     style: danger        # theme token (not yet wired to rendering)
     action: quit         # Go action name matched in button click handler
+    keys: ["q", "Q", "\x03"]  # keyboard shortcuts that fire this action
   settings:
-    text: "⚙ { 'S' | bold | light }ettings"  # bold keyboard shortcut letter
+    text: "{ 'S' | bold | light }ettings"
     style: secondary
     action: open_settings
+    keys: ["s", "S"]
 ```
+
+The `keys:` field lists key sequences (escape sequences as Go string literals) that trigger the same action as clicking the button. `loadKeyActions()` builds a `map[string]string` (key → action name) from this field. In the grid keyboard handler these drive a spec-dispatched `default:` case, replacing the previously hardcoded character switch arms.
+
+**Context-specific keys** (Escape for go_back/quit depending on view, Enter to open files, Space, arrow keys, Tab) are not in `keys:` — they stay hardcoded in Go because they change meaning with view context.
 
 The flow: `loadButtons` → merged into `labels` map at startup → `drawBottomMenu` reads from `labels[key]`.
 

@@ -26,7 +26,7 @@ func TestPlay_MissingVideoFile(t *testing.T) {
 }
 
 func TestPlay_MixedVideoAndImage(t *testing.T) {
-	err := playVideos([]string{"nonexistent.mp4", "../testdata/solid_red_4x4.png"}, 0, 0, 0)
+	err := playVideos([]string{"nonexistent.mp4", "testdata/solid_red_4x4.png"}, 0, 0, 0)
 	if err == nil {
 		t.Error("expected error for mixed video+image paths, got nil")
 	}

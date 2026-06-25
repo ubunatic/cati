@@ -1,0 +1,121 @@
+# yaml-language-server: $schema=./schemas/input.schema.json
+# Cati Input Spec — terminal input state machine.
+# Single source of truth for all raw terminal input parsing.
+# Go loaders must not duplicate or shadow these values.
+$schema: "./schemas/input.schema.json"
+
+input:
+  # Named key aliases: human-readable name → terminal escape sequence.
+  # Values use \xNN notation; the Go loader interprets them.
+  # ctrl-key aliases (c-a .. c-z) are derived from ctrl_pattern below.
+  key_aliases:
+    esc: "\x1b"
+    escape: "\x1b"
+    bs: "\x7f"
+    backspace: "\x7f"
+    cr: "\x0d"
+    enter: "\x0d"
+    return: "\x0d"
+    lf: "\x0a"
+    nl: "\x0a"
+    space: " "
+    tab: "\x09"
+    del: "\x1b[3~"
+    delete: "\x1b[3~"
+    up: "\x1b[A"
+    down: "\x1b[B"
+    right: "\x1b[C"
+    left: "\x1b[D"
+    pgup: "\x1b[5~"
+    pageup: "\x1b[5~"
+    pgdn: "\x1b[6~"
+    pagedown: "\x1b[6~"
+    home: "\x1b[H"
+    end: "\x1b[F"
+    f1: "\x1bOP"
+    f2: "\x1bOQ"
+    f3: "\x1bOR"
+    f4: "\x1bOS"
+    f5: "\x1b[15~"
+    f6: "\x1b[17~"
+    f7: "\x1b[18~"
+    f8: "\x1b[19~"
+    f9: "\x1b[20~"
+    f10: "\x1b[21~"
+    f11: "\x1b[23~"
+    f12: "\x1b[24~"
+
+  # ctrl_pattern describes how <c-X> aliases are derived.
+  # <c-a> = 0x01, <c-b> = 0x02, ..., <c-z> = 0x1a
+  ctrl_pattern:
+    prefix: "c-"
+    base_char: "a"
+    base_code: 1
+
+  # OS signals that produce input events.
+  signals:
+    - name: SIGINT
+      number: 2
+      event: quit
+    - name: SIGTERM
+      number: 15
+      event: quit
+    - name: SIGWINCH
+      number: 28
+      event: resize
+
+  # Terminal escape sequences that produce non-key events.
+  terminal_sequences:
+    - seq: "\x1b[I"
+      event: focus
+    - seq: "\x1b[O"
+      event: defocus
+
+  # SGR 1006 extended mouse protocol.
+  mouse:
+    prefix: "\x1b[<"
+    press_suffix: "M"
+    release_suffix: "m"
+    enable_button: "\x1b[?1002h\x1b[?1006h"
+    enable_motion: "\x1b[?1003h\x1b[?1006h"
+    disable_button: "\x1b[?1002l\x1b[?1006l"
+    disable_motion: "\x1b[?1003l\x1b[?1006l"
+    btn_button_mask: 3
+    btn_shift_mask: 4
+    btn_meta_mask: 8
+    btn_ctrl_mask: 16
+    btn_motion_flag: 32
+    btn_scroll_flag: 64
+    # Button field value 3 (bits 0-1 both set) means no button held.
+    # Combined with the motion flag this signals a pure mouse move.
+    # Emitted only when all-motion tracking is enabled (enable_motion).
+    btn_no_button: 3
+
+  # Tokenizer: ordered rules applied to raw bytes.
+  # First matching rule wins. The Go tokenizer must follow this order exactly.
+  tokenizer:
+    rules:
+      - name: sgr_mouse
+        match: starts_with
+        prefix: "\x1b[<"
+        scan_until: "Mm"
+        emit: mouse
+
+      - name: csi_sequence
+        match: starts_with
+        prefix: "\x1b["
+        scan_class: alpha_tilde
+        emit: key
+
+      - name: bare_escape
+        match: starts_with
+        prefix: "\x1b"
+        emit: key
+
+      - name: utf8_multibyte
+        match: utf8_lead
+        emit: key
+
+      - name: any_char
+        match: any
+        emit: key

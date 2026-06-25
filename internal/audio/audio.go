@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // Info describes the audio stream found in a media file.
@@ -123,6 +124,22 @@ func Open(ctx context.Context, path string) (*Player, error) {
 func (p *Player) Stop() {
 	_ = p.cmd.Process.Kill()
 	<-p.done
+}
+
+// Pause suspends playback by sending SIGSTOP to the ffplay process.
+func (p *Player) Pause() {
+	if p == nil || p.cmd.Process == nil {
+		return
+	}
+	_ = p.cmd.Process.Signal(syscall.SIGSTOP)
+}
+
+// Resume resumes a suspended player by sending SIGCONT.
+func (p *Player) Resume() {
+	if p == nil || p.cmd.Process == nil {
+		return
+	}
+	_ = p.cmd.Process.Signal(syscall.SIGCONT)
 }
 
 // Done returns a channel that is closed when playback finishes naturally or

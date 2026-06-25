@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"image"
-	"math"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"codeberg.org/ubunatic/cati/internal/audio"
 	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"golang.org/x/term"
 )
@@ -130,7 +128,7 @@ func playImages(paths []string, fps, width, height int) error {
 
 // ── video streaming mode ──────────────────────────────────────────────────────
 
-// playVideos streams one or more video files sequentially, looping forever.
+// playVideos streams one or more video files sequentially, playing each once.
 // All paths must be video files.
 func playVideos(paths []string, fps, width, height int) error {
 	// Validate: all paths must be video files.
@@ -175,44 +173,19 @@ func playVideos(paths []string, fps, width, height int) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// openAudio starts audio playback for path, if the file has an audio stream
-	// and the required binaries are available.  Returns nil silently on failure
-	// so video playback continues without audio rather than aborting.
-	openAudio := func(path string) *audio.Player {
-		ok, err := audio.HasAudio(path)
-		if err != nil || !ok {
-			return nil
-		}
-		p, err := audio.Open(ctx, path)
-		if err != nil {
-			return nil
-		}
-		return p
-	}
-
-	stopAudio := func(p *audio.Player) {
-		if p != nil {
-			p.Stop()
-		}
-	}
-
 	// index into paths; restartStream opens a fresh stream for paths[videoIdx].
 	videoIdx := 0
-	frames, cleanup, err := halfblock.OpenVideoStream(ctx, paths[videoIdx])
+	frames, cleanup, err := halfblock.OpenVideoStream(ctx, paths[videoIdx], displayFPS)
 	if err != nil {
 		return fmt.Errorf("open video stream: %w", err)
 	}
 	defer cleanup()
 
-	audioPlayer := openAudio(paths[videoIdx])
+	audioPlayer := openAudio(ctx, paths[videoIdx])
 	defer stopAudio(audioPlayer)
 
 	var lastFrame image.Image
-	// consecutiveFailures counts streams that closed without producing any
-	// frames at all.  A stream that finishes normally resets the counter so
-	// playback loops indefinitely.  Only bail out when every path in the list
-	// has failed consecutively — this means all sources are broken.
-	consecutiveFailures := 0
+	failedVideos := 0
 	currentVideoHadFrames := false
 
 	for {
@@ -222,56 +195,51 @@ func playVideos(paths []string, fps, width, height int) error {
 		case <-sigs:
 			return nil
 
-		case img, ok := <-frames:
-			if !ok {
-				// Current stream ended (normally or with error).
-				cleanup()
-				stopAudio(audioPlayer)
-				if currentVideoHadFrames {
-					consecutiveFailures = 0
-				} else {
-					consecutiveFailures++
-					if consecutiveFailures >= len(paths) {
+		case <-ticker.C:
+			// Pull exactly one frame per tick so playback advances at displayFPS.
+			// A non-blocking inner select avoids stalling the ticker when ffmpeg
+			// hasn't produced a frame yet.
+			select {
+			case img, ok := <-frames:
+				if !ok {
+					// This video ended.
+					cleanup()
+					stopAudio(audioPlayer)
+					if !currentVideoHadFrames {
+						failedVideos++
+					}
+					videoIdx++
+					if videoIdx >= len(paths) {
+						return nil // played every video once
+					}
+					if failedVideos >= len(paths) {
 						return fmt.Errorf("failed to decode any frames from video stream(s)")
 					}
+					currentVideoHadFrames = false
+					frames, cleanup, err = halfblock.OpenVideoStream(ctx, paths[videoIdx], displayFPS)
+					if err != nil {
+						return fmt.Errorf("open video stream: %w", err)
+					}
+					audioPlayer = openAudio(ctx, paths[videoIdx])
+					continue
 				}
-				videoIdx = (videoIdx + 1) % len(paths)
-				currentVideoHadFrames = false
-				frames, cleanup, err = halfblock.OpenVideoStream(ctx, paths[videoIdx])
-				if err != nil {
-					return fmt.Errorf("open video stream: %w", err)
+				currentVideoHadFrames = true
+				if cols > 0 || rows > 0 {
+					img = halfblock.ScaleToFit(img, cols, rows)
 				}
-				audioPlayer = openAudio(paths[videoIdx])
-				continue
+				lastFrame = img
+			default:
+				// No frame ready — keep showing the current frame.
 			}
-			currentVideoHadFrames = true
-			// Scale the incoming frame to fit the terminal.
-			if cols > 0 || rows > 0 {
-				img = halfblock.ScaleToFit(img, cols, rows)
-			}
-			lastFrame = img
 
-		case <-ticker.C:
 			if lastFrame == nil {
-				continue // no frame yet
+				continue
 			}
 			halfblock.CursorHome(os.Stdout)
 			if err := halfblock.Render(os.Stdout, lastFrame); err != nil {
 				return err
 			}
 			halfblock.EraseDown(os.Stdout)
-
-			// Drop stale buffered frames to stay in sync with the ticker.
-			// This prevents the display from lagging behind the decode goroutine.
-			n := int(math.Max(0, float64(len(frames)-1)))
-			for range n {
-				if img, ok := <-frames; ok {
-					if cols > 0 || rows > 0 {
-						img = halfblock.ScaleToFit(img, cols, rows)
-					}
-					lastFrame = img
-				}
-			}
 		}
 	}
 }

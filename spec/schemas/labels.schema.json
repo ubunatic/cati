@@ -14,6 +14,11 @@
     "hint_browser":  { "type": "string", "description": "Hint bar text for the main browser view" },
     "hint_settings": { "type": "string", "description": "Hint bar text for the settings view" },
     "hint_about":    { "type": "string", "description": "Hint bar text for the about view" },
-    "hint_viewer":   { "type": "string", "description": "Hint bar text for the image/video viewer" }
+    "hint_viewer":   { "type": "string", "description": "Hint bar text for the image/video viewer" },
+    "settings_title":        { "type": "string", "description": "Header shown at the top of the settings page" },
+    "settings_hint_tab":     { "type": "string", "description": "Settings page instruction for cycling fields" },
+    "settings_hint_adjust":  { "type": "string", "description": "Settings page instruction for adjusting a value" },
+    "settings_hint_save":    { "type": "string", "description": "Settings page instruction for saving/cancelling" },
+    "website_url":           { "type": "string", "description": "URL opened by the open_website action" }
   }
 }

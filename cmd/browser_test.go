@@ -2,56 +2,47 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 )
 
 func TestBrowser_DrawBottomMenu(t *testing.T) {
 	var buf bytes.Buffer
+	style := loadStyle()
 	labels := loadLabels()
+	for k, v := range loadButtons(style.BtnLeftCap, style.BtnRightCap) {
+		labels[k] = v
+	}
 	rows := loadViewButtonRows()
+	btnActions := loadButtonActions()
 
-	// Test standard grid buttons (5 buttons: prev, next, settings, about, quit)
-	btns := drawBottomMenu(&buf, 24, "grid", "", nil, labels, rows, nil, nil)
-	if len(btns) != 5 {
-		t.Errorf("expected 5 buttons in grid view, got %d", len(btns))
+	cases := []struct {
+		view    string
+		actions []string
+	}{
+		// browser: prev next back | settings mode about | quit
+		{"grid", []string{"nav_prev", "nav_next", "go_back", "open_settings", "toggle_mode", "open_about", "quit"}},
+		// about: back website | quit
+		{"about", []string{"go_back", "open_website", "quit"}},
+		// settings: save cancel | quit
+		{"settings", []string{"save_settings", "cancel_settings", "quit"}},
 	}
-	expectedActions := []string{"prev", "next", "settings", "about", "quit"}
-	for i, b := range btns {
-		if b.action != expectedActions[i] {
-			t.Errorf("btn[%d] action = %q, want %q", i, b.action, expectedActions[i])
+	for _, tc := range cases {
+		btns := drawBottomMenu(&buf, 24, tc.view, "", style, labels, rows, nil, btnActions)
+		if len(btns) != len(tc.actions) {
+			t.Errorf("view %q: expected %d buttons, got %d", tc.view, len(tc.actions), len(btns))
+			continue
 		}
-	}
-
-	// Test about page buttons (2 buttons: back, quit)
-	btnsAbout := drawBottomMenu(&buf, 24, "about", "", nil, labels, rows, nil, nil)
-	if len(btnsAbout) != 2 {
-		t.Errorf("expected 2 buttons in about view, got %d", len(btnsAbout))
-	}
-	expectedAboutActions := []string{"back", "quit"}
-	for i, b := range btnsAbout {
-		if b.action != expectedAboutActions[i] {
-			t.Errorf("btn[%d] action = %q, want %q", i, b.action, expectedAboutActions[i])
-		}
-	}
-
-	// Test settings page buttons (3 buttons: save, cancel, quit)
-	btnsSettings := drawBottomMenu(&buf, 24, "settings", "", nil, labels, rows, nil, nil)
-	if len(btnsSettings) != 3 {
-		t.Errorf("expected 3 buttons in settings view, got %d", len(btnsSettings))
-	}
-	expectedSettingsActions := []string{"save", "cancel", "quit"}
-	for i, b := range btnsSettings {
-		if b.action != expectedSettingsActions[i] {
-			t.Errorf("btn[%d] action = %q, want %q", i, b.action, expectedSettingsActions[i])
+		for i, b := range btns {
+			if b.action != tc.actions[i] {
+				t.Errorf("view %q btn[%d] action = %q, want %q", tc.view, i, b.action, tc.actions[i])
+			}
 		}
 	}
 }
 
 func TestBrowser_ParseYaml(t *testing.T) {
-	view, err := parseYamlView("../spec/about.yaml")
+	view, err := parseYamlView("about.yaml")
 	if err != nil {
 		t.Fatalf("failed to parse about.yaml: %v", err)
 	}
@@ -63,50 +54,5 @@ func TestBrowser_ParseYaml(t *testing.T) {
 	}
 	if !strings.Contains(view.Content, "Version: 1.0.0") {
 		t.Errorf("expected version text in content, got:\n%s", view.Content)
-	}
-}
-
-// TestButtonSchemaActionsHandled verifies every action name in the buttons schema
-// enum appears as a string literal in the Go action handler source files.
-// This catches schema additions that have no corresponding Go handler.
-func TestButtonSchemaActionsHandled(t *testing.T) {
-	schemaData, err := os.ReadFile("../spec/schemas/buttons.schema.json")
-	if err != nil {
-		t.Skip("buttons.schema.json not available:", err)
-	}
-
-	var schema struct {
-		Definitions struct {
-			Button struct {
-				Properties struct {
-					Action struct {
-						Enum []string `json:"enum"`
-					} `json:"action"`
-				} `json:"properties"`
-			} `json:"button"`
-		} `json:"definitions"`
-	}
-	if err := json.Unmarshal(schemaData, &schema); err != nil {
-		t.Fatalf("parse schema: %v", err)
-	}
-	actions := schema.Definitions.Button.Properties.Action.Enum
-	if len(actions) == 0 {
-		t.Fatal("schema action enum is empty — schema may have changed structure")
-	}
-
-	var src strings.Builder
-	for _, f := range []string{"browser.go", "interactive.go"} {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			t.Fatalf("read %s: %v", f, err)
-		}
-		src.Write(b)
-	}
-	source := src.String()
-
-	for _, action := range actions {
-		if !strings.Contains(source, `"`+action+`"`) {
-			t.Errorf("action %q declared in schema enum but not found as string literal in Go source — add a case handler", action)
-		}
 	}
 }

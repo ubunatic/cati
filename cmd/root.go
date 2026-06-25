@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/internal/quadblock"
 	"github.com/spf13/cobra"
 )
 
@@ -26,9 +27,11 @@ func New() *cobra.Command {
 	var noHeader     bool
 	var playMode     bool
 	var interactMode bool
+	var inputTest    bool
 	var fps          int
 	var width        int
 	var height       int
+	var quadMode     string
 
 	root := &cobra.Command{
 		Use:   "cati [flags] <image|dir> [image|dir ...]",
@@ -44,9 +47,15 @@ in sorted order. Use -r to recurse into subdirectories.
 
 Use --play to animate a sequence of frames at --fps frames per second.
 Press Ctrl+C to stop playback.`,
-		Args:         cobra.MinimumNArgs(1),
+		Args:         cobra.ArbitraryArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if inputTest {
+				return runInputTest()
+			}
+			if len(args) == 0 {
+				return fmt.Errorf("requires at least 1 arg(s), only received 0")
+			}
 			return run(opts{
 				ansi:        ansiMode,
 				recursive:   recursive,
@@ -56,6 +65,7 @@ Press Ctrl+C to stop playback.`,
 				fps:         fps,
 				width:       width,
 				height:      height,
+				quadMode:    quadMode,
 			}, args)
 		},
 	}
@@ -68,6 +78,12 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().IntVar(&fps,            "fps",         0,     "frames per second (0 = auto: native fps for video, 15 for images)")
 	root.Flags().IntVarP(&width,         "width",       "w",   0,     "target width in terminal columns (0 = auto)")
 	root.Flags().IntVar(&height,         "height",      0,     "target height in terminal rows (0 = auto)")
+	root.Flags().StringVarP(&quadMode,   "quad",        "q",   "",    "quad-block render mode: default, hb2, splithalf, splithalf-nb, lum-split")
+	root.Flags().BoolVar(&inputTest,     "input-test",  false, "")
+	// Allow -q without a value (bare -q means "default").
+	root.Flags().Lookup("quad").NoOptDefVal = "default"
+	// Hide the debug flag from help output.
+	_ = root.Flags().MarkHidden("input-test")
 
 	return root
 }
@@ -81,8 +97,9 @@ type opts struct {
 	playMode    bool
 	interactive bool
 	fps         int
-	width       int // terminal columns; 0 = auto
-	height      int // terminal rows;   0 = auto
+	width       int    // terminal columns; 0 = auto
+	height      int    // terminal rows;   0 = auto
+	quadMode    string // "" = halfblock; "default"|"hb2"|"splithalf"|"splithalf-nb"|"lum-split" = quad
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────
@@ -97,6 +114,12 @@ func run(o opts, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	quadOpts, useQuad, err := parseQuadMode(o.quadMode)
+	if err != nil {
+		return err
+	}
+	rc := renderCfg{useQuad: useQuad, quadOpts: quadOpts}
 
 	if o.playMode {
 		if len(paths) == 0 {
@@ -114,15 +137,15 @@ func run(o opts, args []string) error {
 			}
 		}
 		if len(args) > 1 || isDir {
-			return browser(args, o.width, o.height)
+			return browser(args, o.width, o.height, rc)
 		}
 		if len(paths) == 0 {
 			return fmt.Errorf("no supported images found")
 		}
 		if halfblock.IsVideo(paths[0]) {
-			return interactiveVideo(paths[0], o.width, o.height, nil, nil, nil, nil)
+			return interactiveVideo(paths[0], o.width, o.height, rc, nil, nil, nil, nil, nil, nil)
 		}
-		return interactive(paths[0], o.width, o.height)
+		return interactive(paths[0], o.width, o.height, rc)
 	}
 
 	if len(paths) == 0 {
@@ -148,15 +171,44 @@ func run(o opts, args []string) error {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 
-		if cols > 0 || rows > 0 {
-			img = halfblock.ScaleToFit(img, cols, rows)
-		}
-
-		if err := halfblock.Render(os.Stdout, img); err != nil {
-			return fmt.Errorf("%s: %w", path, err)
+		if useQuad {
+			if cols > 0 || rows > 0 {
+				img = quadblock.ScaleToFit(img, cols, rows)
+			}
+			if err := quadblock.RenderOpts(os.Stdout, img, quadOpts); err != nil {
+				return fmt.Errorf("%s: %w", path, err)
+			}
+		} else {
+			if cols > 0 || rows > 0 {
+				img = halfblock.ScaleToFit(img, cols, rows)
+			}
+			if err := halfblock.Render(os.Stdout, img); err != nil {
+				return fmt.Errorf("%s: %w", path, err)
+			}
 		}
 	}
 	return nil
+}
+
+// parseQuadMode converts a --quad flag value into Options and a useQuad bool.
+// Returns an error for unrecognised mode names.
+func parseQuadMode(mode string) (quadblock.Options, bool, error) {
+	switch mode {
+	case "":
+		return quadblock.Options{}, false, nil
+	case "default":
+		return quadblock.Options{}, true, nil
+	case "hb2":
+		return quadblock.Options{HalfblockThreshold: 2}, true, nil
+	case "splithalf":
+		return quadblock.Options{SplitHalf: true}, true, nil
+	case "splithalf-nb":
+		return quadblock.Options{SplitHalf: true, SplitHalfNeighbors: true}, true, nil
+	case "lum-split":
+		return quadblock.Options{LumSplit: true}, true, nil
+	default:
+		return quadblock.Options{}, false, fmt.Errorf("unknown --quad mode %q; valid: default, hb2, splithalf, splithalf-nb, lum-split", mode)
+	}
 }
 
 // ── directory expansion ───────────────────────────────────────────────────────

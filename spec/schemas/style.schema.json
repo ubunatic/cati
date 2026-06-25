@@ -107,6 +107,15 @@
         "rail_fg":    { "$ref": "#/definitions/color" },
         "rail_bg":    { "$ref": "#/definitions/color" }
       }
+    },
+    "page_title": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Style for view title lines (about page, settings header)",
+      "properties": {
+        "fg":   { "$ref": "#/definitions/color" },
+        "bold": { "type": "boolean" }
+      }
     }
   }
 }
