@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
 )
 
@@ -125,14 +126,14 @@ func TestRenderQuality(t *testing.T) {
 				// Pyramid reference from orig (not the NN-scaled viewport): sharper
 				// than a single-pass box so blurry renders can't cheat, and different
 				// from NN so halfblock != 1.0.
-				ref := pyramidDownscale(orig, b.Dx(), b.Dy())
+				ref := metrics.PyramidDownscale(orig, b.Dx(), b.Dy())
 				rendered := quadblock.RenderToImage(scaled, v.opts)
-				ssim = ssimLuminance(ref, rendered)
+				ssim = metrics.SSIMLuminance(ref, rendered)
 			} else {
 				scaled := halfblock.ScaleToFit(orig, cols, rows)
 				b := scaled.Bounds()
-				ref := pyramidDownscale(orig, b.Dx(), b.Dy())
-				ssim = ssimLuminance(ref, scaled)
+				ref := metrics.PyramidDownscale(orig, b.Dx(), b.Dy())
+				ssim = metrics.SSIMLuminance(ref, scaled)
 			}
 			results = append(results, result{v.name, ssim})
 			cumSSIM[v.name] += ssim

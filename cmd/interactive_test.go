@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"testing"
 
+	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/input"
 )
 
@@ -34,9 +35,9 @@ func TestFitPixelDims(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotW, gotH := fitPixelDims(tc.srcW, tc.srcH, tc.maxW, tc.maxH)
+			gotW, gotH := imgutil.FitPixelDims(tc.srcW, tc.srcH, tc.maxW, tc.maxH)
 			if gotW != tc.wantW || gotH != tc.wantH {
-				t.Errorf("fitPixelDims(%d,%d,%d,%d) = %dx%d, want %dx%d",
+				t.Errorf("imgutil.FitPixelDims(%d,%d,%d,%d) = %dx%d, want %dx%d",
 					tc.srcW, tc.srcH, tc.maxW, tc.maxH, gotW, gotH, tc.wantW, tc.wantH)
 			}
 		})
@@ -178,7 +179,7 @@ func TestCropImage(t *testing.T) {
 	red := color.RGBA{R: 255, A: 255}
 	img.Set(5, 5, red)
 
-	crop := cropImage(img, 4, 4, 4, 4)
+	crop := imgutil.CropImage(img, 4, 4, 4, 4)
 	b := crop.Bounds()
 	if b.Dx() != 4 || b.Dy() != 4 {
 		t.Errorf("crop size = %dx%d, want 4x4", b.Dx(), b.Dy())

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/pixelart"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
 )
@@ -126,7 +127,7 @@ func TestSSIMBenchmark(t *testing.T) {
 
 	type result struct {
 		name string
-		q    RenderQuality
+		q    metrics.RenderQuality
 	}
 
 	type cumQ struct{ ssim, blk, edge float64 }
@@ -147,7 +148,7 @@ func TestSSIMBenchmark(t *testing.T) {
 		for _, v := range allVariants {
 			vp := v.rc.scaleToFit(orig, cols, rows)
 			b := vp.Bounds()
-			ref := pyramidDownscale(orig, b.Dx(), b.Dy())
+			ref := metrics.PyramidDownscale(orig, b.Dx(), b.Dy())
 			q := computeQuality(ref, vp, v.rc)
 			results = append(results, result{v.name, q})
 			c := cum[v.name]

@@ -15,7 +15,9 @@ import (
 
 	"codeberg.org/ubunatic/cati/internal/audio"
 	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/input"
+	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
 	spec "codeberg.org/ubunatic/cati/spec"
 	"golang.org/x/term"
@@ -246,12 +248,12 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	if !rc.useQuad {
 		lastNonHBID = -1
 	}
-	var curQ RenderQuality
+	var curQ metrics.RenderQuality
 	fileMeta := loadMediaMeta(path, false)
 	redraw := func() {
 		halfblock.CursorHome(os.Stdout)
 		vp := renderView(orig, &state, termCols, max(1, termRows-2), rc)
-		ref := buildRef(orig, state, termCols, max(1, termRows-2), rc, qualityGridK, fullComp)
+		ref := buildRef(orig, state, termCols, max(1, termRows-2), rc, metrics.GridK, fullComp)
 		curQ = computeQuality(ref, vp, rc)
 		halfblock.EraseDown(os.Stdout)
 		buttons = drawBottomMenu(os.Stdout, termRows, "image_viewer", activeAction, style, labels, viewBtnRows, nil, btnActions, nil)
@@ -550,7 +552,7 @@ func recenterForMode(state *viewState, orig image.Image, termCols, termRows int,
 	if oldRC.useQuad {
 		fitSrcW = srcW * 2
 	}
-	fitW, fitH := fitPixelDims(fitSrcW, srcH, pixColsOld, termRows*2)
+	fitW, fitH := imgutil.FitPixelDims(fitSrcW, srcH, pixColsOld, termRows*2)
 	scaledW := max(1, int(math.Round(float64(fitW) * state.zoom)))
 	scaledH := max(1, int(math.Round(float64(fitH) * state.zoom)))
 	viewW := min(pixColsOld, scaledW)
@@ -567,7 +569,7 @@ func recenterForMode(state *viewState, orig image.Image, termCols, termRows int,
 	if newRC.useQuad {
 		fitSrcW2 = srcW * 2
 	}
-	fitW2, fitH2 := fitPixelDims(fitSrcW2, srcH, pixColsNew, termRows*2)
+	fitW2, fitH2 := imgutil.FitPixelDims(fitSrcW2, srcH, pixColsNew, termRows*2)
 	scaledW2 := max(1, int(math.Round(float64(fitW2) * state.zoom)))
 	scaledH2 := max(1, int(math.Round(float64(fitH2) * state.zoom)))
 	viewW2 := min(pixColsNew, scaledW2)
@@ -620,7 +622,7 @@ func buildViewport(orig image.Image, state *viewState, termCols, termRows int, r
 	}
 
 	// Compute the "fit" pixel dims (what the image looks like at zoom 1.0).
-	fitW, fitH := fitPixelDims(fitSrcW, srcH, pixCols, termRows*2)
+	fitW, fitH := imgutil.FitPixelDims(fitSrcW, srcH, pixCols, termRows*2)
 
 	// Apply zoom to get the full scaled image size.
 	scaledW := max(1, int(math.Round(float64(fitW)*state.zoom)))
@@ -636,7 +638,7 @@ func buildViewport(orig image.Image, state *viewState, termCols, termRows int, r
 	// Crop to viewport.
 	viewW := min(pixCols, scaledW)
 	viewH := min(termRows*2, scaledH)
-	return cropImage(scaled, state.panX, state.panY, viewW, viewH)
+	return imgutil.CropImage(scaled, state.panX, state.panY, viewW, viewH)
 }
 
 // renderView renders the current viewport to stdout and returns it for callers
@@ -647,45 +649,7 @@ func renderView(orig image.Image, state *viewState, termCols, termRows int, rc r
 	return vp
 }
 
-// ── pixel helpers ─────────────────────────────────────────────────────────────
 
-// fitPixelDims returns the largest w×h that fits srcW×srcH inside maxW×maxH
-// while preserving the aspect ratio (never upscales).
-func fitPixelDims(srcW, srcH, maxW, maxH int) (int, int) {
-	if srcW == 0 || srcH == 0 {
-		return max(1, maxW), max(1, maxH)
-	}
-	w, h := srcW, srcH
-	if w > maxW {
-		h = h * maxW / w
-		w = maxW
-	}
-	if h > maxH {
-		w = w * maxH / h
-		h = maxH
-	}
-	return max(1, w), max(1, h)
-}
-
-// cropImage returns the w×h sub-image of img starting at pixel (x, y).
-// Uses SubImage when available (zero-copy for *image.RGBA); otherwise copies.
-func cropImage(img image.Image, x, y, w, h int) image.Image {
-	type subImager interface {
-		SubImage(r image.Rectangle) image.Image
-	}
-	b := img.Bounds()
-	r := image.Rect(b.Min.X+x, b.Min.Y+y, b.Min.X+x+w, b.Min.Y+y+h)
-	if si, ok := img.(subImager); ok {
-		return si.SubImage(r)
-	}
-	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	for dy := 0; dy < h; dy++ {
-		for dx := 0; dx < w; dx++ {
-			dst.Set(dx, dy, img.At(r.Min.X+dx, r.Min.Y+dy))
-		}
-	}
-	return dst
-}
 
 // interactiveVideo plays a video file in the terminal using the caller's shared
 // input channel so that keyboard events are routed through the browser's tokenizer.
@@ -833,7 +797,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 	if !rc.useQuad {
 		lastNonHBID = -1
 	}
-	var curQ RenderQuality
+	var curQ metrics.RenderQuality
 	fileMeta := loadMediaMeta(path, true)
 
 	// Probe native fps for smooth playback.
@@ -916,10 +880,10 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						rc, modeName = cycleRenderCfg(rc)
 						if lastRawFrame != nil {
 							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
-							qW, qH := qualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc, qualityGridK)
+							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.useQuad, metrics.GridK)
 							ref := lastRawFrame
 							if !fullComp {
-								ref = pyramidDownscale(lastRawFrame, qW, qH)
+								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)
 							}
 							curQ = computeQuality(ref, lastFrame, rc)
 						}
@@ -927,10 +891,10 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						rc, modeName = cycleRenderCfgPrev(rc)
 						if lastRawFrame != nil {
 							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
-							qW, qH := qualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc, qualityGridK)
+							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.useQuad, metrics.GridK)
 							ref := lastRawFrame
 							if !fullComp {
-								ref = pyramidDownscale(lastRawFrame, qW, qH)
+								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)
 							}
 							curQ = computeQuality(ref, lastFrame, rc)
 						}
@@ -949,10 +913,10 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						}
 						if lastRawFrame != nil {
 							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
-							qW, qH := qualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc, qualityGridK)
+							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.useQuad, metrics.GridK)
 							ref := lastRawFrame
 							if !fullComp {
-								ref = pyramidDownscale(lastRawFrame, qW, qH)
+								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)
 							}
 							curQ = computeQuality(ref, lastFrame, rc)
 						}
@@ -994,7 +958,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					if lastRawFrame != nil {
 						lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
 						b := lastFrame.Bounds()
-						curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+						curQ = computeQuality(metrics.PyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
 					}
 					
 				case "cycle_render_prev":
@@ -1002,7 +966,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					if lastRawFrame != nil {
 						lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
 						b := lastFrame.Bounds()
-						curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+						curQ = computeQuality(metrics.PyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
 					}
 
 				case "toggle_halfblock":
@@ -1021,7 +985,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					if lastRawFrame != nil {
 						lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
 						b := lastFrame.Bounds()
-						curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+						curQ = computeQuality(metrics.PyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
 					}
 						
 					}
@@ -1088,10 +1052,10 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						lastRawFrame = img
 						lastFrame = rc.scaleToFit(img, termCols, max(1, termRows-2))
 						{
-							qW, qH := qualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc, qualityGridK)
+							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.useQuad, metrics.GridK)
 							ref := lastRawFrame
 							if !fullComp {
-								ref = pyramidDownscale(lastRawFrame, qW, qH)
+								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)
 							}
 							curQ = computeQuality(ref, lastFrame, rc)
 						}
