@@ -29,10 +29,11 @@ func specRead(name string) ([]byte, error) {
 }
 
 type menuButton struct {
-	label  string
-	col    int // 1-indexed column
-	width  int // character width
-	action string // e.g. "prev", "next", "settings", "about", "back", "quit", "inc", "dec", "save", "cancel"
+	label     string
+	col       int    // 1-indexed column
+	width     int    // character width
+	action    string // primary action (left-click / primary key)
+	altAction string // optional secondary action (right-click / alt_keys)
 }
 
 type browserItem struct {
@@ -574,6 +575,38 @@ func loadButtonActions() map[string]string {
 	return actions
 }
 
+// loadAltButtonActions reads spec/buttons.yaml and returns button_name → alt_action.
+func loadAltButtonActions() map[string]string {
+	actions := map[string]string{}
+	data, err := specRead("buttons.yaml")
+	if err != nil {
+		return actions
+	}
+	inButtons := false
+	currentKey := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
+			continue
+		}
+		if trimmed == "buttons:" {
+			inButtons = true
+			continue
+		}
+		if !inButtons {
+			continue
+		}
+		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
+			currentKey = strings.TrimSuffix(trimmed, ":")
+			continue
+		}
+		if currentKey != "" && strings.HasPrefix(line, "    alt_action: ") {
+			actions[currentKey] = strings.TrimSpace(strings.TrimPrefix(line, "    alt_action: "))
+		}
+	}
+	return actions
+}
+
 // parseYamlStringList parses an inline YAML array like ["q", "Q", "<esc>"] into Go strings.
 // Each entry is unquoted then passed through inputSpec.ResolveKeyAlias so human-readable
 // aliases like <esc>, <cr>, <c-c> resolve to their terminal sequences.
@@ -599,9 +632,12 @@ func parseYamlStringList(val string, inputSpec *input.Spec) []string {
 }
 
 // buttonKeyDef holds the action name and bound key sequences for one button entry.
+// alt_action/alt_keys provide a second binding on the same button (e.g. reverse cycle).
 type buttonKeyDef struct {
-	action string
-	keys   []string
+	action    string
+	keys      []string
+	altAction string
+	altKeys   []string
 }
 
 // loadButtonKeyDefs reads spec/buttons.yaml and returns button_name → {action, keys}.
@@ -642,6 +678,10 @@ func loadButtonKeyDefs(inputSpec *input.Spec) map[string]buttonKeyDef {
 				cur.action = strings.TrimSpace(strings.TrimPrefix(line, "    action: "))
 			} else if strings.HasPrefix(line, "    keys: ") {
 				cur.keys = parseYamlStringList(strings.TrimPrefix(line, "    keys: "), inputSpec)
+			} else if strings.HasPrefix(line, "    alt_action: ") {
+				cur.altAction = strings.TrimSpace(strings.TrimPrefix(line, "    alt_action: "))
+			} else if strings.HasPrefix(line, "    alt_keys: ") {
+				cur.altKeys = parseYamlStringList(strings.TrimPrefix(line, "    alt_keys: "), inputSpec)
 			}
 		}
 	}
@@ -692,6 +732,11 @@ func buildViewKeyMaps(viewBtnRows map[string]string, defs map[string]buttonKeyDe
 			if def, ok := defs[btnName]; ok {
 				for _, k := range def.keys {
 					km[k] = def.action
+				}
+				if def.altAction != "" {
+					for _, k := range def.altKeys {
+						km[k] = def.altAction
+					}
 				}
 			}
 		}
@@ -1134,6 +1179,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 	viewKeyRows := loadViewKeyRows()
 	controls := loadControls()
 	btnActions := loadButtonActions()
+	// altBtnActions := loadAltButtonActions()
 	viewKeyMaps := buildViewKeyMaps(viewKeyRows, loadButtonKeyDefs(inputSpec))
 
 	cfgHeight := cfg.MaxPreviewHeight
@@ -1328,14 +1374,14 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 
 		if viewMode == "about" {
 			drawAboutPage(os.Stdout, termCols, effHeight, style)
-			buttons = drawBottomMenu(os.Stdout, effHeight, "about", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions)
+			buttons = drawBottomMenu(os.Stdout, effHeight, "about", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions, nil)
 			drawHintBar(os.Stdout, effHeight, labels["hint_about"], map[string]string{"last_key": lastKey}, style)
 			return
 		}
 
 		if viewMode == "settings" {
 			drawSettingsPage(os.Stdout, termCols, effHeight, controls, tempCfg, activeSettingsField, labels)
-			buttons = drawBottomMenu(os.Stdout, effHeight, "settings", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions)
+			buttons = drawBottomMenu(os.Stdout, effHeight, "settings", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions, nil)
 			activeSetting := ""
 			if activeSettingsField >= 0 && activeSettingsField < len(controls) {
 				activeSetting = settingsFieldLabel(controls[activeSettingsField].Key)
@@ -1672,7 +1718,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 		fmt.Fprintf(os.Stdout, "\x1b[1;1H\x1b[K%s%s\x1b[m", baseAnsi, hdrText)
 
 		// Print bottom menu buttons
-		buttons = drawBottomMenu(os.Stdout, effHeight, "grid", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions)
+		buttons = drawBottomMenu(os.Stdout, effHeight, "grid", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions, nil)
 
 		// Print hint bar
 		activeFileName := ""
@@ -2537,7 +2583,7 @@ func drawHintBar(w io.Writer, termRow int, label string, vars map[string]string,
 // drawBottomMenu renders the button bar for the given view using the row template from views.yaml.
 // conditions is an optional map of runtime boolean flags (e.g. "playing") used by if() expressions.
 // btnActions maps button key names to their registered action names (from spec/buttons.yaml); nil means use key name as action.
-func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, conditions map[string]bool, btnActions map[string]string) []menuButton {
+func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, conditions map[string]bool, btnActions map[string]string, altBtnActions map[string]string) []menuButton {
 	if style == nil {
 		style = loadStyle()
 	}
@@ -2605,7 +2651,8 @@ func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction str
 		if a, ok := btnActions[key]; ok {
 			action = a
 		}
-		btn := menuButton{label: label, action: action, col: col, width: tplWidth(label, nil)}
+		altAction := altBtnActions[key]
+		btn := menuButton{label: label, action: action, altAction: altAction, col: col, width: tplWidth(label, nil)}
 		buttons = append(buttons, btn)
 
 		fg := styleFG(style.BtnFg, "")

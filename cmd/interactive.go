@@ -25,16 +25,34 @@ import (
 
 // renderCfg carries the active render mode (halfblock or quad variant).
 // The zero value uses halfblock, matching the historic default.
+//
+// id is set by renderModes entries and used for equality/cycling; it must be
+// unique per renderModes element. The zero id (0) belongs to "halfblock".
 type renderCfg struct {
+	id       int
 	useQuad  bool
 	quadOpts quadblock.Options
+	preScale func(image.Image) image.Image // optional pre-scaler applied before ScaleToFit
 }
 
 func (rc renderCfg) scaleToFit(img image.Image, cols, rows int) image.Image {
+	if rc.preScale != nil {
+		img = rc.preScale(img)
+	}
 	if rc.useQuad {
 		return quadblock.ScaleToFit(img, cols, rows)
 	}
 	return halfblock.ScaleToFit(img, cols, rows)
+}
+
+// preScaleName returns a short suffix for the pre-scaler name, or "".
+func (rc renderCfg) preScaleName() string {
+	switch {
+	case rc.preScale == nil:
+		return ""
+	default:
+		return "+pre"
+	}
 }
 
 func (rc renderCfg) render(w io.Writer, img image.Image) error {
@@ -44,30 +62,50 @@ func (rc renderCfg) render(w io.Writer, img image.Image) error {
 	return halfblock.Render(w, img)
 }
 
-// renderModes is the cycle order for the R key.
+// renderModes is the cycle order for the R key. Each entry's cfg.id must equal
+// its slice index so that cycleRenderCfg and rcModeName can find entries by id.
 var renderModes = []struct {
 	name string
 	cfg  renderCfg
 }{
-	{"halfblock", renderCfg{}},
-	{"quad/lum+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{LumSplit: true, Blend: quadblock.BlendAmbiguous}}},
-	{"quad/pca2+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguous}}},
-	{"quad/splithalf+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguous}}},
-	{"quad/splithalf", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}}},
-	{"quad/lum-split", renderCfg{useQuad: true, quadOpts: quadblock.Options{LumSplit: true}}},
-	{"quad/pca2", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true}}},
-	{"quad/default", renderCfg{useQuad: true}},
+	{"halfblock", renderCfg{id: 4}},
+	// {"halfblock+sharp", renderCfg{id: 10, preScale: pixelart.Sharpen05}},
+	// {"halfblock+epx2x", renderCfg{id: 8, preScale: pixelart.Scale2x}},
+	{"quad/pca2", renderCfg{id: 6, useQuad: true, quadOpts: quadblock.Options{PCA2: true}}},
+	// {"quad/default", renderCfg{id: 7, useQuad: true}},
+	// {"quad/lum+ambig", renderCfg{id: 1, useQuad: true, quadOpts: quadblock.Options{LumSplit: true, Blend: quadblock.BlendAmbiguous}}},
+	// {"quad/pca2+ambig", renderCfg{id: 2, useQuad: true, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguous}}},
+	// {"quad/splithalf+ambig", renderCfg{id: 3, useQuad: true, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/lum-split", renderCfg{id: 5, useQuad: true, quadOpts: quadblock.Options{LumSplit: true}}},
+	{"quad/splithalf", renderCfg{id: 0, useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}}},
+	//{"quad/splithalf+sharp", renderCfg{id: 11, useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen05}},
+	//{"quad/splithalf+epx2x", renderCfg{id: 9, useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale2x}},
+	{"quad/edge-snap", renderCfg{id: 12, useQuad: true, quadOpts: quadblock.Options{EdgeSnap: true}}},
+	// {"quad/edge-snap+ambig", renderCfg{id: 13, useQuad: true, quadOpts: quadblock.Options{EdgeSnap: true, Blend: quadblock.BlendAmbiguous}}},
 }
 
 // cycleRenderCfg returns the next renderCfg in the cycle and its display name.
+// Comparison is by cfg.id, not struct equality (cfg contains a func field).
 func cycleRenderCfg(rc renderCfg) (renderCfg, string) {
 	for i, m := range renderModes {
-		if m.cfg == rc {
+		if m.cfg.id == rc.id {
 			next := renderModes[(i+1)%len(renderModes)]
 			return next.cfg, next.name
 		}
 	}
 	return renderModes[0].cfg, renderModes[0].name
+}
+
+// cycleRenderCfgPrev returns the previous renderCfg in the cycle and its display name.
+func cycleRenderCfgPrev(rc renderCfg) (renderCfg, string) {
+	n := len(renderModes)
+	for i, m := range renderModes {
+		if m.cfg.id == rc.id {
+			prev := renderModes[(i+n-1)%n]
+			return prev.cfg, prev.name
+		}
+	}
+	return renderModes[n-1].cfg, renderModes[n-1].name
 }
 
 // ── constants ─────────────────────────────────────────────────────────────────
@@ -128,6 +166,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		viewBtnRows = loadViewButtonRows()
 	}
 	btnActions := loadButtonActions()
+	// altBtnActions := loadAltButtonActions()
 
 	// ── Raw terminal mode ─────────────────────────────────────────────────────
 	fd := int(os.Stdin.Fd())
@@ -193,15 +232,15 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	var status string
 	var lastKey string
 	modeName := rcModeName(rc)
-	var curSSIM float64
+	var curQ RenderQuality
 	fileMeta := loadMediaMeta(path, false)
 	redraw := func() {
 		halfblock.CursorHome(os.Stdout)
 		vp := renderView(orig, &state, termCols, max(1, termRows-2), rc)
 		ref := buildRef(orig, state, termCols, max(1, termRows-2), rc)
-		curSSIM = renderSSIM(ref, vp, rc)
+		curQ = computeQuality(ref, vp, rc)
 		halfblock.EraseDown(os.Stdout)
-		buttons = drawBottomMenu(os.Stdout, termRows, "image_viewer", activeAction, style, labels, viewBtnRows, nil, btnActions)
+		buttons = drawBottomMenu(os.Stdout, termRows, "image_viewer", activeAction, style, labels, viewBtnRows, nil, btnActions, nil)
 		hint := labels["hint_viewer"]
 		if status != "" {
 			hint = status
@@ -211,7 +250,9 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		fileMeta.DispMode = "half"
 		hintVars := map[string]string{
 			"last_key":    lastKey,
-			"ssim":        fmt.Sprintf("%.3f", curSSIM),
+			"ssim":        fmt.Sprintf("%.3f", curQ.SSIM),
+			"blockiness":  fmt.Sprintf("%.3f", curQ.Blockiness),
+			"edge_cont":   fmt.Sprintf("%.3f", curQ.EdgeCont),
 			"render_mode": modeName,
 		}
 		for k, v := range fileMeta.Vars() {
@@ -265,6 +306,9 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								changed = true
 							case "cycle_render":
 								rc, modeName = cycleRenderCfg(rc)
+								changed = true
+							case "cycle_render_prev":
+								rc, modeName = cycleRenderCfgPrev(rc)
 								changed = true
 							case "go_back", "quit":
 								shouldQuit = true
@@ -382,6 +426,9 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								changed = true
 							case "cycle_render":
 								rc, modeName = cycleRenderCfg(rc)
+								changed = true
+							case "cycle_render_prev":
+								rc, modeName = cycleRenderCfgPrev(rc)
 								changed = true
 							}
 						}
@@ -608,6 +655,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 		viewKeyMaps = buildViewKeyMaps(viewBtnRows, loadButtonKeyDefs(inputSpec))
 	}
 	btnActions := loadButtonActions()
+	//altBtnActions := loadAltButtonActions()
 
 	// keyInputs carries keyboard tokens and sits in the blocking select so keys
 	// are processed immediately.  mouseInputs carries SGR mouse tokens and is
@@ -689,7 +737,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 	var statusClearAt time.Time
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
 	modeName := rcModeName(rc)
-	var curSSIM float64
+	var curQ RenderQuality
 	fileMeta := loadMediaMeta(path, true)
 
 	// Probe native fps for smooth playback.
@@ -772,11 +820,15 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						rc, modeName = cycleRenderCfg(rc)
 						if lastRawFrame != nil {
 							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
-						}
-						{
 							b := lastFrame.Bounds()
-							ref := boxDownscale(lastRawFrame, b.Dx(), b.Dy())
-							curSSIM = renderSSIM(ref, lastFrame, rc)
+							curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+						}
+					case "cycle_render_prev":
+						rc, modeName = cycleRenderCfgPrev(rc)
+						if lastRawFrame != nil {
+							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+							b := lastFrame.Bounds()
+							curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
 						}
 					case "go_back", "quit":
 						return true
@@ -814,11 +866,15 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					rc, modeName = cycleRenderCfg(rc)
 					if lastRawFrame != nil {
 						lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
-					}
-					{
 						b := lastFrame.Bounds()
-						ref := boxDownscale(lastRawFrame, b.Dx(), b.Dy())
-						curSSIM = renderSSIM(ref, lastFrame, rc)
+						curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+					}
+				case "cycle_render_prev":
+					rc, modeName = cycleRenderCfgPrev(rc)
+					if lastRawFrame != nil {
+						lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+						b := lastFrame.Bounds()
+						curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
 					}
 				}
 			}
@@ -872,8 +928,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						lastFrame = rc.scaleToFit(img, termCols, max(1, termRows-2))
 						{
 							b := lastFrame.Bounds()
-							ref := boxDownscale(lastRawFrame, b.Dx(), b.Dy())
-							curSSIM = renderSSIM(ref, lastFrame, rc)
+							curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
 						}
 					}
 				default:
@@ -892,7 +947,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 				halfblock.EraseDown(os.Stdout)
 			}
 			conditions := map[string]bool{"playing": !paused}
-			buttons = drawBottomMenu(os.Stdout, termRows, "video_player", activeAction, style, labels, viewBtnRows, conditions, btnActions)
+			buttons = drawBottomMenu(os.Stdout, termRows, "video_player", activeAction, style, labels, viewBtnRows, conditions, btnActions, nil)
 			if status != "" && time.Now().After(statusClearAt) {
 				status = ""
 			}
@@ -905,7 +960,9 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			fileMeta.DispMode = "half"
 			hintVars := map[string]string{
 				"last_key":    lastKey,
-				"ssim":        fmt.Sprintf("%.3f", curSSIM),
+				"ssim":        fmt.Sprintf("%.3f", curQ.SSIM),
+				"blockiness":  fmt.Sprintf("%.3f", curQ.Blockiness),
+				"edge_cont":   fmt.Sprintf("%.3f", curQ.EdgeCont),
 				"render_mode": modeName,
 			}
 			for k, v := range fileMeta.Vars() {

@@ -194,8 +194,10 @@ func run(o opts, args []string) error {
 // Returns an error for unrecognised mode names.
 func parseQuadMode(mode string) (quadblock.Options, bool, error) {
 	switch mode {
-	case "":
+	case "off", "none", "0":
 		return quadblock.Options{}, false, nil
+	case "", "edge-snap": // edge-snap is current default
+		return quadblock.Options{SplitHalf: true, EdgeSnap: true}, true, nil
 	case "default":
 		return quadblock.Options{}, true, nil
 	case "hb2":

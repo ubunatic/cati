@@ -230,9 +230,10 @@ func renderSSIM(ref, vp image.Image, rc renderCfg) float64 {
 }
 
 // rcModeName returns the display name of rc in renderModes, or "?" if unknown.
+// Matches by cfg.id because renderCfg contains a func field and is not comparable.
 func rcModeName(rc renderCfg) string {
 	for _, m := range renderModes {
-		if m.cfg == rc {
+		if m.cfg.id == rc.id {
 			return m.name
 		}
 	}

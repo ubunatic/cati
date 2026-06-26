@@ -22,6 +22,38 @@
           "description": "Keys that trigger this button's action. Use named aliases: <esc>, <cr>, <space>, <tab>, <bs>, <up>, <down>, <left>, <right>, <pgup>, <pgdn>, <c-c>, <c-d>, … or plain chars like \"q\", \"[\".",
           "items": { "type": "string" }
         },
+        "alt_action": {
+          "type": "string",
+          "description": "Optional secondary action for alt_keys (e.g. reverse direction of a cycle).",
+          "enum": [
+            "nav_prev",
+            "nav_next",
+            "open_settings",
+            "open_about",
+            "open_website",
+            "quit",
+            "go_back",
+            "toggle_mode",
+            "inc_zoom",
+            "dec_zoom",
+            "save_settings",
+            "cancel_settings",
+            "toggle_pan",
+            "copy_viewport",
+            "toggle_play_pause",
+            "nav_up",
+            "nav_down",
+            "nav_page_prev",
+            "nav_page_next",
+            "cycle_render",
+            "cycle_render_prev"
+          ]
+        },
+        "alt_keys": {
+          "type": "array",
+          "description": "Keys that trigger alt_action instead of action.",
+          "items": { "type": "string" }
+        },
         "action": {
           "type": "string",
           "description": "Registered action name mapped to a Go handler at startup",
@@ -45,7 +77,8 @@
             "nav_down",
             "nav_page_prev",
             "nav_page_next",
-            "cycle_render"
+            "cycle_render",
+            "cycle_render_prev"
           ]
         }
       }

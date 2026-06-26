@@ -130,4 +130,6 @@ buttons:
     text: "{ 'R' | bold | light }ender"
     style: secondary
     action: cycle_render
-    keys: ["r", "R"]
+    keys: ["r"]
+    alt_action: cycle_render_prev
+    alt_keys: ["R"]

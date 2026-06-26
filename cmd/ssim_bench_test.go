@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/internal/pixelart"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
 )
 
@@ -63,6 +64,33 @@ var allVariants = []struct {
 	{"quad/pca2+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguous}}},
 	{"quad/pca2+wide", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguousWide}}},
 	{"quad/hb2+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{HalfblockThreshold: 2, Blend: quadblock.BlendAmbiguous}}},
+
+	// ── pixelart pre-scalers ─────────────────────────────────────────────────────
+	// EPX / Scale2x: edge-corner-aware 2× upscale before NN downscale.
+	// Helps for high-contrast sharp-edge images (PCB, line art); near-no-op for
+	// smooth photos (exact pixel-equality condition rarely fires).
+	{"halfblock+epx2x", renderCfg{preScale: pixelart.Scale2x}},
+	{"quad/splithalf+epx2x", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale2x}},
+	{"quad/pca2+epx2x", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true}, preScale: pixelart.Scale2x}},
+
+	// Scale3x: tripling for higher-quality intermediate before downscale.
+	{"halfblock+epx3x", renderCfg{preScale: pixelart.Scale3x}},
+	{"quad/splithalf+epx3x", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale3x}},
+
+	// Unsharp mask: sharpens edges before downscale — useful for all image types.
+	// Brings soft gradients closer to hard transitions → cleaner 2-colour splits.
+	{"halfblock+sharp0.5", renderCfg{preScale: pixelart.Sharpen05}},
+	{"halfblock+sharp1.0", renderCfg{preScale: pixelart.Sharpen10}},
+	{"quad/splithalf+sharp0.5", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen05}},
+	{"quad/splithalf+sharp1.0", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen10}},
+	{"quad/pca2+sharp0.5", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true}, preScale: pixelart.Sharpen05}},
+
+	// ── edge-snap cell encoder ───────────────────────────────────────────────────
+	// Splits each 2×2 cell by the dominant luminance gradient direction within the
+	// cell. Operates at the right scale (cell level, not source image level).
+	{"quad/edge-snap", renderCfg{useQuad: true, quadOpts: quadblock.Options{EdgeSnap: true}}},
+	{"quad/edge-snap+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{EdgeSnap: true, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/edge-snap+hb3", renderCfg{useQuad: true, quadOpts: quadblock.Options{EdgeSnap: true, HalfblockThreshold: 3}}},
 }
 
 // TestSSIMBenchmark loads every sample image, computes SSIM for all render
@@ -98,10 +126,14 @@ func TestSSIMBenchmark(t *testing.T) {
 
 	type result struct {
 		name string
-		ssim float64
+		q    RenderQuality
 	}
 
-	sumSSIM := make(map[string]float64, len(allVariants))
+	type cumQ struct{ ssim, blk, edge float64 }
+	cum := make(map[string]*cumQ, len(allVariants))
+	for _, v := range allVariants {
+		cum[v.name] = &cumQ{}
+	}
 
 	fmt.Println()
 	for _, path := range samples {
@@ -115,21 +147,27 @@ func TestSSIMBenchmark(t *testing.T) {
 		for _, v := range allVariants {
 			vp := v.rc.scaleToFit(orig, cols, rows)
 			b := vp.Bounds()
-			ref := boxDownscale(orig, b.Dx(), b.Dy())
-			s := renderSSIM(ref, vp, v.rc)
-			results = append(results, result{v.name, s})
-			sumSSIM[v.name] += s
+			ref := pyramidDownscale(orig, b.Dx(), b.Dy())
+			q := computeQuality(ref, vp, v.rc)
+			results = append(results, result{v.name, q})
+			c := cum[v.name]
+			c.ssim += q.SSIM
+			c.blk += q.Blockiness
+			c.edge += q.EdgeCont
 		}
 
-		sort.Slice(results, func(i, j int) bool { return results[i].ssim > results[j].ssim })
+		sort.Slice(results, func(i, j int) bool { return results[i].q.SSIM > results[j].q.SSIM })
 
 		fmt.Printf("%-50s\n", filepath.Base(path))
+		fmt.Printf("  %-26s  SSIM   Blk    Edge\n", "variant")
+		fmt.Printf("  %-26s  ─────  ─────  ─────\n", "──────────────────────────")
 		for i, r := range results {
 			marker := "   "
 			if i < 3 {
 				marker = fmt.Sprintf("#%d ", i+1)
 			}
-			fmt.Printf("  %s %-26s SSIM:%.4f\n", marker, r.name, r.ssim)
+			fmt.Printf("  %s %-26s %.3f  %.3f  %.3f\n",
+				marker, r.name, r.q.SSIM, r.q.Blockiness, r.q.EdgeCont)
 			if !testing.Verbose() && i == 2 {
 				break
 			}
@@ -137,20 +175,29 @@ func TestSSIMBenchmark(t *testing.T) {
 		fmt.Println()
 	}
 
-	// Cross-image summary: average SSIM over all images.
-	var avgs []result
-	for _, v := range allVariants {
-		avgs = append(avgs, result{v.name, sumSSIM[v.name] / float64(len(samples))})
+	// Cross-image summary: average over all images, sorted by SSIM.
+	type avg struct {
+		name string
+		q    cumQ
 	}
-	sort.Slice(avgs, func(i, j int) bool { return avgs[i].ssim > avgs[j].ssim })
+	n := float64(len(samples))
+	var avgs []avg
+	for _, v := range allVariants {
+		c := cum[v.name]
+		avgs = append(avgs, avg{v.name, cumQ{c.ssim / n, c.blk / n, c.edge / n}})
+	}
+	sort.Slice(avgs, func(i, j int) bool { return avgs[i].q.ssim > avgs[j].q.ssim })
 
-	fmt.Println("── Overall average SSIM ─────────────────────────────")
+	fmt.Println("── Overall average (pyramid ref) ────────────────────────────────")
+	fmt.Printf("  %-26s  SSIM   Blk    Edge\n", "variant")
+	fmt.Printf("  %-26s  ─────  ─────  ─────\n", "──────────────────────────")
 	for i, a := range avgs {
 		marker := "   "
 		if i < 3 {
 			marker = fmt.Sprintf("#%d ", i+1)
 		}
-		fmt.Printf("  %s %-26s SSIM:%.4f\n", marker, a.name, a.ssim)
+		fmt.Printf("  %s %-26s %.3f  %.3f  %.3f\n",
+			marker, a.name, a.q.ssim, a.q.blk, a.q.edge)
 		if !testing.Verbose() && i == 4 {
 			break
 		}

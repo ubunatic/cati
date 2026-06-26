@@ -139,6 +139,14 @@ type Options struct {
 	// for the given number of iterations. KMeans: 3 is usually sufficient for
 	// convergence on 4 pixels. Finds the minimum-MSE 2-colour partition.
 	KMeans int
+
+	// EdgeSnap splits the 4 sub-pixels by the dominant luminance gradient
+	// direction computed within the cell itself. The bright side of the gradient
+	// becomes fg, the dark side becomes bg; each group's colour is its average.
+	// This is most effective for cells that straddle a diagonal edge (PCB traces,
+	// diagonal silhouettes) where other algorithms produce an averaged mis-aligned
+	// colour. For nearly uniform cells it falls back to the diameter split.
+	EdgeSnap bool
 }
 
 // ── Quadrant character lookup ─────────────────────────────────────────────────
@@ -583,6 +591,9 @@ func compileCellPCA2(pixels [4]color.RGBA) quadCell {
 func compileCell(pixels [4]color.RGBA, left, above *quadCell, opts Options) quadCell {
 	if opts.KMeans > 0 {
 		return compileCellKMeans(pixels, opts.KMeans)
+	}
+	if opts.EdgeSnap {
+		return compileCellEdgeSnap(pixels)
 	}
 	if opts.Diameter {
 		return compileCellDiameter(pixels)
