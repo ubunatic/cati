@@ -46,7 +46,8 @@
             "nav_page_prev",
             "nav_page_next",
             "cycle_render",
-            "cycle_render_prev"
+            "cycle_render_prev",
+            "toggle_halfblock"
           ]
         },
         "alt_keys": {
@@ -78,7 +79,8 @@
             "nav_page_prev",
             "nav_page_next",
             "cycle_render",
-            "cycle_render_prev"
+            "cycle_render_prev",
+            "toggle_halfblock"
           ]
         }
       }

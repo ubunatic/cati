@@ -108,6 +108,16 @@ func cycleRenderCfgPrev(rc renderCfg) (renderCfg, string) {
 	return renderModes[n-1].cfg, renderModes[n-1].name
 }
 
+// findRenderModeByID looks up a render mode by id in renderModes.
+func findRenderModeByID(id int) (renderCfg, string, bool) {
+	for _, m := range renderModes {
+		if m.cfg.id == id {
+			return m.cfg, m.name, true
+		}
+	}
+	return renderCfg{}, "", false
+}
+
 // ── constants ─────────────────────────────────────────────────────────────────
 
 const (
@@ -232,6 +242,10 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	var status string
 	var lastKey string
 	modeName := rcModeName(rc)
+	lastNonHBID := rc.id // last non-halfblock mode id; used by toggle_halfblock
+	if !rc.useQuad {
+		lastNonHBID = -1
+	}
 	var curQ RenderQuality
 	fileMeta := loadMediaMeta(path, false)
 	redraw := func() {
@@ -309,6 +323,21 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								changed = true
 							case "cycle_render_prev":
 								rc, modeName = cycleRenderCfgPrev(rc)
+								changed = true
+							case "toggle_halfblock":
+								if rc.useQuad {
+									lastNonHBID = rc.id
+									if m, n, ok := findRenderModeByID(4); ok {
+										rc, modeName = m, n
+									}
+								} else if lastNonHBID >= 0 {
+									if m, n, ok := findRenderModeByID(lastNonHBID); ok {
+										rc, modeName = m, n
+									}
+								} else {
+									// no halfblock history — just cycle forward
+									rc, modeName = cycleRenderCfg(rc)
+								}
 								changed = true
 							case "go_back", "quit":
 								shouldQuit = true
@@ -429,6 +458,20 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								changed = true
 							case "cycle_render_prev":
 								rc, modeName = cycleRenderCfgPrev(rc)
+								changed = true
+							case "toggle_halfblock":
+								if rc.useQuad {
+									lastNonHBID = rc.id
+									if m, n, ok := findRenderModeByID(4); ok {
+										rc, modeName = m, n
+									}
+								} else if lastNonHBID >= 0 {
+									if m, n, ok := findRenderModeByID(lastNonHBID); ok {
+										rc, modeName = m, n
+									}
+								} else {
+									rc, modeName = cycleRenderCfg(rc)
+								}
 								changed = true
 							}
 						}
@@ -737,6 +780,10 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 	var statusClearAt time.Time
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
 	modeName := rcModeName(rc)
+	lastNonHBID := rc.id
+	if !rc.useQuad {
+		lastNonHBID = -1
+	}
 	var curQ RenderQuality
 	fileMeta := loadMediaMeta(path, true)
 
@@ -830,6 +877,24 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 							b := lastFrame.Bounds()
 							curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
 						}
+					case "toggle_halfblock":
+						if rc.useQuad {
+							lastNonHBID = rc.id
+							if m, n, ok := findRenderModeByID(4); ok {
+								rc, modeName = m, n
+							}
+						} else if lastNonHBID >= 0 {
+							if m, n, ok := findRenderModeByID(lastNonHBID); ok {
+								rc, modeName = m, n
+							}
+						} else {
+							rc, modeName = cycleRenderCfg(rc)
+						}
+						if lastRawFrame != nil {
+							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+							b := lastFrame.Bounds()
+							curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+						}
 					case "go_back", "quit":
 						return true
 					}
@@ -862,13 +927,15 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						}
 						statusClearAt = time.Now().Add(3 * time.Second)
 					}
-				case "cycle_render":
+					
+			case "cycle_render":
 					rc, modeName = cycleRenderCfg(rc)
 					if lastRawFrame != nil {
 						lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
 						b := lastFrame.Bounds()
 						curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
 					}
+					
 				case "cycle_render_prev":
 					rc, modeName = cycleRenderCfgPrev(rc)
 					if lastRawFrame != nil {
@@ -876,13 +943,32 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						b := lastFrame.Bounds()
 						curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
 					}
+
+				case "toggle_halfblock":
+					if rc.useQuad {
+						lastNonHBID = rc.id
+						if m, n, ok := findRenderModeByID(4); ok {
+							rc, modeName = m, n
+						}
+					} else if lastNonHBID >= 0 {
+						if m, n, ok := findRenderModeByID(lastNonHBID); ok {
+							rc, modeName = m, n
+						}
+					} else {
+						rc, modeName = cycleRenderCfg(rc)
+					}
+					if lastRawFrame != nil {
+						lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+						b := lastFrame.Bounds()
+						curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+					}
+						
+					}
 				}
 			}
+			return false
 		}
-		return false
-	}
-
-	// Audio: start playback alongside video.
+			// Audio: start playback alongside video.
 	audioPlayer = openAudio(ctx, path)
 	defer stopAudio(audioPlayer)
 
@@ -894,6 +980,13 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			case tok := <-mouseInputs:
 				if processToken(tok) {
 					return nil
+				}
+				if paused && lastFrame != nil {
+					halfblock.CursorHome(os.Stdout)
+					if err := rc.render(os.Stdout, lastFrame); err != nil {
+						return err
+					}
+					halfblock.EraseDown(os.Stdout)
 				}
 			default:
 				break drainMouse
@@ -909,6 +1002,13 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			// not deferred to the next ticker tick.
 			if processToken(tok) {
 				return nil
+			}
+			if paused && lastFrame != nil {
+				halfblock.CursorHome(os.Stdout)
+				if err := rc.render(os.Stdout, lastFrame); err != nil {
+					return err
+				}
+				halfblock.EraseDown(os.Stdout)
 			}
 
 		case <-ticker.C:

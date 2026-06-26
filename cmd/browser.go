@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
 	"fmt"
 	"image"
 	"image/color"
+	"image/png"
 	"io"
 	"io/fs"
 	"os"
@@ -42,35 +45,26 @@ type browserItem struct {
 	name  string
 }
 
-// ── Custom folder pixel icon ──────────────────────────────────────────────────
+// ── Embedded folder icon ──────────────────────────────────────────────────────
 
-func createFolderIcon() image.Image {
-	img := image.NewRGBA(image.Rect(0, 0, 16, 12))
-	folderColor := color.RGBA{R: 245, G: 158, B: 11, A: 255} // Amber/yellow
-	tabColor := color.RGBA{R: 217, G: 119, B: 6, A: 255}    // Darker amber for tab
-	borderColor := color.RGBA{R: 146, G: 64, B: 14, A: 255} // Dark brown outline
+//go:embed folder.png
+var folderIconData []byte
 
-	for y := 0; y < 12; y++ {
-		for x := 0; x < 16; x++ {
-			// Tab border & fill
-			if y >= 1 && y <= 2 && x >= 1 && x <= 5 {
-				if y == 1 || x == 1 || x == 5 {
-					img.Set(x, y, borderColor)
-				} else {
-					img.Set(x, y, tabColor)
-				}
-			}
-			// Body border & fill
-			if y >= 3 && y <= 10 && x >= 1 && x <= 14 {
-				if y == 3 || y == 10 || x == 1 || x == 14 {
-					img.Set(x, y, borderColor)
-				} else {
-					img.Set(x, y, folderColor)
-				}
-			}
-		}
+var folderIcon image.Image
+
+func initFolderIcon() {
+	img, err := png.Decode(bytes.NewReader(folderIconData))
+	if err != nil {
+		panic(err)
 	}
-	return img
+	folderIcon = img
+}
+
+func getFolderIcon() image.Image {
+	if folderIcon == nil {
+		initFolderIcon()
+	}
+	return folderIcon
 }
 
 // ── Style Configuration ──────────────────────────────────────────────────────
@@ -1249,7 +1243,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 	if nVideoFrames <= 0 {
 		nVideoFrames = 10
 	}
-	startThumbWorkers(workerCtx, nWorkers, tq, previewVideos, nVideoFrames, thumbResults)
+	startThumbWorkers(workerCtx, nWorkers, tq, previewVideos, nVideoFrames, rc, thumbResults)
 
 	getThumbnail := func(item browserItem, cellW, cellH int) image.Image {
 		if item.isDir {
@@ -1257,7 +1251,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 			if frames, ok := thumbCache[key]; ok && len(frames) > 0 {
 				return frames[0]
 			}
-			scaled := halfblock.ScaleToFit(createFolderIcon(), cellW, cellH)
+			scaled := rc.scaleToFit(getFolderIcon(), cellW, cellH)
 			thumbCache[key] = []image.Image{scaled}
 			return scaled
 		}
@@ -1479,7 +1473,11 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 			cellH = 1
 		}
 
-		compW := termCols
+		pixScale := 1
+		if rc.useQuad {
+			pixScale = 2
+		}
+		compW := termCols * pixScale
 		compH := gridRowsLimit * 2
 		compImg := image.NewRGBA(image.Rect(0, 0, compW, compH))
 
@@ -1512,9 +1510,9 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 				if previewImg != nil {
 					scaledW := previewImg.Bounds().Dx()
 					scaledH := previewImg.Bounds().Dy()
-					offsetX := (prevW - scaledW) / 2
+					offsetX := (prevW*pixScale - scaledW) / 2
 					offsetY := (gridRowsLimit*2 - scaledH) / 2
-					destX := leftW + 2 + offsetX
+					destX := (leftW+2)*pixScale + offsetX
 					destY := offsetY
 
 					for ty := 0; ty < scaledH; ty++ {
@@ -1534,27 +1532,30 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 				cellItemIdx := idx - startIdx
 				colIdx := cellItemIdx % gridCols
 				rowIdx := cellItemIdx / gridCols
-				left := colIdx * (cellW + gapX)
+				left := colIdx * (cellW + gapX) * pixScale
 				top := rowIdx * (cellH + gapY)
 
 				thumb := getThumbnail(items[idx], cellW, cellH-1)
 				if thumb != nil {
 					thumbW := thumb.Bounds().Dx()
 					thumbH := thumb.Bounds().Dy()
-					offsetX := (cellW - thumbW) / 2
+					offsetX := (cellW*pixScale - thumbW) / 2
 					offsetY := ((cellH-1)*2 - thumbH) / 2
-					destX := left + offsetX
-					destY := top*2 + offsetY
+				destX := left + offsetX
+				destY := top*2 + offsetY
+				if items[idx].isDir {
+					destX-- // shift folder icon 1px left for better quad alignment
+				}
 
-					for ty := 0; ty < thumbH; ty++ {
-						for tx := 0; tx < thumbW; tx++ {
-							dx := destX + tx
-							dy := destY + ty
-							if dx >= 0 && dx < compW && dy >= 0 && dy < compH {
-								compImg.Set(dx, dy, thumb.At(tx, ty))
-							}
+				for ty := 0; ty < thumbH; ty++ {
+					for tx := 0; tx < thumbW; tx++ {
+						dx := destX + tx
+						dy := destY + ty
+						if dx >= 0 && dx < compW && dy >= 0 && dy < compH {
+							compImg.Set(dx, dy, thumb.At(tx, ty))
 						}
 					}
+				}
 				}
 			}
 		}
@@ -1573,7 +1574,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg) error {
 		// Draw page composite image
 		halfblock.CursorHome(os.Stdout)
 		fmt.Fprintf(os.Stdout, "\x1b[%d;1H", marginTop+1)
-		_ = halfblock.Render(os.Stdout, compImg)
+		_ = rc.render(os.Stdout, compImg)
 		halfblock.EraseDown(os.Stdout)
 
 		// Print filenames centered below thumbnails (Grid) or in dynamic vertical lists

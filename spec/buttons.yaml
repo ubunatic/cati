@@ -126,6 +126,12 @@ buttons:
     action: copy_viewport
     keys: ["c", "C"]
 
+  halfblock:
+    text: "{ 'H' | bold | light }alfblock"
+    style: secondary
+    action: toggle_halfblock
+    keys: ["h", "H"]
+
   render:
     text: "{ 'R' | bold | light }ender"
     style: secondary

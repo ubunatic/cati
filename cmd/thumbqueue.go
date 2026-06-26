@@ -95,16 +95,16 @@ func (q *thumbQueue) stop() {
 	q.mu.Unlock()
 }
 
-func startThumbWorkers(ctx context.Context, n int, q *thumbQueue, previewVideos bool, nVideoFrames int, results chan<- thumbResult) {
+func startThumbWorkers(ctx context.Context, n int, q *thumbQueue, previewVideos bool, nVideoFrames int, rc renderCfg, results chan<- thumbResult) {
 	if n <= 0 {
 		n = max(1, runtime.NumCPU()/2)
 	}
 	for range n {
-		go thumbWorker(ctx, q, previewVideos, nVideoFrames, results)
+		go thumbWorker(ctx, q, previewVideos, nVideoFrames, rc, results)
 	}
 }
 
-func thumbWorker(ctx context.Context, q *thumbQueue, previewVideos bool, nVideoFrames int, results chan<- thumbResult) {
+func thumbWorker(ctx context.Context, q *thumbQueue, previewVideos bool, nVideoFrames int, rc renderCfg, results chan<- thumbResult) {
 	for {
 		job, ok := q.next()
 		if !ok {
@@ -113,12 +113,12 @@ func thumbWorker(ctx context.Context, q *thumbQueue, previewVideos bool, nVideoF
 		var frames []image.Image
 		if job.isVideo {
 			if previewVideos {
-				frames = loadVideoThumbs(job.key.path, nVideoFrames, job.key.w, job.key.h)
+				frames = loadVideoThumbs(job.key.path, nVideoFrames, job.key.w, job.key.h, rc)
 			}
 		} else {
 			img, err := halfblock.LoadImage(job.key.path)
 			if err == nil && img != nil {
-				frames = []image.Image{halfblock.ScaleToFit(img, job.key.w, job.key.h)}
+				frames = []image.Image{rc.scaleToFit(img, job.key.w, job.key.h)}
 			}
 		}
 		if len(frames) > 0 {
@@ -131,23 +131,32 @@ func thumbWorker(ctx context.Context, q *thumbQueue, previewVideos bool, nVideoF
 	}
 }
 
-func loadVideoThumbs(path string, n, w, h int) []image.Image {
+func loadVideoThumbs(path string, n, w, h int, rc renderCfg) []image.Image {
 	dur, err := halfblock.ProbeVideoDuration(path)
 	if err != nil || dur <= 0 || n <= 1 {
+		if dur > 0 {
+			// Use a frame 25% into the video — the first frame is often black.
+			img, err := halfblock.LoadVideoFrameAt(path, dur*0.25)
+			if err == nil {
+				return []image.Image{rc.scaleToFit(img, w, h)}
+			}
+		}
+		// Fallback: try the first frame anyway.
 		img, err := halfblock.LoadVideoFrame(path)
 		if err != nil {
 			return nil
 		}
-		return []image.Image{halfblock.ScaleToFit(img, w, h)}
+		return []image.Image{rc.scaleToFit(img, w, h)}
 	}
 	var frames []image.Image
 	for i := range n {
-		t := dur * float64(i) / float64(n)
+		// Offset from zero to avoid the first frame (often black).
+		t := dur * float64(i+1) / float64(n+1)
 		img, err := halfblock.LoadVideoFrameAt(path, t)
 		if err != nil {
 			continue
 		}
-		frames = append(frames, halfblock.ScaleToFit(img, w, h))
+		frames = append(frames, rc.scaleToFit(img, w, h))
 	}
 	return frames
 }

@@ -78,7 +78,7 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().IntVar(&fps,            "fps",         0,     "frames per second (0 = auto: native fps for video, 15 for images)")
 	root.Flags().IntVarP(&width,         "width",       "w",   0,     "target width in terminal columns (0 = auto)")
 	root.Flags().IntVar(&height,         "height",      0,     "target height in terminal rows (0 = auto)")
-	root.Flags().StringVarP(&quadMode,   "quad",        "q",   "",    "quad-block render mode: default, hb2, splithalf, splithalf-nb, lum-split")
+	root.Flags().StringVarP(&quadMode,   "quad",        "q",   "",    "quad-block render mode: default, hb2, splithalf, splithalf-nb, lum-split, edge-snap")
 	root.Flags().BoolVar(&inputTest,     "input-test",  false, "")
 	// Allow -q without a value (bare -q means "default").
 	root.Flags().Lookup("quad").NoOptDefVal = "default"
@@ -99,7 +99,7 @@ type opts struct {
 	fps         int
 	width       int    // terminal columns; 0 = auto
 	height      int    // terminal rows;   0 = auto
-	quadMode    string // "" = halfblock; "default"|"hb2"|"splithalf"|"splithalf-nb"|"lum-split" = quad
+	quadMode    string // "" = splithalf; "default"|"hb2"|"splithalf"|"splithalf-nb"|"lum-split" = quad
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────
@@ -196,14 +196,12 @@ func parseQuadMode(mode string) (quadblock.Options, bool, error) {
 	switch mode {
 	case "off", "none", "0":
 		return quadblock.Options{}, false, nil
-	case "", "edge-snap": // edge-snap is current default
-		return quadblock.Options{SplitHalf: true, EdgeSnap: true}, true, nil
+	case "", "splithalf": // splithalf is current default
+		return quadblock.Options{SplitHalf: true}, true, nil
 	case "default":
 		return quadblock.Options{}, true, nil
 	case "hb2":
 		return quadblock.Options{HalfblockThreshold: 2}, true, nil
-	case "splithalf":
-		return quadblock.Options{SplitHalf: true}, true, nil
 	case "splithalf-nb":
 		return quadblock.Options{SplitHalf: true, SplitHalfNeighbors: true}, true, nil
 	case "lum-split":
