@@ -32,6 +32,7 @@ func New() *cobra.Command {
 	var width        int
 	var height       int
 	var quadMode     string
+	var fullComp     bool
 
 	root := &cobra.Command{
 		Use:   "cati [flags] <image|dir> [image|dir ...]",
@@ -66,6 +67,7 @@ Press Ctrl+C to stop playback.`,
 				width:       width,
 				height:      height,
 				quadMode:    quadMode,
+				fullComp:    fullComp,
 			}, args)
 		},
 	}
@@ -79,6 +81,7 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().IntVarP(&width,         "width",       "w",   0,     "target width in terminal columns (0 = auto)")
 	root.Flags().IntVar(&height,         "height",      0,     "target height in terminal rows (0 = auto)")
 	root.Flags().StringVarP(&quadMode,   "quad",        "q",   "",    "quad-block render mode: default, hb2, splithalf, splithalf-nb, lum-split, edge-snap")
+	root.Flags().BoolVar(&fullComp,     "full-comp",   false, "compare render quality against original source pixels (slow)")
 	root.Flags().BoolVar(&inputTest,     "input-test",  false, "")
 	// Allow -q without a value (bare -q means "default").
 	root.Flags().Lookup("quad").NoOptDefVal = "default"
@@ -100,6 +103,7 @@ type opts struct {
 	width       int    // terminal columns; 0 = auto
 	height      int    // terminal rows;   0 = auto
 	quadMode    string // "" = splithalf; "default"|"hb2"|"splithalf"|"splithalf-nb"|"lum-split" = quad
+	fullComp    bool   // compare render quality against original source pixels
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────
@@ -137,15 +141,15 @@ func run(o opts, args []string) error {
 			}
 		}
 		if len(args) > 1 || isDir {
-			return browser(args, o.width, o.height, rc)
+			return browser(args, o.width, o.height, rc, o.fullComp)
 		}
 		if len(paths) == 0 {
 			return fmt.Errorf("no supported images found")
 		}
 		if halfblock.IsVideo(paths[0]) {
-			return interactiveVideo(paths[0], o.width, o.height, rc, nil, nil, nil, nil, nil, nil)
+			return interactiveVideo(paths[0], o.width, o.height, rc, nil, nil, nil, nil, nil, nil, o.fullComp)
 		}
-		return interactive(paths[0], o.width, o.height, rc)
+		return interactive(paths[0], o.width, o.height, rc, o.fullComp)
 	}
 
 	if len(paths) == 0 {

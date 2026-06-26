@@ -148,11 +148,11 @@ type dragState struct {
 
 // ── interactive ──────────────────────────────────────────────────────────────
 
-func interactive(path string, initWidth, initHeight int, rc renderCfg) error {
-	return interactiveWithChan(path, initWidth, initHeight, rc, nil, nil, nil, nil, nil, nil)
+func interactive(path string, initWidth, initHeight int, rc renderCfg, fullComp bool) error {
+	return interactiveWithChan(path, initWidth, initHeight, rc, nil, nil, nil, nil, nil, nil, fullComp)
 }
 
-func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec) error {
+func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec, fullComp bool) error {
 	if inputSpec == nil {
 		inputSpec, _ = input.Load(fs.FS(spec.FS))
 	}
@@ -251,7 +251,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	redraw := func() {
 		halfblock.CursorHome(os.Stdout)
 		vp := renderView(orig, &state, termCols, max(1, termRows-2), rc)
-		ref := buildRef(orig, state, termCols, max(1, termRows-2), rc)
+		ref := buildRef(orig, state, termCols, max(1, termRows-2), rc, qualityGridK, fullComp)
 		curQ = computeQuality(ref, vp, rc)
 		halfblock.EraseDown(os.Stdout)
 		buttons = drawBottomMenu(os.Stdout, termRows, "image_viewer", activeAction, style, labels, viewBtnRows, nil, btnActions, nil)
@@ -325,6 +325,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								rc, modeName = cycleRenderCfgPrev(rc)
 								changed = true
 							case "toggle_halfblock":
+								oldRC := rc
 								if rc.useQuad {
 									lastNonHBID = rc.id
 									if m, n, ok := findRenderModeByID(4); ok {
@@ -335,9 +336,9 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 										rc, modeName = m, n
 									}
 								} else {
-									// no halfblock history — just cycle forward
 									rc, modeName = cycleRenderCfg(rc)
 								}
+								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							case "go_back", "quit":
 								shouldQuit = true
@@ -460,6 +461,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								rc, modeName = cycleRenderCfgPrev(rc)
 								changed = true
 							case "toggle_halfblock":
+								oldRC := rc
 								if rc.useQuad {
 									lastNonHBID = rc.id
 									if m, n, ok := findRenderModeByID(4); ok {
@@ -472,6 +474,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								} else {
 									rc, modeName = cycleRenderCfg(rc)
 								}
+								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							}
 						}
@@ -527,6 +530,52 @@ func resolveTermSize(width, height int) (cols, rows int) {
 		rows = 24
 	}
 	return
+}
+
+// recenterForMode adjusts panX/panY after a render-mode switch so the same
+// region of the source image stays visible, despite the pixel budget change.
+func recenterForMode(state *viewState, orig image.Image, termCols, termRows int, oldRC, newRC renderCfg) {
+	b := orig.Bounds()
+	srcW, srcH := b.Dx(), b.Dy()
+	if srcW <= 0 || srcH <= 0 {
+		return
+	}
+
+	// Compute center in source coords under the old mode.
+	pixColsOld := termCols
+	if oldRC.useQuad {
+		pixColsOld = termCols * 2
+	}
+	fitSrcW := srcW
+	if oldRC.useQuad {
+		fitSrcW = srcW * 2
+	}
+	fitW, fitH := fitPixelDims(fitSrcW, srcH, pixColsOld, termRows*2)
+	scaledW := max(1, int(math.Round(float64(fitW) * state.zoom)))
+	scaledH := max(1, int(math.Round(float64(fitH) * state.zoom)))
+	viewW := min(pixColsOld, scaledW)
+	viewH := min(termRows*2, scaledH)
+	centerX := (float64(state.panX) + float64(viewW)/2) * float64(srcW) / float64(scaledW)
+	centerY := (float64(state.panY) + float64(viewH)/2) * float64(srcH) / float64(scaledH)
+
+	// Derive pan under the new mode from the same center.
+	pixColsNew := termCols
+	if newRC.useQuad {
+		pixColsNew = termCols * 2
+	}
+	fitSrcW2 := srcW
+	if newRC.useQuad {
+		fitSrcW2 = srcW * 2
+	}
+	fitW2, fitH2 := fitPixelDims(fitSrcW2, srcH, pixColsNew, termRows*2)
+	scaledW2 := max(1, int(math.Round(float64(fitW2) * state.zoom)))
+	scaledH2 := max(1, int(math.Round(float64(fitH2) * state.zoom)))
+	viewW2 := min(pixColsNew, scaledW2)
+	viewH2 := min(termRows*2, scaledH2)
+	panX2 := int(math.Round(centerX * float64(scaledW2) / float64(srcW) - float64(viewW2)/2))
+	panY2 := int(math.Round(centerY * float64(scaledH2) / float64(srcH) - float64(viewH2)/2))
+	state.panX = max(0, min(panX2, max(0, scaledW2-viewW2)))
+	state.panY = max(0, min(panY2, max(0, scaledH2-viewH2)))
 }
 
 // ── zoom helpers ─────────────────────────────────────────────────────────────
@@ -661,7 +710,7 @@ func stopAudio(p *audio.Player) {
 	}
 }
 
-func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec) error {
+func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec, fullComp bool) error {
 	// The browser restores cooked-mode before calling us.  We must enter raw
 	// mode ourselves so single keypresses are readable without Enter.
 	fd := int(os.Stdin.Fd())
@@ -867,15 +916,23 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						rc, modeName = cycleRenderCfg(rc)
 						if lastRawFrame != nil {
 							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
-							b := lastFrame.Bounds()
-							curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+							qW, qH := qualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc, qualityGridK)
+							ref := lastRawFrame
+							if !fullComp {
+								ref = pyramidDownscale(lastRawFrame, qW, qH)
+							}
+							curQ = computeQuality(ref, lastFrame, rc)
 						}
 					case "cycle_render_prev":
 						rc, modeName = cycleRenderCfgPrev(rc)
 						if lastRawFrame != nil {
 							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
-							b := lastFrame.Bounds()
-							curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+							qW, qH := qualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc, qualityGridK)
+							ref := lastRawFrame
+							if !fullComp {
+								ref = pyramidDownscale(lastRawFrame, qW, qH)
+							}
+							curQ = computeQuality(ref, lastFrame, rc)
 						}
 					case "toggle_halfblock":
 						if rc.useQuad {
@@ -892,8 +949,12 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						}
 						if lastRawFrame != nil {
 							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
-							b := lastFrame.Bounds()
-							curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+							qW, qH := qualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc, qualityGridK)
+							ref := lastRawFrame
+							if !fullComp {
+								ref = pyramidDownscale(lastRawFrame, qW, qH)
+							}
+							curQ = computeQuality(ref, lastFrame, rc)
 						}
 					case "go_back", "quit":
 						return true
@@ -1027,8 +1088,12 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						lastRawFrame = img
 						lastFrame = rc.scaleToFit(img, termCols, max(1, termRows-2))
 						{
-							b := lastFrame.Bounds()
-							curQ = computeQuality(pyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+							qW, qH := qualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc, qualityGridK)
+							ref := lastRawFrame
+							if !fullComp {
+								ref = pyramidDownscale(lastRawFrame, qW, qH)
+							}
+							curQ = computeQuality(ref, lastFrame, rc)
 						}
 					}
 				default:

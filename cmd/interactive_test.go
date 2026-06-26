@@ -11,7 +11,7 @@ import (
 // ── interactive (error paths) ─────────────────────────────────────────────────
 
 func TestInteractive_MissingFile(t *testing.T) {
-	err := interactive("nonexistent.png", 0, 0, renderCfg{})
+	err := interactive("nonexistent.png", 0, 0, renderCfg{}, false)
 	if err == nil {
 		t.Error("expected error for missing file, got nil")
 	}

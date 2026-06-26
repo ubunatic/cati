@@ -125,6 +125,18 @@ func pyramidDownscale(src image.Image, dstW, dstH int) image.Image {
 	return img
 }
 
+// qualityGridDims returns the quality-grid pixel dimensions for a rendered
+// viewport of size vpW × vpH under render config rc, using the given K factor.
+func qualityGridDims(vpW, vpH int, rc renderCfg, k int) (int, int) {
+	pixPerCol := 1
+	if rc.useQuad {
+		pixPerCol = 2
+	}
+	cellW := vpW / pixPerCol
+	cellH := vpH / 2
+	return k * cellW, k * cellH
+}
+
 // blockMeanReconstruct replaces each blockW×blockH tile with its mean colour,
 // modelling the worst-case colour quantisation of a block-based renderer.
 func blockMeanReconstruct(img image.Image, blockW, blockH int) image.Image {
@@ -167,18 +179,20 @@ func blockMeanReconstruct(img image.Image, blockW, blockH int) image.Image {
 	return dst
 }
 
-// buildRef returns a pyramid-downscale reference at the same pixel dimensions
-// as the viewport. The reference is computed from the original image (not the
-// already-NN-scaled viewport), so all rendering modes are measured against the
-// same ideal. pyramidDownscale is sharper than a single-pass box filter (blurry
-// renders cannot match it by blurring more) and different from NN (halfblock's
-// output is not identical to the reference, so SSIM < 1.0 on textured images).
+// buildRef returns a pyramid-downscale reference at the quality-grid resolution
+// (when qualityK > 0) or at viewport pixel dimensions (when qualityK ≤ 0).
+// The reference is computed from the original image (not the already-NN-scaled
+// viewport), so all rendering modes are measured against the same ideal.
+//
+// qualityK > 0 produces a K × K sub-pixel grid per terminal cell, enabling
+// fair SSIM comparison across render modes with different native sub-pixel
+// layouts.
 //
 // The geometry mirrors buildViewport; state must already be clamped (call
 // buildViewport first).
 //
 // NOTE: keep the geometry in sync with buildViewport if either changes.
-func buildRef(orig image.Image, state viewState, termCols, termRows int, rc renderCfg) image.Image {
+func buildRef(orig image.Image, state viewState, termCols, termRows int, rc renderCfg, qualityK int, fullComp bool) image.Image {
 	b := orig.Bounds()
 	srcW, srcH := b.Dx(), b.Dy()
 	if srcW == 0 || srcH == 0 {
@@ -213,6 +227,18 @@ func buildRef(orig image.Image, state viewState, termCols, termRows int, rc rend
 		y1 = y0 + 1
 	}
 	region := cropImage(orig, x0, y0, x1-x0, y1-y0)
+	if fullComp {
+		return pyramidDownscale(region, viewW, viewH)
+	}
+	if qualityK > 0 {
+		pixPerCol := 1
+		if rc.useQuad {
+			pixPerCol = 2
+		}
+		cellW := viewW / pixPerCol
+		cellH := viewH / 2
+		return pyramidDownscale(region, qualityK*cellW, qualityK*cellH)
+	}
 	return pyramidDownscale(region, viewW, viewH)
 }
 

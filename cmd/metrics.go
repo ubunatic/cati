@@ -4,8 +4,16 @@ import (
 	"image"
 	"math"
 
+	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
 )
+
+// qualityGridK is the subdivision factor for the quality metric reference grid.
+// Each terminal cell is divided into qualityGridK × qualityGridK sub-pixels for
+// SSIM, blockiness, and edge continuity. This puts all render modes (halfblock:
+// 2×1 sub-pixels per cell, quad: 2×2 sub-pixels per cell) on a common footing
+// by NN-upscaling the rendered output to match the reference resolution.
+const qualityGridK = 4
 
 // RenderQuality holds all perceptual quality metrics for one rendered frame.
 type RenderQuality struct {
@@ -58,10 +66,12 @@ func sobelGrid(g [][]float64) [][]float64 {
 // block edges the rendered image introduces at cell-grid positions that do not
 // exist in the reference. 1.0 = no excess block boundary gradients.
 //
-// For halfblock (useQuad=false), only horizontal boundaries (every 2 rows) are
-// checked — halfblock has no sub-cell vertical structure. For quad, both
-// horizontal and vertical boundaries (every 2 pixels) are checked.
-func blockinessFromGrids(refS, rendS [][]float64, rc renderCfg) float64 {
+// For halfblock (useQuad=false), only horizontal boundaries (every step rows)
+// are checked — halfblock has no sub-cell vertical structure. For quad, both
+// horizontal and vertical boundaries (every step pixels) are checked.
+// step is the quality-grid boundary stride (qualityGridK for quality-grid refs,
+// 2 for viewport-resolution refs).
+func blockinessFromGrids(refS, rendS [][]float64, rc renderCfg, step int) float64 {
 	h := len(refS)
 	if h == 0 {
 		return 1.0
@@ -70,9 +80,9 @@ func blockinessFromGrids(refS, rendS [][]float64, rc renderCfg) float64 {
 	var totalExcess float64
 	var n int
 
-	// Vertical cell boundaries (quad only — every 2 pixel columns).
+	// Vertical cell boundaries (quad only).
 	if rc.useQuad {
-		for x := 2; x < w-1; x += 2 {
+		for x := step; x < w-1; x += step {
 			for y := 1; y < h-1; y++ {
 				if excess := rendS[y][x] - refS[y][x]; excess > 0 {
 					totalExcess += excess
@@ -82,8 +92,8 @@ func blockinessFromGrids(refS, rendS [][]float64, rc renderCfg) float64 {
 		}
 	}
 
-	// Horizontal cell boundaries — both modes, every 2 pixel rows.
-	for y := 2; y < h-1; y += 2 {
+	// Horizontal cell boundaries — both modes.
+	for y := step; y < h-1; y += step {
 		for x := 1; x < w-1; x++ {
 			if excess := rendS[y][x] - refS[y][x]; excess > 0 {
 				totalExcess += excess
@@ -138,10 +148,13 @@ func edgeContinuityFromGrids(refS, rendS [][]float64) float64 {
 
 // computeQuality returns all perceptual quality metrics for a rendered frame.
 //
-//   - ref  — pyramid-downscale reference at viewport pixel dimensions
-//             (from buildRef or pyramidDownscale(rawFrame, vpW, vpH))
+//   - ref  — pyramid-downscale reference (at viewport or quality-grid resolution)
 //   - vp   — NN-scaled viewport from rc.scaleToFit()
 //   - rc   — active render configuration
+//
+// When ref is larger than vp (quality-grid resolution), vp is NN-upscaled to
+// match ref before computing metrics. Blockiness boundary checks use the
+// quality-grid step size (qualityGridK) derived from the upscale factor.
 func computeQuality(ref, vp image.Image, rc renderCfg) RenderQuality {
 	var rendered image.Image
 	if rc.useQuad {
@@ -150,14 +163,26 @@ func computeQuality(ref, vp image.Image, rc renderCfg) RenderQuality {
 		rendered = vp
 	}
 
+	rb := ref.Bounds()
+	vb := vp.Bounds()
+
+	// When ref is at quality-grid resolution, NN-upscale rendered to match.
+	if rb.Dx() != vb.Dx() || rb.Dy() != vb.Dy() {
+		rendered = halfblock.ScaleNN(rendered, rb.Dx(), rb.Dy())
+	}
+
 	refLuma := lumaGrid(ref)
 	rendLuma := lumaGrid(rendered)
 	refSobel := sobelGrid(refLuma)
 	rendSobel := sobelGrid(rendLuma)
 
-	return RenderQuality{
+	// Boundary step for blockiness: quality grid positions are at multiples
+	// of qualityGridK (since each terminal cell row/col is K sub-pixels).
+	boundaryStep := qualityGridK
+	score := RenderQuality{
 		SSIM:       ssimLuminance(ref, rendered),
-		Blockiness: blockinessFromGrids(refSobel, rendSobel, rc),
+		Blockiness: blockinessFromGrids(refSobel, rendSobel, rc, boundaryStep),
 		EdgeCont:   edgeContinuityFromGrids(refSobel, rendSobel),
 	}
+	return score
 }
