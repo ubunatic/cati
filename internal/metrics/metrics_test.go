@@ -301,20 +301,21 @@ func TestPyramidDownscale_Large(t *testing.T) {
 
 func TestQualityGridDims(t *testing.T) {
 	tests := []struct {
-		name    string
-		vpW, vpH int
-		useQuad bool
-		k       int
-		wantW, wantH int
+		name               string
+		vpW, vpH           int
+		pixPerCol, pixPerRow int
+		k                  int
+		wantW, wantH       int
 	}{
-		{"halfblock, K=4, 80x40", 80, 40, false, 4, 320, 80},
-		{"quad, K=4, 80x40", 80, 40, true, 4, 160, 80},
-		{"halfblock, K=2, 40x20", 40, 20, false, 2, 80, 20},
-		{"quad, K=2, 40x20", 40, 20, true, 2, 40, 20},
+		{"halfblock, K=4, 80x40", 80, 40, 1, 2, 4, 320, 80},
+		{"quad, K=4, 80x40", 80, 40, 2, 2, 4, 160, 80},
+		{"sparkline, K=4, 80x40", 80, 40, 1, 1, 4, 320, 160},
+		{"halfblock, K=2, 40x20", 40, 20, 1, 2, 2, 80, 20},
+		{"quad, K=2, 40x20", 40, 20, 2, 2, 2, 40, 20},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gw, gh := QualityGridDims(tc.vpW, tc.vpH, tc.useQuad, tc.k)
+			gw, gh := QualityGridDims(tc.vpW, tc.vpH, tc.pixPerCol, tc.pixPerRow, tc.k)
 			if gw != tc.wantW || gh != tc.wantH {
 				t.Errorf("got %dx%d, want %dx%d", gw, gh, tc.wantW, tc.wantH)
 			}

@@ -19,7 +19,7 @@ import (
 // quality-grid step size (GridK) derived from the upscale factor.
 func computeQuality(ref, vp image.Image, rc renderCfg) metrics.RenderQuality {
 	var rendered image.Image
-	if rc.useQuad {
+	if rc.mode.useQuad() {
 		rendered = quadblock.RenderToImage(vp, rc.quadOpts)
 	} else {
 		rendered = vp
@@ -40,7 +40,7 @@ func computeQuality(ref, vp image.Image, rc renderCfg) metrics.RenderQuality {
 	boundaryStep := metrics.GridK
 	score := metrics.RenderQuality{
 		SSIM:       metrics.SSIMLuminance(ref, rendered),
-		Blockiness: metrics.BlockinessFromGrids(refSobel, rendSobel, rc.useQuad, boundaryStep),
+		Blockiness: metrics.BlockinessFromGrids(refSobel, rendSobel, rc.mode.useQuad(), boundaryStep),
 		EdgeCont:   metrics.EdgeContinuityFromGrids(refSobel, rendSobel),
 	}
 	return score

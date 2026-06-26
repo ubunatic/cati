@@ -41,57 +41,57 @@ var allVariants = []struct {
 	{"halfblock", renderCfg{}},
 
 	// ── quad: colour-pair selection algorithms ──────────────────────────────────
-	{"quad/default", renderCfg{useQuad: true}},
-	{"quad/lum-split", renderCfg{useQuad: true, quadOpts: quadblock.Options{LumSplit: true}}},
-	{"quad/splithalf", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}}},
-	{"quad/splithalf-nb", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true, SplitHalfNeighbors: true}}},
-	{"quad/pca2", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true}}},
+	{"quad/default", renderCfg{mode: modeQuad}},
+	{"quad/lum-split", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{LumSplit: true}}},
+	{"quad/splithalf", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}},
+	{"quad/splithalf-nb", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true, SplitHalfNeighbors: true}}},
+	{"quad/pca2", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{PCA2: true}}},
 
 	// ── quad: halfblock-threshold fallback (avoids noisy 3-colour cells) ────────
-	{"quad/hb≥1", renderCfg{useQuad: true, quadOpts: quadblock.Options{HalfblockThreshold: 1}}},
-	{"quad/hb≥2", renderCfg{useQuad: true, quadOpts: quadblock.Options{HalfblockThreshold: 2}}},
-	{"quad/hb≥3", renderCfg{useQuad: true, quadOpts: quadblock.Options{HalfblockThreshold: 3}}},
+	{"quad/hb≥1", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{HalfblockThreshold: 1}}},
+	{"quad/hb≥2", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{HalfblockThreshold: 2}}},
+	{"quad/hb≥3", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{HalfblockThreshold: 3}}},
 
 	// ── quad: neighbourhood blending ────────────────────────────────────────────
-	{"quad/blend-ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{Blend: quadblock.BlendAmbiguous}}},
-	{"quad/blend-wide", renderCfg{useQuad: true, quadOpts: quadblock.Options{Blend: quadblock.BlendAmbiguousWide}}},
-	{"quad/blend-always", renderCfg{useQuad: true, quadOpts: quadblock.Options{Blend: quadblock.BlendAlways}}},
+	{"quad/blend-ambig", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{Blend: quadblock.BlendAmbiguous}}},
+	{"quad/blend-wide", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{Blend: quadblock.BlendAmbiguousWide}}},
+	{"quad/blend-always", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{Blend: quadblock.BlendAlways}}},
 
 	// ── quad: combinations ───────────────────────────────────────────────────────
-	{"quad/splithalf+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguous}}},
-	{"quad/splithalf+wide", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguousWide}}},
-	{"quad/lum+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{LumSplit: true, Blend: quadblock.BlendAmbiguous}}},
-	{"quad/lum+wide", renderCfg{useQuad: true, quadOpts: quadblock.Options{LumSplit: true, Blend: quadblock.BlendAmbiguousWide}}},
-	{"quad/pca2+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguous}}},
-	{"quad/pca2+wide", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguousWide}}},
-	{"quad/hb2+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{HalfblockThreshold: 2, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/splithalf+ambig", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/splithalf+wide", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguousWide}}},
+	{"quad/lum+ambig", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{LumSplit: true, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/lum+wide", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{LumSplit: true, Blend: quadblock.BlendAmbiguousWide}}},
+	{"quad/pca2+ambig", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/pca2+wide", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguousWide}}},
+	{"quad/hb2+ambig", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{HalfblockThreshold: 2, Blend: quadblock.BlendAmbiguous}}},
 
 	// ── pixelart pre-scalers ─────────────────────────────────────────────────────
 	// EPX / Scale2x: edge-corner-aware 2× upscale before NN downscale.
 	// Helps for high-contrast sharp-edge images (PCB, line art); near-no-op for
 	// smooth photos (exact pixel-equality condition rarely fires).
 	{"halfblock+epx2x", renderCfg{preScale: pixelart.Scale2x}},
-	{"quad/splithalf+epx2x", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale2x}},
-	{"quad/pca2+epx2x", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true}, preScale: pixelart.Scale2x}},
+	{"quad/splithalf+epx2x", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale2x}},
+	{"quad/pca2+epx2x", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{PCA2: true}, preScale: pixelart.Scale2x}},
 
 	// Scale3x: tripling for higher-quality intermediate before downscale.
 	{"halfblock+epx3x", renderCfg{preScale: pixelart.Scale3x}},
-	{"quad/splithalf+epx3x", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale3x}},
+	{"quad/splithalf+epx3x", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale3x}},
 
 	// Unsharp mask: sharpens edges before downscale — useful for all image types.
 	// Brings soft gradients closer to hard transitions → cleaner 2-colour splits.
 	{"halfblock+sharp0.5", renderCfg{preScale: pixelart.Sharpen05}},
 	{"halfblock+sharp1.0", renderCfg{preScale: pixelart.Sharpen10}},
-	{"quad/splithalf+sharp0.5", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen05}},
-	{"quad/splithalf+sharp1.0", renderCfg{useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen10}},
-	{"quad/pca2+sharp0.5", renderCfg{useQuad: true, quadOpts: quadblock.Options{PCA2: true}, preScale: pixelart.Sharpen05}},
+	{"quad/splithalf+sharp0.5", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen05}},
+	{"quad/splithalf+sharp1.0", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen10}},
+	{"quad/pca2+sharp0.5", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{PCA2: true}, preScale: pixelart.Sharpen05}},
 
 	// ── edge-snap cell encoder ───────────────────────────────────────────────────
 	// Splits each 2×2 cell by the dominant luminance gradient direction within the
 	// cell. Operates at the right scale (cell level, not source image level).
-	{"quad/edge-snap", renderCfg{useQuad: true, quadOpts: quadblock.Options{EdgeSnap: true}}},
-	{"quad/edge-snap+ambig", renderCfg{useQuad: true, quadOpts: quadblock.Options{EdgeSnap: true, Blend: quadblock.BlendAmbiguous}}},
-	{"quad/edge-snap+hb3", renderCfg{useQuad: true, quadOpts: quadblock.Options{EdgeSnap: true, HalfblockThreshold: 3}}},
+	{"quad/edge-snap", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true}}},
+	{"quad/edge-snap+ambig", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/edge-snap+hb3", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true, HalfblockThreshold: 3}}},
 }
 
 // TestSSIMBenchmark loads every sample image, computes SSIM for all render

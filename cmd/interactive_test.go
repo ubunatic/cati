@@ -1,12 +1,16 @@
 package cmd
 
 import (
+	"bytes"
+	"fmt"
 	"image"
 	"image/color"
+	"math"
 	"testing"
 
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/input"
+	"codeberg.org/ubunatic/cati/internal/quadblock"
 )
 
 // ── interactive (error paths) ─────────────────────────────────────────────────
@@ -191,3 +195,322 @@ func TestCropImage(t *testing.T) {
 		t.Errorf("expected red pixel at crop (1,1), got %v", got)
 	}
 }
+
+// ── maxZoom ──────────────────────────────────────────────────────────────────
+
+func TestMaxZoom(t *testing.T) {
+	tests := []struct {
+		name                string
+		srcW, srcH          int
+		termCols, termRows  int
+		mode                renderMode
+		want                float64
+	}{
+		{
+			name:     "halfblock image larger than viewport",
+			srcW:     1920, srcH: 1080,
+			termCols: 80, termRows: 40,
+			mode: modeHalfblock,
+			want: 24.0,
+		},
+		{
+			name:     "quad image larger than viewport",
+			srcW:     1920, srcH: 1080,
+			termCols: 80, termRows: 40,
+			mode: modeQuad,
+			want: 24.0,
+		},
+		{
+			name:     "halfblock image fits exactly",
+			srcW:     80, srcH: 40,
+			termCols: 80, termRows: 40,
+			mode: modeHalfblock,
+			want: 1.0,
+		},
+		{
+			name:     "halfblock small image",
+			srcW:     40, srcH: 20,
+			termCols: 80, termRows: 40,
+			mode: modeHalfblock,
+			want: 1.0,
+		},
+		{
+			name:     "zero srcW",
+			srcW:     0, srcH: 100,
+			termCols: 80, termRows: 40,
+			mode: modeHalfblock,
+			want: 1.0,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := maxZoom(tc.srcW, tc.srcH, tc.termCols, tc.termRows, tc.mode)
+			if got != tc.want {
+				t.Errorf("maxZoom(%d,%d,%d,%d,%v) = %v, want %v",
+					tc.srcW, tc.srcH, tc.termCols, tc.termRows, tc.mode, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestMaxZoomOneToOne verifies that at max zoom with halfblock, the viewport
+// image is a 1:1 crop of the source (each viewport pixel = one source pixel).
+func TestMaxZoomOneToOne(t *testing.T) {
+	src := image.NewNRGBA(image.Rect(0, 0, 6, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 6; x++ {
+			src.SetNRGBA(x, y, color.NRGBA{
+				R: uint8(x * 40),
+				G: uint8(y * 60),
+				B: uint8(x + y*10),
+				A: 255,
+			})
+		}
+	}
+
+	const termCols, termRows = 10, 4
+	zoom := maxZoom(6, 4, termCols, termRows, modeHalfblock)
+	if zoom != 1.0 {
+		t.Fatalf("maxZoom for small image = %v, want 1.0", zoom)
+	}
+
+	state := viewState{zoom: zoom, panX: 0, panY: 0}
+	rc := renderCfg{id: 4} // halfblock
+	vp := buildViewport(src, &state, termCols, termRows, rc)
+	b := vp.Bounds()
+
+	if b.Dx() != 6 || b.Dy() != 4 {
+		t.Fatalf("viewport size = %dx%d, want 6×4", b.Dx(), b.Dy())
+	}
+
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 6; x++ {
+			got := vp.At(x, y)
+			want := src.At(x, y)
+			r1, g1, b1, a1 := got.RGBA()
+			r2, g2, b2, a2 := want.RGBA()
+			if r1 != r2 || g1 != g2 || b1 != b2 || a1 != a2 {
+				t.Errorf("vp.At(%d,%d) = (%d,%d,%d,%d), want (%d,%d,%d,%d)",
+					x, y, r1, g1, b1, a1, r2, g2, b2, a2)
+			}
+		}
+	}
+}
+
+// TestMaxZoomQuadConvergence verifies that all quad render modes produce
+// byte-identical ANSI output when rendering at max zoom. At this zoom every
+// terminal cell covers ≤ 1 source column × 2 source rows: with a horizontally
+// NN-upscaled viewport each 2×2 block has ≤ 2 unique colors making all quad
+// algorithms choose the same color pair.
+func TestMaxZoomQuadConvergence(t *testing.T) {
+	src := image.NewNRGBA(image.Rect(0, 0, 4, 4))
+	// Row 0-1: red, row 2-3: blue — each 2×2 block is either solid red or
+	// solid blue, giving all quad algorithms an unambiguous choice.
+	for x := 0; x < 4; x++ {
+		src.SetNRGBA(x, 0, color.NRGBA{R: 255, A: 255})
+		src.SetNRGBA(x, 1, color.NRGBA{R: 255, A: 255})
+		src.SetNRGBA(x, 2, color.NRGBA{R: 0, G: 0, B: 255, A: 255})
+		src.SetNRGBA(x, 3, color.NRGBA{R: 0, G: 0, B: 255, A: 255})
+	}
+
+	const termCols, termRows = 4, 2
+	zoom := maxZoom(4, 4, termCols, termRows, modeQuad)
+	if zoom != 1.0 {
+		t.Fatalf("maxZoom for small image = %v, want 1.0", zoom)
+	}
+
+	state := viewState{zoom: zoom, panX: 0, panY: 0}
+
+	// Collect all active quad modes and their outputs.
+	type modeResult struct {
+		name string
+		out  string
+	}
+	var results []modeResult
+
+	for _, m := range renderModes {
+		if !m.cfg.mode.useQuad() {
+			continue
+		}
+		vp := buildViewport(src, &state, termCols, termRows, m.cfg)
+		var buf bytes.Buffer
+		if err := quadblock.RenderOpts(&buf, vp, m.cfg.quadOpts); err != nil {
+			t.Fatalf("RenderOpts(%s): %v", m.name, err)
+		}
+		results = append(results, modeResult{m.name, buf.String()})
+	}
+
+	if len(results) < 2 {
+		t.Skip("need at least 2 quad modes for convergence test")
+	}
+
+	ref := results[0].out
+	for _, r := range results[1:] {
+		if r.out != ref {
+			t.Errorf("quad mode %q differs from %q\n%s", r.name, results[0].name, diffTermOutput(ref, r.out))
+		}
+	}
+}
+
+// diffTermOutput shows the first differing position between two ANSI strings.
+func diffTermOutput(a, b string) string {
+	minLen := len(a)
+	if len(b) < minLen {
+		minLen = len(b)
+	}
+	for i := 0; i < minLen; i++ {
+		if a[i] != b[i] {
+			ctx := 8
+			start := i - ctx
+			if start < 0 {
+				start = 0
+			}
+			end := i + ctx
+			if end > minLen {
+				end = minLen
+			}
+			return fmt.Sprintf("first diff at byte %d:\n  a: …%q…\n  b: …%q…",
+				i, a[start:end], b[start:end])
+		}
+	}
+	if len(a) != len(b) {
+		return fmt.Sprintf("length diff: a=%d b=%d", len(a), len(b))
+	}
+	return "identical"
+}
+
+// ── zoomSteps / stepIdx ──────────────────────────────────────────────────────
+
+func TestZoomSteps(t *testing.T) {
+	tests := []struct {
+		name    string
+		mz      float64
+		srcW    int
+		wantLen int
+		want0   float64
+		wantN   float64
+	}{
+		{"maxZoom=1, srcW=5 → 5 steps", 1.0, 5, 5, 1.0, 0.2},
+		{"maxZoom=2, srcW=10 → 10 steps", 2.0, 10, 10, 2.0, 0.2},
+		{"maxZoom=24, srcW=48 → 48 steps", 24.0, 48, 48, 24.0, 0.5},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := zoomSteps(tc.mz, tc.srcW)
+			if len(got) != tc.wantLen {
+				t.Fatalf("len = %d, want %d", len(got), tc.wantLen)
+			}
+			if got[0] != tc.want0 {
+				t.Errorf("steps[0] = %v, want %v", got[0], tc.want0)
+			}
+			if abs(got[len(got)-1]-tc.wantN) > 1e-9 {
+				t.Errorf("steps[last] = %v, want %v", got[len(got)-1], tc.wantN)
+			}
+			for i := 1; i < len(got); i++ {
+				if got[i] >= got[i-1] {
+					t.Errorf("steps[%d]=%v ≥ steps[%d]=%v (expected descending)", i, got[i], i-1, got[i-1])
+				}
+			}
+		})
+	}
+}
+
+func TestStepIdx(t *testing.T) {
+	steps := zoomSteps(24.0, 48) // mz=24, srcW=48 → 48 steps
+	tests := []struct {
+		name string
+		zoom float64
+		want int
+	}{
+		{"exact max = 24 → index 0", 24.0, 0},
+		{"between 24 and 12 → index 1", 18.0, 1},
+		{"exact 12 → index 1", 12.0, 1},
+		{"exact 8 → index 2", 8.0, 2},
+		{"exact 4.8 → index 4", 4.8, 4},
+		{"above max → clamped to 0", 100.0, 0},
+		{"below min → clamped to last", 0.1, len(steps) - 1},
+		{"exact 1 → index K-1 = 23", 1.0, 23},
+		{"exact 0.5 → last index", 0.5, len(steps) - 1},
+		{"zero zoom → last index", 0.0, len(steps) - 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := stepIdx(tc.zoom, steps)
+			if got != tc.want {
+				t.Errorf("stepIdx(%v, steps[0..%d]) = %d, want %d", tc.zoom, len(steps)-1, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestZoomSequenceRoundTrip(t *testing.T) {
+	const mz, srcW = 24.0, 48
+	steps := zoomSteps(mz, srcW)
+	for i, z := range steps {
+		got := stepIdx(z, steps)
+		if got != i {
+			t.Errorf("step %d (zoom=%v): stepIdx returned %d", i, z, got)
+		}
+	}
+}
+
+// TestZoomLevelPixels verifies that at each zoom step the viewport image
+// correctly maps source pixels to viewport pixels.
+func TestZoomLevelPixels(t *testing.T) {
+	// 20×10 source with unique colors: R = x*257, G = y*257, B = x+y
+	src := image.NewNRGBA(image.Rect(0, 0, 20, 10))
+	for y := 0; y < 10; y++ {
+		for x := 0; x < 20; x++ {
+			src.SetNRGBA(x, y, color.NRGBA{
+				R: uint8(x * 10),
+				G: uint8(y * 20),
+				B: uint8(x + y),
+				A: 255,
+			})
+		}
+	}
+
+	const termCols, termRows = 10, 5
+	mz := maxZoom(20, 10, termCols, termRows, modeHalfblock)
+	steps := zoomSteps(mz, 20)
+
+	// Get the fit dimensions that buildViewport uses internally.
+	fw, fh := imgutil.FitPixelDims(20, 10, termCols, modeHalfblock.pixRows(termRows))
+
+	for i, zoom := range steps {
+		state := viewState{zoom: zoom, panX: 0, panY: 0}
+		rc := renderCfg{id: 4}
+		vp := buildViewport(src, &state, termCols, termRows, rc)
+		b := vp.Bounds()
+
+		// Compute the effective scaled width the same way buildViewport does.
+		sw := max(1, int(math.Round(float64(fw)*zoom)))
+
+		for y := 0; y < b.Dy(); y++ {
+			for x := 0; x < b.Dx(); x++ {
+				sx := x * 20 / sw
+				sy := y * 10 / (max(1, int(math.Round(float64(fh)*zoom))))
+				if sx >= 20 || sy >= 10 {
+					continue
+				}
+				got := vp.At(x, y)
+				want := src.At(sx, sy)
+				r1, g1, b1, a1 := got.RGBA()
+				r2, g2, b2, a2 := want.RGBA()
+				if r1 != r2 || g1 != g2 || b1 != b2 || a1 != a2 {
+					t.Errorf("step %d (zoom=%v): vp.At(%d,%d) = (%d,%d,%d,%d), want src.At(%d,%d) = (%d,%d,%d,%d)",
+						i, zoom, x, y, r1, g1, b1, a1, sx, sy, r2, g2, b2, a2)
+				}
+			}
+		}
+	}
+}
+
+// abs returns the absolute value of f.
+func abs(f float64) float64 {
+	if f < 0 {
+		return -f
+	}
+	return f
+}
+

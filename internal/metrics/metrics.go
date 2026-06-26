@@ -256,14 +256,11 @@ func PyramidDownscale(src image.Image, dstW, dstH int) image.Image {
 
 // QualityGridDims returns the quality-grid pixel dimensions for a rendered
 // viewport of size vpW × vpH, using the given K factor.
-// useQuad controls whether each column spans 2 pixels (quad) or 1 (halfblock).
-func QualityGridDims(vpW, vpH int, useQuad bool, k int) (int, int) {
-	pixPerCol := 1
-	if useQuad {
-		pixPerCol = 2
-	}
+// pixPerCol is the number of pixel columns per terminal cell (1 or 2).
+// pixPerRow is the number of pixel rows per terminal cell (1 or 2).
+func QualityGridDims(vpW, vpH int, pixPerCol, pixPerRow int, k int) (int, int) {
 	cellW := vpW / pixPerCol
-	cellH := vpH / 2
+	cellH := vpH / pixPerRow
 	return k * cellW, k * cellH
 }
 

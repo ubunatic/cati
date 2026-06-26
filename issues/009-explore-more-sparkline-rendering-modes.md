@@ -10,7 +10,7 @@ Current sparkline implementation may be limited to a set of horizontal block ele
 - Other full-cell Unicode blocks that might represent shapes like triangles, curves, or other patterns that could be used for sparklike visualization in an 8x8 cell.
 
 ## Tasks
-- [ ] Research Unicode block elements (U+2580 to U+259F) for fractional blocks and their orientations.
+- [x] Research Unicode block elements (U+2580 to U+259F) for fractional blocks and their orientations.
 - [ ] Research other Unicode blocks that might contain suitable full-cell characters for 8x8 pixel representation (e.g., Geometric Shapes, Block Elements, Box Drawing, Braille Patterns, etc.).
 - [ ] For each candidate character, analyze its 8x8 pixel representation (assuming a typical font) to determine how well it represents different fractions or shapes when combined with foreground/background colors.
 - [ ] Consider vertical orientations: are there characters that naturally vertical? Or can we rotate characters? (Note: terminal may not support rotation, but we can use different characters that resemble vertical bars.)

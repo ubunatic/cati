@@ -12,6 +12,11 @@ Adhere to the following conventions.
 
 - Go/Golang @docs/Go.md,
   Modern Go, avoid deps but use Cobra, add tests
+- **Prefer enums over bools** — every boolean parameter that selects between
+  two modes is a future third mode waiting to happen. Define a named type with
+  iota constants instead. Exceptions: flags that are truly on/off (e.g.
+  `fullComp`, `useQuad` may be acceptable early but reconsider at the third
+  occurrence).
 - Make/Makefile @docs/Make.md,
   ⚙️ phony sentinel, self-doc help, build dependency pattern
 <!-- claudeconfig:end Language Conventions -->

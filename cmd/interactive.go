@@ -19,32 +19,81 @@ import (
 	"codeberg.org/ubunatic/cati/internal/input"
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
+	"codeberg.org/ubunatic/cati/internal/sparkline"
 	spec "codeberg.org/ubunatic/cati/spec"
 	"golang.org/x/term"
 )
 
+// ── renderMode ────────────────────────────────────────────────────────────────
+
+// renderMode identifies the image-rendering strategy.
+type renderMode int
+
+const (
+	modeHalfblock renderMode = iota
+	modeQuad
+	modeSpark
+)
+
+func (m renderMode) pixCols(termCols int) int {
+	if m == modeQuad {
+		return termCols * 2
+	}
+	if m == modeSpark {
+		return termCols * 8
+	}
+	return termCols
+}
+
+func (m renderMode) pixRows(termRows int) int {
+	if m == modeSpark {
+		return termRows * 8
+	}
+	return termRows * 2
+}
+
+func (m renderMode) fitSrcW(srcW int) int {
+	if m == modeQuad {
+		return srcW * 2
+	}
+	return srcW
+}
+
+func (m renderMode) useQuad() bool {
+	return m == modeQuad
+}
+
+func (m renderMode) useSpark() bool {
+	return m == modeSpark
+}
+
 // ── renderCfg ─────────────────────────────────────────────────────────────────
 
-// renderCfg carries the active render mode (halfblock or quad variant).
+// renderCfg carries the active render mode (halfblock, quad variant, or sparkline).
 // The zero value uses halfblock, matching the historic default.
 //
 // id is set by renderModes entries and used for equality/cycling; it must be
 // unique per renderModes element. The zero id (0) belongs to "halfblock".
 type renderCfg struct {
-	id       int
-	useQuad  bool
-	quadOpts quadblock.Options
-	preScale func(image.Image) image.Image // optional pre-scaler applied before ScaleToFit
+	id        int
+	mode      renderMode
+	sparkMode sparkline.Mode
+	quadOpts  quadblock.Options
+	preScale  func(image.Image) image.Image // optional pre-scaler applied before ScaleToFit
 }
 
 func (rc renderCfg) scaleToFit(img image.Image, cols, rows int) image.Image {
 	if rc.preScale != nil {
 		img = rc.preScale(img)
 	}
-	if rc.useQuad {
+	switch rc.mode {
+	case modeSpark:
+		return sparkline.ScaleToFit(img, cols, rows)
+	case modeQuad:
 		return quadblock.ScaleToFit(img, cols, rows)
+	default:
+		return halfblock.ScaleToFit(img, cols, rows)
 	}
-	return halfblock.ScaleToFit(img, cols, rows)
 }
 
 // preScaleName returns a short suffix for the pre-scaler name, or "".
@@ -58,10 +107,17 @@ func (rc renderCfg) preScaleName() string {
 }
 
 func (rc renderCfg) render(w io.Writer, img image.Image) error {
-	if rc.useQuad {
+	switch rc.mode {
+	case modeSpark:
+		b := img.Bounds()
+		outCols := max(1, b.Dx()/8)
+		outRows := max(1, b.Dy()/8)
+		return sparkline.RenderOpts(w, img, outCols, outRows, rc.sparkMode)
+	case modeQuad:
 		return quadblock.RenderOpts(w, img, rc.quadOpts)
+	default:
+		return halfblock.Render(w, img)
 	}
-	return halfblock.Render(w, img)
 }
 
 // renderModes is the cycle order for the R key. Each entry's cfg.id must equal
@@ -71,19 +127,23 @@ var renderModes = []struct {
 	cfg  renderCfg
 }{
 	{"halfblock", renderCfg{id: 4}},
+	{"spark/lower", renderCfg{id: 13, mode: modeSpark, sparkMode: sparkline.LowerHorizontal}},
+	{"spark/left", renderCfg{id: 14, mode: modeSpark, sparkMode: sparkline.LeftVertical}},
+	{"spark/upper", renderCfg{id: 15, mode: modeSpark, sparkMode: sparkline.UpperHorizontal}},
+	{"spark/right", renderCfg{id: 16, mode: modeSpark, sparkMode: sparkline.RightVertical}},
 	// {"halfblock+sharp", renderCfg{id: 10, preScale: pixelart.Sharpen05}},
 	// {"halfblock+epx2x", renderCfg{id: 8, preScale: pixelart.Scale2x}},
-	{"quad/pca2", renderCfg{id: 6, useQuad: true, quadOpts: quadblock.Options{PCA2: true}}},
-	// {"quad/default", renderCfg{id: 7, useQuad: true}},
-	// {"quad/lum+ambig", renderCfg{id: 1, useQuad: true, quadOpts: quadblock.Options{LumSplit: true, Blend: quadblock.BlendAmbiguous}}},
-	// {"quad/pca2+ambig", renderCfg{id: 2, useQuad: true, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguous}}},
-	// {"quad/splithalf+ambig", renderCfg{id: 3, useQuad: true, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguous}}},
-	{"quad/lum-split", renderCfg{id: 5, useQuad: true, quadOpts: quadblock.Options{LumSplit: true}}},
-	{"quad/splithalf", renderCfg{id: 0, useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}}},
-	//{"quad/splithalf+sharp", renderCfg{id: 11, useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen05}},
-	//{"quad/splithalf+epx2x", renderCfg{id: 9, useQuad: true, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale2x}},
-	{"quad/edge-snap", renderCfg{id: 12, useQuad: true, quadOpts: quadblock.Options{EdgeSnap: true}}},
-	// {"quad/edge-snap+ambig", renderCfg{id: 13, useQuad: true, quadOpts: quadblock.Options{EdgeSnap: true, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/pca2", renderCfg{id: 6, mode: modeQuad, quadOpts: quadblock.Options{PCA2: true}}},
+	// {"quad/default", renderCfg{id: 7, mode: modeQuad}},
+	// {"quad/lum+ambig", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{LumSplit: true, Blend: quadblock.BlendAmbiguous}}},
+	// {"quad/pca2+ambig", renderCfg{id: 2, mode: modeQuad, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguous}}},
+	// {"quad/splithalf+ambig", renderCfg{id: 3, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguous}}},
+	{"quad/lum-split", renderCfg{id: 5, mode: modeQuad, quadOpts: quadblock.Options{LumSplit: true}}},
+	{"quad/splithalf", renderCfg{id: 0, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}},
+	//{"quad/splithalf+sharp", renderCfg{id: 11, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen05}},
+	//{"quad/splithalf+epx2x", renderCfg{id: 9, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale2x}},
+	{"quad/edge-snap", renderCfg{id: 12, mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true}}},
+	// {"quad/edge-snap+ambig", renderCfg{id: 13, mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true, Blend: quadblock.BlendAmbiguous}}},
 }
 
 // cycleRenderCfg returns the next renderCfg in the cycle and its display name.
@@ -120,13 +180,63 @@ func findRenderModeByID(id int) (renderCfg, string, bool) {
 	return renderCfg{}, "", false
 }
 
-// ── constants ─────────────────────────────────────────────────────────────────
+// ── zoom levels ──────────────────────────────────────────────────────────────
 
-const (
-	zoomStep = 1.25  // multiply/divide per zoom action
-	minZoom  = 0.125 // 1/8×
-	maxZoom  = 8.0   // 8×
-)
+// maxZoom returns the maximum zoom level such that each terminal cell covers at
+// most 1 source pixel column × 2 source pixel rows. The constraint is applied
+// at the terminal-cell level so it works for both halfblock (1 viewport pixel
+// per cell column) and quad (2 viewport pixels per cell column) modes.
+func maxZoom(srcW, srcH, termCols, termRows int, mode renderMode) float64 {
+	if srcW <= 0 || srcH <= 0 || termCols <= 0 || termRows <= 0 {
+		return 1.0
+	}
+	_, _, scaledW, scaledH, _, _ := viewportDims(srcW, srcH, termCols, termRows, 1.0, mode)
+	if scaledW <= 0 || scaledH <= 0 {
+		return 1.0
+	}
+	cellCols := mode.pixCols(1)
+	zCol := float64(cellCols) * float64(srcW) / float64(scaledW)
+	zRow := float64(srcH) / float64(scaledH)
+	return max(math.Min(zCol, zRow), 1.0)
+}
+
+// zoomSteps returns the sequence of zoom levels from max (index 0) to min
+// (last index). Each step shows one more source column per cell than the
+// previous. Replace this function to change the zoom step behaviour without
+// touching any zoom action handler.
+//
+// Current — k-sequence: step i shows (i+1) × 2(i+1) source pixels per cell.
+// k maxes at srcW so the user can zoom out until the image is 1 pixel wide.
+func zoomSteps(mz float64, srcW int) []float64 {
+	kmax := max(1, int(math.Floor(mz)), srcW)
+	steps := make([]float64, kmax)
+	for k := 1; k <= kmax; k++ {
+		steps[k-1] = mz / float64(k)
+	}
+	return steps
+}
+
+// stepIdx returns the index of the nearest zoom step ≤ zoom (clamped to
+// [0, len(steps)-1]). steps must be descending (zoomSteps order).
+func stepIdx(zoom float64, steps []float64) int {
+	for i, z := range steps {
+		if z <= zoom {
+			return i
+		}
+	}
+	return len(steps) - 1
+}
+
+// zoomLevel returns the current k index formatted for the hint bar.
+func zoomLevel(state viewState, orig image.Image, termCols, termRows int, rc renderCfg) string {
+	b := orig.Bounds()
+	mz := maxZoom(b.Dx(), b.Dy(), termCols, termRows, rc.mode)
+	k := int(math.Round(mz / state.zoom))
+	if k < 1 {
+		k = 1
+	}
+	return fmt.Sprintf("k=%d", k)
+}
 
 // ── viewState ────────────────────────────────────────────────────────────────
 
@@ -245,7 +355,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	var lastKey string
 	modeName := rcModeName(rc)
 	lastNonHBID := rc.id // last non-halfblock mode id; used by toggle_halfblock
-	if !rc.useQuad {
+	if rc.mode != modeQuad {
 		lastNonHBID = -1
 	}
 	var curQ metrics.RenderQuality
@@ -270,9 +380,17 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 			"blockiness":  fmt.Sprintf("%.3f", curQ.Blockiness),
 			"edge_cont":   fmt.Sprintf("%.3f", curQ.EdgeCont),
 			"render_mode": modeName,
+			"zoom_level":  zoomLevel(state, orig, termCols, max(1, termRows-2), rc),
 		}
 		for k, v := range fileMeta.Vars() {
 			hintVars[k] = v
+		}
+		// Override src_res with visible crop region when zoomed/panning.
+		b := orig.Bounds()
+		if cw, ch := visibleCrop(b.Dx(), b.Dy(), state, termCols, max(1, termRows-2), rc); cw > 0 && ch > 0 {
+			if cw != b.Dx() || ch != b.Dy() {
+				hintVars["meta.src_res"] = fmt.Sprintf("%d×%d", cw, ch)
+			}
 		}
 		drawHintBar(os.Stdout, termRows, hint, hintVars, style)
 	}
@@ -315,11 +433,19 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 						if m.Release && newAction != "" {
 							switch newAction {
 							case "inc_zoom":
-								state.zoom = math.Min(state.zoom*zoomStep, maxZoom)
-								changed = true
+								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, termRows, rc.mode), orig.Bounds().Dx())
+								i := stepIdx(state.zoom, steps)
+								if i > 0 {
+									state.zoom = steps[i-1]
+									changed = true
+								}
 							case "dec_zoom":
-								state.zoom = math.Max(state.zoom/zoomStep, minZoom)
-								changed = true
+								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, termRows, rc.mode), orig.Bounds().Dx())
+								i := stepIdx(state.zoom, steps)
+								if i < len(steps)-1 {
+									state.zoom = steps[i+1]
+									changed = true
+								}
 							case "cycle_render":
 								rc, modeName = cycleRenderCfg(rc)
 								changed = true
@@ -328,7 +454,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								changed = true
 							case "toggle_halfblock":
 								oldRC := rc
-								if rc.useQuad {
+								if rc.mode.useQuad() {
 									lastNonHBID = rc.id
 									if m, n, ok := findRenderModeByID(4); ok {
 										rc, modeName = m, n
@@ -356,14 +482,13 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 					switch {
 					// ── Scroll wheel: zoom at cursor ──────────────────────────────
 					case m.IsScroll() && !m.Release:
-						var newZoom float64
-						if m.ScrollDir() < 0 {
-							newZoom = math.Min(state.zoom*zoomStep, maxZoom)
-						} else {
-							newZoom = math.Max(state.zoom/zoomStep, minZoom)
-						}
-						if newZoom != state.zoom {
-							zoomAtCursor(&state, newZoom, c, r)
+						steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, termRows, rc.mode), orig.Bounds().Dx())
+						i := stepIdx(state.zoom, steps)
+						if m.ScrollDir() < 0 && i > 0 {
+							zoomAtCursor(&state, steps[i-1], c, r)
+							changed = true
+						} else if m.ScrollDir() >= 0 && i < len(steps)-1 {
+							zoomAtCursor(&state, steps[i+1], c, r)
 							changed = true
 						}
 
@@ -432,11 +557,19 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 							case "go_back", "quit":
 								shouldQuit = true
 							case "inc_zoom":
-								state.zoom = math.Min(state.zoom*zoomStep, maxZoom)
-								changed = true
+								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, termRows, rc.mode), orig.Bounds().Dx())
+								i := stepIdx(state.zoom, steps)
+								if i > 0 {
+									state.zoom = steps[i-1]
+									changed = true
+								}
 							case "dec_zoom":
-								state.zoom = math.Max(state.zoom/zoomStep, minZoom)
-								changed = true
+								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, termRows, rc.mode), orig.Bounds().Dx())
+								i := stepIdx(state.zoom, steps)
+								if i < len(steps)-1 {
+									state.zoom = steps[i+1]
+									changed = true
+								}
 							case "toggle_pan":
 								spacePan = !spacePan
 								spacePanAnchor = dragState{}
@@ -464,7 +597,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								changed = true
 							case "toggle_halfblock":
 								oldRC := rc
-								if rc.useQuad {
+								if rc.mode.useQuad() {
 									lastNonHBID = rc.id
 									if m, n, ok := findRenderModeByID(4); ok {
 										rc, modeName = m, n
@@ -534,6 +667,59 @@ func resolveTermSize(width, height int) (cols, rows int) {
 	return
 }
 
+// viewportDims computes the derived pixel dimensions for a given view state.
+//
+//	pixCols  — pixel budget per row (termCols × 2 for quad, else termCols)
+//	pixRows  — pixel budget per column (termRows × 2, termRows for sparkline)
+//	scaledW  — full NN-scaled width  after zoom (≥ pixCols on zoom-in)
+//	scaledH  — full NN-scaled height after zoom (≥ pixRows on zoom-in)
+//	viewW    — viewport width  clamped to min(pixCols, scaledW)
+//	viewH    — viewport height clamped to min(pixRows, scaledH)
+func viewportDims(srcW, srcH, termCols, termRows int, zoom float64, mode renderMode) (pixCols, pixRows, scaledW, scaledH, viewW, viewH int) {
+	pixCols = mode.pixCols(termCols)
+	pixRows = mode.pixRows(termRows)
+	fitSrcW := mode.fitSrcW(srcW)
+	fitW, fitH := imgutil.FitPixelDims(fitSrcW, srcH, pixCols, pixRows)
+	scaledW = max(1, int(math.Round(float64(fitW)*zoom)))
+	scaledH = max(1, int(math.Round(float64(fitH)*zoom)))
+	viewW = min(pixCols, scaledW)
+	viewH = min(pixRows, scaledH)
+	return
+}
+
+// srcCrop maps viewport pixel coords back to source image coords and returns
+// the visible source rectangle. scaledW/scaledH are the zoomed pixel dimensions
+// the image was NN-scaled to; panX/panY is the offset within that scaled image.
+func srcCrop(srcW, srcH, panX, panY, scaledW, scaledH, viewW, viewH int) (x0, y0, x1, y1 int) {
+	x0 = panX * srcW / scaledW
+	y0 = panY * srcH / scaledH
+	x1 = min((panX+viewW)*srcW/scaledW, srcW)
+	y1 = min((panY+viewH)*srcH/scaledH, srcH)
+	if x1 <= x0 {
+		x1 = x0 + 1
+	}
+	if y1 <= y0 {
+		y1 = y0 + 1
+	}
+	return
+}
+
+// visibleCrop returns the size of the visible source region in source pixels
+// for the current view state. Returns (0, 0) when the image is empty.
+func visibleCrop(srcW, srcH int, state viewState, termCols, termRows int, rc renderCfg) (int, int) {
+	if srcW <= 0 || srcH <= 0 {
+		return 0, 0
+	}
+	_, _, scaledW, scaledH, viewW, viewH := viewportDims(srcW, srcH, termCols, termRows, state.zoom, rc.mode)
+	vw := min(viewW, scaledW-state.panX)
+	vh := min(viewH, scaledH-state.panY)
+	if vw <= 0 || vh <= 0 {
+		return 0, 0
+	}
+	x0, y0, x1, y1 := srcCrop(srcW, srcH, state.panX, state.panY, scaledW, scaledH, vw, vh)
+	return max(1, x1-x0), max(1, y1-y0)
+}
+
 // recenterForMode adjusts panX/panY after a render-mode switch so the same
 // region of the source image stays visible, despite the pixel budget change.
 func recenterForMode(state *viewState, orig image.Image, termCols, termRows int, oldRC, newRC renderCfg) {
@@ -544,36 +730,12 @@ func recenterForMode(state *viewState, orig image.Image, termCols, termRows int,
 	}
 
 	// Compute center in source coords under the old mode.
-	pixColsOld := termCols
-	if oldRC.useQuad {
-		pixColsOld = termCols * 2
-	}
-	fitSrcW := srcW
-	if oldRC.useQuad {
-		fitSrcW = srcW * 2
-	}
-	fitW, fitH := imgutil.FitPixelDims(fitSrcW, srcH, pixColsOld, termRows*2)
-	scaledW := max(1, int(math.Round(float64(fitW) * state.zoom)))
-	scaledH := max(1, int(math.Round(float64(fitH) * state.zoom)))
-	viewW := min(pixColsOld, scaledW)
-	viewH := min(termRows*2, scaledH)
+	_, _, scaledW, scaledH, viewW, viewH := viewportDims(srcW, srcH, termCols, termRows, state.zoom, oldRC.mode)
 	centerX := (float64(state.panX) + float64(viewW)/2) * float64(srcW) / float64(scaledW)
 	centerY := (float64(state.panY) + float64(viewH)/2) * float64(srcH) / float64(scaledH)
 
 	// Derive pan under the new mode from the same center.
-	pixColsNew := termCols
-	if newRC.useQuad {
-		pixColsNew = termCols * 2
-	}
-	fitSrcW2 := srcW
-	if newRC.useQuad {
-		fitSrcW2 = srcW * 2
-	}
-	fitW2, fitH2 := imgutil.FitPixelDims(fitSrcW2, srcH, pixColsNew, termRows*2)
-	scaledW2 := max(1, int(math.Round(float64(fitW2) * state.zoom)))
-	scaledH2 := max(1, int(math.Round(float64(fitH2) * state.zoom)))
-	viewW2 := min(pixColsNew, scaledW2)
-	viewH2 := min(termRows*2, scaledH2)
+	_, _, scaledW2, scaledH2, viewW2, viewH2 := viewportDims(srcW, srcH, termCols, termRows, state.zoom, newRC.mode)
 	panX2 := int(math.Round(centerX * float64(scaledW2) / float64(srcW) - float64(viewW2)/2))
 	panY2 := int(math.Round(centerY * float64(scaledH2) / float64(srcH) - float64(viewH2)/2))
 	state.panX = max(0, min(panX2, max(0, scaledW2-viewW2)))
@@ -599,45 +761,18 @@ func zoomAtCursor(state *viewState, newZoom float64, col, row int) {
 
 // buildViewport returns the cropped+scaled image for the current view state.
 // It also clamps state.panX/panY in-place so they never exceed image bounds.
-// rc is needed to compute the correct pixel budget: quad uses 2 pixels per
-// terminal column horizontally (half-block uses 1).
 func buildViewport(orig image.Image, state *viewState, termCols, termRows int, rc renderCfg) image.Image {
 	b := orig.Bounds()
 	srcW, srcH := b.Dx(), b.Dy()
 	if srcW == 0 || srcH == 0 {
 		return orig
 	}
+	pixCols, pixRows, scaledW, scaledH, viewW, viewH := viewportDims(srcW, srcH, termCols, termRows, state.zoom, rc.mode)
 
-	// Pixel budget per terminal column: 2 for quad, 1 for halfblock.
-	pixCols := termCols
-	if rc.useQuad {
-		pixCols = termCols * 2
-	}
-
-	// For quad, treat source as 2× wider to compensate for the 1:2 pixel
-	// aspect ratio (each quad pixel is narrow-and-tall, like halfblock pixels).
-	fitSrcW := srcW
-	if rc.useQuad {
-		fitSrcW = srcW * 2
-	}
-
-	// Compute the "fit" pixel dims (what the image looks like at zoom 1.0).
-	fitW, fitH := imgutil.FitPixelDims(fitSrcW, srcH, pixCols, termRows*2)
-
-	// Apply zoom to get the full scaled image size.
-	scaledW := max(1, int(math.Round(float64(fitW)*state.zoom)))
-	scaledH := max(1, int(math.Round(float64(fitH)*state.zoom)))
-
-	// Scale original to zoomed dimensions (supports upscale for zoom > 1).
 	scaled := halfblock.ScaleNN(orig, scaledW, scaledH)
 
-	// Clamp pan.
 	state.panX = max(0, min(state.panX, max(0, scaledW-pixCols)))
-	state.panY = max(0, min(state.panY, max(0, scaledH-termRows*2)))
-
-	// Crop to viewport.
-	viewW := min(pixCols, scaledW)
-	viewH := min(termRows*2, scaledH)
+	state.panY = max(0, min(state.panY, max(0, scaledH-pixRows)))
 	return imgutil.CropImage(scaled, state.panX, state.panY, viewW, viewH)
 }
 
@@ -794,7 +929,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
 	modeName := rcModeName(rc)
 	lastNonHBID := rc.id
-	if !rc.useQuad {
+	if !rc.mode.useQuad() {
 		lastNonHBID = -1
 	}
 	var curQ metrics.RenderQuality
@@ -880,7 +1015,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						rc, modeName = cycleRenderCfg(rc)
 						if lastRawFrame != nil {
 							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
-							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.useQuad, metrics.GridK)
+							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
 							ref := lastRawFrame
 							if !fullComp {
 								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)
@@ -891,7 +1026,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						rc, modeName = cycleRenderCfgPrev(rc)
 						if lastRawFrame != nil {
 							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
-							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.useQuad, metrics.GridK)
+							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
 							ref := lastRawFrame
 							if !fullComp {
 								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)
@@ -899,7 +1034,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 							curQ = computeQuality(ref, lastFrame, rc)
 						}
 					case "toggle_halfblock":
-						if rc.useQuad {
+						if rc.mode.useQuad() {
 							lastNonHBID = rc.id
 							if m, n, ok := findRenderModeByID(4); ok {
 								rc, modeName = m, n
@@ -913,7 +1048,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						}
 						if lastRawFrame != nil {
 							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
-							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.useQuad, metrics.GridK)
+							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
 							ref := lastRawFrame
 							if !fullComp {
 								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)
@@ -970,7 +1105,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					}
 
 				case "toggle_halfblock":
-					if rc.useQuad {
+					if rc.mode.useQuad() {
 						lastNonHBID = rc.id
 						if m, n, ok := findRenderModeByID(4); ok {
 							rc, modeName = m, n
@@ -1052,7 +1187,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						lastRawFrame = img
 						lastFrame = rc.scaleToFit(img, termCols, max(1, termRows-2))
 						{
-							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.useQuad, metrics.GridK)
+							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
 							ref := lastRawFrame
 							if !fullComp {
 								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)

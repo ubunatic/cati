@@ -17,7 +17,11 @@ file_icon: "📄"
 hint_browser: "{ active_file | dim }  { meta.src_res | dim }  { meta.duration | dim }  { preview_state | dim }  { queue_size | dim }  { last_key | dim }"
 hint_settings: "Setting: { active_setting } — adjust:◀/▶  save:↵  cancel:Esc  { last_key | dim }"
 hint_about: "{ last_key | dim }"
-hint_viewer: "{ render_mode | dim }  S:{ ssim | dim } B:{ blockiness | dim } E:{ edge_cont | dim }  { meta.src_res | dim }  { meta.disp_res | dim }  { last_key | dim }"
+hint_viewer: "{ render_mode | dim }  { zoom_level | dim }  S:{ ssim | dim }  { meta.src_res | dim }  { meta.disp_res | dim }  { last_key | dim }"
+
+# not shown:
+#   B:{ blockiness | dim } E:{ edge_cont | dim }
+#
 
 # Settings page UI strings
 settings_title: "CATI SETTINGS"

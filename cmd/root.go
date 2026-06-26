@@ -123,7 +123,10 @@ func run(o opts, args []string) error {
 	if err != nil {
 		return err
 	}
-	rc := renderCfg{useQuad: useQuad, quadOpts: quadOpts}
+	rc := renderCfg{quadOpts: quadOpts}
+	if useQuad {
+		rc.mode = modeQuad
+	}
 
 	if o.playMode {
 		if len(paths) == 0 {
