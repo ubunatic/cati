@@ -9,7 +9,6 @@ import (
 	"math"
 	"os"
 	"os/signal"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +22,7 @@ import (
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
 	"codeberg.org/ubunatic/cati/internal/sparkline"
+	"codeberg.org/ubunatic/cati/internal/viewgeom"
 	spec "codeberg.org/ubunatic/cati/spec"
 	"golang.org/x/term"
 )
@@ -39,20 +39,22 @@ const (
 )
 
 func (m renderMode) pixCols(termCols int) int {
-	if m == modeQuad {
-		return termCols * 2
-	}
-	if m == modeSpark {
-		return termCols * 4
-	}
-	return termCols
+	return m.viewSpec().PixCols(termCols)
 }
 
 func (m renderMode) pixRows(termRows int) int {
-	if m == modeSpark {
-		return termRows * 8
+	return m.viewSpec().PixRows(termRows)
+}
+
+func (m renderMode) viewSpec() viewgeom.Spec {
+	switch m {
+	case modeQuad:
+		return viewgeom.NewCell(2, 2, 2)
+	case modeSpark:
+		return viewgeom.NewCell(4, 8, 4)
+	default:
+		return viewgeom.NewCell(1, 2, 1)
 	}
-	return termRows * 2
 }
 
 func (m renderMode) useQuad() bool {
@@ -204,8 +206,6 @@ var renderModes = []struct {
 	{"halfblock", renderCfg{id: 4}},
 	{"spark/lower", renderCfg{id: 13, mode: modeSpark, sparkMode: sparkline.LowerHorizontal}},
 	{"spark/left", renderCfg{id: 14, mode: modeSpark, sparkMode: sparkline.LeftVertical}},
-	{"spark/upper", renderCfg{id: 15, mode: modeSpark, sparkMode: sparkline.UpperHorizontal}},
-	{"spark/right", renderCfg{id: 16, mode: modeSpark, sparkMode: sparkline.RightVertical}},
 	// {"halfblock+sharp", renderCfg{id: 10, preScale: pixelart.Sharpen05}},
 	// {"halfblock+epx2x", renderCfg{id: 8, preScale: pixelart.Scale2x}},
 	{"quad/pca2", renderCfg{id: 6, mode: modeQuad, quadOpts: quadblock.Options{PCA2: true}}},
@@ -271,18 +271,7 @@ func findRenderModeByID(id int) (renderCfg, string, bool) {
 // maxZoom returns the zoom level at which each terminal cell covers exactly
 // 1 source pixel column × 2 source pixel rows (1:1 pixel-perfect).
 func maxZoom(srcW, srcH, termCols, termRows int, mode renderMode) float64 {
-	if srcW <= 0 || srcH <= 0 || termCols <= 0 || termRows <= 0 {
-		return 1.0
-	}
-	_, _, scaledW, scaledH, _, _ := viewportDims(srcW, srcH, termCols, termRows, 1.0, mode)
-	if scaledW <= 0 || scaledH <= 0 {
-		return 1.0
-	}
-	cellCols := mode.pixCols(1)
-	cellRows := mode.pixRows(1)
-	zCol := float64(cellCols) * float64(srcW) / float64(scaledW)
-	zRow := float64(cellRows/2) * float64(srcH) / float64(scaledH)
-	return math.Min(zCol, zRow)
+	return mode.viewSpec().MaxZoom(srcW, srcH, termCols, termRows)
 }
 
 // ── Zoom-levels spec (from spec/zoom_levels.yaml) ──────────────────────────────
@@ -346,144 +335,29 @@ func loadZoomLevels() zoomLevelsSpec {
 // and zoom-out (k > 1) steps, all hitting exact integer k values.
 func zoomSteps(mz float64, srcW int) []float64 {
 	spec := loadZoomLevels()
-
-	// Collect all k values (deduped).
-	seen := map[float64]bool{}
-
-	// Fixed k-values from spec (capped to srcW so rendered width ≥ 1 cell).
-	for _, k := range spec.Levels {
-		k = math.Round(k*10000) / 10000
-		if k >= 0.125 && k <= float64(srcW) && !seen[k] {
-			seen[k] = true
-		}
-	}
-
-	// Extension from 1.0 up to srcW (rendered width ≥ 1 cell).
-	for k := 1.0; k <= float64(srcW); {
-		k = math.Round(k*10000) / 10000
-		if !seen[k] {
-			seen[k] = true
-		}
-		switch spec.Extend {
-		case "quarters":
-			switch {
-			case k < 2:
-				k += 0.25
-			case k < 5:
-				k += 0.5
-			default:
-				k += 1.0
-			}
-		case "adaptive":
-			switch {
-			case k < 2:
-				k += 0.25
-			case k < 5:
-				k += 0.5
-			case k < 15:
-				k += 1.0
-			case k < 32:
-				k += 2.0
-			case k < 64:
-				k += 4.0
-			default:
-				k += 8.0
-			}
-		default: // "halves"
-			switch {
-			case k < 5:
-				k += 0.5
-			default:
-				k += 1.0
-			}
-		}
-	}
-
-	// Build sorted k list.
-	if srcW > 0 {
-		seen[float64(srcW)] = true
-	}
-	var ks []float64
-	for k := range seen {
-		ks = append(ks, k)
-	}
-	sort.Float64Slice(ks).Sort()
-
-	// Convert to descending zoom values (small k → large zoom, first in list).
-	steps := make([]float64, len(ks))
-	for i, k := range ks {
-		steps[i] = mz / k
-	}
-	return steps
+	return viewgeom.ZoomSteps(mz, srcW, viewgeom.ZoomStepSpec{Levels: spec.Levels, Extend: spec.Extend})
 }
 
 // stepIdx returns the index of the nearest zoom step ≤ zoom (clamped to
 // [0, len(steps)-1]). steps must be descending (zoomSteps order).
 func stepIdx(zoom float64, steps []float64) int {
-	for i, z := range steps {
-		if z <= zoom {
-			return i
-		}
-	}
-	return len(steps) - 1
+	return viewgeom.StepIdx(zoom, steps)
 }
 
 // initialZoomRatio parses the --zoom flag value and returns the corresponding
 // zoom ratio (mz/k).  Empty string returns 1.0 (fit-to-viewport).
 func initialZoomRatio(s string, srcW, srcH, termCols, termRows int, mode renderMode) float64 {
-	k := parseZoomK(s)
-	if k <= 0 {
-		return 1.0
-	}
-	mz := maxZoom(srcW, srcH, termCols, termRows, mode)
-	if srcW > 0 {
-		k = math.Max(k, 1.0/float64(srcW))
-		k = math.Min(k, float64(srcW))
-	}
-	return mz / k
+	return mode.viewSpec().InitialZoomRatio(s, srcW, srcH, termCols, termRows)
 }
 
-// parseZoomK parses the --zoom value and returns the number of source columns
-// per terminal cell (k).  Empty string returns 0 (use default).
-//
-//	"1"  "1.0"  "100%"  "1:1"  → 1      (pixel-perfect, max zoom)
-//	"2"  "2.0"   "50%"  "2:1"  → 2      (2× zoomed out)
-//	"0.5"        "200%"  "1:2"  → 0.5    (2× zoomed in)
 func parseZoomK(s string) float64 {
-	if s == "" {
-		return 0
-	}
-	s = strings.TrimSpace(s)
-
-	var k float64 = -1
-	switch {
-	case strings.HasSuffix(s, "%"):
-		pct, err := strconv.ParseFloat(strings.TrimSuffix(s, "%"), 64)
-		if err == nil && pct > 0 {
-			k = 100.0 / pct
-		}
-	case strings.Contains(s, ":"):
-		parts := strings.SplitN(s, ":", 2)
-		a, errA := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
-		b, errB := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
-		if errA == nil && errB == nil && b > 0 {
-			k = a / b
-		}
-	default:
-		v, err := strconv.ParseFloat(s, 64)
-		if err == nil && v > 0 {
-			k = v
-		}
-	}
-	return k
+	return viewgeom.ParseZoomK(s)
 }
 
-// zoomLevel returns the current k index formatted for the hint bar.
+// zoomLevel returns the current source-pixels-per-cell value formatted for the hint bar.
 func zoomLevel(state viewState, orig image.Image, termCols, termRows int, rc renderCfg) string {
 	b := orig.Bounds()
-	mz := maxZoom(b.Dx(), b.Dy(), termCols, termRows, rc.mode)
-	k := mz / state.zoom
-	return fmt.Sprintf("k=%.3g", k)
+	return rc.mode.viewSpec().ZoomLevel(state.zoom, b.Dx(), b.Dy(), termCols, termRows)
 }
 
 // ── viewState ────────────────────────────────────────────────────────────────
@@ -660,8 +534,9 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 			viewRows = max(1, termRows-2)
 			mz := maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode)
 			k := max(1, int(math.Round(mz/state.zoom))) // source columns per cell
-			hStep := max(1, min(termCols/8, k))         // at least 1 cell, at most terminal fraction
-			vStep := max(1, min(viewRows*2/8, k))       // pixel rows
+			geom := rc.mode.viewSpec()
+			hStep := max(1, min(termCols/8, k)) * geom.CellW // pixel columns
+			vStep := max(1, min(viewRows/8, k)) * geom.CellH // pixel rows
 
 			changed := false
 			newStatus := ""
@@ -704,10 +579,14 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 									changed = true
 								}
 							case "cycle_render":
+								oldRC := rc
 								rc, modeName = cycleRenderCfg(rc)
+								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							case "cycle_render_prev":
+								oldRC := rc
 								rc, modeName = cycleRenderCfgPrev(rc)
+								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							case "toggle_gray":
 								cycleGray(&rc)
@@ -747,10 +626,10 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 						steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
 						i := stepIdx(state.zoom, steps)
 						if m.ScrollDir() < 0 && i > 0 {
-							zoomAtCursor(&state, steps[i-1], c, r)
+							zoomAtCursor(&state, steps[i-1], c, r, rc.mode)
 							changed = true
 						} else if m.ScrollDir() >= 0 && i < len(steps)-1 {
-							zoomAtCursor(&state, steps[i+1], c, r)
+							zoomAtCursor(&state, steps[i+1], c, r, rc.mode)
 							changed = true
 						}
 
@@ -765,8 +644,8 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								startPanY: state.panY,
 							}
 						}
-						state.panX = spacePanAnchor.startPanX - (c - spacePanAnchor.startCol)
-						state.panY = spacePanAnchor.startPanY - (r-spacePanAnchor.startRow)*2
+						state.panX = spacePanAnchor.startPanX - (c-spacePanAnchor.startCol)*geom.CellW
+						state.panY = spacePanAnchor.startPanY - (r-spacePanAnchor.startRow)*geom.CellH
 						changed = true
 
 					// ── Left press: start drag ────────────────────────────────────
@@ -782,8 +661,8 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 					// ── Left drag: update pan ─────────────────────────────────────
 					case !spacePan && m.IsDrag() && m.Button == 0 && drag.active:
 						// Grab-and-pull: dragging right shows more of the left side.
-						state.panX = drag.startPanX - (c - drag.startCol)
-						state.panY = drag.startPanY - (r-drag.startRow)*2
+						state.panX = drag.startPanX - (c-drag.startCol)*geom.CellW
+						state.panY = drag.startPanY - (r-drag.startRow)*geom.CellH
 						changed = true
 
 					// ── Left release: end drag ────────────────────────────────────
@@ -852,10 +731,14 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								}
 								changed = true
 							case "cycle_render":
+								oldRC := rc
 								rc, modeName = cycleRenderCfg(rc)
+								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							case "cycle_render_prev":
+								oldRC := rc
 								rc, modeName = cycleRenderCfgPrev(rc)
+								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							case "toggle_gray":
 								cycleGray(&rc)
@@ -943,53 +826,19 @@ func resolveTermSize(width, height int) (cols, rows int) {
 //	viewW    — viewport width  clamped to min(pixCols, scaledW)
 //	viewH    — viewport height clamped to min(pixRows, scaledH)
 func viewportDims(srcW, srcH, termCols, termRows int, zoom float64, mode renderMode) (pixCols, pixRows, scaledW, scaledH, viewW, viewH int) {
-	pixCols = mode.pixCols(termCols)
-	pixRows = mode.pixRows(termRows)
-	// Compute pixel dims from a common halfblock (1×2 cell) base so that
-	// all modes agree on how many source pixels are visible at any k-level.
-	// Rounding is done once on the base dims, then multiplied by the mode's
-	// cell-width and cell-height ratios relative to halfblock.
-	baseFitW, baseFitH := imgutil.FitPixelDims(srcW, srcH, termCols, termRows*2)
-	cw := mode.pixCols(1)     // 1 for halfblock, 2 for quad, 4 for spark
-	ch := mode.pixRows(1) / 2 // 1 for halfblock, 1 for quad, 4 for spark
-	scaledW = max(1, int(math.Round(float64(baseFitW)*zoom))*cw)
-	scaledH = max(1, int(math.Round(float64(baseFitH)*zoom))*ch)
-	viewW = min(pixCols, scaledW)
-	viewH = min(pixRows, scaledH)
-	return
+	return mode.viewSpec().ViewportDims(srcW, srcH, termCols, termRows, zoom)
 }
 
 // srcCrop maps viewport pixel coords back to source image coords and returns
-// the visible source rectangle. scaledW/scaledH are the zoomed pixel dimensions
-// the image was NN-scaled to; panX/panY is the offset within that scaled image.
+// the visible source rectangle.
 func srcCrop(srcW, srcH, panX, panY, scaledW, scaledH, viewW, viewH int) (x0, y0, x1, y1 int) {
-	x0 = panX * srcW / scaledW
-	y0 = panY * srcH / scaledH
-	x1 = min((panX+viewW)*srcW/scaledW, srcW)
-	y1 = min((panY+viewH)*srcH/scaledH, srcH)
-	if x1 <= x0 {
-		x1 = x0 + 1
-	}
-	if y1 <= y0 {
-		y1 = y0 + 1
-	}
-	return
+	return viewgeom.SrcCrop(srcW, srcH, panX, panY, scaledW, scaledH, viewW, viewH)
 }
 
 // visibleCrop returns the size of the visible source region in source pixels
 // for the current view state. Returns (0, 0) when the image is empty.
 func visibleCrop(srcW, srcH int, state viewState, termCols, termRows int, rc renderCfg) (int, int) {
-	if srcW <= 0 || srcH <= 0 {
-		return 0, 0
-	}
-	_, _, scaledW, scaledH, viewW, viewH := viewportDims(srcW, srcH, termCols, termRows, state.zoom, rc.mode)
-	vw := min(viewW, scaledW-state.panX)
-	vh := min(viewH, scaledH-state.panY)
-	if vw <= 0 || vh <= 0 {
-		return 0, 0
-	}
-	x0, y0, x1, y1 := srcCrop(srcW, srcH, state.panX, state.panY, scaledW, scaledH, vw, vh)
-	return max(1, x1-x0), max(1, y1-y0)
+	return rc.mode.viewSpec().VisibleCrop(srcW, srcH, state.zoom, state.panX, state.panY, termCols, termRows)
 }
 
 // applyGrayIf returns a grayscale copy of img when rc.gray is true, otherwise img.
@@ -1008,18 +857,9 @@ func recenterForMode(state *viewState, orig image.Image, termCols, termRows int,
 	if srcW <= 0 || srcH <= 0 {
 		return
 	}
-
-	// Compute center in source coords under the old mode.
-	_, _, scaledW, scaledH, viewW, viewH := viewportDims(srcW, srcH, termCols, termRows, state.zoom, oldRC.mode)
-	centerX := (float64(state.panX) + float64(viewW)/2) * float64(srcW) / float64(scaledW)
-	centerY := (float64(state.panY) + float64(viewH)/2) * float64(srcH) / float64(scaledH)
-
-	// Derive pan under the new mode from the same center.
-	_, _, scaledW2, scaledH2, viewW2, viewH2 := viewportDims(srcW, srcH, termCols, termRows, state.zoom, newRC.mode)
-	panX2 := int(math.Round(centerX*float64(scaledW2)/float64(srcW) - float64(viewW2)/2))
-	panY2 := int(math.Round(centerY*float64(scaledH2)/float64(srcH) - float64(viewH2)/2))
-	state.panX = max(0, min(panX2, max(0, scaledW2-viewW2)))
-	state.panY = max(0, min(panY2, max(0, scaledH2-viewH2)))
+	oldQ := oldRC.mode.viewSpec()
+	newQ := newRC.mode.viewSpec()
+	state.panX, state.panY = oldQ.Recenter(srcW, srcH, termCols, termRows, state.zoom, oldQ, newQ, state.panX, state.panY)
 }
 
 // ── zoom helpers ─────────────────────────────────────────────────────────────
@@ -1030,11 +870,8 @@ func recenterForMode(state *viewState, orig image.Image, termCols, termRows int,
 // Derivation: let p = panX + col be the pixel in the scaled image under the
 // cursor. After scaling by factor f = newZoom/oldZoom, that pixel moves to
 // p*f in the new scaled image. To keep it under the cursor: newPanX = p*f - col.
-func zoomAtCursor(state *viewState, newZoom float64, col, row int) {
-	f := newZoom / state.zoom
-	state.panX = int(math.Round(float64(state.panX+col)*f)) - col
-	state.panY = int(math.Round(float64(state.panY+row*2)*f)) - row*2
-	state.zoom = newZoom
+func zoomAtCursor(state *viewState, newZoom float64, col, row int, mode renderMode) {
+	mode.viewSpec().ZoomAtCursor(&state.zoom, &state.panX, &state.panY, newZoom, col, row)
 }
 
 // ── buildViewport / renderView ────────────────────────────────────────────────

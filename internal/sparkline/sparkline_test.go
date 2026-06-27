@@ -13,9 +13,7 @@ func TestModeName(t *testing.T) {
 		want string
 	}{
 		{LowerHorizontal, "spark/lower"},
-		{UpperHorizontal, "spark/upper"},
 		{LeftVertical, "spark/left"},
-		{RightVertical, "spark/right"},
 		{Mode(99), "spark/lower"},
 	}
 	for _, tc := range tests {
@@ -27,26 +25,26 @@ func TestModeName(t *testing.T) {
 
 func TestModes(t *testing.T) {
 	ms := Modes()
-	if len(ms) != 4 {
-		t.Fatalf("Modes() returned %d entries, want 4", len(ms))
+	if len(ms) != 2 {
+		t.Fatalf("Modes() returned %d entries, want 2", len(ms))
 	}
-	if ms[0] != LowerHorizontal || ms[1] != UpperHorizontal || ms[2] != LeftVertical || ms[3] != RightVertical {
+	if ms[0] != LowerHorizontal || ms[1] != LeftVertical {
 		t.Errorf("Modes() order incorrect: got %v", ms)
 	}
 }
 
 func TestCycle(t *testing.T) {
-	if got := Cycle(RightVertical); got != LowerHorizontal {
-		t.Errorf("Cycle(RightVertical) = %d, want LowerHorizontal", got)
+	if got := Cycle(LeftVertical); got != LowerHorizontal {
+		t.Errorf("Cycle(LeftVertical) = %d, want LowerHorizontal", got)
 	}
-	if got := Cycle(LowerHorizontal); got != UpperHorizontal {
-		t.Errorf("Cycle(LowerHorizontal) = %d, want UpperHorizontal", got)
+	if got := Cycle(LowerHorizontal); got != LeftVertical {
+		t.Errorf("Cycle(LowerHorizontal) = %d, want LeftVertical", got)
 	}
-	if got := CyclePrev(LowerHorizontal); got != RightVertical {
-		t.Errorf("CyclePrev(LowerHorizontal) = %d, want RightVertical", got)
+	if got := CyclePrev(LowerHorizontal); got != LeftVertical {
+		t.Errorf("CyclePrev(LowerHorizontal) = %d, want LeftVertical", got)
 	}
-	if got := CyclePrev(UpperHorizontal); got != LowerHorizontal {
-		t.Errorf("CyclePrev(UpperHorizontal) = %d, want LowerHorizontal", got)
+	if got := CyclePrev(LeftVertical); got != LowerHorizontal {
+		t.Errorf("CyclePrev(LeftVertical) = %d, want LowerHorizontal", got)
 	}
 	if got := Cycle(Mode(99)); got != LowerHorizontal {
 		t.Errorf("Cycle(99) = %d, want LowerHorizontal", got)
@@ -80,27 +78,6 @@ func TestCharLowerHorizontal(t *testing.T) {
 	}
 }
 
-func TestCharUpperHorizontal(t *testing.T) {
-	// UpperHorizontal uses inverted level + swap.
-	// v=0 → level(1-0)=7 → block[7]=█, swap=true
-	// v=1 → level(1-1)=0 → block[0]=▁, swap=true
-	ch, swap := Char(UpperHorizontal, 0)
-	if ch != '\u2588' {
-		t.Errorf("Char(UpperHorizontal, 0) = %c, want █", ch)
-	}
-	if !swap {
-		t.Errorf("Char(UpperHorizontal, 0): swapFgBg = false, want true")
-	}
-
-	ch, swap = Char(UpperHorizontal, 1)
-	if ch != '\u2581' {
-		t.Errorf("Char(UpperHorizontal, 1) = %c, want ▁", ch)
-	}
-	if !swap {
-		t.Errorf("Char(UpperHorizontal, 1): swapFgBg = false, want true")
-	}
-}
-
 func TestCharLeftVertical(t *testing.T) {
 	ch, swap := Char(LeftVertical, 0)
 	if ch != '\u258F' {
@@ -113,16 +90,6 @@ func TestCharLeftVertical(t *testing.T) {
 	ch, swap = Char(LeftVertical, 1)
 	if ch != '\u2588' {
 		t.Errorf("Char(LeftVertical, 1) = %c, want █", ch)
-	}
-}
-
-func TestCharRightVertical(t *testing.T) {
-	ch, swap := Char(RightVertical, 0)
-	if ch != '\u2588' {
-		t.Errorf("Char(RightVertical, 0) = %c, want █", ch)
-	}
-	if !swap {
-		t.Errorf("Char(RightVertical, 0): swapFgBg = false, want true")
 	}
 }
 
@@ -230,29 +197,7 @@ func TestRenderOptsOutput(t *testing.T) {
 	}
 }
 
-func TestRenderOptsSwapMode(t *testing.T) {
-	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
-	for y := 0; y < 8; y++ {
-		for x := 0; x < 8; x++ {
-			img.Set(x, y, color.RGBA{R: 128, G: 128, B: 128, A: 255})
-		}
-	}
 
-	var buf strings.Builder
-	err := RenderOpts(&buf, img, 1, 1, UpperHorizontal)
-	if err != nil {
-		t.Fatalf("RenderOpts(UpperHorizontal) error: %v", err)
-	}
-
-	output := buf.String()
-	// Should contain both fg and bg escapes for swap modes
-	if !strings.Contains(output, "\x1b[48;2;") {
-		t.Error("RenderOpts(UpperHorizontal) missing background color escape")
-	}
-	if !strings.Contains(output, "\x1b[38;2;") {
-		t.Error("RenderOpts(UpperHorizontal) missing foreground color escape")
-	}
-}
 
 func TestRenderOptsLeftVertical(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 8, 8))

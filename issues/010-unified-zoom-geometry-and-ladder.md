@@ -7,7 +7,7 @@
 
 ## Problem
 
-The current zoom model is still anchored around scalar `k` stepping, which is workable for a single renderer but starts to blur important distinctions once multiple glyph families share the same viewer.
+The current zoom model needs to stay coherent across multiple renderer families. Much of the shared zoom math has now moved into `internal/viewgeom`, but the underlying problem remains: the viewer still needs one geometry model that can survive halfblock, quad, sparkline, and later glyph families without mode-specific drift.
 
 The pain points:
 
@@ -37,3 +37,5 @@ The ladder should:
 ## Notes
 
 This is a refactor target, not a feature request for new zoom controls. The important thing is to remove the hidden assumption that zoom is a scalar `k` sequence and replace it with a footprint-based ladder that can survive new render modes.
+
+The immediate mode-switch regression is tracked separately in [012](012-viewport-geometry-mode-switch-regression.md). Use that issue for the current bug; keep this one as the broader geometry refactor umbrella until the new model is complete and tested end to end.

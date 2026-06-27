@@ -250,3 +250,64 @@ func Render(w io.Writer, img image.Image) error {
 	}
 	return nil
 }
+
+// RenderToImage renders the image using the halfblock algorithm and returns a new image.
+func RenderToImage(img image.Image) *image.RGBA {
+	b := img.Bounds()
+	width := b.Dx()
+	height := b.Dy()
+	dst := image.NewRGBA(b)
+
+	for y := b.Min.Y; y < b.Min.Y+height; y += 2 {
+		topY := y
+		botY := y + 1
+
+		for x := b.Min.X; x < b.Min.X+width; x++ {
+			top := toRGBA(img.At(x, topY))
+			var bot color.RGBA
+			if botY < b.Min.Y+height {
+				bot = toRGBA(img.At(x, botY))
+			}
+
+			c := pairToCell(top, bot)
+
+			var topColor color.RGBA
+			var botColor color.RGBA
+
+			if c.transparent {
+				topColor = color.RGBA{}
+				botColor = color.RGBA{}
+			} else {
+				bg := c.bg
+				if !c.hasBG {
+					bg = color.RGBA{A: 255} // terminal default bg (black)
+				}
+				fg := c.fg
+				if !c.hasFG {
+					fg = bg
+				}
+
+				switch c.ch {
+				case '▀':
+					topColor = fg
+					botColor = bg
+				case '▄':
+					topColor = bg
+					botColor = fg
+				case '█':
+					topColor = fg
+					botColor = fg
+				default:
+					topColor = bg
+					botColor = bg
+				}
+			}
+
+			dst.SetRGBA(x, topY, topColor)
+			if botY < b.Min.Y+height {
+				dst.SetRGBA(x, botY, botColor)
+			}
+		}
+	}
+	return dst
+}

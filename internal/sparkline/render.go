@@ -88,18 +88,11 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 				continue
 			}
 
-			bestK, barColor, emptyColor, _ := findOptimalSplit(img, b, x0, x1, y0, y1, mode)
+			bestK, barColor, emptyColor, _ := FindOptimalSplit(img, b, x0, x1, y0, y1, mode)
 
-			switch mode {
-			case LowerHorizontal, LeftVertical:
-				// natural alignment: FG = bar, BG = empty
-				sb.WriteString(bgRGB(emptyColor))
-				sb.WriteString(fgRGB(barColor))
-			case UpperHorizontal, RightVertical:
-				// inverted alignment: FG = empty, BG = bar
-				sb.WriteString(bgRGB(barColor))
-				sb.WriteString(fgRGB(emptyColor))
-			}
+			// natural alignment: FG = bar, BG = empty
+			sb.WriteString(bgRGB(emptyColor))
+			sb.WriteString(fgRGB(barColor))
 			ch := blockChar(mode, bestK)
 			sb.WriteRune(ch)
 			sb.WriteString(ansiReset)
@@ -112,7 +105,7 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 	return nil
 }
 
-// findOptimalSplit tries all character levels 0..7 for the pixel block
+// FindOptimalSplit tries all character levels 0..7 for the pixel block
 // [x0..x1] × [y0..y1] and returns:
 //
 //	bestK     — the character index (0..7) giving the lowest SSE
@@ -126,7 +119,7 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 //	UpperHorizontal: top→bottom, bar=top pixels,  empty=bottom pixels
 //	LeftVertical:    left→right, bar=left pixels,  empty=right pixels
 //	RightVertical:   left→right, bar=right pixels, empty=left pixels
-func findOptimalSplit(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, mode Mode) (bestK int, barColor, emptyColor color.RGBA, bestErr float64) {
+func FindOptimalSplit(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, mode Mode) (bestK int, barColor, emptyColor color.RGBA, bestErr float64) {
 	blockW := x1 - x0 + 1
 	blockH := y1 - y0 + 1
 	n := blockW * blockH
@@ -134,7 +127,7 @@ func findOptimalSplit(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 in
 		return 0, color.RGBA{}, color.RGBA{}, math.MaxFloat64
 	}
 
-	pixels := readBlock(img, x0, x1, y0, y1)
+	pixels := readBlock(img, x0, x1, y0, y1, mode)
 
 	pref := prefixSums(pixels)
 	sum := pref[n]
@@ -195,9 +188,6 @@ func findOptimalSplit(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 in
 			}
 		}
 
-		if firstIsBar {
-			return err, fgAvg, bgAvg
-		}
 		return err, fgAvg, bgAvg
 	}
 
@@ -210,18 +200,10 @@ func findOptimalSplit(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 in
 			// bar at bottom = last region (second)
 			// firstIsBar = false → first=empty, last=bar
 			err, bar, empty = trySplit(ci, false)
-		case UpperHorizontal:
-			// bar at top = first region
-			// firstIsBar = true  → first=bar, last=empty
-			err, bar, empty = trySplit(ci, true)
 		case LeftVertical:
 			// bar at left = first region
 			// firstIsBar = true  → first=bar, last=empty
 			err, bar, empty = trySplit(ci, true)
-		case RightVertical:
-			// bar at right = last region
-			// firstIsBar = false → first=empty, last=bar
-			err, bar, empty = trySplit(ci, false)
 		}
 
 		if err < bestErr {
@@ -247,12 +229,20 @@ func findOptimalSplit(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 in
 
 type acc struct{ r, g, b float64 }
 
-func readBlock(img image.Image, x0, x1, y0, y1 int) []color.RGBA {
+func readBlock(img image.Image, x0, x1, y0, y1 int, mode Mode) []color.RGBA {
 	n := (x1 - x0 + 1) * (y1 - y0 + 1)
 	p := make([]color.RGBA, 0, n)
-	for by := y0; by <= y1; by++ {
+	if mode == LeftVertical {
 		for bx := x0; bx <= x1; bx++ {
-			p = append(p, toRGBA(img.At(bx, by)))
+			for by := y0; by <= y1; by++ {
+				p = append(p, toRGBA(img.At(bx, by)))
+			}
+		}
+	} else {
+		for by := y0; by <= y1; by++ {
+			for bx := x0; bx <= x1; bx++ {
+				p = append(p, toRGBA(img.At(bx, by)))
+			}
 		}
 	}
 	return p
@@ -287,9 +277,9 @@ func blockChar(mode Mode, k int) rune {
 		k = 7
 	}
 	switch mode {
-	case LowerHorizontal, UpperHorizontal:
+	case LowerHorizontal:
 		return lowerBlocks[k]
-	case LeftVertical, RightVertical:
+	case LeftVertical:
 		return leftBlocks[k]
 	default:
 		return lowerBlocks[k]

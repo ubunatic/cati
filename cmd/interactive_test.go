@@ -167,7 +167,7 @@ func TestZoomAtCursor(t *testing.T) {
 	// After doubling zoom, pixel 40 of the 80px scaled image → pixel 80 of 160px.
 	// New panX should be 80 - 40 = 40.
 	state := viewState{zoom: 1.0, panX: 0, panY: 0}
-	zoomAtCursor(&state, 2.0, 40, 0)
+	zoomAtCursor(&state, 2.0, 40, 0, modeHalfblock)
 	if state.panX != 40 {
 		t.Errorf("panX = %d, want 40", state.panX)
 	}

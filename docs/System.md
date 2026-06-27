@@ -84,19 +84,17 @@ The viewport geometry math (`pixelColumns ← termCols × (2 if quad else 1)`, t
 *   **`srcCrop`** — maps viewport pixel coords back to source image coords, returning the visible source rectangle. Used by `buildRef` for SSIM reference generation and by the hint-bar for `meta.src_res` (now shows the visible crop region when zoomed/panning instead of always showing full source resolution).
 *   Both functions live in `cmd/` because they depend on the project-specific `useQuad` concept. They are pure (no I/O), table-driven test candidates.
 
-### K-Sequence Zoom Model (June 2026, revised June 2026)
+### Cell-Quantum Zoom Model (June 2026, revised June 2026)
 
-The zoom model uses a **k-sequence** where each zoom level k represents the number of source-columns per terminal-cell:
+The stable zoom and viewport helpers now live in `internal/viewgeom`. The app layer keeps thin wrappers, while the core model uses a **cell quantum** where each renderer declares how many source-pixel units one cell represents.
 
-*   `zoom_k = mz / k` where `mz` is the dynamic max zoom (computed from source and terminal dimensions)
-*   At `k=1`: each terminal cell shows exactly **1 source column × 2 source rows** (pixel-perfect, no sub-cell algorithm choice)
-*   At `k=srcW`: image is 1 cell wide (minimum useful zoom-out)
-*   k < 1: zoom-in (each cell shows less than 1 source column, image larger than viewport)
-*   k > 1: zoom-out (image fits in viewport)
+*   The stable user-facing unit is `src px/cell`, not `k`. `k` is an internal ladder parameter; the hint bar should report the actual source pixels represented by one terminal cell.
+*   The common geometry is `n : 2n` source pixels per cell footprint. `n` is renderer-specific and must stay configurable so future glyph families can plug into the same math.
+*   Zoom should step through distinct rendered footprints, not through linear arithmetic in `k`. Any candidate state that collapses to the same visible output after rounding is dead weight and should be dropped from the ladder.
+*   Mode changes must preserve source-space center and aspect. Switching between halfblock, quad, and future modes should recenter from the source rectangle, not reuse the old viewport coordinates verbatim.
+*   Subcell phase shifts are a separate axis from zoom. They belong in dedicated controls later; they should not be conflated with the zoom ladder itself.
 
-**Canonical cell quantum.** The long-term direction is to treat `src px / cell` as the user-visible zoom unit and make the mode-specific footprint a configurable integer multiple of a shared base quantum. Halfblock, quad, sparkline, and future glyph modes then become specializations of the same geometry model instead of separate systems.
-
-**Ladder, not linear steps.** Zoom changes should move through distinct rendered footprints, not through arbitrary arithmetic increments in `k`. The step generator should derive candidate cell footprints from the image dimensions and render mode, convert them to `src px / cell`, and drop states that do not change the actual output after rounding. This keeps small images from accumulating useless tail states and gives every mode one geometry path.
+**Ladder, not linear steps.** Zoom changes should move through distinct rendered footprints, not through arbitrary arithmetic increments in `k`. The step generator should derive candidate cell footprints from the image dimensions and render quantum, convert them to `src px / cell`, and drop states that do not change the actual output after rounding. This keeps small images from accumulating useless tail states and gives every mode one geometry path.
 
 **Mode separation.** Zoom changes size only. Sampling phase / subcell offsets are a separate axis for later testing-only controls such as quadshift. SSIM and other quality metrics should compare through a common analysis grid so new glyph families can still be evaluated against the same baseline.
 
@@ -132,7 +130,7 @@ This caps zoom at the 1-source-pixel-per-cell-column limit regardless of termina
 
 The naive `steps[len-1-i]` reversed-index pattern is wrong — it produces ascending zoom, breaking `stepIdx`.
 
-**Zoom level display.** The current k value is shown in the hint bar using `%.3g` format (e.g. `k=0.75`, `k=1.25`), computed from `maxZoom / zoom`. No rounding, no k≥1 clamp — fractional values are displayed as-is.
+**Zoom level display.** The current source-pixels-per-cell value is shown in the hint bar using `%.3g` format (e.g. `src px/cell=0.75`, `src px/cell=1.25`), computed from `maxZoom / zoom`. No rounding, no clamp — fractional values are displayed as-is.
 
 ### Phony Sentinels in Makefiles
 To keep targets phony without polluting the `Makefile` with lists of names, a sentinel target `⚙️` is used:

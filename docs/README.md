@@ -9,6 +9,7 @@ Welcome to the Cati developer documentation. The following resources cover our p
 *   [Spec System — Authoritative Reference](Spec.md) — Spec-as-code philosophy, file map, key dispatch pipeline, quality invariants, agent rules, integrity tests, and change checklist. **Read this before touching any `spec/` file or its Go loaders.**
 *   [Spec System & Browser Design](Design.md) — The `spec/` YAML-driven config system: template engine (`renderTpl`/`if()`), color system, button/label/view pipeline, full hint-bar variable table (`meta.*`, `ssim`, `last_key`, …), scrollbar, dense-mode grid, split-screen preview.
 *   [Quad-Block Pixel Art](QuadPixelArt.md) — Half-block vs. quad-block layout math, the 2× horizontal stretch aspect-ratio correction, neighbour-aware colour quantisation, and the quadrant character lookup table.
+*   [Sparkline Pixel Art](SparklinePixelArt.md) — Sparkline layout math, horizontal and vertical orientation, optimal-split character and color selection, and the test helper suite.
 *   [Go Conventions](Go.md) — Development guidelines for writing Go code, state management, error handling, CLI verbs, and testing.
 *   [Make Conventions](Make.md) — Standardized Makefile structures, target phony declarations using the sentinel `⚙️` trick, and self-documenting rules.
 

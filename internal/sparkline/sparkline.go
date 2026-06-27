@@ -1,50 +1,34 @@
 // Package sparkline renders scalar values as Unicode block-element sparklines.
 //
-// Four modes are provided, differing in the block orientation:
+// Two modes are provided, differing in the block orientation:
 //
 //   - LowerHorizontal:  ▁▂▃▄▅▆▇█  (bars grow upward from cell bottom)
-//   - UpperHorizontal:  same chars, fg↔bg swap (bars grow downward from top)
 //   - LeftVertical:     ▏▎▍▌▋▊▉█  (bars grow rightward from cell left)
-//   - RightVertical:    same chars, fg↔bg swap (bars grow leftward from right)
-//
-// Unicode defines lower and left fractional blocks with 1/8 resolution
-// (U+2581–U+2588, U+2589–U+258F).  Finer upper/right blocks do not exist,
-// so UpperHorizontal and RightVertical reuse the lower/left chars with
-// foreground and background colours swapped: the "filled" region behind
-// the block glyph becomes the visible bar, and the glyph foreground becomes
-// the empty space.
 //
 // Each cell encodes one value in [0,1].  The caller is responsible for
-// setting fg (bar/filled colour) and bg (empty colour) per cell, and for
-// swapping them when Cell.SwapFgBg is true.
+// setting fg (bar/filled colour) and bg (empty colour) per cell.
 package sparkline
 
 type Mode int
 
 const (
 	LowerHorizontal Mode = iota
-	UpperHorizontal
 	LeftVertical
-	RightVertical
 )
 
 func ModeName(m Mode) string {
 	switch m {
 	case LowerHorizontal:
 		return "spark/lower"
-	case UpperHorizontal:
-		return "spark/upper"
 	case LeftVertical:
 		return "spark/left"
-	case RightVertical:
-		return "spark/right"
 	default:
 		return "spark/lower"
 	}
 }
 
 func Modes() []Mode {
-	return []Mode{LowerHorizontal, UpperHorizontal, LeftVertical, RightVertical}
+	return []Mode{LowerHorizontal, LeftVertical}
 }
 
 func Cycle(m Mode) Mode {
@@ -101,12 +85,8 @@ func Char(m Mode, v float64) (r rune, swapFgBg bool) {
 	switch m {
 	case LowerHorizontal:
 		return lowerBlocks[idx], false
-	case UpperHorizontal:
-		return lowerBlocks[level(1-v)], true
 	case LeftVertical:
 		return leftBlocks[idx], false
-	case RightVertical:
-		return leftBlocks[level(1-v)], true
 	default:
 		return lowerBlocks[idx], false
 	}
