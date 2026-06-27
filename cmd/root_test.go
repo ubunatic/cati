@@ -122,3 +122,34 @@ func TestExpandArgs_MissingFile(t *testing.T) {
 		t.Error("expected error for missing file, got nil")
 	}
 }
+
+func TestZoomFlagShorthand(t *testing.T) {
+	cmd := New()
+	// Test --zoom
+	err := cmd.ParseFlags([]string{"--zoom", "w"})
+	if err != nil {
+		t.Fatalf("failed to parse --zoom: %v", err)
+	}
+	zoomVal, err := cmd.Flags().GetString("zoom")
+	if err != nil {
+		t.Fatalf("failed to get zoom flag: %v", err)
+	}
+	if zoomVal != "w" {
+		t.Errorf("expected zoom flag to be 'w', got '%s'", zoomVal)
+	}
+
+	// Reset flags and test -z
+	cmd = New()
+	err = cmd.ParseFlags([]string{"-z", "h"})
+	if err != nil {
+		t.Fatalf("failed to parse -z: %v", err)
+	}
+	zoomVal, err = cmd.Flags().GetString("zoom")
+	if err != nil {
+		t.Fatalf("failed to get zoom flag: %v", err)
+	}
+	if zoomVal != "h" {
+		t.Errorf("expected zoom flag to be 'h', got '%s'", zoomVal)
+	}
+}
+

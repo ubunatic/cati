@@ -35,7 +35,9 @@ All user-facing configuration, styling, labelling, and layout lives in `spec/`. 
 | `spec/theme.yaml` | `schemas/theme.schema.json` | Semantic style tokens (primary, secondary, active, …) |
 | `spec/controls.yaml` | `schemas/controls.schema.json` | Tunable runtime controls with get/set action names |
 | `spec/config.yaml` | `schemas/config.schema.json` | App config defaults — read by `loadSpecConfigDefaults()` as the base layer before user config |
-| `spec/about.yaml` | — | About page content (parsed by `parseYamlView`) |
+| `spec/about.yaml` | — | About page content (loaded by `spec.LoadYamlView()` via `parseYamlView`) |
+
+All of these files are loaded through typed helpers in `spec/load.go`. The `cmd/` package keeps only thin adapters such as `loadViewButtonRows()` and `loadViewKeyRows()` so the browser logic still works with simple string templates, but the spec content itself is no longer line-parsed in Go.
 
 ### 3.2 Color values
 

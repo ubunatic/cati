@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"io/fs"
 	"math"
 	"testing"
 
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/input"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
+	spec "codeberg.org/ubunatic/cati/spec"
 )
 
 // ── interactive (error paths) ─────────────────────────────────────────────────
@@ -437,9 +439,9 @@ func TestZoomSteps(t *testing.T) {
 		srcW    int
 		wantLen int
 	}{
-		{"maxZoom=1, srcW=5", 1.0, 5, 15},
-		{"maxZoom=2, srcW=10", 2.0, 10, 20},
-		{"maxZoom=24, srcW=48", 24.0, 48, 38},
+		{"maxZoom=1, srcW=5", 1.0, 5, 14},
+		{"maxZoom=2, srcW=10", 2.0, 10, 19},
+		{"maxZoom=24, srcW=48", 24.0, 48, 37},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -461,7 +463,7 @@ func TestZoomSteps(t *testing.T) {
 
 func TestZoomStepsAdaptiveTail(t *testing.T) {
 	steps := zoomSteps(24.0, 48)
-	want := []float64{24.0 / 15.0, 24.0 / 17.0, 24.0 / 19.0, 24.0 / 21.0, 24.0 / 23.0}
+	want := []float64{24.0 / 17.0, 24.0 / 19.0, 24.0 / 21.0, 24.0 / 23.0, 24.0 / 25.0}
 	for i, z := range want {
 		if got := steps[24+i]; math.Abs(got-z) > 1e-9 {
 			t.Fatalf("tail step %d = %v, want %v", 24+i, got, z)
@@ -567,3 +569,22 @@ func abs(f float64) float64 {
 	}
 	return f
 }
+
+func TestSpecZoomKKeyBindings(t *testing.T) {
+	inputSpec, _ := input.Load(fs.FS(spec.FS))
+	defs := loadButtonKeyDefs(inputSpec)
+	keyRows := loadViewKeyRows()
+	maps := buildViewKeyMaps(keyRows, defs)
+
+	for _, k := range []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"} {
+		action, ok := maps["image_viewer"][k]
+		if !ok {
+			t.Errorf("image_viewer has no key binding for %q", k)
+			continue
+		}
+		if action != "zoom_k" {
+			t.Errorf("key %q bound to action %q, want zoom_k", k, action)
+		}
+	}
+}
+

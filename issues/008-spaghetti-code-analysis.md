@@ -9,6 +9,15 @@
 
 Static analysis of the 24 non-test Go source files (8,423 lines total) reveals systemic spaghetti code: **12 hand-written YAML parsers**, **~1,080 lines of duplicated code**, and **god functions exceeding 1,200 lines**. The worst offender is `cmd/browser.go` which alone accounts for 2,689 lines (32% of the codebase) and contains a single function spanning ~1,217 lines with 11 levels of nesting.
 
+## Progress Update
+
+The refactor has already started to chip away at the analysis above:
+
+- `spec/load.go` now centralizes typed YAML loaders for `style`, `labels`, `buttons`, `views`, `config`, `controls`, `about`, and `zoom_levels`
+- `cmd/browser.go` no longer line-parses `views.yaml`, `about.yaml`, `config.yaml`, `controls.yaml`, or `zoom_levels.yaml`
+- the browser now consumes `loadViewButtonRows()` and `loadViewKeyRows()` as thin adapters over `spec.LoadViews()`
+- the remaining manual spec parsing is now much smaller and mostly concentrated in `internal/input/input.go`
+
 ---
 
 ## A. Manual YAML Parsing — 12 ad-hoc parsers, zero YAML libraries
@@ -206,9 +215,9 @@ The spec system rules (AGENTS.md) mandate:
 - "Update spec and Go together"
 - "All keys must be specced"
 
-### E1. Hardcoded fallback views in `loadViewRowYaml()` (line 2485-2513)
+### E1. Hardcoded fallback views in `loadViewRowYaml()` (historical; removed in the current tree)
 
-When `views.yaml` is unreadable or missing, the function falls back to hardcoded strings:
+The pre-refactor browser code fell back to hardcoded strings when `views.yaml` was unreadable or missing:
 ```go
 visibleDefaults := map[string]string{
     "browser":      "{ prev } { next } { back } | { settings } { mode } { about } | { quit }",
@@ -226,7 +235,7 @@ hiddenDefaults := map[string]string{
 }
 ```
 
-This directly violates "No Go fallbacks". If the spec file goes missing, the app shows hardcoded defaults instead of the raw key names.
+This directly violated "No Go fallbacks". It has now been retired in favor of `spec.LoadViews()`, so the issue remains only as historical context for the earlier analysis.
 
 ### E2. Hardcoded button labels in `loadLabels()` (lines 512-521)
 

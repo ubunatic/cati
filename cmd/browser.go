@@ -27,10 +27,6 @@ import (
 	"golang.org/x/term"
 )
 
-func specRead(name string) ([]byte, error) {
-	return fs.ReadFile(spec.FS, name)
-}
-
 type menuButton struct {
 	label     string
 	col       int    // 1-indexed column
@@ -72,7 +68,7 @@ func getFolderIcon() image.Image {
 // ControlSpec describes a single tunable setting loaded from spec/controls.yaml.
 type ControlSpec struct {
 	Key    string
-	Type   string   // "int", "bool", "enum"
+	Type   string // "int", "bool", "enum"
 	Min    int
 	Max    int
 	Values []string // for enum type
@@ -103,7 +99,7 @@ func applySettingsDelta(c ControlSpec, delta int, s *Settings) {
 					break
 				}
 			}
-			idx = ((idx + delta) % len(c.Values) + len(c.Values)) % len(c.Values)
+			idx = ((idx+delta)%len(c.Values) + len(c.Values)) % len(c.Values)
 			s.ViewMode = c.Values[idx]
 		}
 	case "preview_videos":
@@ -118,19 +114,19 @@ func applySettingsDelta(c ControlSpec, delta int, s *Settings) {
 }
 
 type StyleConfig struct {
-	AppBg           string
-	AppBorderStyle  string
-	AppBorderColor  string
-	BtnFg           string
-	BtnBg           string
-	BtnBorderColor  string
-	BtnLeftCap      string
-	BtnRightCap     string
-	BtnActiveFg     string
-	BtnActiveBg     string
-	PreviewBg       string
-	ControlBarBg    string
-	ControlBarFg    string
+	AppBg          string
+	AppBorderStyle string
+	AppBorderColor string
+	BtnFg          string
+	BtnBg          string
+	BtnBorderColor string
+	BtnLeftCap     string
+	BtnRightCap    string
+	BtnActiveFg    string
+	BtnActiveBg    string
+	PreviewBg      string
+	ControlBarBg   string
+	ControlBarFg   string
 	// Header bar (top status line)
 	HeaderFg   string
 	HeaderBg   string
@@ -158,7 +154,7 @@ type StyleConfig struct {
 var namedColors = map[string]string{
 	"black": "#000000", "blk": "#000000",
 	"white": "#ffffff", "wht": "#ffffff",
-	"red": "#ff0000",
+	"red":   "#ff0000",
 	"green": "#008000", "grn": "#008000",
 	"blue": "#0000ff", "blu": "#0000ff",
 	"yellow": "#ffff00", "yel": "#ffff00",
@@ -170,11 +166,11 @@ var namedColors = map[string]string{
 	"brown": "#a52a2a", "brn": "#a52a2a",
 	"gray": "#808080", "grey": "#808080", "gry": "#808080",
 	"navy": "#000080", "nav": "#000080",
-	"lime": "#00ff00",
-	"aqua": "#00ffff",
-	"teal": "#008080",
+	"lime":   "#00ff00",
+	"aqua":   "#00ffff",
+	"teal":   "#008080",
 	"maroon": "#800000",
-	"olive": "#808000",
+	"olive":  "#808000",
 	"silver": "#c0c0c0", "slv": "#c0c0c0",
 }
 
@@ -247,9 +243,10 @@ func styleBG(s string, def string) string {
 // renderTpl renders a template string with variable substitution and inline styling.
 //
 // Syntax: literal text mixed with { expr } blocks where expr is:
-//   key            — value from vars map (falls back to key name if missing)
-//   'literal'      — quoted literal string passed through as-is
-//   key | mod …    — value with style modifiers applied
+//
+//	key            — value from vars map (falls back to key name if missing)
+//	'literal'      — quoted literal string passed through as-is
+//	key | mod …    — value with style modifiers applied
 //
 // Modifiers: bold, dim, italic, underline, or any named/hex color (applied as fg).
 // After each styled segment the baseAnsi style is restored automatically.
@@ -373,130 +370,69 @@ func loadStyle() *StyleConfig {
 		ScrollThumbChar:    "█",
 		ScrollRailChar:     "▒",
 		ScrollWidth:        1,
-		ScrollRailBg:    "",
+		ScrollRailBg:       "",
 	}
 
-	data, err := specRead("style.yaml")
+	s, err := spec.LoadStyle()
 	if err != nil {
 		return cfg
 	}
 
-	lines := strings.Split(string(data), "\n")
-	section := ""
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		if strings.HasSuffix(trimmed, ":") {
-			section = strings.TrimSuffix(trimmed, ":")
-			continue
-		}
-
-		parts := strings.SplitN(trimmed, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		val = strings.Trim(val, "\"'")
-		if val == "null" {
-			val = ""
-		}
-
-		switch section {
-		case "app":
-			switch key {
-			case "bg":
-				cfg.AppBg = val
-			case "border_style":
-				cfg.AppBorderStyle = val
-			case "border_color":
-				cfg.AppBorderColor = val
-			}
-		case "buttons":
-			switch key {
-			case "fg":
-				cfg.BtnFg = val
-			case "bg":
-				cfg.BtnBg = val
-			case "border_color":
-				cfg.BtnBorderColor = val
-			case "left_cap":
-				cfg.BtnLeftCap = val
-			case "right_cap":
-				cfg.BtnRightCap = val
-			case "active_fg":
-				cfg.BtnActiveFg = val
-			case "active_bg":
-				cfg.BtnActiveBg = val
-			}
-		case "preview":
-			if key == "bg" {
-				cfg.PreviewBg = val
-			}
-		case "control_bar":
-			switch key {
-			case "bg":
-				cfg.ControlBarBg = val
-			case "fg":
-				cfg.ControlBarFg = val
-			}
-		case "header_bar":
-			switch key {
-			case "fg":
-				cfg.HeaderFg = val
-			case "bg":
-				cfg.HeaderBg = val
-			case "bold":
-				cfg.HeaderBold = val == "true"
-			}
-		case "grid":
-			switch key {
-			case "item_fg":
-				cfg.GridItemFg = val
-			case "item_bg":
-				cfg.GridItemBg = val
-			case "selected_fg":
-				cfg.GridSelectedFg = val
-			case "selected_bg":
-				cfg.GridSelectedBg = val
-			case "selected_bold":
-				cfg.GridSelectedBold = val == "true"
-			case "selected_marker":
-				cfg.GridSelectedMarker = val
-			case "image_border":
-				if val == "box" || val == "double" || val == "none" {
-					cfg.ImageBorder = val
-				}
-			}
-		case "scroll_bar":
-			switch key {
-			case "thumb_char":
-				cfg.ScrollThumbChar = val
-			case "rail_char":
-				cfg.ScrollRailChar = val
-			case "width":
-				w, err := strconv.Atoi(val)
-				if err == nil && (w == 1 || w == 2) {
-					cfg.ScrollWidth = w
-				}
-			case "thumb_fg":
-				cfg.ScrollThumbFg = val
-			case "rail_fg":
-				cfg.ScrollRailFg = val
-			case "rail_bg":
-				cfg.ScrollRailBg = val
-			}
-		case "page_title":
-			switch key {
-			case "fg":
-				cfg.PageTitleFg = val
-			case "bold":
-				cfg.PageTitleBold = val == "true"
-			}
-		}
+	cfg.AppBg = s.App.Bg
+	if s.App.BorderStyle != "" {
+		cfg.AppBorderStyle = s.App.BorderStyle
 	}
+	cfg.AppBorderColor = s.App.BorderColor
+
+	cfg.BtnFg = s.Buttons.Fg
+	cfg.BtnBg = s.Buttons.Bg
+	cfg.BtnBorderColor = s.Buttons.BorderColor
+	if s.Buttons.LeftCap != "" {
+		cfg.BtnLeftCap = s.Buttons.LeftCap
+	}
+	if s.Buttons.RightCap != "" {
+		cfg.BtnRightCap = s.Buttons.RightCap
+	}
+	cfg.BtnActiveFg = s.Buttons.ActiveFg
+	cfg.BtnActiveBg = s.Buttons.ActiveBg
+
+	cfg.PreviewBg = s.Preview.Bg
+
+	cfg.ControlBarBg = s.ControlBar.Bg
+	cfg.ControlBarFg = s.ControlBar.Fg
+
+	cfg.HeaderFg = s.HeaderBar.Fg
+	cfg.HeaderBg = s.HeaderBar.Bg
+	cfg.HeaderBold = s.HeaderBar.Bold
+
+	cfg.GridItemFg = s.Grid.ItemFg
+	cfg.GridItemBg = s.Grid.ItemBg
+	cfg.GridSelectedFg = s.Grid.SelectedFg
+	cfg.GridSelectedBg = s.Grid.SelectedBg
+	cfg.GridSelectedBold = s.Grid.SelectedBold
+	if s.Grid.SelectedMarker != "" {
+		cfg.GridSelectedMarker = s.Grid.SelectedMarker
+	}
+	if s.Grid.ImageBorder == "box" || s.Grid.ImageBorder == "double" || s.Grid.ImageBorder == "none" {
+		cfg.ImageBorder = s.Grid.ImageBorder
+	}
+
+	if s.ScrollBar.ThumbChar != "" {
+		cfg.ScrollThumbChar = s.ScrollBar.ThumbChar
+	}
+	if s.ScrollBar.RailChar != "" {
+		cfg.ScrollRailChar = s.ScrollBar.RailChar
+	}
+	if s.ScrollBar.Width == 1 || s.ScrollBar.Width == 2 {
+		cfg.ScrollWidth = s.ScrollBar.Width
+	}
+	cfg.ScrollThumbFg = s.ScrollBar.ThumbFg
+	cfg.ScrollRailFg = s.ScrollBar.RailFg
+	cfg.ScrollRailBg = s.ScrollBar.RailBg
+
+	cfg.PageTitleFg = s.PageTitle.Fg
+	cfg.PageTitleBold = s.PageTitle.Bold
+
 	return cfg
 }
 
@@ -504,33 +440,23 @@ func loadStyle() *StyleConfig {
 
 func loadLabels() map[string]string {
 	labels := map[string]string{
-		"app_name":       "Cati Browser",
-		"header":         " {app_name}  [{dir}] — Page {page}/{pages} ({start}-{end} of {total})",
-		"folder_icon":    "📁",
-		"file_icon":      "📄",
-		"hint_browser":   "[Enter/Click] View/Enter  [◀/▶/Scroll] Page  [s] Settings  [m] Toggle Mode  [q] Quit",
-		"hint_settings":  "[▲/▼] Adjust  [s/Enter] Save  [Esc/q] Cancel",
-		"hint_about":     "[q/Esc] Back",
-		"hint_viewer":    "[q/Esc] Back  [+/-] Zoom",
+		"app_name":      "Cati Browser",
+		"header":        " {app_name}  [{dir}] — Page {page}/{pages} ({start}-{end} of {total})",
+		"folder_icon":   "📁",
+		"file_icon":     "📄",
+		"hint_browser":  "[Enter/Click] View/Enter  [◀/▶/Scroll] Page  [s] Settings  [m] Toggle Mode  [q] Quit",
+		"hint_settings": "[▲/▼] Adjust  [s/Enter] Save  [Esc/q] Cancel",
+		"hint_about":    "[q/Esc] Back",
+		"hint_viewer":   "[q/Esc] Back  [+/-] Zoom",
 	}
 
-	data, err := specRead("labels.yaml")
+	l, err := spec.LoadLabels()
 	if err != nil {
 		return labels
 	}
-
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) == 2 {
-			key := strings.TrimSpace(parts[0])
-			val := strings.Trim(strings.TrimSpace(parts[1]), "\"'")
-			if val != "" {
-				labels[key] = val
-			}
+	for k, v := range l {
+		if v != "" {
+			labels[k] = v
 		}
 	}
 	return labels
@@ -539,31 +465,13 @@ func loadLabels() map[string]string {
 // loadButtonActions reads spec/buttons.yaml and returns button_name → action name.
 func loadButtonActions() map[string]string {
 	actions := map[string]string{}
-	data, err := specRead("buttons.yaml")
+	btnSpec, err := spec.LoadButtons()
 	if err != nil {
 		return actions
 	}
-	inButtons := false
-	currentKey := ""
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
-			continue
-		}
-		if trimmed == "buttons:" {
-			inButtons = true
-			continue
-		}
-		if !inButtons {
-			continue
-		}
-		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
-			currentKey = strings.TrimSuffix(trimmed, ":")
-			continue
-		}
-		if currentKey != "" && strings.HasPrefix(line, "    action: ") {
-			action := strings.TrimSpace(strings.TrimPrefix(line, "    action: "))
-			actions[currentKey] = action
+	for name, def := range btnSpec.Buttons {
+		if def.Action != "" {
+			actions[name] = def.Action
 		}
 	}
 	return actions
@@ -572,61 +480,19 @@ func loadButtonActions() map[string]string {
 // loadAltButtonActions reads spec/buttons.yaml and returns button_name → alt_action.
 func loadAltButtonActions() map[string]string {
 	actions := map[string]string{}
-	data, err := specRead("buttons.yaml")
+	btnSpec, err := spec.LoadButtons()
 	if err != nil {
 		return actions
 	}
-	inButtons := false
-	currentKey := ""
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
-			continue
-		}
-		if trimmed == "buttons:" {
-			inButtons = true
-			continue
-		}
-		if !inButtons {
-			continue
-		}
-		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
-			currentKey = strings.TrimSuffix(trimmed, ":")
-			continue
-		}
-		if currentKey != "" && strings.HasPrefix(line, "    alt_action: ") {
-			actions[currentKey] = strings.TrimSpace(strings.TrimPrefix(line, "    alt_action: "))
+	for name, def := range btnSpec.Buttons {
+		if def.AltAction != "" {
+			actions[name] = def.AltAction
 		}
 	}
 	return actions
 }
 
-// parseYamlStringList parses an inline YAML array like ["q", "Q", "<esc>"] into Go strings.
-// Each entry is unquoted then passed through inputSpec.ResolveKeyAlias so human-readable
-// aliases like <esc>, <cr>, <c-c> resolve to their terminal sequences.
-func parseYamlStringList(val string, inputSpec *input.Spec) []string {
-	val = strings.TrimSpace(val)
-	val = strings.TrimPrefix(val, "[")
-	val = strings.TrimSuffix(val, "]")
-	var result []string
-	for _, part := range strings.Split(val, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		var s string
-		if unquoted, err := strconv.Unquote(part); err == nil {
-			s = unquoted
-		} else {
-			s = strings.Trim(part, "\"'")
-		}
-		result = append(result, inputSpec.ResolveKeyAlias(s))
-	}
-	return result
-}
-
 // buttonKeyDef holds the action name and bound key sequences for one button entry.
-// alt_action/alt_keys provide a second binding on the same button (e.g. reverse cycle).
 type buttonKeyDef struct {
 	action    string
 	keys      []string
@@ -637,49 +503,28 @@ type buttonKeyDef struct {
 // loadButtonKeyDefs reads spec/buttons.yaml and returns button_name → {action, keys}.
 func loadButtonKeyDefs(inputSpec *input.Spec) map[string]buttonKeyDef {
 	defs := map[string]buttonKeyDef{}
-	data, err := specRead("buttons.yaml")
+	btnSpec, err := spec.LoadButtons()
 	if err != nil {
 		return defs
 	}
-	inButtons := false
-	currentName := ""
-	cur := buttonKeyDef{}
-	commit := func() {
-		if currentName != "" && cur.action != "" {
-			defs[currentName] = cur
-		}
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
-			continue
-		}
-		if trimmed == "buttons:" {
-			inButtons = true
-			continue
-		}
-		if !inButtons {
-			continue
-		}
-		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
-			commit()
-			currentName = strings.TrimSuffix(trimmed, ":")
-			cur = buttonKeyDef{}
-			continue
-		}
-		if currentName != "" {
-			if strings.HasPrefix(line, "    action: ") {
-				cur.action = strings.TrimSpace(strings.TrimPrefix(line, "    action: "))
-			} else if strings.HasPrefix(line, "    keys: ") {
-				cur.keys = parseYamlStringList(strings.TrimPrefix(line, "    keys: "), inputSpec)
-			} else if strings.HasPrefix(line, "    alt_action: ") {
-				cur.altAction = strings.TrimSpace(strings.TrimPrefix(line, "    alt_action: "))
-			} else if strings.HasPrefix(line, "    alt_keys: ") {
-				cur.altKeys = parseYamlStringList(strings.TrimPrefix(line, "    alt_keys: "), inputSpec)
+	for name, def := range btnSpec.Buttons {
+		if def.Action != "" {
+			var keys []string
+			for _, k := range def.Keys {
+				keys = append(keys, inputSpec.ResolveKeyAlias(k))
+			}
+			var altKeys []string
+			for _, k := range def.AltKeys {
+				altKeys = append(altKeys, inputSpec.ResolveKeyAlias(k))
+			}
+			defs[name] = buttonKeyDef{
+				action:    def.Action,
+				keys:      keys,
+				altAction: def.AltAction,
+				altKeys:   altKeys,
 			}
 		}
 	}
-	commit()
 	return defs
 }
 
@@ -761,35 +606,13 @@ func openWebsite(url string) {
 func loadButtons(leftCap, rightCap string) map[string]string {
 	wrap := func(text string) string { return leftCap + text + rightCap }
 	buttons := map[string]string{}
-
-	data, err := specRead("buttons.yaml")
+	btnSpec, err := spec.LoadButtons()
 	if err != nil {
 		return buttons
 	}
-
-	inButtons := false
-	currentKey := ""
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
-			continue
-		}
-		if trimmed == "buttons:" {
-			inButtons = true
-			continue
-		}
-		if !inButtons {
-			continue
-		}
-		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
-			currentKey = strings.TrimSuffix(trimmed, ":")
-			continue
-		}
-		if currentKey != "" && strings.HasPrefix(line, "    text: ") {
-			text := strings.Trim(strings.TrimPrefix(line, "    text: "), "\"'")
-			if text != "" {
-				buttons[currentKey] = wrap(text)
-			}
+	for name, def := range btnSpec.Buttons {
+		if def.Text != "" {
+			buttons[name] = wrap(def.Text)
 		}
 	}
 	return buttons
@@ -806,60 +629,17 @@ type YamlView struct {
 }
 
 func parseYamlView(name string) (*YamlView, error) {
-	data, err := specRead(name)
+	v, err := spec.LoadYamlView(name)
 	if err != nil {
 		return nil, err
 	}
-
-	view := &YamlView{}
-	lines := strings.Split(string(data), "\n")
-
-	inContent := false
-	inControls := false
-
-	for _, line := range lines {
-		if inContent {
-			if line == "" {
-				view.Content += "\n"
-				continue
-			}
-			if strings.HasPrefix(line, "  ") || strings.HasPrefix(line, "\t") {
-				view.Content += strings.TrimPrefix(strings.TrimPrefix(line, "  "), "\t") + "\n"
-				continue
-			} else {
-				inContent = false
-			}
-		}
-
-		if inControls {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "- ") {
-				view.Controls = append(view.Controls, strings.TrimPrefix(trimmed, "- "))
-				continue
-			} else if line != "" && !strings.HasPrefix(line, " ") {
-				inControls = false
-			}
-		}
-
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		if strings.HasPrefix(line, "type:") {
-			view.Type = strings.TrimSpace(strings.TrimPrefix(line, "type:"))
-		} else if strings.HasPrefix(line, "name:") {
-			view.Name = strings.TrimSpace(strings.TrimPrefix(line, "name:"))
-		} else if strings.HasPrefix(line, "title:") {
-			view.Title = strings.TrimSpace(strings.TrimPrefix(line, "title:"))
-		} else if strings.HasPrefix(line, "content: |") {
-			inContent = true
-		} else if strings.HasPrefix(line, "controls:") {
-			inControls = true
-		}
-	}
-
-	return view, nil
+	return &YamlView{
+		Type:     v.Type,
+		Name:     v.Name,
+		Title:    v.Title,
+		Content:  v.Content,
+		Controls: v.Controls,
+	}, nil
 }
 
 func getAboutView() *YamlView {
@@ -916,53 +696,25 @@ func getConfigDir() string {
 
 func loadSpecConfigDefaults() Settings {
 	cfg := Settings{MaxPreviewHeight: 20, ViewMode: "grid", PreviewVideos: true, MaxJobs: 0, VideoFrames: 10, VideoPreviewDelay: 1000}
-	data, err := specRead("config.yaml")
+	s, err := spec.LoadConfigDefaults()
 	if err != nil {
 		return cfg
 	}
-	inConfig := false
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
-			continue
-		}
-		if trimmed == "config:" {
-			inConfig = true
-			continue
-		}
-		if !inConfig {
-			continue
-		}
-		parts := strings.SplitN(trimmed, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-		switch key {
-		case "preview_height":
-			if h, err := strconv.Atoi(val); err == nil && h > 0 {
-				cfg.MaxPreviewHeight = h
-			}
-		case "view_mode":
-			if val == "preview" || val == "grid" {
-				cfg.ViewMode = val
-			}
-		case "preview_videos":
-			cfg.PreviewVideos = val != "false"
-		case "max_jobs":
-			if n, err := strconv.Atoi(val); err == nil && n >= 0 {
-				cfg.MaxJobs = n
-			}
-		case "video_frames":
-			if n, err := strconv.Atoi(val); err == nil && n > 0 {
-				cfg.VideoFrames = n
-			}
-		case "video_preview_delay":
-			if n, err := strconv.Atoi(val); err == nil && n >= 0 {
-				cfg.VideoPreviewDelay = n
-			}
-		}
+	if s.Config.PreviewHeight > 0 {
+		cfg.MaxPreviewHeight = s.Config.PreviewHeight
+	}
+	if s.Config.ViewMode == "preview" || s.Config.ViewMode == "grid" {
+		cfg.ViewMode = s.Config.ViewMode
+	}
+	cfg.PreviewVideos = s.Config.PreviewVideos
+	if s.Config.MaxJobs >= 0 {
+		cfg.MaxJobs = s.Config.MaxJobs
+	}
+	if s.Config.VideoFrames > 0 {
+		cfg.VideoFrames = s.Config.VideoFrames
+	}
+	if s.Config.VideoPreviewDelay >= 0 {
+		cfg.VideoPreviewDelay = s.Config.VideoPreviewDelay
 	}
 	return cfg
 }
@@ -1040,66 +792,24 @@ func saveConfig(cfg Settings) error {
 func loadControls() []ControlSpec {
 	specs := []ControlSpec{
 		{Key: "preview_height", Type: "int", Min: 10, Max: 200},
-		{Key: "view_mode",      Type: "enum", Values: []string{"grid", "preview"}},
+		{Key: "view_mode", Type: "enum", Values: []string{"grid", "preview"}},
 		{Key: "preview_videos", Type: "bool"},
-		{Key: "max_jobs",       Type: "int", Min: 1, Max: 32},
-		{Key: "video_frames",         Type: "int", Min: 1, Max: 60},
-		{Key: "video_preview_delay",  Type: "int", Min: 0, Max: 5000},
+		{Key: "max_jobs", Type: "int", Min: 1, Max: 32},
+		{Key: "video_frames", Type: "int", Min: 1, Max: 60},
+		{Key: "video_preview_delay", Type: "int", Min: 0, Max: 5000},
 	}
-	data, err := specRead("controls.yaml")
+	cSpec, err := spec.LoadControls()
 	if err != nil {
 		return specs
 	}
-	specIdx := map[string]int{}
 	for i, s := range specs {
-		specIdx[s.Key] = i
-	}
-	inControls := false
-	currentKey := ""
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
-			continue
-		}
-		if trimmed == "controls:" {
-			inControls = true
-			continue
-		}
-		if !inControls {
-			continue
-		}
-		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
-			currentKey = strings.TrimSuffix(trimmed, ":")
-			continue
-		}
-		idx, ok := specIdx[currentKey]
-		if !ok {
-			continue
-		}
-		parts := strings.SplitN(trimmed, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		k, v := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
-		switch k {
-		case "min":
-			if n, err := strconv.Atoi(v); err == nil {
-				specs[idx].Min = n
+		if def, ok := cSpec.Controls[s.Key]; ok {
+			if def.Min != 0 || def.Max != 0 {
+				specs[i].Min = def.Min
+				specs[i].Max = def.Max
 			}
-		case "max":
-			if n, err := strconv.Atoi(v); err == nil {
-				specs[idx].Max = n
-			}
-		case "values":
-			v = strings.Trim(v, "[]")
-			var vals []string
-			for _, val := range strings.Split(v, ",") {
-				if s := strings.TrimSpace(val); s != "" {
-					vals = append(vals, s)
-				}
-			}
-			if len(vals) > 0 {
-				specs[idx].Values = vals
+			if len(def.Values) > 0 {
+				specs[i].Values = def.Values
 			}
 		}
 	}
@@ -1211,9 +921,9 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 		path string
 		meta MediaMeta
 	}
-	metaCache   := make(map[string]*MediaMeta)
+	metaCache := make(map[string]*MediaMeta)
 	metaLoading := make(map[string]bool)
-	metaCh      := make(chan metaResult, 8)
+	metaCh := make(chan metaResult, 8)
 
 	// Per-video one-shot animation: plays frames once when video scrolls into view
 	// or when the user moves the selection cursor onto a video.
@@ -1411,7 +1121,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 		cellH := (gridRowsLimit - (gridRows-1)*gapY) / gridRows
 
 		if isDense {
-			gridCols = max(1, (termCols - 4)/22)
+			gridCols = max(1, (termCols-4)/22)
 			gridRows = gridRowsLimit
 			cellH = 1
 			gapY = 0
@@ -1541,21 +1251,21 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 					thumbH := thumb.Bounds().Dy()
 					offsetX := (cellW*pixScale - thumbW) / 2
 					offsetY := ((cellH-1)*2 - thumbH) / 2
-				destX := left + offsetX
-				destY := top*2 + offsetY
-				if items[idx].isDir {
-					destX-- // shift folder icon 1px left for better quad alignment
-				}
+					destX := left + offsetX
+					destY := top*2 + offsetY
+					if items[idx].isDir {
+						destX-- // shift folder icon 1px left for better quad alignment
+					}
 
-				for ty := 0; ty < thumbH; ty++ {
-					for tx := 0; tx < thumbW; tx++ {
-						dx := destX + tx
-						dy := destY + ty
-						if dx >= 0 && dx < compW && dy >= 0 && dy < compH {
-							compImg.Set(dx, dy, thumb.At(tx, ty))
+					for ty := 0; ty < thumbH; ty++ {
+						for tx := 0; tx < thumbW; tx++ {
+							dx := destX + tx
+							dy := destY + ty
+							if dx >= 0 && dx < compW && dy >= 0 && dy < compH {
+								compImg.Set(dx, dy, thumb.At(tx, ty))
+							}
 						}
 					}
-				}
 				}
 			}
 		}
@@ -1838,7 +1548,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 			gridCols := 3
 			gridRows := 2
 			if isDense {
-				gridCols = max(1, (termCols - 4)/22)
+				gridCols = max(1, (termCols-4)/22)
 				gridRows = gridRowsLimit
 			} else {
 				if termCols < 60 {
@@ -2483,92 +2193,33 @@ func loadViewKeyRows() map[string]string {
 }
 
 func loadViewRowYaml(includeHidden bool) map[string]string {
-	visibleDefaults := map[string]string{
-		"browser":      "{ prev } { next } { back } | { settings } { mode } { about } | { quit }",
-		"settings":     "{ save } { cancel } | { quit }",
-		"about":        "{ back } { website } | { quit }",
-		"image_viewer": "{ zoom_in } { zoom_out } { toggle_pan } { copy_viewport } { back } { quit }",
-		"video_player": "{ zoom_in } { zoom_out } { if(playing, pause, play) } { copy_viewport } { back } { quit }",
-	}
-	hiddenDefaults := map[string]string{
-		"browser": "{ nav_up } { nav_down } { page_prev } { page_next }",
-	}
-	data, err := specRead("views.yaml")
+	views, err := spec.LoadViews()
 	if err != nil {
-		result := map[string]string{}
-		for k, v := range visibleDefaults {
-			result[k] = v
-		}
-		if includeHidden {
-			for k, v := range hiddenDefaults {
-				if existing, ok := result[k]; ok {
-					result[k] = existing + " " + v
-				} else {
-					result[k] = v
-				}
-			}
-		}
-		return result
-	}
-	visible := map[string]string{}
-	hidden := map[string]string{}
-	currentView := ""
-	inViews := false
-	for _, line := range strings.Split(string(data), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "$schema") {
-			continue
-		}
-		if trimmed == "views:" {
-			inViews = true
-			continue
-		}
-		if !inViews {
-			continue
-		}
-		if len(line) >= 3 && line[0] == ' ' && line[1] == ' ' && line[2] != ' ' && strings.HasSuffix(trimmed, ":") {
-			currentView = strings.TrimSuffix(trimmed, ":")
-			continue
-		}
-		if currentView != "" {
-			if strings.HasPrefix(line, "    - row: ") {
-				tpl := strings.Trim(strings.TrimPrefix(line, "    - row: "), "\"'")
-				if !strings.Contains(tpl, "hint_") {
-					if _, exists := visible[currentView]; !exists {
-						visible[currentView] = tpl
-					}
-				}
-			} else if includeHidden && strings.HasPrefix(line, "    - hidden_keys: ") {
-				tpl := strings.Trim(strings.TrimPrefix(line, "    - hidden_keys: "), "\"'")
-				if existing, ok := hidden[currentView]; ok {
-					hidden[currentView] = existing + " " + tpl
-				} else {
-					hidden[currentView] = tpl
-				}
-			}
-		}
-	}
-	for k, v := range visibleDefaults {
-		if _, exists := visible[k]; !exists {
-			visible[k] = v
-		}
+		return map[string]string{}
 	}
 	result := map[string]string{}
-	for k, v := range visible {
-		result[k] = v
-	}
-	if includeHidden {
-		for k, v := range hiddenDefaults {
-			if _, exists := hidden[k]; !exists {
-				hidden[k] = v
+	for viewName, rows := range views.Views {
+		var visible []string
+		var hidden []string
+		for _, row := range rows {
+			if tpl := row["row"]; tpl != "" && !strings.Contains(tpl, "hint_") && len(visible) == 0 {
+				visible = append(visible, tpl)
+			}
+			if includeHidden {
+				if tpl := row["hidden_keys"]; tpl != "" {
+					hidden = append(hidden, tpl)
+				}
 			}
 		}
-		for k, v := range hidden {
-			if existing, ok := result[k]; ok {
-				result[k] = existing + " " + v
-			} else {
-				result[k] = v
-			}
+		if len(visible) == 0 && len(hidden) == 0 {
+			continue
+		}
+		if includeHidden {
+			result[viewName] = strings.TrimSpace(strings.Join(append(visible, hidden...), " "))
+			continue
+		}
+		if len(visible) > 0 {
+			result[viewName] = visible[0]
 		}
 	}
 	return result
