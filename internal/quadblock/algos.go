@@ -37,7 +37,7 @@ func compileCellDiameter(pixels [4]color.RGBA) quadCell {
 		}
 	}
 	if maxD == 0 {
-		return quadCell{ch: '█', fg: a, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '█', fg: a, hasFG: true})
 	}
 
 	fg, bg := kmeansStep(op[:n], a, b)
@@ -77,7 +77,7 @@ func compileCellKMeans(pixels [4]color.RGBA, iters int) quadCell {
 		}
 	}
 	if maxD == 0 {
-		return quadCell{ch: '█', fg: a, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '█', fg: a, hasFG: true})
 	}
 
 	for range iters {
@@ -128,7 +128,7 @@ func compileCellEdgeSnap(pixels [4]color.RGBA) quadCell {
 	case 0:
 		return quadCell{ch: ' ', transparent: true}
 	case 1:
-		return quadCell{ch: '█', fg: op[0], hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '█', fg: op[0], hasFG: true})
 	}
 
 	// BT.709 luma for each quadrant; transparent pixels contribute 0.
@@ -210,14 +210,105 @@ func kmeansStep(pts []color.RGBA, ca, cb color.RGBA) (fg, bg color.RGBA) {
 // determine per-quadrant assignment by nearest-colour.
 func twoColorCell(pixels [4]color.RGBA, fg, bg color.RGBA) quadCell {
 	if eqRGB(fg, bg) {
-		return quadCell{ch: '█', fg: fg, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '█', fg: fg, hasFG: true})
 	}
 	mask := buildMask(pixels, fg, bg, true)
 	switch mask {
 	case 0:
-		return quadCell{ch: '█', fg: bg, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '█', fg: bg, hasFG: true})
 	case 0b1111:
-		return quadCell{ch: '█', fg: fg, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '█', fg: fg, hasFG: true})
 	}
-	return quadCell{ch: quadChar[mask], fg: fg, bg: bg, hasFG: true, hasBG: true}
+	return maybeVerticalize(pixels, quadCell{ch: quadChar[mask], fg: fg, bg: bg, hasFG: true, hasBG: true})
+}
+
+// cellError returns the sum of squared distances from each source pixel to the
+// colour the rendered cell would display at that quadrant.
+func cellError(pixels [4]color.RGBA, c quadCell) int {
+	if c.transparent {
+		return 0
+	}
+	if c.ch == ' ' {
+		return 0
+	}
+	switch c.ch {
+	case '▌':
+		return sideError(pixels, true, c)
+	case '▐':
+		return sideError(pixels, false, c)
+	}
+
+	mask := charToMask(c.ch)
+	if c.ch != ' ' && mask == 0 && !c.transparent {
+		// Unknown glyph; treat as a poor fit.
+		return 1 << 30
+	}
+
+	total := 0
+	for i, p := range pixels {
+		if isTransparent(p) {
+			continue
+		}
+		if mask&(1<<(3-i)) != 0 {
+			total += colorDist2(p, c.fg)
+		} else if c.hasBG {
+			total += colorDist2(p, c.bg)
+		} else {
+			total += colorDist2(p, c.fg)
+		}
+	}
+	return total
+}
+
+// sideError evaluates a vertical split where fg occupies either the left or
+// right column and bg occupies the opposite side.
+func sideError(pixels [4]color.RGBA, fgLeft bool, c quadCell) int {
+	var total int
+	for i, p := range pixels {
+		if isTransparent(p) {
+			continue
+		}
+		isFg := (i == 0 || i == 2)
+		if !fgLeft {
+			isFg = !isFg
+		}
+		if isFg {
+			total += colorDist2(p, c.fg)
+		} else if c.hasBG {
+			total += colorDist2(p, c.bg)
+		} else {
+			total += colorDist2(p, c.fg)
+		}
+	}
+	return total
+}
+
+// maybeVerticalize replaces a cell with ▌/▐ when a vertical split fits the
+// source pixels better than the current encoding.
+func maybeVerticalize(pixels [4]color.RGBA, c quadCell) quadCell {
+	if c.transparent {
+		return c
+	}
+
+	best := c
+	bestErr := cellError(pixels, c)
+
+	left := avgRGB(pixels[0], pixels[2])
+	right := avgRGB(pixels[1], pixels[3])
+	if isTransparent(left) || isTransparent(right) || eqRGB(left, right) {
+		return best
+	}
+
+	leftCell := quadCell{ch: '▌', fg: left, bg: right, hasFG: true, hasBG: true}
+	if err := cellError(pixels, leftCell); err < bestErr {
+		best = leftCell
+		bestErr = err
+	}
+
+	rightCell := quadCell{ch: '▐', fg: right, bg: left, hasFG: true, hasBG: true}
+	if err := cellError(pixels, rightCell); err < bestErr {
+		best = rightCell
+	}
+
+	return best
 }

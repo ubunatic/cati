@@ -305,14 +305,14 @@ func halfblockFallback(pixels [4]color.RGBA) quadCell {
 	case topT && botT:
 		return quadCell{ch: ' ', transparent: true}
 	case topT:
-		return quadCell{ch: '▄', fg: bot, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '▄', fg: bot, hasFG: true})
 	case botT:
-		return quadCell{ch: '▀', fg: top, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '▀', fg: top, hasFG: true})
 	default:
 		if eqRGB(top, bot) {
-			return quadCell{ch: '█', fg: top, hasFG: true}
+			return maybeVerticalize(pixels, quadCell{ch: '█', fg: top, hasFG: true})
 		}
-		return quadCell{ch: '▀', fg: top, bg: bot, hasFG: true, hasBG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '▀', fg: top, bg: bot, hasFG: true, hasBG: true})
 	}
 }
 
@@ -380,7 +380,7 @@ func splitHalfCell(pixels [4]color.RGBA, left, above *quadCell, withNeighbors bo
 		c.bg = bg
 		c.hasBG = true
 	}
-	return c
+	return maybeVerticalize(pixels, c)
 }
 
 // compileCellLumSplit splits sub-pixels at their mean BT.601 luminance:
@@ -431,19 +431,19 @@ func compileCellLumSplit(pixels [4]color.RGBA) quadCell {
 	fg := avgRGB(high...)
 
 	if len(low) == 0 {
-		return quadCell{ch: '█', fg: fg, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '█', fg: fg, hasFG: true})
 	}
 
 	bg := avgRGB(low...)
 	if eqRGB(fg, bg) {
-		return quadCell{ch: '█', fg: fg, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '█', fg: fg, hasFG: true})
 	}
 
 	mask := buildMask(pixels, fg, bg, true)
 	if mask == 0 {
-		return quadCell{ch: '█', fg: bg, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: '█', fg: bg, hasFG: true})
 	}
-	return quadCell{ch: quadChar[mask], fg: fg, bg: bg, hasFG: true, hasBG: true}
+	return maybeVerticalize(pixels, quadCell{ch: quadChar[mask], fg: fg, bg: bg, hasFG: true, hasBG: true})
 }
 
 // quantError returns the sum of squared distances from each non-transparent
@@ -578,13 +578,13 @@ func compileCellPCA2(pixels [4]color.RGBA) quadCell {
 
 	fg := avgRGB(fgPx...)
 	if len(bgPx) == 0 {
-		return quadCell{ch: quadChar[0b1111], fg: fg, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: quadChar[0b1111], fg: fg, hasFG: true})
 	}
 	bg := avgRGB(bgPx...)
 	if eqRGB(fg, bg) {
-		return quadCell{ch: quadChar[0b1111], fg: fg, hasFG: true}
+		return maybeVerticalize(pixels, quadCell{ch: quadChar[0b1111], fg: fg, hasFG: true})
 	}
-	return quadCell{ch: quadChar[mask], fg: fg, bg: bg, hasFG: true, hasBG: true}
+	return maybeVerticalize(pixels, quadCell{ch: quadChar[mask], fg: fg, bg: bg, hasFG: true, hasBG: true})
 }
 
 // compileCell converts a 2×2 pixel block into a terminal quadrant cell.
@@ -648,7 +648,7 @@ func compileCell(pixels [4]color.RGBA, left, above *quadCell, opts Options) quad
 		c.bg = bg
 		c.hasBG = true
 	}
-	return c
+	return maybeVerticalize(pixels, c)
 }
 
 // ── Scaling ───────────────────────────────────────────────────────────────────
@@ -894,14 +894,41 @@ func RenderToImage(img image.Image, opts Options) *image.RGBA {
 			if !c.hasFG {
 				fg = bg
 			}
-			for q, bit := range quadBit {
-				dx, dy := qDX[q], qDY[q]
-				px, py := tc*2+dx, tr*2+dy
-				if px < pixW && py < pixH {
-					if mask&bit != 0 {
-						dst.SetRGBA(px, py, fg)
-					} else {
-						dst.SetRGBA(px, py, bg)
+			switch c.ch {
+			case '▌':
+				for q, dx := range []int{0, 1, 0, 1} {
+					dy := qDY[q]
+					px, py := tc*2+dx, tr*2+dy
+					if px < pixW && py < pixH {
+						if dx == 0 {
+							dst.SetRGBA(px, py, fg)
+						} else {
+							dst.SetRGBA(px, py, bg)
+						}
+					}
+				}
+			case '▐':
+				for q, dx := range []int{0, 1, 0, 1} {
+					dy := qDY[q]
+					px, py := tc*2+dx, tr*2+dy
+					if px < pixW && py < pixH {
+						if dx == 1 {
+							dst.SetRGBA(px, py, fg)
+						} else {
+							dst.SetRGBA(px, py, bg)
+						}
+					}
+				}
+			default:
+				for q, bit := range quadBit {
+					dx, dy := qDX[q], qDY[q]
+					px, py := tc*2+dx, tr*2+dy
+					if px < pixW && py < pixH {
+						if mask&bit != 0 {
+							dst.SetRGBA(px, py, fg)
+						} else {
+							dst.SetRGBA(px, py, bg)
+						}
 					}
 				}
 			}

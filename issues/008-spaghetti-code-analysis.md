@@ -1,7 +1,7 @@
-# 008 — Spaghetti Code Analysis
+# 008 — Spaghetti Code & Viewport Geometry Refactoring Plan
 
 **Status:** 🔴 Open  
-**Refs:** AGENTS.md (Spec System rules), [Design.md](../docs/Design.md)
+**Refs:** AGENTS.md (Spec System rules), [Design.md](../docs/Design.md), [010](010-unified-zoom-geometry-and-ladder.md), [012](012-viewport-geometry-mode-switch-regression.md)
 
 ---
 
@@ -315,31 +315,78 @@ type renderCfg struct {
 
 ---
 
-## G. Remediation Priority
+## G. Viewport Geometry & Mode Switch Consolidation
 
-| Priority | Area | Effort | Impact | Approach |
-|----------|------|--------|--------|----------|
-| **P0** | 12 hand-written YAML parsers → single `yaml.Unmarshal` | 2-3 days | Eliminates 35+ functions, corrects all spec violations | Add `gopkg.in/yaml.v3`, define Go structs matching spec schemas, delete all manual parsers |
-| **P1** | Break up `browser()` god function | 3-5 days | Reduces max function size from 1,217 to <200 lines | Extract `redrawGrid`, `redrawPreview`, `processMouse`, `processKeyboard`, `handleDirNav` |
-| **P1** | Factor out duplicated terminal boilerplate | 0.5 day | Removes ~80 lines of duplication | Create `enterVisualMode()` / `exitVisualMode()` helpers in `halfblock` |
-| **P2** | Merge `cycle_render`/`copy_viewport`/`toggle_play_pause` duplicate handlers | 0.5 day | Removes ~50 lines, ensures consistency | Extract handler functions in `interactive.go` |
-| **P2** | Extract shared color/ANSI helpers | 0.5 day | Removes ~26 lines of duplication, single source of truth | New `internal/colorutil` package |
-| **P3** | Split `cmd/` package into sub-packages | 2 days | Enforces module boundaries, prevents cross-contamination | `cmdbrowser/`, `cmdviewer/`, `cmdconfig/` |
-| **P3** | Consolidate ffprobe invocation patterns | 0.5 day | Removes ~4 duplicate command builders | `halfblock.probeJSON()` or similar |
-| **P4** | `renderCfg` cleanup | 0.5 day | Eliminates redundant `useQuad` field | Compare `quadOpts` to zero value, validate `id` in init |
+Analysis of issues [010 — Unified Zoom Geometry and Ladder](010-unified-zoom-geometry-and-ladder.md) and [012 — Viewport Geometry Regression on Render-Mode Switch](012-viewport-geometry-mode-switch-regression.md) reveals that viewport geometry issues are tightly coupled with the package boundaries and state mismatches of the `cmd/` package:
+
+### G1. The `rc.id` Mismatch Root Cause
+During initial command startup (in `cmd/root.go`), a `renderCfg` is constructed to hold user flags like `--quad`. However, the unexported `rc.id` field is left at its zero value (`0`).
+- In `renderModes` (defined in `cmd/interactive.go`), `id: 0` is associated with `quad/splithalf`.
+- If the user starts in halfblock mode (using `-q=0`), `rc.mode` is set to `modeHalfblock`, but `rc.id` remains `0`.
+- When cycling render modes via key `r` (`cycle_render`), `cycleRenderCfg` looks up the index matching `rc.id == 0`. It matches `quad/splithalf` and returns the next item in the slice, `quad/edge-snap` (`id: 12`, `mode: modeQuad`), completely skipping modes and starting the cycle from the wrong place.
+- In addition, the mismatch between `rc.id` (which claims `quad/splithalf`) and `rc.mode` (which is `modeHalfblock`) causes status/hint variables and metrics calculations to disagree on the active geometry.
+
+### G2. Zoom State Drift on Mode Switch
+When the user switches modes (e.g., from halfblock to sparkline), the terminal-cell pixel footprint changes (halfblock is 1×2, quad is 2×2, sparkline is 4×8).
+- `state.zoom` represents a multiplier relative to the fitted image dimension (`baseFitW`, `baseFitH`).
+- Different modes have different fit dimensions and different `MaxZoom` ratios.
+- If `state.zoom` is left unchanged during a mode switch, the physical zoom level (`k = MaxZoom / zoom` in source pixels per cell) drifts drastically. This shifts the zoom center and causes clamping overflows.
 
 ---
 
-## H. Conclusion
+## H. Remediation Priority
 
-The cati codebase suffers from three systemic problems:
+| Priority | Area | Effort | Impact | Approach |
+|----------|------|--------|--------|----------|
+| **P0** | Standardize YAML Parsing (`gopkg.in/yaml.v3`) | 2-3 days | Eliminates 35+ functions, removes Go-only fallbacks, corrects all spec violations | Add `gopkg.in/yaml.v3`, define Go structs matching spec schemas, delete all 12 manual parsers. |
+| **P0** | Solve `rc.id` Mismatch & Mode Cycling Mismatch | 0.5 day | Fixes cycling bugs, makes initial command config match `renderModes` | Implement a `FindInitialRenderCfg` helper in `interactive.go` called by `root.go`. |
+| **P1** | Unified Viewport Geometry & Mode Switch Zoom Alignment | 1-2 days | Fixes aspect ratio loss and pan/zoom center shift during mode switches | Integrate `internal/viewgeom` fully, updating `state.zoom` on mode switch to preserve physical scale `k`. |
+| **P1** | Deconstruct `browser()` God Function | 3-5 days | Reduces max function size from 1,217 to <200 lines | Extract `redrawGrid`, `redrawPreview`, `processMouse`, `processKeyboard`, `handleDirNav`. |
+| **P1** | Factor out Stdin/Terminal Boilerplate | 0.5 day | Removes ~80 lines of duplication | Create `enterVisualMode()` and `exitVisualMode()` helpers. |
+| **P2** | Extract Shared Color/ANSI Helpers | 0.5 day | Removes ~26 lines of duplicate ANSI code | Create a new `internal/colorutil` package. |
+| **P2** | Consolidate Video Metadata & `ffprobe` Commands | 0.5 day | Removes ~4 duplicated subprocess invocation blocks | Extract a single `probeJSON` runner. |
+| **P3** | Split `cmd/` package into Clean Sub-packages | 2 days | Enforces module boundaries, prevents cross-contamination | `cmdbrowser/`, `cmdviewer/`, `cmdconfig/`. |
 
-1. **No YAML library** — 12 hand-written parsers create ~800 lines of fragile, duplicate spec-reading code that directly violates project conventions. This is the single highest-impact fix.
+---
 
-2. **God functions in `cmd/browser.go`** — the `browser()` function exceeds 1,200 lines and handles every concern: input, rendering, navigation, caching, settings, animation. It needs to be decomposed into focused sub-functions.
+## I. Concrete Implementation Plan
 
-3. **Triplicated infrastructure** — the stdin-reader goroutine, raw-terminal entry, signal handling, and event-draining loop are copied-and-pasted across three functions instead of being extracted once.
+### Phase 1: Dependency & Parsing Modernization (P0)
+1. Add `gopkg.in/yaml.v3` to `go.mod` by running `go get gopkg.in/yaml.v3`.
+2. Create `spec/types.go` or define structs in `spec` package to model:
+   - Theme configuration (`style.yaml`, `theme.yaml`)
+   - Labels dictionary (`labels.yaml`)
+   - Buttons and key definitions (`buttons.yaml`)
+   - Views layouts (`views.yaml`)
+   - Zoom ladder configuration (`zoom_levels.yaml`)
+   - Settings controls (`controls.yaml`)
+3. Rewrite the spec reading pipeline to parse everything through a single structured pass, storing the config in a global or context configuration object.
+4. Eliminate all 12 ad-hoc parsers in `cmd/browser.go` and `internal/input/input.go`.
+5. Remove all Go-only fallback maps (e.g. hardcoded menus, buttons, labels) as per AGENTS.md rules. If a spec is missing, display raw key names gracefully instead of falling back to hardcoded strings.
 
-The duplication analysis found ~1,080 lines (13% of the codebase) that could be eliminated through extraction and consolidation. The nesting analysis found 941 lines (11% of the codebase) at 5+ levels of indentation, concentrated in `browser.go` and `interactive.go`.
+### Phase 2: Viewport Geometry & Cycling Fix (P0-P1)
+1. **Initialize `rc.id` Correctly**: Add a function `FindInitialRenderCfg(useQuad bool, quadOpts quadblock.Options) renderCfg` in `cmd/interactive.go` that finds the matching configuration entry in `renderModes` and returns it. Call this from `cmd/root.go` to ensure `rc` starts with the correct ID.
+2. **Preserve `k` on Mode Switch**: Update `recenterForMode` to adjust `state.zoom` so the physical zoom level (`k = MaxZoom / zoom`) is preserved:
+   ```go
+   oldMZ := oldRC.mode.viewSpec().MaxZoom(srcW, srcH, termCols, termRows)
+   newMZ := newRC.mode.viewSpec().MaxZoom(srcW, srcH, termCols, termRows)
+   state.zoom = state.zoom * (newMZ / oldMZ)
+   ```
+3. **Viewport Clamping and Bounds Alignment**: Align `buildViewport` and `buildRef` to ensure they both use `viewgeom.Spec` for calculating dimensions and cropping regions.
+4. **Fix Copy Viewport**: Correct the discrepancy in `copy_viewport` where it calls `buildViewport` with `termRows` instead of `max(1, termRows-2)`.
 
-A systematic refactoring following the P0→P4 priority table above would cut the codebase by 10-15% while dramatically improving maintainability, testability, and spec compliance.
+### Phase 3: God Function Deconstruction & Refactoring (P1)
+1. Break up the 1,200+ line `browser()` function by extracting:
+   - Grid rendering (`drawBrowserGrid`)
+   - Preview rendering (`drawBrowserPreview`)
+   - Keyboard events loop (`handleBrowserKeyboard`)
+   - Mouse events loop (`handleBrowserMouse`)
+2. Refactor `interactiveWithChan()` and `interactiveVideo()` to use shared visual-mode wrappers to avoid duplicating stdin-reader and raw-mode setup.
+
+---
+
+## J. Conclusion
+
+Consolidating the static code quality analysis and the viewport geometry regression into a single implementation plan provides a clear roadmap. The underlying issues in the `cmd` package (lack of standardized parsing, duplicated boilerplate, and coordinate/mode mismatches) can be resolved systematically in four structured phases.
+
+Following this plan will eliminate approximately 1,000 lines of duplicated code, reduce nesting depth significantly, and ensure total compliance with the spec-system design rules.

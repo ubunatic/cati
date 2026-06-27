@@ -1,6 +1,6 @@
 # 010 — Unified Zoom Geometry and Ladder
 
-**Status:** 🔴 Open  
+**Status:** ✅ Consolidated (Merged into [008 — Spaghetti Code & Viewport Geometry Refactoring Plan](008-spaghetti-code-analysis.md))  
 **Refs:** [System.md](../docs/System.md#k-sequence-zoom-model-june-2026-revised-june-2026), [QuadPixelArt.md](../docs/QuadPixelArt.md), `cmd/interactive.go`
 
 ---

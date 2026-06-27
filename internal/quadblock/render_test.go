@@ -42,6 +42,24 @@ func makeImage(w, h int, pixels []color.RGBA) image.Image {
 	return img
 }
 
+func imagesEqual(a, b image.Image) bool {
+	ab := a.Bounds()
+	bb := b.Bounds()
+	if ab != bb {
+		return false
+	}
+	for y := ab.Min.Y; y < ab.Max.Y; y++ {
+		for x := ab.Min.X; x < ab.Max.X; x++ {
+			r1, g1, b1, a1 := a.At(x, y).RGBA()
+			r2, g2, b2, a2 := b.At(x, y).RGBA()
+			if r1 != r2 || g1 != g2 || b1 != b2 || a1 != a2 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // ── quadChar table ────────────────────────────────────────────────────────────
 
 func TestQuadCharTable(t *testing.T) {
@@ -233,6 +251,33 @@ func TestCompileCell_Diagonal(t *testing.T) {
 	}
 }
 
+func TestCompileCell_VerticalSplit(t *testing.T) {
+	// Left column = red, right column = blue → vertical split.
+	cases := []struct {
+		name string
+		opts Options
+	}{
+		{name: "default", opts: Options{}},
+		{name: "diameter", opts: Options{Diameter: true}},
+		{name: "kmeans", opts: Options{KMeans: 3}},
+		{name: "pca2", opts: Options{PCA2: true}},
+		{name: "lumsplit", opts: Options{LumSplit: true}},
+		{name: "edgesnap", opts: Options{EdgeSnap: true}},
+		{name: "splithalf", opts: Options{SplitHalf: true}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := compileCell([4]color.RGBA{red, blue, red, blue}, nil, nil, tc.opts)
+			if c.ch != '▌' {
+				t.Fatalf("ch: got %q, want ▌", string(c.ch))
+			}
+			if !eqRGB(c.fg, red) || !c.hasBG || !eqRGB(c.bg, blue) {
+				t.Fatalf("fg/bg: got fg=%v bg=%v hasBG=%v, want red/blue", c.fg, c.bg, c.hasBG)
+			}
+		})
+	}
+}
+
 func TestCompileCell_Quantisation(t *testing.T) {
 	// 3 colours: red (2px), blue (1px), green (1px) → must pick red+one other
 	c := compileCell([4]color.RGBA{red, red, blue, green}, nil, nil, Options{})
@@ -316,6 +361,27 @@ func TestRender_TwoColorHalves(t *testing.T) {
 	}
 }
 
+func TestRender_LeftRightSplit(t *testing.T) {
+	img := makeImage(2, 2, []color.RGBA{
+		red, blue,
+		red, blue,
+	})
+	var sb strings.Builder
+	if err := Render(&sb, img); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	out := sb.String()
+	if !strings.ContainsRune(out, '▌') {
+		t.Fatalf("expected ▌ for left-red/right-blue image: %q", out)
+	}
+	if !strings.Contains(out, "38;2;255;0;0") {
+		t.Errorf("expected red fg escape: %q", out)
+	}
+	if !strings.Contains(out, "48;2;0;0;255") {
+		t.Errorf("expected blue bg escape: %q", out)
+	}
+}
+
 func TestRender_OddDimensions(t *testing.T) {
 	// 3×3 image → 2×2 terminal cells (odd dims padded with transparent)
 	img := solidImage(3, 3, green)
@@ -339,6 +405,17 @@ func TestRender_SinglePixel(t *testing.T) {
 	// 1×1 pixel → 1 terminal cell → 1 line with UL quadrant only (▘)
 	if !strings.ContainsRune(out, '▘') {
 		t.Errorf("expected ▘ for single-pixel image: %q", out)
+	}
+}
+
+func TestRenderToImage_LeftRightSplit(t *testing.T) {
+	img := makeImage(2, 2, []color.RGBA{
+		red, blue,
+		red, blue,
+	})
+	out := RenderToImage(img, Options{})
+	if !imagesEqual(img, out) {
+		t.Fatalf("RenderToImage mismatch for vertical split")
 	}
 }
 

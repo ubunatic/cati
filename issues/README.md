@@ -11,10 +11,11 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [005](005-video-ffmpeg-scaling.md) | Video: ffmpeg-side scaling to terminal dimensions for rawvideo pipe | 🔴 Open |
 | [006](006-quality-metrics-and-pixel-art-scaling.md) | Quality metrics: blockiness, edge continuity, pixel-art scaling, 8×8 cell compare | 🔴 Open |
 | [007](007-meta-loading-perf.md) | Media metadata: ffprobe called for all image hovers, perf + scope options | 🔴 Open |
+| [008](008-spaghetti-code-analysis.md) | Spaghetti Code & Viewport Geometry Refactoring Plan | 🔴 Open |
 | [009](009-explore-more-sparkline-rendering-modes.md) | Explore more sparkline rendering modes (triangles, curves, fractional shading) | 🔴 Open |
-| [010](010-unified-zoom-geometry-and-ladder.md) | Unified zoom geometry and ladder: src px per cell, mode quantum, deduped footprint steps | 🔴 Open |
+| [010](010-unified-zoom-geometry-and-ladder.md) | Unified zoom geometry and ladder: src px per cell, mode quantum, deduped footprint steps | ✅ Consolidated |
 | [011](011-sparkline-inversion-and-stripe-bugs.md) | Sparkline inversion (upper/right) and stripe/comb line (left/right) bugs | ✅ Closed |
-| [012](012-viewport-geometry-mode-switch-regression.md) | Viewport geometry regression on render-mode switch | 🔴 Open |
+| [012](012-viewport-geometry-mode-switch-regression.md) | Viewport geometry regression on render-mode switch | ✅ Consolidated |
 
 ## Status legend
 - 🔴 Open
