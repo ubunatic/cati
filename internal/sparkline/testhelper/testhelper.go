@@ -130,7 +130,7 @@ func RenderToImage(img image.Image, outCols, outRows int, mode sparkline.Mode) i
 				continue
 			}
 
-			bestK, barColor, emptyColor, _ := sparkline.FindOptimalSplit(img, b, x0, x1, y0, y1, mode)
+			cell := sparkline.FindBestCell(img, b, x0, x1, y0, y1, mode)
 
 			cx0, cx1 := x0, x1
 			cy0, cy1 := y0, y1
@@ -142,21 +142,13 @@ func RenderToImage(img image.Image, outCols, outRows int, mode sparkline.Mode) i
 				for cx := cx0; cx <= cx1; cx++ {
 					dx := cx - cx0
 
-					var isFg bool
-					switch mode {
-					case sparkline.LowerHorizontal:
-						threshold := float64(ch) - float64(bestK+1)*float64(ch)/8.0
-						isFg = (float64(dy) >= threshold)
-					case sparkline.LeftVertical:
-						threshold := float64(bestK+1)*float64(cw)/8.0
-						isFg = (float64(dx) < threshold)
-					}
+					isFg := cellMask(cell.Ch, dx, dy, cw, ch)
 
 					var c color.Color
 					if isFg {
-						c = barColor
+						c = cell.FG
 					} else {
-						c = emptyColor
+						c = cell.BG
 					}
 					dst.Set(cx, cy, c)
 				}
@@ -164,6 +156,44 @@ func RenderToImage(img image.Image, outCols, outRows int, mode sparkline.Mode) i
 		}
 	}
 	return dst
+}
+
+func cellMask(ch rune, x, y, w, h int) bool {
+	switch ch {
+	case ' ':
+		return false
+	case '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█':
+		level := map[rune]int{'▁': 1, '▂': 2, '▃': 3, '▄': 4, '▅': 5, '▆': 6, '▇': 7, '█': 8}[ch]
+		return (h-y)*8 <= level*h
+	case '▘':
+		return x*2 < w && y*2 < h
+	case '▝':
+		return x*2 >= w && y*2 < h
+	case '▖':
+		return x*2 < w && y*2 >= h
+	case '▗':
+		return x*2 >= w && y*2 >= h
+	case '▀':
+		return y*2 < h
+	case '▌':
+		return x*2 < w
+	case '▐':
+		return x*2 >= w
+	case '▚':
+		return (x*2 < w && y*2 < h) || (x*2 >= w && y*2 >= h)
+	case '▞':
+		return (x*2 >= w && y*2 < h) || (x*2 < w && y*2 >= h)
+	case '▛':
+		return !(x*2 >= w && y*2 >= h)
+	case '▜':
+		return !(x*2 < w && y*2 >= h)
+	case '▙':
+		return !(x*2 >= w && y*2 < h)
+	case '▟':
+		return !(x*2 < w && y*2 < h)
+	default:
+		return true
+	}
 }
 
 // RenderHalfblock renders the image using the halfblock algorithm and scales it back to original bounds.

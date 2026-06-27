@@ -48,11 +48,11 @@ func ScaleToFit(img image.Image, cols, rows int) image.Image {
 	return dst
 }
 
-// Render writes img to w as ANSI block-element art (lower-block orientation).
+// Render writes img to w as ANSI block-element art (vertical orientation).
 // img should be at the resolution computed by pixCols(=termCols*4) × pixRows(=termRows*8).
 func Render(w io.Writer, img image.Image) error {
 	b := img.Bounds()
-	return RenderOpts(w, img, max(1, b.Dx()/4), max(1, b.Dy()/8), LowerHorizontal)
+	return RenderOpts(w, img, max(1, b.Dx()/4), max(1, b.Dy()/8), Vertical)
 }
 
 // RenderOpts writes img to w as ANSI block-element art.  The image should
@@ -60,13 +60,8 @@ func Render(w io.Writer, img image.Image) error {
 // so that each cell covers a 4×8 pixel block.
 // outCols and outRows are the number of terminal columns and rows to emit.
 //
-// For each cell the algorithm analyses every possible split level (0..7) and
-// picks the one that minimises total squared colour error.  Per-mode rules:
-//
-//	LowerHorizontal: FG = bar (bottom), BG = empty (top)
-//	UpperHorizontal: FG = empty (bottom), BG = bar (top) — inverted via swap
-//	LeftVertical:    FG = bar (left),   BG = empty (right)
-//	RightVertical:   FG = empty (left),   BG = bar (right) — inverted via swap
+// For each cell the algorithm evaluates the active mode's glyph masks and picks
+// the one that minimises total squared colour error.
 func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) error {
 	b := img.Bounds()
 	pixW := b.Dx()
@@ -88,13 +83,11 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 				continue
 			}
 
-			bestK, barColor, emptyColor, _ := FindOptimalSplit(img, b, x0, x1, y0, y1, mode)
+			cell := FindBestCell(img, b, x0, x1, y0, y1, mode)
 
-			// natural alignment: FG = bar, BG = empty
-			sb.WriteString(bgRGB(emptyColor))
-			sb.WriteString(fgRGB(barColor))
-			ch := blockChar(mode, bestK)
-			sb.WriteRune(ch)
+			sb.WriteString(bgRGB(cell.BG))
+			sb.WriteString(fgRGB(cell.FG))
+			sb.WriteRune(cell.Ch)
 			sb.WriteString(ansiReset)
 		}
 
@@ -103,6 +96,148 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 		}
 	}
 	return nil
+}
+
+type cellResult struct {
+	Ch  rune
+	FG  color.RGBA
+	BG  color.RGBA
+	Err float64
+}
+
+type candidate struct {
+	ch   rune
+	mask func(x, y, w, h int) bool
+}
+
+func verticalCandidates() []candidate {
+	out := make([]candidate, 0, len(lowerBlocks))
+	for i, ch := range lowerBlocks {
+		k := i + 1
+		out = append(out, candidate{
+			ch: ch,
+			mask: func(_ int, y int, _ int, h int) bool {
+				return (h-y)*8 <= k*h
+			},
+		})
+	}
+	return out
+}
+
+func quadCandidates() []candidate {
+	out := verticalCandidates()
+	out = append(out,
+		candidate{ch: ' ', mask: func(_, _, _, _ int) bool { return false }},
+		candidate{ch: '▘', mask: quadMask(true, false, false, false)},
+		candidate{ch: '▝', mask: quadMask(false, true, false, false)},
+		candidate{ch: '▖', mask: quadMask(false, false, true, false)},
+		candidate{ch: '▗', mask: quadMask(false, false, false, true)},
+		candidate{ch: '▀', mask: quadMask(true, true, false, false)},
+		candidate{ch: '▄', mask: quadMask(false, false, true, true)},
+		candidate{ch: '▌', mask: quadMask(true, false, true, false)},
+		candidate{ch: '▐', mask: quadMask(false, true, false, true)},
+		candidate{ch: '▚', mask: quadMask(true, false, false, true)},
+		candidate{ch: '▞', mask: quadMask(false, true, true, false)},
+		candidate{ch: '▛', mask: quadMask(true, true, true, false)},
+		candidate{ch: '▜', mask: quadMask(true, true, false, true)},
+		candidate{ch: '▙', mask: quadMask(true, false, true, true)},
+		candidate{ch: '▟', mask: quadMask(false, true, true, true)},
+		candidate{ch: '█', mask: func(_, _, _, _ int) bool { return true }},
+	)
+	return out
+}
+
+func quadMask(ul, ur, ll, lr bool) func(x, y, w, h int) bool {
+	return func(x, y, w, h int) bool {
+		left := x*2 < w
+		top := y*2 < h
+		switch {
+		case top && left:
+			return ul
+		case top && !left:
+			return ur
+		case !top && left:
+			return ll
+		default:
+			return lr
+		}
+	}
+}
+
+// FindBestCell tries the active mode's glyph candidates for the pixel block
+// [x0..x1] × [y0..y1] and returns the lowest-SSE reconstruction.
+func FindBestCell(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, mode Mode) cellResult {
+	candidates := verticalCandidates()
+	if mode == Quad {
+		candidates = quadCandidates()
+	}
+	return findBestCandidate(img, bounds, x0, x1, y0, y1, candidates)
+}
+
+func findBestCandidate(img image.Image, _ image.Rectangle, x0, x1, y0, y1 int, candidates []candidate) cellResult {
+	blockW := x1 - x0 + 1
+	blockH := y1 - y0 + 1
+	if blockW <= 0 || blockH <= 0 {
+		return cellResult{Ch: ' ', Err: math.MaxFloat64}
+	}
+
+	best := cellResult{Ch: ' ', Err: math.MaxFloat64}
+	for _, cand := range candidates {
+		var fgSum, bgSum acc
+		var fgN, bgN int
+		for y := 0; y < blockH; y++ {
+			for x := 0; x < blockW; x++ {
+				p := toRGBA(img.At(x0+x, y0+y))
+				if cand.mask(x, y, blockW, blockH) {
+					fgSum.r += float64(p.R)
+					fgSum.g += float64(p.G)
+					fgSum.b += float64(p.B)
+					fgN++
+				} else {
+					bgSum.r += float64(p.R)
+					bgSum.g += float64(p.G)
+					bgSum.b += float64(p.B)
+					bgN++
+				}
+			}
+		}
+
+		fgAvg := avgColor(fgSum, fgN, bgSum, bgN)
+		bgAvg := avgColor(bgSum, bgN, fgSum, fgN)
+
+		var err float64
+		for y := 0; y < blockH; y++ {
+			for x := 0; x < blockW; x++ {
+				p := toRGBA(img.At(x0+x, y0+y))
+				if cand.mask(x, y, blockW, blockH) {
+					err += sqDist(p, fgAvg)
+				} else {
+					err += sqDist(p, bgAvg)
+				}
+			}
+		}
+
+		if err < best.Err {
+			best = cellResult{Ch: cand.ch, FG: fgAvg, BG: bgAvg, Err: err}
+		}
+	}
+	return best
+}
+
+func avgColor(sum acc, n int, fallback acc, fallbackN int) color.RGBA {
+	if n == 0 {
+		sum = fallback
+		n = fallbackN
+	}
+	if n == 0 {
+		return color.RGBA{}
+	}
+	return color.RGBA{
+		R: uint8(sum.r / float64(n)),
+		G: uint8(sum.g / float64(n)),
+		B: uint8(sum.b / float64(n)),
+		A: 255,
+	}
 }
 
 // FindOptimalSplit tries all character levels 0..7 for the pixel block
@@ -115,10 +250,10 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 //
 // Per-mode pixel ordering and region semantics:
 //
-//	LowerHorizontal: top→bottom, bar=bottom pixels, empty=top pixels
-//	UpperHorizontal: top→bottom, bar=top pixels,  empty=bottom pixels
-//	LeftVertical:    left→right, bar=left pixels,  empty=right pixels
-//	RightVertical:   left→right, bar=right pixels, empty=left pixels
+//	Vertical: top→bottom, bar=bottom pixels, empty=top pixels
+//
+// Deprecated: use FindBestCell. This remains for tests and golden helpers that
+// need the old scalar split result.
 func FindOptimalSplit(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, mode Mode) (bestK int, barColor, emptyColor color.RGBA, bestErr float64) {
 	blockW := x1 - x0 + 1
 	blockH := y1 - y0 + 1
@@ -195,16 +330,9 @@ func FindOptimalSplit(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 in
 		var err float64
 		var bar, empty color.RGBA
 
-		switch mode {
-		case LowerHorizontal:
-			// bar at bottom = last region (second)
-			// firstIsBar = false → first=empty, last=bar
-			err, bar, empty = trySplit(ci, false)
-		case LeftVertical:
-			// bar at left = first region
-			// firstIsBar = true  → first=bar, last=empty
-			err, bar, empty = trySplit(ci, true)
-		}
+		// bar at bottom = last region (second)
+		// firstIsBar = false → first=empty, last=bar
+		err, bar, empty = trySplit(ci, false)
 
 		if err < bestErr {
 			bestErr = err
@@ -232,17 +360,9 @@ type acc struct{ r, g, b float64 }
 func readBlock(img image.Image, x0, x1, y0, y1 int, mode Mode) []color.RGBA {
 	n := (x1 - x0 + 1) * (y1 - y0 + 1)
 	p := make([]color.RGBA, 0, n)
-	if mode == LeftVertical {
+	for by := y0; by <= y1; by++ {
 		for bx := x0; bx <= x1; bx++ {
-			for by := y0; by <= y1; by++ {
-				p = append(p, toRGBA(img.At(bx, by)))
-			}
-		}
-	} else {
-		for by := y0; by <= y1; by++ {
-			for bx := x0; bx <= x1; bx++ {
-				p = append(p, toRGBA(img.At(bx, by)))
-			}
+			p = append(p, toRGBA(img.At(bx, by)))
 		}
 	}
 	return p
@@ -277,10 +397,8 @@ func blockChar(mode Mode, k int) rune {
 		k = 7
 	}
 	switch mode {
-	case LowerHorizontal:
+	case Vertical:
 		return lowerBlocks[k]
-	case LeftVertical:
-		return leftBlocks[k]
 	default:
 		return lowerBlocks[k]
 	}

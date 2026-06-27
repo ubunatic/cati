@@ -4,25 +4,31 @@ This document captures the architecture, design decisions, optimal-split algorit
 
 ---
 
-## 1. Overview & Orientation Modes
+## 1. Overview & Modes
 
-Sparkline mode displays scalar gradients and pixel grids in the terminal by mapping image regions to fractional Unicode block characters. 
+Sparkline mode displays scalar gradients and pixel grids in the terminal by
+mapping each terminal cell's `4×8` source block to the Unicode glyph and two
+colours that minimise reconstruction error.
 
-Cati provides two orientation modes, each with 1/8th resolution:
+Cati provides two sparkline-family modes:
 
 | Mode | Visual Representation | Growth Direction | Character Set |
 | :--- | :--- | :--- | :--- |
-| `LowerHorizontal` (`spark/lower`) | ` ▂▃▄▅▆▇█` | Bottom-to-Top (Upward) | `U+2581` – `U+2588` |
-| `LeftVertical` (`spark/left`) | `▏▎▍▌▋▊▉█` | Left-to-Right (Rightward) | `U+258F` – `U+2589` |
+| `Vertical` (`spark/vert`) | ` ▂▃▄▅▆▇█` | Bottom-to-Top (Upward) | `U+2581` – `U+2588` |
+| `Quad` (`spark/quad`) | vertical spark blocks plus `▘▝▖▗▀▄▌▐▚▞▛▜▙▟█` | Best 2D mask | fractional block + quad block candidates |
 
-### Removal of Redundant Modes
-Earlier versions of Cati included `UpperHorizontal` (`spark/upper`) and `RightVertical` (`spark/right`) modes. These were simulated by swapping foreground and background colors on the lower and left block characters. However, they were removed due to redundancy (the same gradients can be clearly represented by cycling between `spark/lower` and `spark/left`) and the index-mapping complexity they introduced.
+### Removed Modes
+Earlier versions included `spark/upper`, `spark/right`, and `spark/left`.
+`spark/upper` and `spark/right` were redundant foreground/background inversions.
+`spark/left` was removed because it produced weak visual results under the
+current `4×8` sparkline geometry. Horizontal 1/8 blocks need an `8×8` base grid
+to be represented as cleanly as vertical eighths.
 
 ---
 
 ## 2. The Optimal Split Algorithm
 
-To render a terminal cell, Cati analyzes its corresponding source pixel block of size $W_c \times H_c$. It selects the character index `bestK` (0..7) and colors (`barColor` and `emptyColor`) that minimize the Total Squared Error (SSE) between the reconstructed cell and the source pixels.
+To render a terminal cell, Cati analyzes its corresponding source pixel block of size $W_c \times H_c$. In `spark/vert`, it selects the character index `bestK` (0..7) and colors (`barColor` and `emptyColor`) that minimize the Total Squared Error (SSE) between the reconstructed cell and the source pixels.
 
 For each possible split level `ci` (0 to 7):
 1. **Division**: The cell's pixels are split into two regions: the "bar" (covering $\frac{ci+1}{8}$ of the cell) and the "empty" space (covering the remaining $\frac{7-ci}{8}$).
@@ -31,17 +37,34 @@ For each possible split level `ci` (0 to 7):
    $$\text{SSE} = \sum_{p \in \text{bar}} (p - fgAvg)^2 + \sum_{p \in \text{empty}} (p - bgAvg)^2$$
 4. **Minimization**: The level `ci` yielding the lowest SSE is chosen as `bestK`.
 
+### `spark/quad` Candidate Masks
+
+`spark/quad` generalizes the same SSE idea from one-dimensional split levels to
+two-dimensional candidate masks. For each terminal cell it:
+
+1. Evaluates the vertical sparkline masks.
+2. Evaluates quad, half, full, and space masks on the same `4×8` block.
+3. Averages source pixels inside the mask to get foreground colour.
+4. Averages source pixels outside the mask to get background colour.
+5. Reconstructs the block and selects the rune with the lowest SSE.
+
+Quad candidates are upsampled to `4×8`: each quadrant covers a `2×4` rectangle.
+This keeps `spark/quad` in the sparkline geometry family and avoids changing the
+pure `quadblock` renderer.
+
 ---
 
 ## 3. Pixel Scanning Traversal & Pitfalls
 
-The 1D split logic requires that the pixel array passed to the error minimization function is segmented along the split line. This introduces a critical traversal requirement:
+The legacy 1D split logic requires that the pixel array passed to the error minimization function is segmented along the split line. This introduces a critical traversal requirement:
 
-*   **Horizontal Modes (`LowerHorizontal`)**: Must scan pixels in **row-major** order (row 0, row 1, ..., row H-1). A horizontal split boundary in 1D then maps to a horizontal boundary dividing the top and bottom rows of the cell block.
-*   **Vertical Modes (`LeftVertical`)**: Must scan pixels in **column-major** order (column 0, column 1, ..., column W-1). A 1D split boundary then maps to a vertical boundary dividing the left and right columns of the cell block.
+*   **Vertical Spark Mode (`Vertical`)**: Must scan pixels in **row-major** order (row 0, row 1, ..., row H-1). A horizontal split boundary in 1D then maps to a horizontal boundary dividing the top and bottom rows of the cell block.
+*   **Quad Combo Mode (`Quad`)**: Uses explicit 2D masks instead of scan-order-dependent splits.
 
 > [!WARNING]
-> Scanning pixels in row-major order for vertical modes causes a structural mismatch. The algorithm splits the block horizontally but maps it to a vertical left block character. This mismatch causes severe vertical/horizontal stripe artifacts (comb lines).
+> Reintroducing horizontal 1/8 block modes under `4×8` geometry will be
+> approximate. Use an `8×8` spark-family geometry first if exact horizontal
+> eighths become important.
 
 ---
 

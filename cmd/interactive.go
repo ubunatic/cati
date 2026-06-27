@@ -51,7 +51,7 @@ func (m renderMode) viewSpec() viewgeom.Spec {
 	case modeQuad:
 		return viewgeom.NewCell(2, 2, 2)
 	case modeSpark:
-		return viewgeom.NewCell(4, 8, 4)
+		return viewgeom.NewCell(4, 8, 1)
 	default:
 		return viewgeom.NewCell(1, 2, 1)
 	}
@@ -204,8 +204,8 @@ var renderModes = []struct {
 	cfg  renderCfg
 }{
 	{"halfblock", renderCfg{id: 4}},
-	{"spark/lower", renderCfg{id: 13, mode: modeSpark, sparkMode: sparkline.LowerHorizontal}},
-	{"spark/left", renderCfg{id: 14, mode: modeSpark, sparkMode: sparkline.LeftVertical}},
+	{"spark/vert", renderCfg{id: 13, mode: modeSpark, sparkMode: sparkline.Vertical}},
+	{"spark/quad", renderCfg{id: 14, mode: modeSpark, sparkMode: sparkline.Quad}},
 	// {"halfblock+sharp", renderCfg{id: 10, preScale: pixelart.Sharpen05}},
 	// {"halfblock+epx2x", renderCfg{id: 8, preScale: pixelart.Scale2x}},
 	{"quad/pca2", renderCfg{id: 6, mode: modeQuad, quadOpts: quadblock.Options{PCA2: true}}},

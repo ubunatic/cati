@@ -12,9 +12,9 @@ func TestModeName(t *testing.T) {
 		m    Mode
 		want string
 	}{
-		{LowerHorizontal, "spark/lower"},
-		{LeftVertical, "spark/left"},
-		{Mode(99), "spark/lower"},
+		{Vertical, "spark/vert"},
+		{Quad, "spark/quad"},
+		{Mode(99), "spark/vert"},
 	}
 	for _, tc := range tests {
 		if got := ModeName(tc.m); got != tc.want {
@@ -28,30 +28,30 @@ func TestModes(t *testing.T) {
 	if len(ms) != 2 {
 		t.Fatalf("Modes() returned %d entries, want 2", len(ms))
 	}
-	if ms[0] != LowerHorizontal || ms[1] != LeftVertical {
+	if ms[0] != Vertical || ms[1] != Quad {
 		t.Errorf("Modes() order incorrect: got %v", ms)
 	}
 }
 
 func TestCycle(t *testing.T) {
-	if got := Cycle(LeftVertical); got != LowerHorizontal {
-		t.Errorf("Cycle(LeftVertical) = %d, want LowerHorizontal", got)
+	if got := Cycle(Quad); got != Vertical {
+		t.Errorf("Cycle(Quad) = %d, want Vertical", got)
 	}
-	if got := Cycle(LowerHorizontal); got != LeftVertical {
-		t.Errorf("Cycle(LowerHorizontal) = %d, want LeftVertical", got)
+	if got := Cycle(Vertical); got != Quad {
+		t.Errorf("Cycle(Vertical) = %d, want Quad", got)
 	}
-	if got := CyclePrev(LowerHorizontal); got != LeftVertical {
-		t.Errorf("CyclePrev(LowerHorizontal) = %d, want LeftVertical", got)
+	if got := CyclePrev(Vertical); got != Quad {
+		t.Errorf("CyclePrev(Vertical) = %d, want Quad", got)
 	}
-	if got := CyclePrev(LeftVertical); got != LowerHorizontal {
-		t.Errorf("CyclePrev(LeftVertical) = %d, want LowerHorizontal", got)
+	if got := CyclePrev(Quad); got != Vertical {
+		t.Errorf("CyclePrev(Quad) = %d, want Vertical", got)
 	}
-	if got := Cycle(Mode(99)); got != LowerHorizontal {
-		t.Errorf("Cycle(99) = %d, want LowerHorizontal", got)
+	if got := Cycle(Mode(99)); got != Vertical {
+		t.Errorf("Cycle(99) = %d, want Vertical", got)
 	}
 }
 
-func TestCharLowerHorizontal(t *testing.T) {
+func TestCharVertical(t *testing.T) {
 	tests := []struct {
 		v    float64
 		want rune
@@ -68,57 +68,42 @@ func TestCharLowerHorizontal(t *testing.T) {
 		{1.0, '\u2588'},
 	}
 	for _, tc := range tests {
-		ch, swap := Char(LowerHorizontal, tc.v)
+		ch, swap := Char(Vertical, tc.v)
 		if ch != tc.want {
-			t.Errorf("Char(LowerHorizontal, %v) = %c, want %c", tc.v, ch, tc.want)
+			t.Errorf("Char(Vertical, %v) = %c, want %c", tc.v, ch, tc.want)
 		}
 		if swap {
-			t.Errorf("Char(LowerHorizontal, %v): swapFgBg = true, want false", tc.v)
+			t.Errorf("Char(Vertical, %v): swapFgBg = true, want false", tc.v)
 		}
-	}
-}
-
-func TestCharLeftVertical(t *testing.T) {
-	ch, swap := Char(LeftVertical, 0)
-	if ch != '\u258F' {
-		t.Errorf("Char(LeftVertical, 0) = %c, want ▏", ch)
-	}
-	if swap {
-		t.Errorf("Char(LeftVertical, 0): swapFgBg = true, want false")
-	}
-
-	ch, swap = Char(LeftVertical, 1)
-	if ch != '\u2588' {
-		t.Errorf("Char(LeftVertical, 1) = %c, want █", ch)
 	}
 }
 
 func TestCharEdgeCases(t *testing.T) {
 	// Negative value treated as 0
-	ch, swap := Char(LowerHorizontal, -0.5)
+	ch, swap := Char(Vertical, -0.5)
 	if ch != '\u2581' {
-		t.Errorf("Char(LowerHorizontal, -0.5) = %c, want ▁", ch)
+		t.Errorf("Char(Vertical, -0.5) = %c, want ▁", ch)
 	}
 	_ = swap
 
 	// Very large value treated as 1
-	ch, _ = Char(LowerHorizontal, 2.0)
+	ch, _ = Char(Vertical, 2.0)
 	if ch != '\u2588' {
-		t.Errorf("Char(LowerHorizontal, 2.0) = %c, want █", ch)
+		t.Errorf("Char(Vertical, 2.0) = %c, want █", ch)
 	}
 }
 
 func TestString(t *testing.T) {
 	values := []float64{0, 0.25, 0.5, 0.75, 1.0}
-	s := String(LowerHorizontal, values)
+	s := String(Vertical, values)
 	expected := "\u2581\u2583\u2585\u2587\u2588"
 	if s != expected {
-		t.Errorf("String(LowerHorizontal) = %q, want %q", s, expected)
+		t.Errorf("String(Vertical) = %q, want %q", s, expected)
 	}
 }
 
 func TestStringEmpty(t *testing.T) {
-	s := String(LowerHorizontal, nil)
+	s := String(Vertical, nil)
 	if s != "" {
 		t.Errorf("String(nil) = %q, want empty", s)
 	}
@@ -159,7 +144,7 @@ func TestRenderOptsOutput(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	err := RenderOpts(&buf, img, 2, 1, LowerHorizontal)
+	err := RenderOpts(&buf, img, 2, 1, Vertical)
 	if err != nil {
 		t.Fatalf("RenderOpts returned error: %v", err)
 	}
@@ -196,27 +181,26 @@ func TestRenderOptsOutput(t *testing.T) {
 		t.Error("RenderOpts output missing block characters")
 	}
 }
-
-
-
-func TestRenderOptsLeftVertical(t *testing.T) {
-	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+func TestRenderOptsSparkQuad(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 4, 8))
 	for y := 0; y < 8; y++ {
-		for x := 0; x < 8; x++ {
-			img.Set(x, y, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+		for x := 0; x < 4; x++ {
+			c := color.RGBA{R: 0, G: 0, B: 255, A: 255}
+			if x < 2 && y < 4 {
+				c = color.RGBA{R: 255, G: 0, B: 0, A: 255}
+			}
+			img.Set(x, y, c)
 		}
 	}
 
 	var buf strings.Builder
-	err := RenderOpts(&buf, img, 1, 1, LeftVertical)
+	err := RenderOpts(&buf, img, 1, 1, Quad)
 	if err != nil {
-		t.Fatalf("RenderOpts(LeftVertical) error: %v", err)
+		t.Fatalf("RenderOpts(Quad) error: %v", err)
 	}
 
 	output := buf.String()
-	// Left vertical should use left blocks (U+258F)
-	if strings.Contains(output, "\u258F") || strings.Contains(output, "\u258E") {
-		return // found a left block char
+	if !strings.Contains(output, "▘") {
+		t.Fatalf("RenderOpts(Quad) = %q, want upper-left quad glyph", output)
 	}
-	t.Error("RenderOpts(LeftVertical) missing left block characters")
 }

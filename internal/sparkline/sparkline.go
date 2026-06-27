@@ -1,9 +1,9 @@
 // Package sparkline renders scalar values as Unicode block-element sparklines.
 //
-// Two modes are provided, differing in the block orientation:
+// Two modes are provided:
 //
-//   - LowerHorizontal:  ▁▂▃▄▅▆▇█  (bars grow upward from cell bottom)
-//   - LeftVertical:     ▏▎▍▌▋▊▉█  (bars grow rightward from cell left)
+//   - Vertical:  ▁▂▃▄▅▆▇█  (bars grow upward from cell bottom)
+//   - Quad:      sparkline fractional blocks plus quad/half/full block masks
 //
 // Each cell encodes one value in [0,1].  The caller is responsible for
 // setting fg (bar/filled colour) and bg (empty colour) per cell.
@@ -12,23 +12,23 @@ package sparkline
 type Mode int
 
 const (
-	LowerHorizontal Mode = iota
-	LeftVertical
+	Vertical Mode = iota
+	Quad
 )
 
 func ModeName(m Mode) string {
 	switch m {
-	case LowerHorizontal:
-		return "spark/lower"
-	case LeftVertical:
-		return "spark/left"
+	case Vertical:
+		return "spark/vert"
+	case Quad:
+		return "spark/quad"
 	default:
-		return "spark/lower"
+		return "spark/vert"
 	}
 }
 
 func Modes() []Mode {
-	return []Mode{LowerHorizontal, LeftVertical}
+	return []Mode{Vertical, Quad}
 }
 
 func Cycle(m Mode) Mode {
@@ -63,17 +63,6 @@ var lowerBlocks = [...]rune{
 	'\u2588',
 }
 
-var leftBlocks = [...]rune{
-	'\u258F',
-	'\u258E',
-	'\u258D',
-	'\u258C',
-	'\u258B',
-	'\u258A',
-	'\u2589',
-	'\u2588',
-}
-
 type Cell struct {
 	Ch       rune
 	SwapFgBg bool
@@ -83,10 +72,8 @@ type Cell struct {
 func Char(m Mode, v float64) (r rune, swapFgBg bool) {
 	idx := level(v)
 	switch m {
-	case LowerHorizontal:
+	case Vertical:
 		return lowerBlocks[idx], false
-	case LeftVertical:
-		return leftBlocks[idx], false
 	default:
 		return lowerBlocks[idx], false
 	}
