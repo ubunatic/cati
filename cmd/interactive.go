@@ -152,6 +152,35 @@ func (rc renderCfg) preScaleName() string {
 	}
 }
 
+func ellipsizeRunes(s string, max int) string {
+	if max <= 0 || s == "" {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	if max <= 3 {
+		return string(r[:max])
+	}
+	return string(r[:max-3]) + "..."
+}
+
+func viewerHintVars(meta MediaMeta, termCols int, hintTpl string, extra map[string]string) map[string]string {
+	vars := meta.Vars()
+	for k, v := range extra {
+		vars[k] = v
+	}
+	vars["meta.name_short"] = ""
+	available := max(0, termCols-2-tplWidth(hintTpl, vars))
+	meta.NameShort = ellipsizeRunes(meta.Name, available)
+	vars = meta.Vars()
+	for k, v := range extra {
+		vars[k] = v
+	}
+	return vars
+}
+
 func (rc renderCfg) render(w io.Writer, img image.Image) error {
 	switch rc.mode {
 	case modeSpark:
@@ -271,7 +300,7 @@ var (
 func loadZoomLevels() zoomLevelsSpec {
 	zoomLevelsOnce.Do(func() {
 		zoomLevelsCached = zoomLevelsSpec{
-			Levels: []float64{0.5, 0.75, 1.25},
+			Levels: []float64{0.125, 0.25, 0.5, 0.75, 1.25},
 			Extend: "halves",
 		}
 		data, err := specRead("zoom_levels.yaml")
@@ -324,7 +353,7 @@ func zoomSteps(mz float64, srcW int) []float64 {
 	// Fixed k-values from spec (capped to srcW so rendered width ≥ 1 cell).
 	for _, k := range spec.Levels {
 		k = math.Round(k*10000) / 10000
-		if k >= 0.5 && k <= float64(srcW) && !seen[k] {
+		if k >= 0.125 && k <= float64(srcW) && !seen[k] {
 			seen[k] = true
 		}
 	}
@@ -584,17 +613,14 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		if rc.gray {
 			graySuffix = fmt.Sprintf(" (gray%d)", grayColorsCount(rc.grayColors))
 		}
-		hintVars := map[string]string{
+		hintVars := viewerHintVars(fileMeta, termCols, hint, map[string]string{
 			"last_key":    lastKey,
 			"ssim":        fmt.Sprintf("%.3f", curQ.SSIM),
 			"blockiness":  fmt.Sprintf("%.3f", curQ.Blockiness),
 			"edge_cont":   fmt.Sprintf("%.3f", curQ.EdgeCont),
 			"render_mode": modeName + graySuffix,
 			"zoom_level":  zoomLevel(state, orig, termCols, max(1, termRows-2), rc),
-		}
-		for k, v := range fileMeta.Vars() {
-			hintVars[k] = v
-		}
+		})
 		// Override src_res with visible crop region when zoomed/panning.
 		b := orig.Bounds()
 		if cw, ch := visibleCrop(b.Dx(), b.Dy(), state, termCols, max(1, termRows-2), rc); cw > 0 && ch > 0 {
@@ -972,8 +998,8 @@ func recenterForMode(state *viewState, orig image.Image, termCols, termRows int,
 
 	// Derive pan under the new mode from the same center.
 	_, _, scaledW2, scaledH2, viewW2, viewH2 := viewportDims(srcW, srcH, termCols, termRows, state.zoom, newRC.mode)
-	panX2 := int(math.Round(centerX * float64(scaledW2) / float64(srcW) - float64(viewW2)/2))
-	panY2 := int(math.Round(centerY * float64(scaledH2) / float64(srcH) - float64(viewH2)/2))
+	panX2 := int(math.Round(centerX*float64(scaledW2)/float64(srcW) - float64(viewW2)/2))
+	panY2 := int(math.Round(centerY*float64(scaledH2)/float64(srcH) - float64(viewH2)/2))
 	state.panX = max(0, min(panX2, max(0, scaledW2-viewW2)))
 	state.panY = max(0, min(panY2, max(0, scaledH2-viewH2)))
 }
@@ -1022,8 +1048,6 @@ func renderView(orig image.Image, state *viewState, termCols, termRows int, rc r
 	_ = rc.render(os.Stdout, vp)
 	return vp
 }
-
-
 
 // interactiveVideo plays a video file in the terminal using the caller's shared
 // input channel so that keyboard events are routed through the browser's tokenizer.
@@ -1345,8 +1369,8 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						}
 						statusClearAt = time.Now().Add(3 * time.Second)
 					}
-					
-			case "cycle_render":
+
+				case "cycle_render":
 					rc, modeName = cycleRenderCfg(rc)
 					if lastRawFrame != nil {
 						src := applyGrayIf(lastRawFrame, rc)
@@ -1354,7 +1378,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						b := lastFrame.Bounds()
 						curQ = computeQuality(metrics.PyramidDownscale(src, b.Dx(), b.Dy()), lastFrame, rc)
 					}
-					
+
 				case "cycle_render_prev":
 					rc, modeName = cycleRenderCfgPrev(rc)
 					if lastRawFrame != nil {
@@ -1396,13 +1420,13 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						b := lastFrame.Bounds()
 						curQ = computeQuality(metrics.PyramidDownscale(src, b.Dx(), b.Dy()), lastFrame, rc)
 					}
-						
-					}
+
 				}
 			}
-			return false
 		}
-			// Audio: start playback alongside video.
+		return false
+	}
+	// Audio: start playback alongside video.
 	audioPlayer = openAudio(ctx, path)
 	defer stopAudio(audioPlayer)
 
@@ -1501,16 +1525,13 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			if rc.gray {
 				graySuffix = fmt.Sprintf(" (gray%d)", grayColorsCount(rc.grayColors))
 			}
-			hintVars := map[string]string{
+			hintVars := viewerHintVars(fileMeta, termCols, hint, map[string]string{
 				"last_key":    lastKey,
 				"ssim":        fmt.Sprintf("%.3f", curQ.SSIM),
 				"blockiness":  fmt.Sprintf("%.3f", curQ.Blockiness),
 				"edge_cont":   fmt.Sprintf("%.3f", curQ.EdgeCont),
 				"render_mode": modeName + graySuffix,
-			}
-			for k, v := range fileMeta.Vars() {
-				hintVars[k] = v
-			}
+			})
 			drawHintBar(os.Stdout, termRows, hint, hintVars, style)
 		}
 	}
