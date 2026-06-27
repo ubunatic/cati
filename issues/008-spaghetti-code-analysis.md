@@ -345,7 +345,7 @@ When the user switches modes (e.g., from halfblock to sparkline), the terminal-c
 | **P1** | Factor out Stdin/Terminal Boilerplate | 0.5 day | Removes ~80 lines of duplication | Create `enterVisualMode()` and `exitVisualMode()` helpers. |
 | **P2** | Extract Shared Color/ANSI Helpers | 0.5 day | Removes ~26 lines of duplicate ANSI code | Create a new `internal/colorutil` package. |
 | **P2** | Consolidate Video Metadata & `ffprobe` Commands | 0.5 day | Removes ~4 duplicated subprocess invocation blocks | Extract a single `probeJSON` runner. |
-| **P3** | Split `cmd/` package into Clean Sub-packages | 2 days | Enforces module boundaries, prevents cross-contamination | `cmdbrowser/`, `cmdviewer/`, `cmdconfig/`. |
+| **P3** | Decouple Browser as a "Plugin" & Split CLI Sub-packages | 2-3 days | Focuses CLI on single-purpose image display, enforces strict boundaries | Extract `browser.go` into a separate `cmd/browser` plugin package; split viewer and configuration into `cmd/viewer` and `cmd/config`. |
 
 ---
 
@@ -383,10 +383,15 @@ When the user switches modes (e.g., from halfblock to sparkline), the terminal-c
    - Mouse events loop (`handleBrowserMouse`)
 2. Refactor `interactiveWithChan()` and `interactiveVideo()` to use shared visual-mode wrappers to avoid duplicating stdin-reader and raw-mode setup.
 
+### Phase 4: Browser-as-a-Plugin and CLI Restructuring (P3)
+1. **Extract Browser to a Plugin**: Move `cmd/browser.go` and `cmd/browser_test.go` to a new sub-package `codeberg.org/ubunatic/cati/cmd/browser`. Decouple it so that the core CLI package does not directly import or depend on the browser.
+2. **Split CLI Sub-packages**: Group viewer and configuration logic into clean sub-packages `cmd/viewer` (containing interactive image/video viewers) and `cmd/config` (containing user settings).
+3. Keep the root `cmd` package extremely lightweight, focusing solely on Cobra command routing and static rendering.
+
 ---
 
 ## J. Conclusion
 
-Consolidating the static code quality analysis and the viewport geometry regression into a single implementation plan provides a clear roadmap. The underlying issues in the `cmd` package (lack of standardized parsing, duplicated boilerplate, and coordinate/mode mismatches) can be resolved systematically in four structured phases.
+Consolidating the static code quality analysis and the viewport geometry regression into a single implementation plan provides a clear roadmap. The underlying issues in the `cmd` package (lack of standardized parsing, duplicated boilerplate, and coordinate/mode mismatches) can be resolved systematically.
 
-Following this plan will eliminate approximately 1,000 lines of duplicated code, reduce nesting depth significantly, and ensure total compliance with the spec-system design rules.
+Following this plan will eliminate approximately 1,000 lines of duplicated code, reduce nesting depth significantly, cleanly isolate the browser as an optional plugin component, and ensure total compliance with the spec-system design rules.
