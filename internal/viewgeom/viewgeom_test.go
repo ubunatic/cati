@@ -157,9 +157,47 @@ func TestZoomLevel(t *testing.T) {
 	}
 }
 
+func TestParseZoomK(t *testing.T) {
+	tests := []struct {
+		in   string
+		want float64
+	}{
+		{"0", 0},
+		{"1", 1},
+		{"100%", 1},
+		{"1:1", 1},
+	}
+	for _, tc := range tests {
+		if got := ParseZoomK(tc.in); got != tc.want {
+			t.Fatalf("ParseZoomK(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestCropMath(t *testing.T) {
 	x0, y0, x1, y1 := SrcCrop(10, 10, 4, 4, 8, 8, 4, 4)
 	if x1 <= x0 || y1 <= y0 {
 		t.Fatalf("SrcCrop invalid: %d,%d,%d,%d", x0, y0, x1, y1)
+	}
+}
+
+func TestInitialZoomRatio(t *testing.T) {
+	s := NewCell(1, 2, 1)
+	// Image: 100x50. Term: 80x10.
+	// pixCols = 80, pixRows = 20.
+	// baseFitW, baseFitH = imgutil.FitPixelDims(100, 50, 80, 20) = 40, 20.
+	// For "w": zoom = 80 / 40 = 2.0.
+	// For "h": zoom = 20 / 20 = 1.0.
+	gotW := s.InitialZoomRatio("w", 100, 50, 80, 10)
+	if gotW != 2.0 {
+		t.Errorf("InitialZoomRatio(\"w\") = %v, want 2.0", gotW)
+	}
+	gotH := s.InitialZoomRatio("h", 100, 50, 80, 10)
+	if gotH != 1.0 {
+		t.Errorf("InitialZoomRatio(\"h\") = %v, want 1.0", gotH)
+	}
+	got0 := s.InitialZoomRatio("0", 100, 50, 80, 10)
+	if got0 != 1.0 {
+		t.Errorf("InitialZoomRatio(\"0\") = %v, want 1.0", got0)
 	}
 }

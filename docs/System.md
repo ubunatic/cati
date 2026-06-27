@@ -104,7 +104,7 @@ The stable zoom and viewport helpers now live in `internal/viewgeom`. The app la
 - `levels` — fixed fractional k-values near 1 (e.g. `0.5, 0.75, 1.25`)
 - `extend` — strategy enum `halves`/`quarters`/`adaptive` for generating k from 1.0 up to `srcW`
 
-The loader (`loadZoomLevels`) parses the YAML line-by-line (no library dependency), returns defaults on read/parse error, and uses `sync.Once` for lazy init. See `docs/Spec.md` for spec system conventions.
+The loader (`loadZoomLevels`) now delegates to the typed spec loader in `spec/load.go` (`spec.LoadZoomLevels()`), which uses `gopkg.in/yaml.v3` and still returns defaults on read/parse error through `sync.Once` lazy init. The app layer keeps the zoom ladder normalization thin and mode-agnostic. See `docs/Spec.md` for spec system conventions.
 
 **Minimum rendered width: 1 cell.** Both the levels list and the extension loop are capped at `k ≤ srcW`. This guarantees the rendered image is never smaller than 1 terminal cell wide, regardless of what the spec contains. The `adaptive` extension widens its k jumps as the image gets larger so zooming out of small images does not feel linear and slow at high `k`.
 
@@ -120,7 +120,7 @@ This caps zoom at the 1-source-pixel-per-cell-column limit regardless of termina
 
 **Convergence at k=1.** When each cell shows 1×2 source pixels, all halfblock modes produce identical output. Quad modes also converge provided each 2×2 block has ≤ 2 colours (verified by `TestMaxZoomQuadConvergence`).
 
-**`viewRows` consistency.** The `--zoom 1:1` flag must open at k=1.0. The old bug (opening at k≈1.03) was caused by `initialZoomRatio` using the full `termRows` in its maxZoom computation while `zoomLevel` and the render viewport used `termRows - 2` (reserving 2 rows for the hint bar). Fix: define `viewRows = max(1, termRows - 2)` once and use it consistently in `initialZoomRatio`, `zoomSteps`, `zoomLevel`, and all event-handler zoom calls.
+**`viewRows` consistency.** The `--zoom 1:1` flag must open at k=1.0, and `--zoom 0` / key `0` must fit the viewport. The old bug (opening at k≈1.03) was caused by `initialZoomRatio` using the full `termRows` in its maxZoom computation while `zoomLevel` and the render viewport used `termRows - 2` (reserving 2 rows for the hint bar). Fix: define `viewRows = max(1, termRows - 2)` once and use it consistently in `initialZoomRatio`, `zoomSteps`, `zoomLevel`, and all event-handler zoom calls.
 
 **Step index invariant.** `stepIdx(zoom, steps)` returns the first index where `steps[i] ≤ zoom`. The sequence must be **strictly descending** — `stepIdx` assumes ascending clamped behaviour (zoom above `steps[0]` returns 0, zoom below `steps[last]` returns `last`). Building steps from a deduplicated map of k-values follows this pattern:
 

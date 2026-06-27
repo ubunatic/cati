@@ -9,7 +9,6 @@ import (
 	"math"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -292,38 +291,15 @@ func loadZoomLevels() zoomLevelsSpec {
 			Levels: []float64{0.125, 0.25, 0.5, 0.75, 1.25},
 			Extend: "adaptive",
 		}
-		data, err := specRead("zoom_levels.yaml")
+		specDef, err := spec.LoadZoomLevels()
 		if err != nil {
 			return
 		}
-		for _, line := range strings.Split(string(data), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "$schema") {
-				continue
-			}
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			key := strings.TrimSpace(parts[0])
-			val := strings.TrimSpace(parts[1])
-			switch key {
-			case "levels":
-				var list []float64
-				for _, s := range strings.Split(val, ",") {
-					s = strings.TrimSpace(s)
-					if v, err := strconv.ParseFloat(s, 64); err == nil {
-						list = append(list, v)
-					}
-				}
-				if len(list) > 0 {
-					zoomLevelsCached.Levels = list
-				}
-			case "extend":
-				if val != "" {
-					zoomLevelsCached.Extend = val
-				}
-			}
+		if len(specDef.Levels) > 0 {
+			zoomLevelsCached.Levels = specDef.Levels
+		}
+		if specDef.Extend != "" {
+			zoomLevelsCached.Extend = specDef.Extend
 		}
 	})
 	return zoomLevelsCached
@@ -697,6 +673,29 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 							switch action {
 							case "go_back", "quit":
 								shouldQuit = true
+							case "zoom_k":
+								k := 1.0
+								if len(tok) == 1 && tok[0] >= '0' && tok[0] <= '9' {
+									val := int(tok[0] - '0')
+									if val == 0 {
+										state.zoom = 1.0
+										changed = true
+										break
+									}
+									if val == 1 {
+										k = 1.0
+									} else {
+										k = float64(val)
+									}
+								}
+								srcW := orig.Bounds().Dx()
+								if srcW > 0 {
+									k = math.Max(k, 1.0/float64(srcW))
+									k = math.Min(k, float64(srcW))
+								}
+								mz := maxZoom(srcW, orig.Bounds().Dy(), termCols, viewRows, rc.mode)
+								state.zoom = rc.mode.viewSpec().ZoomRatioForK(mz, k)
+								changed = true
 							case "inc_zoom":
 								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
 								i := stepIdx(state.zoom, steps)

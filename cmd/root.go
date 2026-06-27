@@ -85,7 +85,7 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().IntVar(&height, "height", 0, "target height in terminal rows (0 = auto)")
 	root.Flags().StringVarP(&quadMode, "quad", "q", "", "quad-block render mode: default, hb2, splithalf, splithalf-nb, lum-split, edge-snap")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
-	root.Flags().StringVar(&initialZoom, "zoom", "", `initial zoom: "1" or "1.0" or "100%" or "1:1" = pixel-perfect (k=1)`)
+	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
 	root.Flags().BoolVar(&inputTest, "input-test", false, "")
 	// Allow -q without a value (bare -q means "default").
 	root.Flags().Lookup("quad").NoOptDefVal = "default"
@@ -108,7 +108,7 @@ type opts struct {
 	height      int    // terminal rows;   0 = auto
 	quadMode    string // "" = splithalf; "default"|"hb2"|"splithalf"|"splithalf-nb"|"lum-split" = quad
 	fullComp    bool   // compare render quality against original source pixels
-	initialZoom string // zoom level: 1, 1.0, 100%, 1:1 → pixel-perfect (k=1)
+	initialZoom string // zoom level: 0 → fit to viewport; 1, 1.0, 100%, 1:1 → pixel-perfect (k=1)
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────
@@ -167,12 +167,7 @@ func run(o opts, args []string) error {
 	// ── Static render ─────────────────────────────────────────────────────────
 	// Determine display dimensions: explicit flags take priority; fall back to
 	// the terminal size when both are zero.
-	cols, rows := o.width, o.height
-	if cols == 0 && rows == 0 {
-		cols = halfblock.TermWidth()
-	}
 	multi := len(paths) > 1
-
 	for _, path := range paths {
 		if multi && !o.noHeader {
 			fmt.Printf("# %s\n", path)
@@ -183,27 +178,73 @@ func run(o opts, args []string) error {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 
-		// Apply --zoom when specified (overrides the default fit-to-viewport).
-		if o.initialZoom != "" {
-			k := parseZoomK(o.initialZoom)
-			if k > 0 {
-				b := img.Bounds()
-				cols = max(1, int(math.Round(float64(b.Dx())/k)))
-				rows = max(1, int(math.Round(float64(b.Dy())/(2*k))))
+		b := img.Bounds()
+		if o.initialZoom == "w" {
+			var termCols int
+			if o.width > 0 {
+				termCols = o.width
+			} else {
+				termCols = halfblock.TermWidth()
+			}
+			if b.Dx() > 0 && b.Dy() > 0 {
+				if useQuad {
+					targetW := termCols * 2
+					targetH := max(1, b.Dy()*termCols/b.Dx())
+					img = halfblock.ScaleNN(img, targetW, targetH)
+				} else {
+					targetW := termCols
+					targetH := max(1, b.Dy()*targetW/b.Dx())
+					img = halfblock.ScaleNN(img, targetW, targetH)
+				}
+			}
+		} else if o.initialZoom == "h" {
+			var termRows int
+			if o.height > 0 {
+				termRows = o.height
+			} else {
+				termRows = halfblock.TermHeight()
+			}
+			if b.Dx() > 0 && b.Dy() > 0 {
+				if useQuad {
+					targetH := termRows * 2
+					targetW := max(1, (b.Dx()*2)*targetH/b.Dy())
+					img = halfblock.ScaleNN(img, targetW, targetH)
+				} else {
+					targetH := termRows * 2
+					targetW := max(1, b.Dx()*targetH/b.Dy())
+					img = halfblock.ScaleNN(img, targetW, targetH)
+				}
+			}
+		} else {
+			cols, rows := o.width, o.height
+			if o.initialZoom != "" {
+				k := parseZoomK(o.initialZoom)
+				if k > 0 && b.Dx() > 0 {
+					cols = max(1, int(math.Round(float64(b.Dx())/k)))
+					rows = max(1, int(math.Round(float64(b.Dy())/(2*k))))
+				}
+			} else {
+				if cols == 0 && rows == 0 {
+					cols = halfblock.TermWidth()
+				}
+			}
+
+			if useQuad {
+				if cols > 0 || rows > 0 {
+					img = quadblock.ScaleToFit(img, cols, rows)
+				}
+			} else {
+				if cols > 0 || rows > 0 {
+					img = halfblock.ScaleToFit(img, cols, rows)
+				}
 			}
 		}
 
 		if useQuad {
-			if cols > 0 || rows > 0 {
-				img = quadblock.ScaleToFit(img, cols, rows)
-			}
 			if err := quadblock.RenderOpts(os.Stdout, img, quadOpts); err != nil {
 				return fmt.Errorf("%s: %w", path, err)
 			}
 		} else {
-			if cols > 0 || rows > 0 {
-				img = halfblock.ScaleToFit(img, cols, rows)
-			}
 			if err := halfblock.Render(os.Stdout, img); err != nil {
 				return fmt.Errorf("%s: %w", path, err)
 			}

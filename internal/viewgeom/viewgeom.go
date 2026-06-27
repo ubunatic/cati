@@ -148,6 +148,15 @@ func (s Spec) ZoomLevel(zoom float64, srcW, srcH, termCols, termRows int) string
 	return fmt.Sprintf("src px/cell=%.3g", srcPxPerCell)
 }
 
+// ZoomRatioForK converts a source-pixels-per-cell value into the internal
+// zoom multiplier. A non-positive k means fit-to-viewport.
+func (s Spec) ZoomRatioForK(mz, k float64) float64 {
+	if k <= 0 {
+		return 1.0
+	}
+	return mz / k
+}
+
 // ZoomSteps returns a descending sequence of zoom values using the supplied spec.
 func ZoomSteps(mz float64, srcW int, spec ZoomStepSpec) []float64 {
 	seen := map[float64]bool{}
@@ -228,6 +237,25 @@ func StepIdx(zoom float64, steps []float64) int {
 
 // InitialZoomRatio parses a zoom flag and returns the corresponding ratio.
 func (s Spec) InitialZoomRatio(flag string, srcW, srcH, termCols, termRows int) float64 {
+	if flag == "w" {
+		pixCols := s.PixCols(termCols)
+		pixRows := s.PixRows(termRows)
+		baseFitW, _ := imgutil.FitPixelDims(srcW*s.AspectX, srcH, pixCols, pixRows)
+		if baseFitW > 0 {
+			return float64(pixCols) / float64(baseFitW)
+		}
+		return 1.0
+	}
+	if flag == "h" {
+		pixCols := s.PixCols(termCols)
+		pixRows := s.PixRows(termRows)
+		_, baseFitH := imgutil.FitPixelDims(srcW*s.AspectX, srcH, pixCols, pixRows)
+		if baseFitH > 0 {
+			return float64(pixRows) / float64(baseFitH)
+		}
+		return 1.0
+	}
+
 	k := ParseZoomK(flag)
 	if k <= 0 {
 		return 1.0
@@ -252,19 +280,23 @@ func ParseZoomK(s string) float64 {
 	switch {
 	case strings.HasSuffix(s, "%"):
 		pct, err := strconv.ParseFloat(strings.TrimSuffix(s, "%"), 64)
-		if err == nil && pct > 0 {
-			k = 100.0 / pct
+		if err == nil && pct >= 0 {
+			if pct == 0 {
+				k = 0
+			} else {
+				k = 100.0 / pct
+			}
 		}
 	case strings.Contains(s, ":"):
 		parts := strings.SplitN(s, ":", 2)
 		a, errA := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
 		b, errB := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
-		if errA == nil && errB == nil && b > 0 {
+		if errA == nil && errB == nil && a >= 0 && b > 0 {
 			k = a / b
 		}
 	default:
 		v, err := strconv.ParseFloat(s, 64)
-		if err == nil && v > 0 {
+		if err == nil && v >= 0 {
 			k = v
 		}
 	}
