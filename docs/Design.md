@@ -92,6 +92,7 @@ website_url:        # URL opened by the open_website action
 | `ssim` | `hint_viewer` | SSIM quality score as `"0.823"` |
 | `render_mode` | `hint_viewer` | Current rendering mode name (`"halfblock"`, `"quad/pca2"`, …) |
 | `meta.name` | browser + viewer | Base filename |
+| `meta.name_short` | `hint_viewer` | Base filename shortened with `...` to fit the hint bar |
 | `meta.ext` | browser + viewer | Lowercase extension without dot |
 | `meta.size` | browser + viewer | Human-readable file size (`"3.2 MB"`) |
 | `meta.modified` | browser + viewer | File modification date (`"2024-01-15"`) |

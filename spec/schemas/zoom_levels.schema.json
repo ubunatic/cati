@@ -12,8 +12,8 @@
     },
     "extend": {
       "type": "string",
-      "enum": ["halves", "quarters"],
-      "description": "Strategy for extending the sequence from 1.0 up to srcW. halves: 0.5 steps for k < 5, then 1.0 steps. quarters: 0.25 steps for k < 2, then 0.5 steps for k < 5, then 1.0 steps."
+      "enum": ["halves", "quarters", "adaptive"],
+      "description": "Strategy for extending the sequence from 1.0 up to srcW. halves: 0.5 steps for k < 5, then 1.0 steps. quarters: 0.25 steps for k < 2, then 0.5 steps for k < 5, then 1.0 steps. adaptive: 0.25 steps for k < 2, 0.5 for k < 5, 1.0 for k < 15, 2.0 for k < 32, 4.0 for k < 64, then 8.0 steps."
     }
   },
   "required": ["levels", "extend"]

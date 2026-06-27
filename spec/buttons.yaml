@@ -61,13 +61,13 @@ buttons:
     keys: ["m", "M"]
 
   zoom_in:
-    text: "+ Zoom In"
+    text: "{ '+' | bold | light } Zoom In"
     style: secondary
     action: inc_zoom
     keys: ["+", "="]
 
   zoom_out:
-    text: "- Zoom Out"
+    text: "{ '-' | bold | light } Zoom Out"
     style: secondary
     action: dec_zoom
     keys: ["-"]

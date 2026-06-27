@@ -11,6 +11,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [005](005-video-ffmpeg-scaling.md) | Video: ffmpeg-side scaling to terminal dimensions for rawvideo pipe | 🔴 Open |
 | [006](006-quality-metrics-and-pixel-art-scaling.md) | Quality metrics: blockiness, edge continuity, pixel-art scaling, 8×8 cell compare | 🔴 Open |
 | [007](007-meta-loading-perf.md) | Media metadata: ffprobe called for all image hovers, perf + scope options | 🔴 Open |
+| [010](010-unified-zoom-geometry-and-ladder.md) | Unified zoom geometry and ladder: src px per cell, mode quantum, deduped footprint steps | 🔴 Open |
 
 ## Status legend
 - 🔴 Open

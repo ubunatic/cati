@@ -102,16 +102,16 @@ func TestSGRPredicates(t *testing.T) {
 		button   int
 	}
 	tests := []row{
-		{"\x1b[<0;1;1M", false, false, 0},    // left click
-		{"\x1b[<1;1;1M", false, false, 1},    // middle click
-		{"\x1b[<2;1;1M", false, false, 2},    // right click
-		{"\x1b[<32;1;1M", false, true, 0},    // left drag
-		{"\x1b[<33;1;1M", false, true, 1},    // middle drag
-		{"\x1b[<34;1;1M", false, true, 2},    // right drag
-		{"\x1b[<64;1;1M", true, false, 0},    // scroll up
-		{"\x1b[<65;1;1M", true, false, 1},    // scroll down
-		{"\x1b[<68;1;1M", true, false, 0},    // scroll up + shift
-		{"\x1b[<36;1;1M", false, true, 0},    // left drag + shift (32+4)
+		{"\x1b[<0;1;1M", false, false, 0}, // left click
+		{"\x1b[<1;1;1M", false, false, 1}, // middle click
+		{"\x1b[<2;1;1M", false, false, 2}, // right click
+		{"\x1b[<32;1;1M", false, true, 0}, // left drag
+		{"\x1b[<33;1;1M", false, true, 1}, // middle drag
+		{"\x1b[<34;1;1M", false, true, 2}, // right drag
+		{"\x1b[<64;1;1M", true, false, 0}, // scroll up
+		{"\x1b[<65;1;1M", true, false, 1}, // scroll down
+		{"\x1b[<68;1;1M", true, false, 0}, // scroll up + shift
+		{"\x1b[<36;1;1M", false, true, 0}, // left drag + shift (32+4)
 	}
 	for _, tc := range tests {
 		m, ok := s.ParseMouse(tc.tok)
@@ -200,43 +200,43 @@ func TestCropImage(t *testing.T) {
 
 func TestMaxZoom(t *testing.T) {
 	tests := []struct {
-		name                string
-		srcW, srcH          int
-		termCols, termRows  int
-		mode                renderMode
-		want                float64
+		name               string
+		srcW, srcH         int
+		termCols, termRows int
+		mode               renderMode
+		want               float64
 	}{
 		{
-			name:     "halfblock image larger than viewport",
-			srcW:     1920, srcH: 1080,
+			name: "halfblock image larger than viewport",
+			srcW: 1920, srcH: 1080,
 			termCols: 80, termRows: 40,
 			mode: modeHalfblock,
 			want: 24.0,
 		},
 		{
-			name:     "quad image larger than viewport",
-			srcW:     1920, srcH: 1080,
+			name: "quad image larger than viewport",
+			srcW: 1920, srcH: 1080,
 			termCols: 80, termRows: 40,
 			mode: modeQuad,
 			want: 24.0,
 		},
 		{
-			name:     "halfblock image fits exactly",
-			srcW:     80, srcH: 40,
+			name: "halfblock image fits exactly",
+			srcW: 80, srcH: 40,
 			termCols: 80, termRows: 40,
 			mode: modeHalfblock,
 			want: 1.0,
 		},
 		{
-			name:     "halfblock small image",
-			srcW:     40, srcH: 20,
+			name: "halfblock small image",
+			srcW: 40, srcH: 20,
 			termCols: 80, termRows: 40,
 			mode: modeHalfblock,
 			want: 1.0,
 		},
 		{
-			name:     "zero srcW",
-			srcW:     0, srcH: 100,
+			name: "zero srcW",
+			srcW: 0, srcH: 100,
 			termCols: 80, termRows: 40,
 			mode: modeHalfblock,
 			want: 1.0,
@@ -250,6 +250,54 @@ func TestMaxZoom(t *testing.T) {
 					tc.srcW, tc.srcH, tc.termCols, tc.termRows, tc.mode, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestEllipsizeRunes(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		max  int
+		want string
+	}{
+		{"fits", "cat.png", 8, "cat.png"},
+		{"truncate with ellipsis", "very_long_name.png", 10, "very_lo..."},
+		{"tight budget", "abcdef", 3, "abc"},
+		{"empty budget", "abcdef", 0, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ellipsizeRunes(tc.in, tc.max); got != tc.want {
+				t.Fatalf("ellipsizeRunes(%q, %d) = %q, want %q", tc.in, tc.max, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestViewerHintVarsFitsWidth(t *testing.T) {
+	meta := MediaMeta{
+		Name:     "very_long_filename_for_the_viewer_hint_bar.png",
+		SrcW:     "1920",
+		SrcH:     "1080",
+		DispW:    "80",
+		DispH:    "24",
+		DispMode: "half",
+	}
+	hint := "{ meta.name_short | dim }  { render_mode | dim }  { zoom_level | dim }  S:{ ssim | dim }  { meta.src_res | dim }  { meta.disp_res | dim }  { last_key | dim }"
+	vars := viewerHintVars(meta, 80, hint, map[string]string{
+		"last_key":    "q",
+		"render_mode": "halfblock",
+		"zoom_level":  "1:1",
+		"ssim":        "0.999",
+	})
+	if got := tplWidth(hint, vars); got > 78 {
+		t.Fatalf("viewer hint width = %d, want <= 78 (termCols-2)", got)
+	}
+	if got := vars["meta.name_short"]; got == "" {
+		t.Fatal("viewer hint missing shortened filename")
+	}
+	if got := vars["meta.name_short"]; got == meta.Name && len([]rune(meta.Name)) > 0 {
+		t.Fatal("viewer hint did not shorten an overlong filename")
 	}
 }
 
@@ -389,9 +437,9 @@ func TestZoomSteps(t *testing.T) {
 		srcW    int
 		wantLen int
 	}{
-		{"maxZoom=1, srcW=5", 1.0, 5, 12},
-		{"maxZoom=2, srcW=10", 2.0, 10, 17},
-		{"maxZoom=24, srcW=48", 24.0, 48, 55},
+		{"maxZoom=1, srcW=5", 1.0, 5, 15},
+		{"maxZoom=2, srcW=10", 2.0, 10, 20},
+		{"maxZoom=24, srcW=48", 24.0, 48, 38},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -411,6 +459,19 @@ func TestZoomSteps(t *testing.T) {
 	}
 }
 
+func TestZoomStepsAdaptiveTail(t *testing.T) {
+	steps := zoomSteps(24.0, 48)
+	want := []float64{24.0 / 15.0, 24.0 / 17.0, 24.0 / 19.0, 24.0 / 21.0, 24.0 / 23.0}
+	for i, z := range want {
+		if got := steps[24+i]; math.Abs(got-z) > 1e-9 {
+			t.Fatalf("tail step %d = %v, want %v", 24+i, got, z)
+		}
+	}
+	if got := steps[len(steps)-1]; got != 24.0/48.0 {
+		t.Fatalf("last step = %v, want %v", got, 24.0/48.0)
+	}
+}
+
 func TestStepIdx(t *testing.T) {
 	steps := zoomSteps(24.0, 48)
 	tests := []struct {
@@ -418,7 +479,7 @@ func TestStepIdx(t *testing.T) {
 		zoom float64
 		want int
 	}{
-		{"above max → clamped to 0", 96.1, 0},
+		{"above max → clamped to 0", steps[0] * 1.01, 0},
 		{"exact 1st step → index 0", steps[0], 0},
 		{"exact 2nd step → index 1", steps[1], 1},
 		{"exact mid step → correct index", steps[len(steps)/2], len(steps) / 2},
@@ -506,4 +567,3 @@ func abs(f float64) float64 {
 	}
 	return f
 }
-

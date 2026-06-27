@@ -301,7 +301,7 @@ func loadZoomLevels() zoomLevelsSpec {
 	zoomLevelsOnce.Do(func() {
 		zoomLevelsCached = zoomLevelsSpec{
 			Levels: []float64{0.125, 0.25, 0.5, 0.75, 1.25},
-			Extend: "halves",
+			Extend: "adaptive",
 		}
 		data, err := specRead("zoom_levels.yaml")
 		if err != nil {
@@ -374,6 +374,21 @@ func zoomSteps(mz float64, srcW int) []float64 {
 			default:
 				k += 1.0
 			}
+		case "adaptive":
+			switch {
+			case k < 2:
+				k += 0.25
+			case k < 5:
+				k += 0.5
+			case k < 15:
+				k += 1.0
+			case k < 32:
+				k += 2.0
+			case k < 64:
+				k += 4.0
+			default:
+				k += 8.0
+			}
 		default: // "halves"
 			switch {
 			case k < 5:
@@ -385,6 +400,9 @@ func zoomSteps(mz float64, srcW int) []float64 {
 	}
 
 	// Build sorted k list.
+	if srcW > 0 {
+		seen[float64(srcW)] = true
+	}
 	var ks []float64
 	for k := range seen {
 		ks = append(ks, k)

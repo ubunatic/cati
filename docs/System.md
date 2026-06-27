@@ -94,15 +94,21 @@ The zoom model uses a **k-sequence** where each zoom level k represents the numb
 *   k < 1: zoom-in (each cell shows less than 1 source column, image larger than viewport)
 *   k > 1: zoom-out (image fits in viewport)
 
+**Canonical cell quantum.** The long-term direction is to treat `src px / cell` as the user-visible zoom unit and make the mode-specific footprint a configurable integer multiple of a shared base quantum. Halfblock, quad, sparkline, and future glyph modes then become specializations of the same geometry model instead of separate systems.
+
+**Ladder, not linear steps.** Zoom changes should move through distinct rendered footprints, not through arbitrary arithmetic increments in `k`. The step generator should derive candidate cell footprints from the image dimensions and render mode, convert them to `src px / cell`, and drop states that do not change the actual output after rounding. This keeps small images from accumulating useless tail states and gives every mode one geometry path.
+
+**Mode separation.** Zoom changes size only. Sampling phase / subcell offsets are a separate axis for later testing-only controls such as quadshift. SSIM and other quality metrics should compare through a common analysis grid so new glyph families can still be evaluated against the same baseline.
+
 **Decoupled step generation.** `zoomSteps(mz, srcW) []float64` returns a descending slice of zoom values. Handlers (`inc_zoom`, `dec_zoom`, scroll wheel) consume it via `stepIdx(zoom, steps) int` and never compute steps directly.
 
 **Spec-driven levels** (June 2026). k-values come from `spec/zoom_levels.yaml`:
 - `levels` — fixed fractional k-values near 1 (e.g. `0.5, 0.75, 1.25`)
-- `extend` — strategy enum `halves`/`quarters` for generating k from 1.0 up to `srcW`
+- `extend` — strategy enum `halves`/`quarters`/`adaptive` for generating k from 1.0 up to `srcW`
 
 The loader (`loadZoomLevels`) parses the YAML line-by-line (no library dependency), returns defaults on read/parse error, and uses `sync.Once` for lazy init. See `docs/Spec.md` for spec system conventions.
 
-**Minimum rendered width: 1 cell.** Both the levels list and the extension loop are capped at `k ≤ srcW`. This guarantees the rendered image is never smaller than 1 terminal cell wide, regardless of what the spec contains.
+**Minimum rendered width: 1 cell.** Both the levels list and the extension loop are capped at `k ≤ srcW`. This guarantees the rendered image is never smaller than 1 terminal cell wide, regardless of what the spec contains. The `adaptive` extension widens its k jumps as the image gets larger so zooming out of small images does not feel linear and slow at high `k`.
 
 **`maxZoom`** (`mz`) is computed dynamically:
 

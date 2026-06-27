@@ -19,10 +19,11 @@ import (
 // context — they depend on the current terminal/cell size, not the file itself.
 type MediaMeta struct {
 	// File
-	Name     string // base filename
-	Ext      string // lowercase extension without dot, e.g. "jpg"
-	Size     string // human-readable file size, e.g. "3.2 MB"
-	Modified string // modification date "2006-01-02"
+	Name      string // base filename
+	NameShort string // optional shortened filename for narrow hint bars
+	Ext       string // lowercase extension without dot, e.g. "jpg"
+	Size      string // human-readable file size, e.g. "3.2 MB"
+	Modified  string // modification date "2006-01-02"
 
 	// Source pixel dimensions
 	SrcW string // e.g. "1920"
@@ -63,7 +64,13 @@ func (m MediaMeta) Vars() map[string]string {
 		dispRes = m.DispW + "×" + m.DispH + " " + m.DispMode
 	}
 	return map[string]string{
-		"meta.name":      m.Name,
+		"meta.name": m.Name,
+		"meta.name_short": func() string {
+			if m.NameShort != "" {
+				return m.NameShort
+			}
+			return m.Name
+		}(),
 		"meta.ext":       m.Ext,
 		"meta.size":      m.Size,
 		"meta.modified":  m.Modified,
