@@ -9,7 +9,10 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -40,7 +43,7 @@ func (m renderMode) pixCols(termCols int) int {
 		return termCols * 2
 	}
 	if m == modeSpark {
-		return termCols * 8
+		return termCols * 4
 	}
 	return termCols
 }
@@ -50,13 +53,6 @@ func (m renderMode) pixRows(termRows int) int {
 		return termRows * 8
 	}
 	return termRows * 2
-}
-
-func (m renderMode) fitSrcW(srcW int) int {
-	if m == modeQuad {
-		return srcW * 2
-	}
-	return srcW
 }
 
 func (m renderMode) useQuad() bool {
@@ -75,11 +71,61 @@ func (m renderMode) useSpark() bool {
 // id is set by renderModes entries and used for equality/cycling; it must be
 // unique per renderModes element. The zero id (0) belongs to "halfblock".
 type renderCfg struct {
-	id        int
-	mode      renderMode
-	sparkMode sparkline.Mode
-	quadOpts  quadblock.Options
-	preScale  func(image.Image) image.Image // optional pre-scaler applied before ScaleToFit
+	id         int
+	mode       renderMode
+	sparkMode  sparkline.Mode
+	quadOpts   quadblock.Options
+	preScale   func(image.Image) image.Image // optional pre-scaler applied before ScaleToFit
+	gray       bool                          // when true, convert image to grayscale before rendering
+	grayColors quadblock.ColorReduction      // active grayscale palette level (ColorGray4/8/64/256)
+}
+
+// grayLevels is the cycle order for the G key: off → 256 → 64 → 8 → 4 → off.
+var grayLevels = []quadblock.ColorReduction{
+	quadblock.ColorGray256,
+	quadblock.ColorGray64,
+	quadblock.ColorGray8,
+	quadblock.ColorGray4,
+}
+
+// cycleGray advances rc one step through the gray level cycle.
+func cycleGray(rc *renderCfg) {
+	if !rc.gray {
+		rc.gray = true
+		rc.grayColors = grayLevels[0]
+		return
+	}
+	for i, l := range grayLevels {
+		if l == rc.grayColors {
+			if i+1 < len(grayLevels) {
+				rc.grayColors = grayLevels[i+1]
+			} else {
+				rc.gray = false
+			}
+			return
+		}
+	}
+	// unknown level — reset
+	rc.gray = true
+	rc.grayColors = grayLevels[0]
+}
+
+// grayColorsCount returns the number of gray shades for a given ColorReduction.
+func grayColorsCount(cr quadblock.ColorReduction) int {
+	switch cr {
+	case quadblock.ColorGray4:
+		return 4
+	case quadblock.ColorGray8:
+		return 8
+	case quadblock.ColorGray16:
+		return 16
+	case quadblock.ColorGray64:
+		return 64
+	case quadblock.ColorGray256:
+		return 256
+	default:
+		return 0
+	}
 }
 
 func (rc renderCfg) scaleToFit(img image.Image, cols, rows int) image.Image {
@@ -110,7 +156,7 @@ func (rc renderCfg) render(w io.Writer, img image.Image) error {
 	switch rc.mode {
 	case modeSpark:
 		b := img.Bounds()
-		outCols := max(1, b.Dx()/8)
+		outCols := max(1, b.Dx()/4)
 		outRows := max(1, b.Dy()/8)
 		return sparkline.RenderOpts(w, img, outCols, outRows, rc.sparkMode)
 	case modeQuad:
@@ -147,27 +193,38 @@ var renderModes = []struct {
 }
 
 // cycleRenderCfg returns the next renderCfg in the cycle and its display name.
-// Comparison is by cfg.id, not struct equality (cfg contains a func field).
+// The gray state is carried over from the current cfg.
 func cycleRenderCfg(rc renderCfg) (renderCfg, string) {
 	for i, m := range renderModes {
 		if m.cfg.id == rc.id {
 			next := renderModes[(i+1)%len(renderModes)]
+			next.cfg.gray = rc.gray
+			next.cfg.grayColors = rc.grayColors
 			return next.cfg, next.name
 		}
 	}
-	return renderModes[0].cfg, renderModes[0].name
+	next := renderModes[0]
+	next.cfg.gray = rc.gray
+	next.cfg.grayColors = rc.grayColors
+	return next.cfg, next.name
 }
 
 // cycleRenderCfgPrev returns the previous renderCfg in the cycle and its display name.
+// The gray state is carried over from the current cfg.
 func cycleRenderCfgPrev(rc renderCfg) (renderCfg, string) {
 	n := len(renderModes)
 	for i, m := range renderModes {
 		if m.cfg.id == rc.id {
 			prev := renderModes[(i+n-1)%n]
+			prev.cfg.gray = rc.gray
+			prev.cfg.grayColors = rc.grayColors
 			return prev.cfg, prev.name
 		}
 	}
-	return renderModes[n-1].cfg, renderModes[n-1].name
+	prev := renderModes[n-1]
+	prev.cfg.gray = rc.gray
+	prev.cfg.grayColors = rc.grayColors
+	return prev.cfg, prev.name
 }
 
 // findRenderModeByID looks up a render mode by id in renderModes.
@@ -182,10 +239,8 @@ func findRenderModeByID(id int) (renderCfg, string, bool) {
 
 // ── zoom levels ──────────────────────────────────────────────────────────────
 
-// maxZoom returns the maximum zoom level such that each terminal cell covers at
-// most 1 source pixel column × 2 source pixel rows. The constraint is applied
-// at the terminal-cell level so it works for both halfblock (1 viewport pixel
-// per cell column) and quad (2 viewport pixels per cell column) modes.
+// maxZoom returns the zoom level at which each terminal cell covers exactly
+// 1 source pixel column × 2 source pixel rows (1:1 pixel-perfect).
 func maxZoom(srcW, srcH, termCols, termRows int, mode renderMode) float64 {
 	if srcW <= 0 || srcH <= 0 || termCols <= 0 || termRows <= 0 {
 		return 1.0
@@ -195,23 +250,122 @@ func maxZoom(srcW, srcH, termCols, termRows int, mode renderMode) float64 {
 		return 1.0
 	}
 	cellCols := mode.pixCols(1)
+	cellRows := mode.pixRows(1)
 	zCol := float64(cellCols) * float64(srcW) / float64(scaledW)
-	zRow := float64(srcH) / float64(scaledH)
-	return max(math.Min(zCol, zRow), 1.0)
+	zRow := float64(cellRows/2) * float64(srcH) / float64(scaledH)
+	return math.Min(zCol, zRow)
 }
 
-// zoomSteps returns the sequence of zoom levels from max (index 0) to min
-// (last index). Each step shows one more source column per cell than the
-// previous. Replace this function to change the zoom step behaviour without
-// touching any zoom action handler.
-//
-// Current — k-sequence: step i shows (i+1) × 2(i+1) source pixels per cell.
-// k maxes at srcW so the user can zoom out until the image is 1 pixel wide.
+// ── Zoom-levels spec (from spec/zoom_levels.yaml) ──────────────────────────────
+
+type zoomLevelsSpec struct {
+	Levels []float64
+	Extend string
+}
+
+var (
+	zoomLevelsOnce   sync.Once
+	zoomLevelsCached zoomLevelsSpec
+)
+
+func loadZoomLevels() zoomLevelsSpec {
+	zoomLevelsOnce.Do(func() {
+		zoomLevelsCached = zoomLevelsSpec{
+			Levels: []float64{0.5, 0.75, 1.25},
+			Extend: "halves",
+		}
+		data, err := specRead("zoom_levels.yaml")
+		if err != nil {
+			return
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "$schema") {
+				continue
+			}
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			switch key {
+			case "levels":
+				var list []float64
+				for _, s := range strings.Split(val, ",") {
+					s = strings.TrimSpace(s)
+					if v, err := strconv.ParseFloat(s, 64); err == nil {
+						list = append(list, v)
+					}
+				}
+				if len(list) > 0 {
+					zoomLevelsCached.Levels = list
+				}
+			case "extend":
+				if val != "" {
+					zoomLevelsCached.Extend = val
+				}
+			}
+		}
+	})
+	return zoomLevelsCached
+}
+
+// zoomSteps returns a descending sequence of zoom values with ~1.25× ratio
+// between consecutive steps. k = mz / zoom is the number of source columns
+// per terminal cell. The sequence includes zoom-in (k < 1), 1:1 (k = 1),
+// and zoom-out (k > 1) steps, all hitting exact integer k values.
 func zoomSteps(mz float64, srcW int) []float64 {
-	kmax := max(1, int(math.Floor(mz)), srcW)
-	steps := make([]float64, kmax)
-	for k := 1; k <= kmax; k++ {
-		steps[k-1] = mz / float64(k)
+	spec := loadZoomLevels()
+
+	// Collect all k values (deduped).
+	seen := map[float64]bool{}
+
+	// Fixed k-values from spec (capped to srcW so rendered width ≥ 1 cell).
+	for _, k := range spec.Levels {
+		k = math.Round(k*10000) / 10000
+		if k >= 0.5 && k <= float64(srcW) && !seen[k] {
+			seen[k] = true
+		}
+	}
+
+	// Extension from 1.0 up to srcW (rendered width ≥ 1 cell).
+	for k := 1.0; k <= float64(srcW); {
+		k = math.Round(k*10000) / 10000
+		if !seen[k] {
+			seen[k] = true
+		}
+		switch spec.Extend {
+		case "quarters":
+			switch {
+			case k < 2:
+				k += 0.25
+			case k < 5:
+				k += 0.5
+			default:
+				k += 1.0
+			}
+		default: // "halves"
+			switch {
+			case k < 5:
+				k += 0.5
+			default:
+				k += 1.0
+			}
+		}
+	}
+
+	// Build sorted k list.
+	var ks []float64
+	for k := range seen {
+		ks = append(ks, k)
+	}
+	sort.Float64Slice(ks).Sort()
+
+	// Convert to descending zoom values (small k → large zoom, first in list).
+	steps := make([]float64, len(ks))
+	for i, k := range ks {
+		steps[i] = mz / k
 	}
 	return steps
 }
@@ -227,15 +381,62 @@ func stepIdx(zoom float64, steps []float64) int {
 	return len(steps) - 1
 }
 
+// initialZoomRatio parses the --zoom flag value and returns the corresponding
+// zoom ratio (mz/k).  Empty string returns 1.0 (fit-to-viewport).
+func initialZoomRatio(s string, srcW, srcH, termCols, termRows int, mode renderMode) float64 {
+	k := parseZoomK(s)
+	if k <= 0 {
+		return 1.0
+	}
+	mz := maxZoom(srcW, srcH, termCols, termRows, mode)
+	if srcW > 0 {
+		k = math.Max(k, 1.0/float64(srcW))
+		k = math.Min(k, float64(srcW))
+	}
+	return mz / k
+}
+
+// parseZoomK parses the --zoom value and returns the number of source columns
+// per terminal cell (k).  Empty string returns 0 (use default).
+//
+//	"1"  "1.0"  "100%"  "1:1"  → 1      (pixel-perfect, max zoom)
+//	"2"  "2.0"   "50%"  "2:1"  → 2      (2× zoomed out)
+//	"0.5"        "200%"  "1:2"  → 0.5    (2× zoomed in)
+func parseZoomK(s string) float64 {
+	if s == "" {
+		return 0
+	}
+	s = strings.TrimSpace(s)
+
+	var k float64 = -1
+	switch {
+	case strings.HasSuffix(s, "%"):
+		pct, err := strconv.ParseFloat(strings.TrimSuffix(s, "%"), 64)
+		if err == nil && pct > 0 {
+			k = 100.0 / pct
+		}
+	case strings.Contains(s, ":"):
+		parts := strings.SplitN(s, ":", 2)
+		a, errA := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+		b, errB := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+		if errA == nil && errB == nil && b > 0 {
+			k = a / b
+		}
+	default:
+		v, err := strconv.ParseFloat(s, 64)
+		if err == nil && v > 0 {
+			k = v
+		}
+	}
+	return k
+}
+
 // zoomLevel returns the current k index formatted for the hint bar.
 func zoomLevel(state viewState, orig image.Image, termCols, termRows int, rc renderCfg) string {
 	b := orig.Bounds()
 	mz := maxZoom(b.Dx(), b.Dy(), termCols, termRows, rc.mode)
-	k := int(math.Round(mz / state.zoom))
-	if k < 1 {
-		k = 1
-	}
-	return fmt.Sprintf("k=%d", k)
+	k := mz / state.zoom
+	return fmt.Sprintf("k=%.3g", k)
 }
 
 // ── viewState ────────────────────────────────────────────────────────────────
@@ -260,11 +461,11 @@ type dragState struct {
 
 // ── interactive ──────────────────────────────────────────────────────────────
 
-func interactive(path string, initWidth, initHeight int, rc renderCfg, fullComp bool) error {
-	return interactiveWithChan(path, initWidth, initHeight, rc, nil, nil, nil, nil, nil, nil, fullComp)
+func interactive(path string, initWidth, initHeight int, rc renderCfg, fullComp bool, initialZoom string) error {
+	return interactiveWithChan(path, initWidth, initHeight, rc, nil, nil, nil, nil, nil, nil, fullComp, initialZoom)
 }
 
-func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec, fullComp bool) error {
+func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec, fullComp bool, initialZoom string) error {
 	if inputSpec == nil {
 		inputSpec, _ = input.Load(fs.FS(spec.FS))
 	}
@@ -286,6 +487,9 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	}
 	if viewBtnRows == nil {
 		viewBtnRows = loadViewButtonRows()
+	}
+	if viewKeyMaps == nil {
+		viewKeyMaps = buildViewKeyMaps(viewBtnRows, loadButtonKeyDefs(inputSpec))
 	}
 	btnActions := loadButtonActions()
 	// altBtnActions := loadAltButtonActions()
@@ -343,11 +547,13 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		fmt.Fprint(os.Stdout, "\r\n") // CR+LF: ensure col 0 so the shell won't show a stray '%'
 	}()
 
-	state := viewState{zoom: 1.0}
+	termCols, termRows := resolveTermSize(initWidth, initHeight)
+
+	viewRows := max(1, termRows-2)
+	state := viewState{zoom: initialZoomRatio(initialZoom, orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode)}
 	var drag dragState
 	var spacePan bool
 	var spacePanAnchor dragState
-	termCols, termRows := resolveTermSize(initWidth, initHeight)
 
 	var buttons []menuButton
 	activeAction := ""
@@ -374,12 +580,16 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		fileMeta.DispW = fmt.Sprintf("%d", termCols)
 		fileMeta.DispH = fmt.Sprintf("%d", max(1, termRows-2))
 		fileMeta.DispMode = "half"
+		graySuffix := ""
+		if rc.gray {
+			graySuffix = fmt.Sprintf(" (gray%d)", grayColorsCount(rc.grayColors))
+		}
 		hintVars := map[string]string{
 			"last_key":    lastKey,
 			"ssim":        fmt.Sprintf("%.3f", curQ.SSIM),
 			"blockiness":  fmt.Sprintf("%.3f", curQ.Blockiness),
 			"edge_cont":   fmt.Sprintf("%.3f", curQ.EdgeCont),
-			"render_mode": modeName,
+			"render_mode": modeName + graySuffix,
 			"zoom_level":  zoomLevel(state, orig, termCols, max(1, termRows-2), rc),
 		}
 		for k, v := range fileMeta.Vars() {
@@ -401,10 +611,13 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		case <-sigs:
 			return nil
 
-		case k := <-inputs:
+		case in := <-inputs:
 			termCols, termRows = resolveTermSize(initWidth, initHeight)
-			hStep := max(1, termCols/8)
-			vStep := max(1, termRows*2/8) // in pixel rows
+			viewRows = max(1, termRows-2)
+			mz := maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode)
+			k := max(1, int(math.Round(mz/state.zoom))) // source columns per cell
+			hStep := max(1, min(termCols/8, k))         // at least 1 cell, at most terminal fraction
+			vStep := max(1, min(viewRows*2/8, k))       // pixel rows
 
 			changed := false
 			newStatus := ""
@@ -433,14 +646,14 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 						if m.Release && newAction != "" {
 							switch newAction {
 							case "inc_zoom":
-								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, termRows, rc.mode), orig.Bounds().Dx())
+								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
 								i := stepIdx(state.zoom, steps)
 								if i > 0 {
 									state.zoom = steps[i-1]
 									changed = true
 								}
 							case "dec_zoom":
-								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, termRows, rc.mode), orig.Bounds().Dx())
+								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
 								i := stepIdx(state.zoom, steps)
 								if i < len(steps)-1 {
 									state.zoom = steps[i+1]
@@ -451,6 +664,9 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								changed = true
 							case "cycle_render_prev":
 								rc, modeName = cycleRenderCfgPrev(rc)
+								changed = true
+							case "toggle_gray":
+								cycleGray(&rc)
 								changed = true
 							case "toggle_halfblock":
 								oldRC := rc
@@ -466,6 +682,8 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								} else {
 									rc, modeName = cycleRenderCfg(rc)
 								}
+								rc.gray = oldRC.gray
+								rc.grayColors = oldRC.grayColors
 								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							case "go_back", "quit":
@@ -482,7 +700,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 					switch {
 					// ── Scroll wheel: zoom at cursor ──────────────────────────────
 					case m.IsScroll() && !m.Release:
-						steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, termRows, rc.mode), orig.Bounds().Dx())
+						steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
 						i := stepIdx(state.zoom, steps)
 						if m.ScrollDir() < 0 && i > 0 {
 							zoomAtCursor(&state, steps[i-1], c, r)
@@ -557,14 +775,14 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 							case "go_back", "quit":
 								shouldQuit = true
 							case "inc_zoom":
-								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, termRows, rc.mode), orig.Bounds().Dx())
+								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
 								i := stepIdx(state.zoom, steps)
 								if i > 0 {
 									state.zoom = steps[i-1]
 									changed = true
 								}
 							case "dec_zoom":
-								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, termRows, rc.mode), orig.Bounds().Dx())
+								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
 								i := stepIdx(state.zoom, steps)
 								if i < len(steps)-1 {
 									state.zoom = steps[i+1]
@@ -595,6 +813,9 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 							case "cycle_render_prev":
 								rc, modeName = cycleRenderCfgPrev(rc)
 								changed = true
+							case "toggle_gray":
+								cycleGray(&rc)
+								changed = true
 							case "toggle_halfblock":
 								oldRC := rc
 								if rc.mode.useQuad() {
@@ -609,6 +830,8 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								} else {
 									rc, modeName = cycleRenderCfg(rc)
 								}
+								rc.gray = oldRC.gray
+								rc.grayColors = oldRC.grayColors
 								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							}
@@ -618,7 +841,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 			}
 
 			// Process first event
-			processInput(k)
+			processInput(in)
 			if shouldQuit {
 				return nil
 			}
@@ -678,10 +901,15 @@ func resolveTermSize(width, height int) (cols, rows int) {
 func viewportDims(srcW, srcH, termCols, termRows int, zoom float64, mode renderMode) (pixCols, pixRows, scaledW, scaledH, viewW, viewH int) {
 	pixCols = mode.pixCols(termCols)
 	pixRows = mode.pixRows(termRows)
-	fitSrcW := mode.fitSrcW(srcW)
-	fitW, fitH := imgutil.FitPixelDims(fitSrcW, srcH, pixCols, pixRows)
-	scaledW = max(1, int(math.Round(float64(fitW)*zoom)))
-	scaledH = max(1, int(math.Round(float64(fitH)*zoom)))
+	// Compute pixel dims from a common halfblock (1×2 cell) base so that
+	// all modes agree on how many source pixels are visible at any k-level.
+	// Rounding is done once on the base dims, then multiplied by the mode's
+	// cell-width and cell-height ratios relative to halfblock.
+	baseFitW, baseFitH := imgutil.FitPixelDims(srcW, srcH, termCols, termRows*2)
+	cw := mode.pixCols(1)     // 1 for halfblock, 2 for quad, 4 for spark
+	ch := mode.pixRows(1) / 2 // 1 for halfblock, 1 for quad, 4 for spark
+	scaledW = max(1, int(math.Round(float64(baseFitW)*zoom))*cw)
+	scaledH = max(1, int(math.Round(float64(baseFitH)*zoom))*ch)
 	viewW = min(pixCols, scaledW)
 	viewH = min(pixRows, scaledH)
 	return
@@ -718,6 +946,14 @@ func visibleCrop(srcW, srcH int, state viewState, termCols, termRows int, rc ren
 	}
 	x0, y0, x1, y1 := srcCrop(srcW, srcH, state.panX, state.panY, scaledW, scaledH, vw, vh)
 	return max(1, x1-x0), max(1, y1-y0)
+}
+
+// applyGrayIf returns a grayscale copy of img when rc.gray is true, otherwise img.
+func applyGrayIf(img image.Image, rc renderCfg) image.Image {
+	if rc.gray {
+		return quadblock.ReduceColors(img, rc.grayColors)
+	}
+	return img
 }
 
 // recenterForMode adjusts panX/panY after a render-mode switch so the same
@@ -762,6 +998,9 @@ func zoomAtCursor(state *viewState, newZoom float64, col, row int) {
 // buildViewport returns the cropped+scaled image for the current view state.
 // It also clamps state.panX/panY in-place so they never exceed image bounds.
 func buildViewport(orig image.Image, state *viewState, termCols, termRows int, rc renderCfg) image.Image {
+	if rc.gray {
+		orig = quadblock.ReduceColors(orig, rc.grayColors)
+	}
 	b := orig.Bounds()
 	srcW, srcH := b.Dx(), b.Dy()
 	if srcW == 0 || srcH == 0 {
@@ -809,7 +1048,7 @@ func stopAudio(p *audio.Player) {
 	}
 }
 
-func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec, fullComp bool) error {
+func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec, fullComp bool, initialZoom string) error {
 	// The browser restores cooked-mode before calling us.  We must enter raw
 	// mode ourselves so single keypresses are readable without Enter.
 	fd := int(os.Stdin.Fd())
@@ -1014,26 +1253,42 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					case "cycle_render":
 						rc, modeName = cycleRenderCfg(rc)
 						if lastRawFrame != nil {
-							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+							src := applyGrayIf(lastRawFrame, rc)
+							lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
 							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
-							ref := lastRawFrame
+							ref := src
 							if !fullComp {
-								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)
+								ref = metrics.PyramidDownscale(src, qW, qH)
 							}
 							curQ = computeQuality(ref, lastFrame, rc)
 						}
 					case "cycle_render_prev":
 						rc, modeName = cycleRenderCfgPrev(rc)
 						if lastRawFrame != nil {
-							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+							src := applyGrayIf(lastRawFrame, rc)
+							lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
 							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
-							ref := lastRawFrame
+							ref := src
 							if !fullComp {
-								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)
+								ref = metrics.PyramidDownscale(src, qW, qH)
+							}
+							curQ = computeQuality(ref, lastFrame, rc)
+						}
+					case "toggle_gray":
+						cycleGray(&rc)
+						if lastRawFrame != nil {
+							src := applyGrayIf(lastRawFrame, rc)
+							lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
+							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
+							ref := src
+							if !fullComp {
+								ref = metrics.PyramidDownscale(src, qW, qH)
 							}
 							curQ = computeQuality(ref, lastFrame, rc)
 						}
 					case "toggle_halfblock":
+						graySaved := rc.gray
+						grayColorsSaved := rc.grayColors
 						if rc.mode.useQuad() {
 							lastNonHBID = rc.id
 							if m, n, ok := findRenderModeByID(4); ok {
@@ -1046,12 +1301,15 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						} else {
 							rc, modeName = cycleRenderCfg(rc)
 						}
+						rc.gray = graySaved
+						rc.grayColors = grayColorsSaved
 						if lastRawFrame != nil {
-							lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+							src := applyGrayIf(lastRawFrame, rc)
+							lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
 							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
-							ref := lastRawFrame
+							ref := src
 							if !fullComp {
-								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)
+								ref = metrics.PyramidDownscale(src, qW, qH)
 							}
 							curQ = computeQuality(ref, lastFrame, rc)
 						}
@@ -1091,20 +1349,33 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			case "cycle_render":
 					rc, modeName = cycleRenderCfg(rc)
 					if lastRawFrame != nil {
-						lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+						src := applyGrayIf(lastRawFrame, rc)
+						lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
 						b := lastFrame.Bounds()
-						curQ = computeQuality(metrics.PyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+						curQ = computeQuality(metrics.PyramidDownscale(src, b.Dx(), b.Dy()), lastFrame, rc)
 					}
 					
 				case "cycle_render_prev":
 					rc, modeName = cycleRenderCfgPrev(rc)
 					if lastRawFrame != nil {
-						lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+						src := applyGrayIf(lastRawFrame, rc)
+						lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
 						b := lastFrame.Bounds()
-						curQ = computeQuality(metrics.PyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+						curQ = computeQuality(metrics.PyramidDownscale(src, b.Dx(), b.Dy()), lastFrame, rc)
+					}
+
+				case "toggle_gray":
+					cycleGray(&rc)
+					if lastRawFrame != nil {
+						src := applyGrayIf(lastRawFrame, rc)
+						lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
+						b := lastFrame.Bounds()
+						curQ = computeQuality(metrics.PyramidDownscale(src, b.Dx(), b.Dy()), lastFrame, rc)
 					}
 
 				case "toggle_halfblock":
+					graySaved := rc.gray
+					grayColorsSaved := rc.grayColors
 					if rc.mode.useQuad() {
 						lastNonHBID = rc.id
 						if m, n, ok := findRenderModeByID(4); ok {
@@ -1117,10 +1388,13 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					} else {
 						rc, modeName = cycleRenderCfg(rc)
 					}
+					rc.gray = graySaved
+					rc.grayColors = grayColorsSaved
 					if lastRawFrame != nil {
-						lastFrame = rc.scaleToFit(lastRawFrame, termCols, max(1, termRows-2))
+						src := applyGrayIf(lastRawFrame, rc)
+						lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
 						b := lastFrame.Bounds()
-						curQ = computeQuality(metrics.PyramidDownscale(lastRawFrame, b.Dx(), b.Dy()), lastFrame, rc)
+						curQ = computeQuality(metrics.PyramidDownscale(src, b.Dx(), b.Dy()), lastFrame, rc)
 					}
 						
 					}
@@ -1185,12 +1459,13 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						audioPlayer = nil
 					} else {
 						lastRawFrame = img
-						lastFrame = rc.scaleToFit(img, termCols, max(1, termRows-2))
+						src := applyGrayIf(img, rc)
+						lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
 						{
 							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
-							ref := lastRawFrame
+							ref := src
 							if !fullComp {
-								ref = metrics.PyramidDownscale(lastRawFrame, qW, qH)
+								ref = metrics.PyramidDownscale(src, qW, qH)
 							}
 							curQ = computeQuality(ref, lastFrame, rc)
 						}
@@ -1222,12 +1497,16 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			fileMeta.DispW = fmt.Sprintf("%d", termCols)
 			fileMeta.DispH = fmt.Sprintf("%d", max(1, termRows-2))
 			fileMeta.DispMode = "half"
+			graySuffix := ""
+			if rc.gray {
+				graySuffix = fmt.Sprintf(" (gray%d)", grayColorsCount(rc.grayColors))
+			}
 			hintVars := map[string]string{
 				"last_key":    lastKey,
 				"ssim":        fmt.Sprintf("%.3f", curQ.SSIM),
 				"blockiness":  fmt.Sprintf("%.3f", curQ.Blockiness),
 				"edge_cont":   fmt.Sprintf("%.3f", curQ.EdgeCont),
-				"render_mode": modeName,
+				"render_mode": modeName + graySuffix,
 			}
 			for k, v := range fileMeta.Vars() {
 				hintVars[k] = v

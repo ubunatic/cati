@@ -84,18 +84,27 @@ The viewport geometry math (`pixelColumns ← termCols × (2 if quad else 1)`, t
 *   **`srcCrop`** — maps viewport pixel coords back to source image coords, returning the visible source rectangle. Used by `buildRef` for SSIM reference generation and by the hint-bar for `meta.src_res` (now shows the visible crop region when zoomed/panning instead of always showing full source resolution).
 *   Both functions live in `cmd/` because they depend on the project-specific `useQuad` concept. They are pure (no I/O), table-driven test candidates.
 
-### K-Sequence Zoom Model (June 2026)
+### K-Sequence Zoom Model (June 2026, revised June 2026)
 
-The zoom model was changed from a fixed `maxZoom` constant (8×) with exponential `zoomStep` (1.25×) to a **k-sequence** where each level has a clear semantic meaning:
+The zoom model uses a **k-sequence** where each zoom level k represents the number of source-columns per terminal-cell:
 
-*   `zoom_k = maxZoom / k` for `k = 1 … K`, `K = floor(maxZoom)`
+*   `zoom_k = mz / k` where `mz` is the dynamic max zoom (computed from source and terminal dimensions)
 *   At `k=1`: each terminal cell shows exactly **1 source column × 2 source rows** (pixel-perfect, no sub-cell algorithm choice)
-*   At `k=K`: image is fully zoomed out (fits the viewport), `zoom_K ≈ 1.0`
-*   Each zoom action changes `k` by ±1, snapping to exact `maxZoom/k` values
+*   At `k=srcW`: image is 1 cell wide (minimum useful zoom-out)
+*   k < 1: zoom-in (each cell shows less than 1 source column, image larger than viewport)
+*   k > 1: zoom-out (image fits in viewport)
 
-**Decoupled step generation.** The step logic lives in `zoomSteps(mz) []float64` — a single function that returns the descending slice of zoom values. Zoom action handlers (`inc_zoom`, `dec_zoom`, scroll wheel) consume it via `stepIdx(zoom, steps) int`, and never compute step values directly. Replacing `zoomSteps` changes the step behaviour everywhere without touching handler logic.
+**Decoupled step generation.** `zoomSteps(mz, srcW) []float64` returns a descending slice of zoom values. Handlers (`inc_zoom`, `dec_zoom`, scroll wheel) consume it via `stepIdx(zoom, steps) int` and never compute steps directly.
 
-**`maxZoom`** is no longer a constant. It is computed dynamically from source dimensions, terminal size, and render mode:
+**Spec-driven levels** (June 2026). k-values come from `spec/zoom_levels.yaml`:
+- `levels` — fixed fractional k-values near 1 (e.g. `0.5, 0.75, 1.25`)
+- `extend` — strategy enum `halves`/`quarters` for generating k from 1.0 up to `srcW`
+
+The loader (`loadZoomLevels`) parses the YAML line-by-line (no library dependency), returns defaults on read/parse error, and uses `sync.Once` for lazy init. See `docs/Spec.md` for spec system conventions.
+
+**Minimum rendered width: 1 cell.** Both the levels list and the extension loop are capped at `k ≤ srcW`. This guarantees the rendered image is never smaller than 1 terminal cell wide, regardless of what the spec contains.
+
+**`maxZoom`** (`mz`) is computed dynamically:
 
 ```
 zCol = cellCols × srcW / scaledW    (cellCols = 1 halfblock, 2 quad)
@@ -103,11 +112,21 @@ zRow = srcH / scaledH
 maxZoom = max(min(zCol, zRow), 1.0)
 ```
 
-This ensures the zoom never exceeds the 1-source-pixel-per-cell-column limit regardless of terminal resize or render-mode switch.
+This caps zoom at the 1-source-pixel-per-cell-column limit regardless of terminal resize or render-mode switch.
 
-**Convergence at k=1.** When each terminal cell shows exactly 1×2 source pixels, every halfblock-rendered mode produces the same output (no colour-pair selection to do). Quad modes also converge provided each 2×2 block contains ≤ 2 colours (verified by `TestMaxZoomQuadConvergence`).
+**Convergence at k=1.** When each cell shows 1×2 source pixels, all halfblock modes produce identical output. Quad modes also converge provided each 2×2 block has ≤ 2 colours (verified by `TestMaxZoomQuadConvergence`).
 
-**Zoom level in the hint bar.** The current k value is exposed as `zoom_level` in the hint-bar template (`spec/labels.yaml`). It is computed directly from `round(maxZoom / zoom)` without allocating the step slice.
+**`viewRows` consistency.** The `--zoom 1:1` flag must open at k=1.0. The old bug (opening at k≈1.03) was caused by `initialZoomRatio` using the full `termRows` in its maxZoom computation while `zoomLevel` and the render viewport used `termRows - 2` (reserving 2 rows for the hint bar). Fix: define `viewRows = max(1, termRows - 2)` once and use it consistently in `initialZoomRatio`, `zoomSteps`, `zoomLevel`, and all event-handler zoom calls.
+
+**Step index invariant.** `stepIdx(zoom, steps)` returns the first index where `steps[i] ≤ zoom`. The sequence must be **strictly descending** — `stepIdx` assumes ascending clamped behaviour (zoom above `steps[0]` returns 0, zoom below `steps[last]` returns `last`). Building steps from a deduplicated map of k-values follows this pattern:
+
+1. Collect k-values into a `map[float64]bool` (dedup)
+2. Iterate map keys into a slice, then `sort.Float64Slice(ks).Sort()` (ascending k)
+3. Forward-iterate the sorted ks: `steps[i] = mz / k` (ascending k → descending zoom)
+
+The naive `steps[len-1-i]` reversed-index pattern is wrong — it produces ascending zoom, breaking `stepIdx`.
+
+**Zoom level display.** The current k value is shown in the hint bar using `%.3g` format (e.g. `k=0.75`, `k=1.25`), computed from `maxZoom / zoom`. No rounding, no k≥1 clamp — fractional values are displayed as-is.
 
 ### Phony Sentinels in Makefiles
 To keep targets phony without polluting the `Makefile` with lists of names, a sentinel target `⚙️` is used:

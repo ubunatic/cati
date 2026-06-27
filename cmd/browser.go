@@ -1161,7 +1161,7 @@ type scrollDragState struct {
 	startY int
 }
 
-func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bool) error {
+func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bool, initialZoom string) error {
 	cfg := loadConfig()
 	inputSpec, _ := input.Load(fs.FS(spec.FS))
 	style := loadStyle()
@@ -2142,9 +2142,9 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 										halfblock.ShowCursor(os.Stdout)
 
 										if halfblock.IsVideo(targetItem.path) {
-											_ = interactiveVideo(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp)
+											_ = interactiveVideo(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp, initialZoom)
 										} else {
-											_ = interactiveWithChan(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp)
+											_ = interactiveWithChan(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp, initialZoom)
 										}
 
 										// Propagate any quit signal that arrived while the viewer ran.
@@ -2257,9 +2257,9 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 							halfblock.ShowCursor(os.Stdout)
 
 							if halfblock.IsVideo(targetItem.path) {
-								_ = interactiveVideo(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp)
+								_ = interactiveVideo(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp, initialZoom)
 							} else {
-								_ = interactiveWithChan(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp)
+								_ = interactiveWithChan(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp, initialZoom)
 							}
 
 							// Propagate any quit signal that arrived while the viewer ran.

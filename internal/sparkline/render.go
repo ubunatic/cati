@@ -49,14 +49,15 @@ func ScaleToFit(img image.Image, cols, rows int) image.Image {
 }
 
 // Render writes img to w as ANSI block-element art (lower-block orientation).
+// img should be at the resolution computed by pixCols(=termCols*4) × pixRows(=termRows*8).
 func Render(w io.Writer, img image.Image) error {
 	b := img.Bounds()
-	return RenderOpts(w, img, max(1, b.Dx()/8), max(1, b.Dy()/8), LowerHorizontal)
+	return RenderOpts(w, img, max(1, b.Dx()/4), max(1, b.Dy()/8), LowerHorizontal)
 }
 
 // RenderOpts writes img to w as ANSI block-element art.  The image should
-// be at the resolution computed by pixCols(=termCols*8) × pixRows(=termRows*8)
-// so that each cell can analyze up to an 8×8 pixel block.
+// be at the resolution computed by pixCols(=termCols*4) × pixRows(=termRows*8)
+// so that each cell covers a 4×8 pixel block.
 // outCols and outRows are the number of terminal columns and rows to emit.
 //
 // For each cell the algorithm analyses every possible split level (0..7) and

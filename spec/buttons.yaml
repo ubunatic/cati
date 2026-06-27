@@ -132,6 +132,12 @@ buttons:
     action: toggle_halfblock
     keys: ["h", "H"]
 
+  gray:
+    text: "{ 'G' | bold | light }ray"
+    style: secondary
+    action: toggle_gray
+    keys: ["g", "G"]
+
   render:
     text: "{ 'R' | bold | light }ender"
     style: secondary

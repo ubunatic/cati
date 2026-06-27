@@ -16,7 +16,7 @@ import (
 // ── interactive (error paths) ─────────────────────────────────────────────────
 
 func TestInteractive_MissingFile(t *testing.T) {
-	err := interactive("nonexistent.png", 0, 0, renderCfg{}, false)
+	err := interactive("nonexistent.png", 0, 0, renderCfg{}, false, "")
 	if err == nil {
 		t.Error("expected error for missing file, got nil")
 	}
@@ -253,15 +253,16 @@ func TestMaxZoom(t *testing.T) {
 	}
 }
 
-// TestMaxZoomOneToOne verifies that at max zoom with halfblock, the viewport
-// image is a 1:1 crop of the source (each viewport pixel = one source pixel).
+// TestMaxZoomOneToOne verifies that at max zoom, each viewport pixel
+// corresponds to exactly one source pixel for an image that fills the viewport.
 func TestMaxZoomOneToOne(t *testing.T) {
-	src := image.NewNRGBA(image.Rect(0, 0, 6, 4))
-	for y := 0; y < 4; y++ {
-		for x := 0; x < 6; x++ {
+	// 10×8 source = pixCols × pixRows for termCols=10, termRows=4 in halfblock.
+	src := image.NewNRGBA(image.Rect(0, 0, 10, 8))
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 10; x++ {
 			src.SetNRGBA(x, y, color.NRGBA{
-				R: uint8(x * 40),
-				G: uint8(y * 60),
+				R: uint8(x * 25),
+				G: uint8(y * 30),
 				B: uint8(x + y*10),
 				A: 255,
 			})
@@ -269,9 +270,9 @@ func TestMaxZoomOneToOne(t *testing.T) {
 	}
 
 	const termCols, termRows = 10, 4
-	zoom := maxZoom(6, 4, termCols, termRows, modeHalfblock)
+	zoom := maxZoom(10, 8, termCols, termRows, modeHalfblock)
 	if zoom != 1.0 {
-		t.Fatalf("maxZoom for small image = %v, want 1.0", zoom)
+		t.Fatalf("maxZoom for 10×8 image = %v, want 1.0", zoom)
 	}
 
 	state := viewState{zoom: zoom, panX: 0, panY: 0}
@@ -279,12 +280,12 @@ func TestMaxZoomOneToOne(t *testing.T) {
 	vp := buildViewport(src, &state, termCols, termRows, rc)
 	b := vp.Bounds()
 
-	if b.Dx() != 6 || b.Dy() != 4 {
-		t.Fatalf("viewport size = %dx%d, want 6×4", b.Dx(), b.Dy())
+	if b.Dx() != 10 || b.Dy() != 8 {
+		t.Fatalf("viewport size = %dx%d, want 10×8", b.Dx(), b.Dy())
 	}
 
-	for y := 0; y < 4; y++ {
-		for x := 0; x < 6; x++ {
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 10; x++ {
 			got := vp.At(x, y)
 			want := src.At(x, y)
 			r1, g1, b1, a1 := got.RGBA()
@@ -387,12 +388,10 @@ func TestZoomSteps(t *testing.T) {
 		mz      float64
 		srcW    int
 		wantLen int
-		want0   float64
-		wantN   float64
 	}{
-		{"maxZoom=1, srcW=5 → 5 steps", 1.0, 5, 5, 1.0, 0.2},
-		{"maxZoom=2, srcW=10 → 10 steps", 2.0, 10, 10, 2.0, 0.2},
-		{"maxZoom=24, srcW=48 → 48 steps", 24.0, 48, 48, 24.0, 0.5},
+		{"maxZoom=1, srcW=5", 1.0, 5, 12},
+		{"maxZoom=2, srcW=10", 2.0, 10, 17},
+		{"maxZoom=24, srcW=48", 24.0, 48, 55},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -400,11 +399,8 @@ func TestZoomSteps(t *testing.T) {
 			if len(got) != tc.wantLen {
 				t.Fatalf("len = %d, want %d", len(got), tc.wantLen)
 			}
-			if got[0] != tc.want0 {
-				t.Errorf("steps[0] = %v, want %v", got[0], tc.want0)
-			}
-			if abs(got[len(got)-1]-tc.wantN) > 1e-9 {
-				t.Errorf("steps[last] = %v, want %v", got[len(got)-1], tc.wantN)
+			if got[len(got)-1] != tc.mz/float64(tc.srcW) {
+				t.Errorf("steps[last] = %v, want %v", got[len(got)-1], tc.mz/float64(tc.srcW))
 			}
 			for i := 1; i < len(got); i++ {
 				if got[i] >= got[i-1] {
@@ -416,21 +412,18 @@ func TestZoomSteps(t *testing.T) {
 }
 
 func TestStepIdx(t *testing.T) {
-	steps := zoomSteps(24.0, 48) // mz=24, srcW=48 → 48 steps
+	steps := zoomSteps(24.0, 48)
 	tests := []struct {
 		name string
 		zoom float64
 		want int
 	}{
-		{"exact max = 24 → index 0", 24.0, 0},
-		{"between 24 and 12 → index 1", 18.0, 1},
-		{"exact 12 → index 1", 12.0, 1},
-		{"exact 8 → index 2", 8.0, 2},
-		{"exact 4.8 → index 4", 4.8, 4},
-		{"above max → clamped to 0", 100.0, 0},
-		{"below min → clamped to last", 0.1, len(steps) - 1},
-		{"exact 1 → index K-1 = 23", 1.0, 23},
-		{"exact 0.5 → last index", 0.5, len(steps) - 1},
+		{"above max → clamped to 0", 96.1, 0},
+		{"exact 1st step → index 0", steps[0], 0},
+		{"exact 2nd step → index 1", steps[1], 1},
+		{"exact mid step → correct index", steps[len(steps)/2], len(steps) / 2},
+		{"exact last step → last index", steps[len(steps)-1], len(steps) - 1},
+		{"below min → clamped to last", steps[len(steps)-1] * 0.5, len(steps) - 1},
 		{"zero zoom → last index", 0.0, len(steps) - 1},
 	}
 	for _, tc := range tests {

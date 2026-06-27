@@ -24,6 +24,10 @@ const (
 	ColorGray16
 	// ColorGray64 converts to 64-level grayscale.
 	ColorGray64
+	// ColorGray4 converts to 4-level grayscale.
+	ColorGray4
+	// ColorGray256 converts to 256-level grayscale (full luminance range).
+	ColorGray256
 )
 
 // ReduceColors returns a copy of img with every opaque pixel snapped to the
@@ -50,6 +54,10 @@ func ReduceColors(img image.Image, cr ColorReduction) image.Image {
 		mapFn = func(c color.RGBA) color.RGBA { return toGray(c, 16) }
 	case ColorGray64:
 		mapFn = func(c color.RGBA) color.RGBA { return toGray(c, 64) }
+	case ColorGray4:
+		mapFn = func(c color.RGBA) color.RGBA { return toGray(c, 4) }
+	case ColorGray256:
+		mapFn = func(c color.RGBA) color.RGBA { return toGray(c, 256) }
 	default:
 		return img
 	}

@@ -4,6 +4,7 @@ package cmd
 import (
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,17 +23,18 @@ var imageExts = map[string]bool{
 
 // New returns the root Cobra command for cati.
 func New() *cobra.Command {
-	var ansiMode     bool
-	var recursive    bool
-	var noHeader     bool
-	var playMode     bool
+	var ansiMode bool
+	var recursive bool
+	var noHeader bool
+	var playMode bool
 	var interactMode bool
-	var inputTest    bool
-	var fps          int
-	var width        int
-	var height       int
-	var quadMode     string
-	var fullComp     bool
+	var inputTest bool
+	var fps int
+	var width int
+	var height int
+	var quadMode string
+	var fullComp bool
+	var initialZoom string
 
 	root := &cobra.Command{
 		Use:   "cati [flags] <image|dir> [image|dir ...]",
@@ -68,21 +70,23 @@ Press Ctrl+C to stop playback.`,
 				height:      height,
 				quadMode:    quadMode,
 				fullComp:    fullComp,
+				initialZoom: initialZoom,
 			}, args)
 		},
 	}
 
-	root.Flags().BoolVar(&ansiMode,      "ansi",        true,  "render with 24-bit ANSI true-color (default)")
-	root.Flags().BoolVarP(&recursive,    "recursive",   "r",   false, "recurse into subdirectories")
-	root.Flags().BoolVar(&noHeader,      "no-header",   false, "suppress filename headers between images")
-	root.Flags().BoolVarP(&playMode,     "play",        "p",   false, "animate frames in a loop (Ctrl+C to stop)")
-	root.Flags().BoolVarP(&interactMode, "interactive", "i",   false, "interactive viewer: +/- zoom, arrow keys pan, q quit")
-	root.Flags().IntVar(&fps,            "fps",         0,     "frames per second (0 = auto: native fps for video, 15 for images)")
-	root.Flags().IntVarP(&width,         "width",       "w",   0,     "target width in terminal columns (0 = auto)")
-	root.Flags().IntVar(&height,         "height",      0,     "target height in terminal rows (0 = auto)")
-	root.Flags().StringVarP(&quadMode,   "quad",        "q",   "",    "quad-block render mode: default, hb2, splithalf, splithalf-nb, lum-split, edge-snap")
-	root.Flags().BoolVar(&fullComp,     "full-comp",   false, "compare render quality against original source pixels (slow)")
-	root.Flags().BoolVar(&inputTest,     "input-test",  false, "")
+	root.Flags().BoolVar(&ansiMode, "ansi", true, "render with 24-bit ANSI true-color (default)")
+	root.Flags().BoolVarP(&recursive, "recursive", "r", false, "recurse into subdirectories")
+	root.Flags().BoolVar(&noHeader, "no-header", false, "suppress filename headers between images")
+	root.Flags().BoolVarP(&playMode, "play", "p", false, "animate frames in a loop (Ctrl+C to stop)")
+	root.Flags().BoolVarP(&interactMode, "interactive", "i", false, "interactive viewer: +/- zoom, arrow keys pan, q quit")
+	root.Flags().IntVar(&fps, "fps", 0, "frames per second (0 = auto: native fps for video, 15 for images)")
+	root.Flags().IntVarP(&width, "width", "w", 0, "target width in terminal columns (0 = auto)")
+	root.Flags().IntVar(&height, "height", 0, "target height in terminal rows (0 = auto)")
+	root.Flags().StringVarP(&quadMode, "quad", "q", "", "quad-block render mode: default, hb2, splithalf, splithalf-nb, lum-split, edge-snap")
+	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
+	root.Flags().StringVar(&initialZoom, "zoom", "", `initial zoom: "1" or "1.0" or "100%" or "1:1" = pixel-perfect (k=1)`)
+	root.Flags().BoolVar(&inputTest, "input-test", false, "")
 	// Allow -q without a value (bare -q means "default").
 	root.Flags().Lookup("quad").NoOptDefVal = "default"
 	// Hide the debug flag from help output.
@@ -104,6 +108,7 @@ type opts struct {
 	height      int    // terminal rows;   0 = auto
 	quadMode    string // "" = splithalf; "default"|"hb2"|"splithalf"|"splithalf-nb"|"lum-split" = quad
 	fullComp    bool   // compare render quality against original source pixels
+	initialZoom string // zoom level: 1, 1.0, 100%, 1:1 → pixel-perfect (k=1)
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────
@@ -144,15 +149,15 @@ func run(o opts, args []string) error {
 			}
 		}
 		if len(args) > 1 || isDir {
-			return browser(args, o.width, o.height, rc, o.fullComp)
+			return browser(args, o.width, o.height, rc, o.fullComp, o.initialZoom)
 		}
 		if len(paths) == 0 {
 			return fmt.Errorf("no supported images found")
 		}
 		if halfblock.IsVideo(paths[0]) {
-			return interactiveVideo(paths[0], o.width, o.height, rc, nil, nil, nil, nil, nil, nil, o.fullComp)
+			return interactiveVideo(paths[0], o.width, o.height, rc, nil, nil, nil, nil, nil, nil, o.fullComp, o.initialZoom)
 		}
-		return interactive(paths[0], o.width, o.height, rc, o.fullComp)
+		return interactive(paths[0], o.width, o.height, rc, o.fullComp, o.initialZoom)
 	}
 
 	if len(paths) == 0 {
@@ -176,6 +181,16 @@ func run(o opts, args []string) error {
 		img, err := halfblock.LoadImage(path)
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)
+		}
+
+		// Apply --zoom when specified (overrides the default fit-to-viewport).
+		if o.initialZoom != "" {
+			k := parseZoomK(o.initialZoom)
+			if k > 0 {
+				b := img.Bounds()
+				cols = max(1, int(math.Round(float64(b.Dx())/k)))
+				rows = max(1, int(math.Round(float64(b.Dy())/(2*k))))
+			}
 		}
 
 		if useQuad {

@@ -19,6 +19,9 @@ import (
 //
 // state must already be clamped (call buildViewport first).
 func buildRef(orig image.Image, state viewState, termCols, termRows int, rc renderCfg, qualityK int, fullComp bool) image.Image {
+	if rc.gray {
+		orig = quadblock.ReduceColors(orig, rc.grayColors)
+	}
 	b := orig.Bounds()
 	srcW, srcH := b.Dx(), b.Dy()
 	if srcW == 0 || srcH == 0 {
