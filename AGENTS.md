@@ -32,6 +32,7 @@ Adhere to the following conventions.
 - Bugs, features, and design issues are tracked in `issues/` — read `issues/README.md` for the current status of known problems before starting work.
 - Before starting any feature or fix, skim any Open/In-Progress issues that touch the area you're working in — the index is short and pays for itself immediately.
 - When you change an interface, function signature, or data flow, update the relevant section of the Evergreen doc in the same logical step — not at the end of the session.
+- **Golden Image Verification**: Any new visual rendering mode or algorithm must have a corresponding golden image test under `testhelper` or `testdata` with descriptive metadata (like algorithm name and parameters) embedded as custom PNG `tEXt` chunks.
 
 ## Spec System (`spec/`)
 
