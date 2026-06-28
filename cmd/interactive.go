@@ -821,14 +821,6 @@ func visibleCrop(srcW, srcH int, state viewState, termCols, termRows int, rc ren
 	return rc.mode.viewSpec().VisibleCrop(srcW, srcH, state.zoom, state.panX, state.panY, termCols, termRows)
 }
 
-// applyGrayIf returns a grayscale copy of img when rc.gray is true, otherwise img.
-func applyGrayIf(img image.Image, rc renderCfg) image.Image {
-	if rc.gray {
-		return quadblock.ReduceColors(img, rc.grayColors)
-	}
-	return img
-}
-
 // recenterForMode adjusts panX/panY after a render-mode switch so the same
 // region of the source image stays visible, despite the pixel budget change.
 func recenterForMode(state *viewState, orig image.Image, termCols, termRows int, oldRC, newRC renderCfg) {
@@ -1030,6 +1022,9 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 		lastNonHBID = -1
 	}
 	var curQ metrics.RenderQuality
+	state := viewState{zoom: 1.0}
+	var lastSrcW, lastSrcH int
+	var rerenderLastFrame func()
 	fileMeta := loadMediaMeta(path, true)
 
 	// Probe native fps for smooth playback.
@@ -1108,42 +1103,33 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 							}
 							statusClearAt = time.Now().Add(3 * time.Second)
 						}
+					case "inc_zoom":
+						if lastSrcW > 0 {
+							steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
+							i := stepIdx(state.zoom, steps)
+							if i > 0 {
+								state.zoom = steps[i-1]
+								rerenderLastFrame()
+							}
+						}
+					case "dec_zoom":
+						if lastSrcW > 0 {
+							steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
+							i := stepIdx(state.zoom, steps)
+							if i < len(steps)-1 {
+								state.zoom = steps[i+1]
+								rerenderLastFrame()
+							}
+						}
 					case "cycle_render":
 						rc, modeName = cycleRenderCfg(rc)
-						if lastRawFrame != nil {
-							src := applyGrayIf(lastRawFrame, rc)
-							lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
-							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
-							ref := src
-							if !fullComp {
-								ref = metrics.PyramidDownscale(src, qW, qH)
-							}
-							curQ = computeQuality(ref, lastFrame, rc)
-						}
+						rerenderLastFrame()
 					case "cycle_render_prev":
 						rc, modeName = cycleRenderCfgPrev(rc)
-						if lastRawFrame != nil {
-							src := applyGrayIf(lastRawFrame, rc)
-							lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
-							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
-							ref := src
-							if !fullComp {
-								ref = metrics.PyramidDownscale(src, qW, qH)
-							}
-							curQ = computeQuality(ref, lastFrame, rc)
-						}
+						rerenderLastFrame()
 					case "toggle_gray":
 						cycleGray(&rc)
-						if lastRawFrame != nil {
-							src := applyGrayIf(lastRawFrame, rc)
-							lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
-							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
-							ref := src
-							if !fullComp {
-								ref = metrics.PyramidDownscale(src, qW, qH)
-							}
-							curQ = computeQuality(ref, lastFrame, rc)
-						}
+						rerenderLastFrame()
 					case "toggle_halfblock":
 						graySaved := rc.gray
 						grayColorsSaved := rc.grayColors
@@ -1161,16 +1147,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						}
 						rc.gray = graySaved
 						rc.grayColors = grayColorsSaved
-						if lastRawFrame != nil {
-							src := applyGrayIf(lastRawFrame, rc)
-							lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
-							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
-							ref := src
-							if !fullComp {
-								ref = metrics.PyramidDownscale(src, qW, qH)
-							}
-							curQ = computeQuality(ref, lastFrame, rc)
-						}
+						rerenderLastFrame()
 					case "go_back", "quit":
 						return true
 					}
@@ -1204,32 +1181,60 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						statusClearAt = time.Now().Add(3 * time.Second)
 					}
 
+				case "inc_zoom":
+					if lastSrcW > 0 {
+						steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
+						i := stepIdx(state.zoom, steps)
+						if i > 0 {
+							state.zoom = steps[i-1]
+							rerenderLastFrame()
+						}
+					}
+
+				case "dec_zoom":
+					if lastSrcW > 0 {
+						steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
+						i := stepIdx(state.zoom, steps)
+						if i < len(steps)-1 {
+							state.zoom = steps[i+1]
+							rerenderLastFrame()
+						}
+					}
+
+				case "zoom_k":
+					if lastSrcW > 0 {
+						k := 1.0
+						if len(tok) == 1 && tok[0] >= '0' && tok[0] <= '9' {
+							val := int(tok[0] - '0')
+							if val == 0 {
+								state.zoom = 1.0
+								rerenderLastFrame()
+								break
+							}
+							if val == 1 {
+								k = 1.0
+							} else {
+								k = float64(val)
+							}
+						}
+						k = math.Max(k, 1.0/float64(lastSrcW))
+						k = math.Min(k, float64(lastSrcW))
+						mz := maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode)
+						state.zoom = rc.mode.viewSpec().ZoomRatioForK(mz, k)
+						rerenderLastFrame()
+					}
+
 				case "cycle_render":
 					rc, modeName = cycleRenderCfg(rc)
-					if lastRawFrame != nil {
-						src := applyGrayIf(lastRawFrame, rc)
-						lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
-						b := lastFrame.Bounds()
-						curQ = computeQuality(metrics.PyramidDownscale(src, b.Dx(), b.Dy()), lastFrame, rc)
-					}
+					rerenderLastFrame()
 
 				case "cycle_render_prev":
 					rc, modeName = cycleRenderCfgPrev(rc)
-					if lastRawFrame != nil {
-						src := applyGrayIf(lastRawFrame, rc)
-						lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
-						b := lastFrame.Bounds()
-						curQ = computeQuality(metrics.PyramidDownscale(src, b.Dx(), b.Dy()), lastFrame, rc)
-					}
+					rerenderLastFrame()
 
 				case "toggle_gray":
 					cycleGray(&rc)
-					if lastRawFrame != nil {
-						src := applyGrayIf(lastRawFrame, rc)
-						lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
-						b := lastFrame.Bounds()
-						curQ = computeQuality(metrics.PyramidDownscale(src, b.Dx(), b.Dy()), lastFrame, rc)
-					}
+					rerenderLastFrame()
 
 				case "toggle_halfblock":
 					graySaved := rc.gray
@@ -1248,18 +1253,21 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					}
 					rc.gray = graySaved
 					rc.grayColors = grayColorsSaved
-					if lastRawFrame != nil {
-						src := applyGrayIf(lastRawFrame, rc)
-						lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
-						b := lastFrame.Bounds()
-						curQ = computeQuality(metrics.PyramidDownscale(src, b.Dx(), b.Dy()), lastFrame, rc)
-					}
+					rerenderLastFrame()
 
 				}
 			}
 		}
 		return false
 	}
+	rerenderLastFrame = func() {
+		if lastRawFrame != nil {
+			lastFrame = buildViewport(lastRawFrame, &state, termCols, max(1, termRows-2), rc)
+			ref := buildRef(lastRawFrame, state, termCols, max(1, termRows-2), rc, metrics.GridK, fullComp)
+			curQ = computeQuality(ref, lastFrame, rc)
+		}
+	}
+
 	// Audio: start playback alongside video.
 	audioPlayer = openAudio(ctx, path)
 	defer stopAudio(audioPlayer)
@@ -1317,16 +1325,11 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						audioPlayer = nil
 					} else {
 						lastRawFrame = img
-						src := applyGrayIf(img, rc)
-						lastFrame = rc.scaleToFit(src, termCols, max(1, termRows-2))
-						{
-							qW, qH := metrics.QualityGridDims(lastFrame.Bounds().Dx(), lastFrame.Bounds().Dy(), rc.mode.pixCols(1), rc.mode.pixRows(1), metrics.GridK)
-							ref := src
-							if !fullComp {
-								ref = metrics.PyramidDownscale(src, qW, qH)
-							}
-							curQ = computeQuality(ref, lastFrame, rc)
-						}
+						b := img.Bounds()
+						lastSrcW, lastSrcH = b.Dx(), b.Dy()
+						lastFrame = buildViewport(img, &state, termCols, max(1, termRows-2), rc)
+						ref := buildRef(img, state, termCols, max(1, termRows-2), rc, metrics.GridK, fullComp)
+						curQ = computeQuality(ref, lastFrame, rc)
 					}
 				default:
 					// no frame ready — keep showing lastFrame
@@ -1365,6 +1368,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 				"blockiness":  fmt.Sprintf("%.3f", curQ.Blockiness),
 				"edge_cont":   fmt.Sprintf("%.3f", curQ.EdgeCont),
 				"render_mode": modeName + graySuffix,
+				"zoom_level":  rc.mode.viewSpec().ZoomLevel(state.zoom, lastSrcW, lastSrcH, termCols, max(1, termRows-2)),
 			})
 			drawHintBar(os.Stdout, termRows, hint, hintVars, style)
 		}
