@@ -123,6 +123,7 @@ func LoadLabels() (map[string]string, error) {
 type ButtonDef struct {
 	Text      string   `yaml:"text"`
 	Style     string   `yaml:"style"`
+	Prio      int      `yaml:"prio"`
 	Action    string   `yaml:"action"`
 	Keys      []string `yaml:"keys"`
 	AltAction string   `yaml:"alt_action"`

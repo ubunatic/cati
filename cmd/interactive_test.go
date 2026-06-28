@@ -9,6 +9,7 @@ import (
 	"math"
 	"testing"
 
+	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/input"
 	"codeberg.org/ubunatic/cati/internal/metrics"
@@ -322,6 +323,40 @@ func TestViewerHintVarsFitsWidth(t *testing.T) {
 	}
 }
 
+func TestRenderModeZeroValueIsHalfblockAndCyclesToQuad(t *testing.T) {
+	rc := renderCfg{}
+	if got := rcModeName(rc); got != "halfblock" {
+		t.Fatalf("rcModeName(zero) = %q, want halfblock", got)
+	}
+	next, name := cycleRenderCfg(rc)
+	if name != "quad/splithalf" {
+		t.Fatalf("cycleRenderCfg(zero) name = %q, want quad/splithalf", name)
+	}
+	if next.mode != modeQuad || !next.quadOpts.SplitHalf {
+		t.Fatalf("cycleRenderCfg(zero) = %#v, want splithalf quad", next)
+	}
+}
+
+func TestCanonicalRenderCfgMapsStartupConfigsToCycleIDs(t *testing.T) {
+	tests := []struct {
+		name string
+		in   renderCfg
+		want string
+	}{
+		{"zero halfblock", renderCfg{}, "halfblock"},
+		{"splithalf quad", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, "quad/splithalf"},
+		{"edge snap quad", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true}}, "quad/edge-snap"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := canonicalRenderCfg(tc.in)
+			if gotName := rcModeName(got); gotName != tc.want {
+				t.Fatalf("canonical name = %q, want %q (cfg %#v)", gotName, tc.want, got)
+			}
+		})
+	}
+}
+
 func TestZoomLevelReportsTerminalCellSourceWidthAcrossModes(t *testing.T) {
 	src := image.NewRGBA(image.Rect(0, 0, 728, 592))
 	state := viewState{zoom: 2.0}
@@ -330,9 +365,9 @@ func TestZoomLevelReportsTerminalCellSourceWidthAcrossModes(t *testing.T) {
 		name string
 		rc   renderCfg
 	}{
-		{"halfblock", renderCfg{id: 4}},
-		{"quad", renderCfg{id: 0, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}},
-		{"spark", renderCfg{id: 14, mode: modeSpark, sparkMode: sparkline.Quad}},
+		{"halfblock", renderCfg{id: 0}},
+		{"quad", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}},
+		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}},
 	}
 	for _, tc := range modes {
 		t.Run(tc.name, func(t *testing.T) {
@@ -348,19 +383,19 @@ func TestBuildRefUsesCommonQualityGridAcrossModes(t *testing.T) {
 	state := viewState{zoom: 2.0}
 	const termCols, termRows = 91, 37
 	modes := []struct {
-		name    string
-		rc      renderCfg
-		wantW   int
-		wantH   int
+		name  string
+		rc    renderCfg
+		wantW int
+		wantH int
 	}{
 		// halfblock and quad use the common GridK×GridK quality grid per terminal cell.
-		{"halfblock", renderCfg{id: 4}, termCols * metrics.GridK, termRows * metrics.GridK},
-		{"quad", renderCfg{id: 0, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, termCols * metrics.GridK, termRows * metrics.GridK},
+		{"halfblock", renderCfg{id: 0}, termCols * metrics.GridK, termRows * metrics.GridK},
+		{"quad", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, termCols * metrics.GridK, termRows * metrics.GridK},
 		// spark has CellH=8 so the common quality grid (GridK=4 per cell) would be
 		// at viewH/2 — smaller than RenderToImage output.  buildRef falls through to
 		// viewW×viewH so that rendered and ref are compared at the same resolution
 		// without a 2× downscale that would alias the character fill pattern.
-		{"spark", renderCfg{id: 14, mode: modeSpark, sparkMode: sparkline.Quad}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
+		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
 	}
 	for _, tc := range modes {
 		t.Run(tc.name, func(t *testing.T) {
@@ -373,6 +408,126 @@ func TestBuildRefUsesCommonQualityGridAcrossModes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildViewportExpandsSparkSmallFitToDisplaySize(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	const termCols, termRows = 80, 22
+
+	modes := []struct {
+		name string
+		rc   renderCfg
+		want renderCells
+	}{
+		{"halfblock", renderCfg{id: 0}, renderCells{Cols: 32, Rows: 16}},
+		{"quad", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, renderCells{Cols: 32, Rows: 16}},
+		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}, renderCells{Cols: 32, Rows: 16}},
+	}
+	for _, tc := range modes {
+		t.Run(tc.name, func(t *testing.T) {
+			state := viewState{zoom: 1.0}
+			vp := buildViewport(src, &state, termCols, termRows, tc.rc)
+			if got := renderedCellSize(vp, tc.rc); got != tc.want {
+				t.Fatalf("rendered size = %dx%d, want %dx%d", got.Cols, got.Rows, tc.want.Cols, tc.want.Rows)
+			}
+			if err := validateRenderSize(src, vp, state, termCols, termRows, tc.rc); err != nil {
+				t.Fatalf("validateRenderSize(%s) unexpected error: %v", tc.name, err)
+			}
+		})
+	}
+}
+
+func TestValidateRenderSizeCatchesBadSparkViewport(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	vp := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	rc := renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}
+	state := viewState{zoom: 1.0}
+	const termCols, termRows = 80, 22
+
+	err := validateRenderSize(src, vp, state, termCols, termRows, rc)
+	if err == nil {
+		t.Fatal("validateRenderSize(spark) succeeded, want size mismatch")
+	}
+}
+
+func TestCycleRenderKeepsRenderedImageSizeAtZoomKThree(t *testing.T) {
+	src := horizontalGradientNRGBA(32, 32)
+	const termCols, termRows = 95, 35
+
+	rc := renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}
+	state := viewState{
+		zoom: rc.mode.viewSpec().ZoomRatioForK(
+			maxZoom(src.Bounds().Dx(), src.Bounds().Dy(), termCols, termRows, rc.mode),
+			3,
+		),
+	}
+
+	vp := buildViewport(src, &state, termCols, termRows, rc)
+	want := renderedCellSize(vp, rc)
+	if want.Cols <= 0 || want.Rows <= 0 {
+		t.Fatalf("initial rendered size = %dx%d, want non-empty", want.Cols, want.Rows)
+	}
+
+	for i := 0; i < len(renderModes)*2; i++ {
+		oldRC := rc
+		rc, _ = cycleRenderCfg(rc)
+		preserveZoomForMode(&state, src, termCols, termRows, oldRC, rc)
+		recenterForMode(&state, src, termCols, termRows, oldRC, rc)
+
+		vp = buildViewport(src, &state, termCols, termRows, rc)
+		got := renderedCellSize(vp, rc)
+		if got != want {
+			t.Fatalf("after cycle %d to %s rendered size = %dx%d, want %dx%d",
+				i+1, rcModeName(rc), got.Cols, got.Rows, want.Cols, want.Rows)
+		}
+	}
+}
+
+func TestHorizontalGradientSparkQuadQualityAtZoomKThree(t *testing.T) {
+	src := horizontalGradientNRGBA(32, 32)
+	const termCols, termRows = 95, 35
+
+	rc := renderCfg{}
+	state := viewState{
+		zoom: rc.mode.viewSpec().ZoomRatioForK(
+			maxZoom(src.Bounds().Dx(), src.Bounds().Dy(), termCols, termRows, rc.mode),
+			3,
+		),
+	}
+
+	scores := map[string]float64{}
+	for i := 0; i < len(renderModes); i++ {
+		st := state
+		vp := buildViewport(src, &st, termCols, termRows, rc)
+		ref := buildRef(src, st, termCols, termRows, rc, metrics.GridK, false)
+		scores[rcModeName(rc)] = computeQuality(ref, vp, rc).SSIM
+
+		oldRC := rc
+		rc, _ = cycleRenderCfg(rc)
+		preserveZoomForMode(&state, src, termCols, termRows, oldRC, rc)
+		recenterForMode(&state, src, termCols, termRows, oldRC, rc)
+	}
+
+	spark := scores["spark/quad"]
+	for _, mode := range []string{"quad/splithalf", "quad/edge-snap"} {
+		if spark+1e-9 < scores[mode] {
+			t.Fatalf("spark/quad SSIM %.6f below %s %.6f (scores: %#v)", spark, mode, scores[mode], scores)
+		}
+	}
+}
+
+func horizontalGradientNRGBA(w, h int) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			v := uint8(0)
+			if w > 1 {
+				v = uint8(x * 255 / (w - 1))
+			}
+			img.SetNRGBA(x, y, color.NRGBA{R: v, G: v, B: v, A: 255})
+		}
+	}
+	return img
 }
 
 // TestMaxZoomOneToOne verifies that at max zoom, each viewport pixel
@@ -398,7 +553,7 @@ func TestMaxZoomOneToOne(t *testing.T) {
 	}
 
 	state := viewState{zoom: zoom, panX: 0, panY: 0}
-	rc := renderCfg{id: 4} // halfblock
+	rc := renderCfg{id: 0} // halfblock
 	vp := buildViewport(src, &state, termCols, termRows, rc)
 	b := vp.Bounds()
 
@@ -602,32 +757,36 @@ func TestZoomLevelPixels(t *testing.T) {
 	mz := maxZoom(20, 10, termCols, termRows, modeHalfblock)
 	steps := zoomSteps(mz, 20)
 
-	// Get the fit dimensions that buildViewport uses internally.
-	fw, fh := imgutil.FitPixelDims(20, 10, termCols, modeHalfblock.pixRows(termRows))
-
 	for i, zoom := range steps {
+		rc := renderCfg{id: 0}
 		state := viewState{zoom: zoom, panX: 0, panY: 0}
-		rc := renderCfg{id: 4}
 		vp := buildViewport(src, &state, termCols, termRows, rc)
 		b := vp.Bounds()
 
-		// Compute the effective scaled width the same way buildViewport does.
-		sw := max(1, int(math.Round(float64(fw)*zoom)))
+		expectState := viewState{zoom: zoom, panX: 0, panY: 0}
+		dims := rc.mode.viewSpec().Dims(20, 10, termCols, termRows, expectState.zoom)
+		scaled := halfblock.ScaleNN(src, dims.ScaledW, dims.ScaledH)
+		dims.ClampPan(&expectState.panX, &expectState.panY)
+		viewW, viewH := alignViewportSize(dims.ViewW, dims.ViewH, rc)
+		wantVP := imgutil.CropImage(scaled, expectState.panX, expectState.panY, viewW, viewH)
+		targetCells := expectedCellSize(src, expectState, termCols, termRows, rc)
+		targetW, targetH := viewportPixelSizeForCells(targetCells, rc)
+		if targetW > 0 && targetH > 0 {
+			wb := wantVP.Bounds()
+			if wb.Dx() != targetW || wb.Dy() != targetH {
+				wantVP = halfblock.ScaleNN(wantVP, targetW, targetH)
+			}
+		}
 
 		for y := 0; y < b.Dy(); y++ {
 			for x := 0; x < b.Dx(); x++ {
-				sx := x * 20 / sw
-				sy := y * 10 / (max(1, int(math.Round(float64(fh)*zoom))))
-				if sx >= 20 || sy >= 10 {
-					continue
-				}
 				got := vp.At(x, y)
-				want := src.At(sx, sy)
+				want := wantVP.At(x, y)
 				r1, g1, b1, a1 := got.RGBA()
 				r2, g2, b2, a2 := want.RGBA()
 				if r1 != r2 || g1 != g2 || b1 != b2 || a1 != a2 {
-					t.Errorf("step %d (zoom=%v): vp.At(%d,%d) = (%d,%d,%d,%d), want src.At(%d,%d) = (%d,%d,%d,%d)",
-						i, zoom, x, y, r1, g1, b1, a1, sx, sy, r2, g2, b2, a2)
+					t.Errorf("step %d (zoom=%v): vp.At(%d,%d) = (%d,%d,%d,%d), want normalized crop (%d,%d,%d,%d)",
+						i, zoom, x, y, r1, g1, b1, a1, r2, g2, b2, a2)
 				}
 			}
 		}

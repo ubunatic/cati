@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -490,6 +491,18 @@ func loadAltButtonActions() map[string]string {
 		}
 	}
 	return actions
+}
+
+func loadButtonPriorities() map[string]int {
+	prios := map[string]int{}
+	btnSpec, err := spec.LoadButtons()
+	if err != nil {
+		return prios
+	}
+	for name, def := range btnSpec.Buttons {
+		prios[name] = def.Prio
+	}
+	return prios
 }
 
 // buttonKeyDef holds the action name and bound key sequences for one button entry.
@@ -2229,7 +2242,61 @@ func loadViewRowYaml(includeHidden bool) map[string]string {
 func drawHintBar(w io.Writer, termRow int, label string, vars map[string]string, style *StyleConfig) {
 	ctrlAnsi := styleBG(style.ControlBarBg, "") + styleFG(style.ControlBarFg, "")
 	text := renderTpl(label, vars, ctrlAnsi)
+	if cols := writerTermCols(w); cols > 2 {
+		text = truncateANSI(text, cols-2)
+	}
 	fmt.Fprintf(w, "\x1b[%d;1H\x1b[K%s %s \x1b[m", termRow, ctrlAnsi, text)
+}
+
+func writerTermCols(w io.Writer) int {
+	f, ok := w.(*os.File)
+	if !ok {
+		return 0
+	}
+	cols, _, err := term.GetSize(int(f.Fd()))
+	if err != nil {
+		return 0
+	}
+	return cols
+}
+
+func truncateANSI(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	var out strings.Builder
+	width := 0
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' {
+			start := i
+			i++
+			if i < len(s) && s[i] == '[' {
+				i++
+				for i < len(s) {
+					c := s[i]
+					i++
+					if c >= 0x40 && c <= 0x7e {
+						break
+					}
+				}
+				out.WriteString(s[start:i])
+				continue
+			}
+			out.WriteByte(s[start])
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 0 {
+			break
+		}
+		if width+1 > maxWidth {
+			break
+		}
+		out.WriteString(s[i : i+size])
+		width++
+		i += size
+	}
+	return out.String()
 }
 
 // drawBottomMenu renders the button bar for the given view using the row template from views.yaml.
@@ -2247,26 +2314,83 @@ func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction str
 
 	ctrlAnsi := styleBG(style.ControlBarBg, "") + styleFG(style.ControlBarFg, "")
 	fmt.Fprintf(w, "\x1b[%d;1H\x1b[K%s", termRows-1, ctrlAnsi)
+	maxCols := writerTermCols(w)
 
 	tpl := viewBtnRows[viewName]
 	if tpl == "" {
 		return nil
 	}
 
+	items := parseMenuItems(tpl, labels, conditions, btnActions, altBtnActions, loadButtonPriorities())
+	if maxCols > 0 {
+		fitMenuItems(items, maxCols)
+	}
+
 	var buttons []menuButton
 	col := 1
+	for _, item := range items {
+		if !item.visible {
+			continue
+		}
+		literal := item.literal
+		if strings.TrimSpace(literal) != "" {
+			fmt.Fprintf(w, "\x1b[%d;%dH%s%s\x1b[m", termRows-1, col, ctrlAnsi, literal)
+		}
+		col += utf8.RuneCountInString(literal)
+
+		width := tplWidth(item.label, nil)
+		btn := menuButton{label: item.label, action: item.action, altAction: item.altAction, col: col, width: width}
+		buttons = append(buttons, btn)
+
+		fg := styleFG(style.BtnFg, "")
+		bg := styleBG(style.BtnBg, "")
+		boldEsc := ""
+		for _, mod := range item.mods {
+			switch strings.TrimSpace(mod) {
+			case "bold":
+				boldEsc = "\x1b[1m"
+			default:
+				if c := styleFG(strings.TrimSpace(mod), ""); c != "" {
+					fg = c
+				}
+			}
+		}
+		if item.action == activeAction {
+			boldEsc = "\x1b[1m"
+			fg = styleFG(style.BtnActiveFg, fg)
+			bg = styleBG(style.BtnActiveBg, bg)
+		}
+		baseAnsi := boldEsc + fg + bg
+		rendered := renderTpl(item.label, nil, baseAnsi)
+		fmt.Fprintf(w, "\x1b[%d;%dH%s%s\x1b[m", termRows-1, col, baseAnsi, rendered)
+		col += btn.width
+	}
+	return buttons
+}
+
+type menuLayoutItem struct {
+	literal      string
+	key          string
+	label        string
+	fullLabel    string
+	compactLabel string
+	mods         []string
+	action       string
+	altAction    string
+	prio         int
+	visible      bool
+	collapsed    bool
+}
+
+func parseMenuItems(tpl string, labels map[string]string, conditions map[string]bool, btnActions map[string]string, altBtnActions map[string]string, prios map[string]int) []menuLayoutItem {
+	var items []menuLayoutItem
 	i := 0
 	for i < len(tpl) {
 		open := strings.Index(tpl[i:], "{")
 		if open == -1 {
 			break
 		}
-		// Render literal content between buttons (e.g. " | " separators)
 		literal := tpl[i : i+open]
-		if strings.TrimSpace(literal) != "" {
-			fmt.Fprintf(w, "\x1b[%d;%dH%s%s\x1b[m", termRows-1, col, ctrlAnsi, literal)
-		}
-		col += utf8.RuneCountInString(literal)
 		i += open + 1
 
 		close := strings.Index(tpl[i:], "}")
@@ -2298,37 +2422,95 @@ func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction str
 		if label == "" {
 			label = key
 		}
-
 		action := key
 		if a, ok := btnActions[key]; ok {
 			action = a
 		}
-		altAction := altBtnActions[key]
-		btn := menuButton{label: label, action: action, altAction: altAction, col: col, width: tplWidth(label, nil)}
-		buttons = append(buttons, btn)
-
-		fg := styleFG(style.BtnFg, "")
-		bg := styleBG(style.BtnBg, "")
-		boldEsc := ""
-		for _, mod := range mods {
-			switch strings.TrimSpace(mod) {
-			case "bold":
-				boldEsc = "\x1b[1m"
-			default:
-				if c := styleFG(strings.TrimSpace(mod), ""); c != "" {
-					fg = c
-				}
-			}
-		}
-		if action == activeAction {
-			boldEsc = "\x1b[1m"
-			fg = styleFG(style.BtnActiveFg, fg)
-			bg = styleBG(style.BtnActiveBg, bg)
-		}
-		baseAnsi := boldEsc + fg + bg
-		rendered := renderTpl(label, nil, baseAnsi)
-		fmt.Fprintf(w, "\x1b[%d;%dH%s%s\x1b[m", termRows-1, col, baseAnsi, rendered)
-		col += btn.width
+		items = append(items, menuLayoutItem{
+			literal:      literal,
+			key:          key,
+			label:        label,
+			fullLabel:    label,
+			compactLabel: compactButtonLabel(label),
+			mods:         mods,
+			action:       action,
+			altAction:    altBtnActions[key],
+			prio:         prios[key],
+			visible:      true,
+		})
 	}
-	return buttons
+	return items
+}
+
+func fitMenuItems(items []menuLayoutItem, maxCols int) {
+	if menuItemsWidth(items) <= maxCols {
+		return
+	}
+	order := make([]int, len(items))
+	for i := range items {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		a, b := items[order[i]], items[order[j]]
+		if a.prio != b.prio {
+			return a.prio < b.prio
+		}
+		return order[i] > order[j]
+	})
+	for _, idx := range order {
+		item := &items[idx]
+		if !item.visible || item.collapsed || item.compactLabel == item.fullLabel {
+			continue
+		}
+		item.label = item.compactLabel
+		item.collapsed = true
+		if menuItemsWidth(items) <= maxCols {
+			return
+		}
+	}
+	for _, idx := range order {
+		items[idx].visible = false
+		if menuItemsWidth(items) <= maxCols {
+			return
+		}
+	}
+}
+
+func menuItemsWidth(items []menuLayoutItem) int {
+	width := 0
+	for _, item := range items {
+		if !item.visible {
+			continue
+		}
+		width += utf8.RuneCountInString(item.literal)
+		width += tplWidth(item.label, nil)
+	}
+	return width
+}
+
+func compactButtonLabel(label string) string {
+	left, body, right := splitButtonCaps(label)
+	body = strings.TrimSpace(body)
+	if strings.HasPrefix(body, "{") {
+		if end := strings.Index(body, "}"); end >= 0 {
+			return left + body[:end+1] + right
+		}
+	}
+	r, size := utf8.DecodeRuneInString(body)
+	if r == utf8.RuneError && size == 0 {
+		return label
+	}
+	return left + body[:size] + right
+}
+
+func splitButtonCaps(label string) (string, string, string) {
+	if label == "" {
+		return "", "", ""
+	}
+	left := label[:1]
+	right := label[len(label)-1:]
+	if left == "[" && right == "]" {
+		return left, label[1 : len(label)-1], right
+	}
+	return "", label, ""
 }

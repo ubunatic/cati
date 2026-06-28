@@ -22,12 +22,12 @@ views:
 
   image_viewer:
     - area: canvas
-    - row: "{ halfblock } { gray } { zoom_in } { zoom_out } { toggle_pan } { copy_viewport } { render } { back } { quit }"
+    - row: "{ halfblock } { gray } { zoom_in } { zoom_out } { toggle_pan } { info } { copy_viewport } { render } { back } { quit }"
     - row: "{ hint_viewer }"
 
   video_player:
     - area: canvas
-    - row: "{ halfblock } { gray } { zoom_in } { zoom_out } { if(playing, pause, play) } { copy_viewport } { render } { back } { quit }"
+    - row: "{ halfblock } { gray } { zoom_in } { zoom_out } { if(playing, pause, play) } { info } { copy_viewport } { render } { back } { quit }"
     - row: "{ hint_viewer }"
 
   settings:

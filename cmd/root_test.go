@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"codeberg.org/ubunatic/cati/internal/quadblock"
 )
 
 // ── isImageFile ───────────────────────────────────────────────────────────────
@@ -153,3 +155,37 @@ func TestZoomFlagShorthand(t *testing.T) {
 	}
 }
 
+func TestParseQuadMode(t *testing.T) {
+	tests := []struct {
+		name    string
+		mode    string
+		useQuad bool
+		check   func(t *testing.T, opts quadblock.Options)
+	}{
+		{"off zero", "0", false, nil},
+		{"default empty is splithalf", "", true, func(t *testing.T, opts quadblock.Options) {
+			if !opts.SplitHalf {
+				t.Fatal("empty quad mode should enable SplitHalf")
+			}
+		}},
+		{"edge snap", "edge-snap", true, func(t *testing.T, opts quadblock.Options) {
+			if !opts.EdgeSnap {
+				t.Fatal("edge-snap mode should enable EdgeSnap")
+			}
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts, useQuad, err := parseQuadMode(tc.mode)
+			if err != nil {
+				t.Fatalf("parseQuadMode(%q): %v", tc.mode, err)
+			}
+			if useQuad != tc.useQuad {
+				t.Fatalf("useQuad = %v, want %v", useQuad, tc.useQuad)
+			}
+			if tc.check != nil {
+				tc.check(t, opts)
+			}
+		})
+	}
+}

@@ -132,6 +132,7 @@ func run(o opts, args []string) error {
 	if useQuad {
 		rc.mode = modeQuad
 	}
+	rc = canonicalRenderCfg(rc)
 
 	if o.playMode {
 		if len(paths) == 0 {
@@ -269,8 +270,10 @@ func parseQuadMode(mode string) (quadblock.Options, bool, error) {
 		return quadblock.Options{SplitHalf: true, SplitHalfNeighbors: true}, true, nil
 	case "lum-split":
 		return quadblock.Options{LumSplit: true}, true, nil
+	case "edge-snap":
+		return quadblock.Options{EdgeSnap: true}, true, nil
 	default:
-		return quadblock.Options{}, false, fmt.Errorf("unknown --quad mode %q; valid: default, hb2, splithalf, splithalf-nb, lum-split", mode)
+		return quadblock.Options{}, false, fmt.Errorf("unknown --quad mode %q; valid: default, hb2, splithalf, splithalf-nb, lum-split, edge-snap", mode)
 	}
 }
 

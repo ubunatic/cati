@@ -33,6 +33,7 @@ func buildRef(orig image.Image, state viewState, termCols, termRows int, rc rend
 	dims.ClampPan(&state.panX, &state.panY)
 
 	viewW, viewH := dims.VisibleSize(state.panX, state.panY)
+	viewW, viewH = alignViewportSize(viewW, viewH, rc)
 	if viewW <= 0 || viewH <= 0 {
 		return orig
 	}

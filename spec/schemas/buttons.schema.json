@@ -17,6 +17,10 @@
           "enum": ["primary", "secondary", "active", "muted", "info", "danger"],
           "description": "Theme token from spec/theme.yaml"
         },
+        "prio": {
+          "type": "integer",
+          "description": "Visual priority for narrow terminals. Higher values are kept longer; lower values are hidden first. Hotkeys remain active."
+        },
         "keys": {
           "type": "array",
           "description": "Keys that trigger this button's action. Use named aliases: <esc>, <cr>, <space>, <tab>, <bs>, <up>, <down>, <left>, <right>, <pgup>, <pgdn>, <c-c>, <c-d>, … or plain chars like \"q\", \"[\".",
@@ -40,6 +44,7 @@
             "save_settings",
             "cancel_settings",
             "toggle_pan",
+            "show_info",
             "copy_viewport",
             "toggle_play_pause",
             "nav_up",
@@ -75,6 +80,7 @@
             "save_settings",
             "cancel_settings",
             "toggle_pan",
+            "show_info",
             "copy_viewport",
             "toggle_play_pause",
             "nav_up",

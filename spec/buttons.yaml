@@ -8,60 +8,70 @@ $schema: "./schemas/buttons.schema.json"
 buttons:
   prev:
     text: "◀ Prev"
+    prio: 50
     style: secondary
     action: nav_prev
     keys: ["<left>"]
 
   next:
     text: "Next ▶"
+    prio: 50
     style: secondary
     action: nav_next
     keys: ["<right>"]
 
   page_prev:
     text: ""
+    prio: 10
     style: secondary
     action: nav_page_prev
     keys: ["<pgup>"]
 
   page_next:
     text: ""
+    prio: 10
     style: secondary
     action: nav_page_next
     keys: ["<pgdn>"]
 
   settings:
     text: "{ 'S' | bold | light }ettings"
+    prio: 70
     style: secondary
     action: open_settings
     keys: ["s", "S"]
 
   about:
     text: "{ 'A' | bold | light }bout"
+    prio: 30
     style: secondary
     action: open_about
     keys: ["a", "A"]
 
   quit:
     text: "{ 'Q' | bold | light }uit"
+    prio: 100
     style: danger
     action: quit
     keys: ["q", "Q", "<c-c>"]
 
   back:
     text: "↩ Back"
+    prio: 90
     style: secondary
     action: go_back
     keys: ["<esc>", "<bs>"]
 
   mode:
     text: "{ 'M' | bold | light }ode"
+    prio: 60
     style: secondary
     action: toggle_mode
     keys: ["m", "M"]
 
   zoom_in:
     text: "{ '+' | bold | light } Zoom In"
+    prio: 95
     style: secondary
     action: inc_zoom
     keys: ["+", "="]
@@ -70,6 +80,7 @@ buttons:
 
   zoom_out:
     text: "{ '-' | bold | light } Zoom Out"
+    prio: 95
     style: secondary
     action: dec_zoom
     keys: ["-"]
@@ -78,72 +89,91 @@ buttons:
 
   play:
     text: "▶︎ Play"
+    prio: 95
     style: primary
     action: toggle_play_pause
     keys: ["<space>"]
 
   pause:
     text: "⏸︎ Pause"
+    prio: 95
     style: primary
     action: toggle_play_pause
     keys: ["<space>"]
 
   save:
     text: "✔ Save"
+    prio: 95
     style: primary
     action: save_settings
     keys: ["<cr>"]
 
   cancel:
     text: "✖ Cancel"
+    prio: 90
     style: secondary
     action: cancel_settings
     keys: ["<esc>", "<bs>"]
 
   website:
     text: "🌐 Website"
+    prio: 30
     style: secondary
     action: open_website
     keys: []
 
   nav_up:
     text: ""
+    prio: 10
     style: secondary
     action: nav_up
     keys: ["<up>"]
 
   nav_down:
     text: ""
+    prio: 10
     style: secondary
     action: nav_down
     keys: ["<down>"]
 
   toggle_pan:
     text: "⊹ Pan"
+    prio: 40
     style: secondary
     action: toggle_pan
     keys: ["<space>"]
 
   copy_viewport:
     text: "⎘ Copy"
+    prio: 35
     style: secondary
     action: copy_viewport
     keys: ["c", "C"]
 
+  info:
+    text: "{ 'I' | bold | light }nfo"
+    prio: 85
+    style: secondary
+    action: show_info
+    keys: ["i", "I"]
+
   halfblock:
     text: "{ 'H' | bold | light }alfblock"
+    prio: 80
     style: secondary
     action: toggle_halfblock
     keys: ["h", "H"]
 
   gray:
     text: "{ 'G' | bold | light }ray"
+    prio: 45
     style: secondary
     action: toggle_gray
     keys: ["g", "G"]
 
   render:
     text: "{ 'R' | bold | light }ender"
+    prio: 75
     style: secondary
     action: cycle_render
     keys: ["r"]

@@ -196,14 +196,124 @@ func (rc renderCfg) render(w io.Writer, img image.Image) error {
 	}
 }
 
-// renderModes is the cycle order for the R key. Each entry's cfg.id must equal
-// its slice index so that cycleRenderCfg and rcModeName can find entries by id.
+type renderCells struct {
+	Cols int
+	Rows int
+}
+
+type zoomInfo struct {
+	RawK        float64
+	LadderK     float64
+	SrcW        int
+	SrcH        int
+	ScaledW     int
+	ScaledH     int
+	ViewW       int
+	ViewH       int
+	AlignedW    int
+	AlignedH    int
+	TrimW       int
+	TrimH       int
+	Rendered    renderCells
+	SourceCells renderCells
+	Crop        image.Rectangle
+}
+
+func ceilDiv(a, b int) int {
+	if b <= 0 {
+		return 0
+	}
+	if a <= 0 {
+		return 0
+	}
+	return (a + b - 1) / b
+}
+
+func renderedCellSize(vp image.Image, rc renderCfg) renderCells {
+	b := vp.Bounds()
+	return renderedCellSizeForPixels(b.Dx(), b.Dy(), rc)
+}
+
+func renderedCellSizeForPixels(w, h int, rc renderCfg) renderCells {
+	switch rc.mode {
+	case modeSpark:
+		return renderCells{Cols: max(1, w/4), Rows: max(1, h/8)}
+	case modeQuad:
+		return renderCells{Cols: ceilDiv(w, 2), Rows: ceilDiv(h, 2)}
+	default:
+		return renderCells{Cols: w, Rows: ceilDiv(h, 2)}
+	}
+}
+
+func expectedCellSize(orig image.Image, state viewState, termCols, termRows int, rc renderCfg) renderCells {
+	b := orig.Bounds()
+	srcW, srcH := b.Dx(), b.Dy()
+	if srcW <= 0 || srcH <= 0 || state.zoom <= 0 {
+		return renderCells{}
+	}
+	dims := rc.mode.viewSpec().Dims(srcW, srcH, termCols, termRows, state.zoom)
+	dims.ClampPan(&state.panX, &state.panY)
+	viewW, viewH := dims.VisibleSize(state.panX, state.panY)
+	if viewW <= 0 || viewH <= 0 {
+		return renderCells{}
+	}
+	crop := image.Rect(viewgeom.SrcCrop(srcW, srcH, state.panX, state.panY, dims.ScaledW, dims.ScaledH, viewW, viewH))
+	k := rc.mode.viewSpec().MaxZoom(srcW, srcH, termCols, termRows) / state.zoom
+	if k <= 0 {
+		return renderCells{}
+	}
+	return renderCells{
+		Cols: min(termCols, max(1, int(math.Ceil(float64(crop.Dx())/k)))),
+		Rows: min(termRows, max(1, int(math.Ceil(float64(crop.Dy())/(2*k))))),
+	}
+}
+
+func viewportPixelSizeForCells(cells renderCells, rc renderCfg) (int, int) {
+	if cells.Cols <= 0 || cells.Rows <= 0 {
+		return 0, 0
+	}
+	spec := rc.mode.viewSpec()
+	return cells.Cols * spec.CellW, cells.Rows * spec.CellH
+}
+
+func alignViewportSize(viewW, viewH int, rc renderCfg) (int, int) {
+	if rc.mode.useQuad() {
+		if viewW > 1 && viewW%2 != 0 {
+			viewW--
+		}
+	}
+	return viewW, viewH
+}
+
+func validateRenderSize(orig, vp image.Image, state viewState, termCols, termRows int, rc renderCfg) error {
+	got := renderedCellSize(vp, rc)
+	want := expectedCellSize(orig, state, termCols, termRows, rc)
+	if want.Cols <= 0 || want.Rows <= 0 {
+		return nil
+	}
+	if got != want {
+		return fmt.Errorf("render size mismatch for %s: got %dx%d cells from viewport %dx%d, want %dx%d cells",
+			rcModeName(rc), got.Cols, got.Rows, vp.Bounds().Dx(), vp.Bounds().Dy(), want.Cols, want.Rows)
+	}
+	return nil
+}
+
+func renderValidated(w io.Writer, orig, vp image.Image, state viewState, termCols, termRows int, rc renderCfg) error {
+	if orig != nil {
+		if err := validateRenderSize(orig, vp, state, termCols, termRows, rc); err != nil {
+			return err
+		}
+	}
+	return rc.render(w, vp)
+}
+
+// renderModes is the cycle order for the R key. Each entry's cfg.id must be
+// stable and unique so that cycleRenderCfg and rcModeName can find entries by id.
 var renderModes = []struct {
 	name string
 	cfg  renderCfg
 }{
-	{"halfblock", renderCfg{id: 4}},
-	{"spark/quad", renderCfg{id: 14, mode: modeSpark, sparkMode: sparkline.Quad}},
+	{"halfblock", renderCfg{id: 0}},
 	// {"halfblock+sharp", renderCfg{id: 10, preScale: pixelart.Sharpen05}},
 	// {"halfblock+epx2x", renderCfg{id: 8, preScale: pixelart.Scale2x}},
 	// {"quad/pca2", renderCfg{id: 6, mode: modeQuad, quadOpts: quadblock.Options{PCA2: true}}},
@@ -212,11 +322,34 @@ var renderModes = []struct {
 	// {"quad/pca2+ambig", renderCfg{id: 2, mode: modeQuad, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguous}}},
 	// {"quad/splithalf+ambig", renderCfg{id: 3, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguous}}},
 	// {"quad/lum-split", renderCfg{id: 5, mode: modeQuad, quadOpts: quadblock.Options{LumSplit: true}}},
-	{"quad/splithalf", renderCfg{id: 0, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}},
+	{"quad/splithalf", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}},
 	//{"quad/splithalf+sharp", renderCfg{id: 11, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen05}},
 	//{"quad/splithalf+epx2x", renderCfg{id: 9, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale2x}},
-	{"quad/edge-snap", renderCfg{id: 12, mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true}}},
+	{"quad/edge-snap", renderCfg{id: 2, mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true}}},
 	// {"quad/edge-snap+ambig", renderCfg{id: 13, mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true, Blend: quadblock.BlendAmbiguous}}},
+	{"spark/quad", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}},
+}
+
+func canonicalRenderCfg(rc renderCfg) renderCfg {
+	for _, m := range renderModes {
+		if sameRenderMode(rc, m.cfg) {
+			canon := m.cfg
+			canon.gray = rc.gray
+			canon.grayColors = rc.grayColors
+			return canon
+		}
+	}
+	return rc
+}
+
+func sameRenderMode(a, b renderCfg) bool {
+	if a.mode != b.mode || a.sparkMode != b.sparkMode {
+		return false
+	}
+	if (a.preScale == nil) != (b.preScale == nil) {
+		return false
+	}
+	return a.quadOpts == b.quadOpts
 }
 
 // cycleRenderCfg returns the next renderCfg in the cycle and its display name.
@@ -331,12 +464,91 @@ func parseZoomK(s string) float64 {
 
 // zoomLevel returns the current source-pixels-per-cell value formatted for the hint bar.
 func zoomLevel(state viewState, orig image.Image, termCols, termRows int, rc renderCfg) string {
-	b := orig.Bounds()
-	cropW, _ := visibleCrop(b.Dx(), b.Dy(), state, termCols, termRows, rc)
-	if cropW <= 0 || termCols <= 0 {
+	info, ok := currentZoomInfo(state, orig, termCols, termRows, rc)
+	if !ok {
+		b := orig.Bounds()
 		return rc.mode.viewSpec().ZoomLevel(state.zoom, b.Dx(), b.Dy(), termCols, termRows)
 	}
-	return fmt.Sprintf("src px/cell=%.3g", float64(cropW)/float64(termCols))
+	return fmt.Sprintf("src px/cell=%.3g", info.LadderK)
+}
+
+func currentZoomInfo(state viewState, orig image.Image, termCols, termRows int, rc renderCfg) (zoomInfo, bool) {
+	b := orig.Bounds()
+	srcW, srcH := b.Dx(), b.Dy()
+	if srcW <= 0 || srcH <= 0 || state.zoom <= 0 {
+		return zoomInfo{}, false
+	}
+	dims := rc.mode.viewSpec().Dims(srcW, srcH, termCols, termRows, state.zoom)
+	dims.ClampPan(&state.panX, &state.panY)
+	viewW, viewH := dims.VisibleSize(state.panX, state.panY)
+	alignedW, alignedH := alignViewportSize(viewW, viewH, rc)
+	if alignedW <= 0 || alignedH <= 0 {
+		return zoomInfo{}, false
+	}
+	cells := expectedCellSize(orig, state, termCols, termRows, rc)
+	if cells.Cols <= 0 {
+		return zoomInfo{}, false
+	}
+	rawCrop := image.Rect(viewgeom.SrcCrop(srcW, srcH, state.panX, state.panY, dims.ScaledW, dims.ScaledH, viewW, viewH))
+	rawK := float64(rawCrop.Dx()) / float64(cells.Cols)
+	return zoomInfo{
+		RawK:        rawK,
+		LadderK:     nearestZoomLevelK(rawK, srcW),
+		SrcW:        srcW,
+		SrcH:        srcH,
+		ScaledW:     dims.ScaledW,
+		ScaledH:     dims.ScaledH,
+		ViewW:       viewW,
+		ViewH:       viewH,
+		AlignedW:    alignedW,
+		AlignedH:    alignedH,
+		TrimW:       viewW - alignedW,
+		TrimH:       viewH - alignedH,
+		Rendered:    cells,
+		SourceCells: expectedCellSize(orig, state, termCols, termRows, rc),
+		Crop:        rawCrop,
+	}, true
+}
+
+func nearestZoomLevelK(k float64, srcW int) float64 {
+	if k <= 0 {
+		return k
+	}
+	steps := zoomSteps(1, srcW)
+	best := k
+	bestDelta := math.Inf(1)
+	for _, z := range steps {
+		if z <= 0 {
+			continue
+		}
+		candidate := 1 / z
+		delta := math.Abs(candidate - k)
+		if delta < bestDelta {
+			best = candidate
+			bestDelta = delta
+		}
+	}
+	return best
+}
+
+func formatZoomInfo(state viewState, orig image.Image, termCols, termRows int, rc renderCfg) string {
+	info, ok := currentZoomInfo(state, orig, termCols, termRows, rc)
+	if !ok {
+		return "info unavailable"
+	}
+	trim := "none"
+	if info.TrimW != 0 || info.TrimH != 0 {
+		trim = fmt.Sprintf("%dx%d", info.TrimW, info.TrimH)
+	}
+	return fmt.Sprintf(
+		"info raw=%.3g ladder=%.3g trim=%s crop=%dx%d cells=%dx%d src=%dx%d",
+		info.RawK,
+		info.LadderK,
+		trim,
+		info.Crop.Dx(), info.Crop.Dy(),
+		info.Rendered.Cols, info.Rendered.Rows,
+		info.SrcW, info.SrcH,
+	)
 }
 
 // ── viewState ────────────────────────────────────────────────────────────────
@@ -450,6 +662,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	var buttons []menuButton
 	activeAction := ""
 	var status string
+	var infoVisible bool
 	var lastKey string
 	modeName := rcModeName(rc)
 	lastNonHBID := rc.id // last non-halfblock mode id; used by toggle_halfblock
@@ -458,15 +671,20 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	}
 	var curQ metrics.RenderQuality
 	fileMeta := loadMediaMeta(path, false)
-	redraw := func() {
+	redraw := func() error {
 		halfblock.CursorHome(os.Stdout)
-		vp := renderView(orig, &state, termCols, max(1, termRows-2), rc)
+		vp, err := renderView(orig, &state, termCols, max(1, termRows-2), rc)
+		if err != nil {
+			return err
+		}
 		ref := buildRef(orig, state, termCols, max(1, termRows-2), rc, metrics.GridK, fullComp)
 		curQ = computeQuality(ref, vp, rc)
 		halfblock.EraseDown(os.Stdout)
 		buttons = drawBottomMenu(os.Stdout, termRows, "image_viewer", activeAction, style, labels, viewBtnRows, nil, btnActions, nil)
 		hint := labels["hint_viewer"]
-		if status != "" {
+		if infoVisible {
+			hint = formatZoomInfo(state, orig, termCols, max(1, termRows-2), rc)
+		} else if status != "" {
 			hint = status
 		}
 		fileMeta.DispW = fmt.Sprintf("%d", termCols)
@@ -492,8 +710,11 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 			}
 		}
 		drawHintBar(os.Stdout, termRows, hint, hintVars, style)
+		return nil
 	}
-	redraw()
+	if err := redraw(); err != nil {
+		return err
+	}
 
 	for {
 		select {
@@ -552,21 +773,27 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 							case "cycle_render":
 								oldRC := rc
 								rc, modeName = cycleRenderCfg(rc)
+								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							case "cycle_render_prev":
 								oldRC := rc
 								rc, modeName = cycleRenderCfgPrev(rc)
+								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							case "toggle_gray":
 								cycleGray(&rc)
 								changed = true
+							case "show_info":
+								infoVisible = !infoVisible
+								newStatus = ""
+								changed = true
 							case "toggle_halfblock":
 								oldRC := rc
 								if rc.mode.useQuad() {
 									lastNonHBID = rc.id
-									if m, n, ok := findRenderModeByID(4); ok {
+									if m, n, ok := findRenderModeByID(0); ok {
 										rc, modeName = m, n
 									}
 								} else if lastNonHBID >= 0 {
@@ -578,6 +805,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								}
 								rc.gray = oldRC.gray
 								rc.grayColors = oldRC.grayColors
+								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							case "go_back", "quit":
@@ -710,14 +938,20 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 									newStatus = "✓ copied to clipboard"
 								}
 								changed = true
+							case "show_info":
+								infoVisible = !infoVisible
+								newStatus = ""
+								changed = true
 							case "cycle_render":
 								oldRC := rc
 								rc, modeName = cycleRenderCfg(rc)
+								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							case "cycle_render_prev":
 								oldRC := rc
 								rc, modeName = cycleRenderCfgPrev(rc)
+								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							case "toggle_gray":
@@ -727,7 +961,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								oldRC := rc
 								if rc.mode.useQuad() {
 									lastNonHBID = rc.id
-									if m, n, ok := findRenderModeByID(4); ok {
+									if m, n, ok := findRenderModeByID(0); ok {
 										rc, modeName = m, n
 									}
 								} else if lastNonHBID >= 0 {
@@ -739,6 +973,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 								}
 								rc.gray = oldRC.gray
 								rc.grayColors = oldRC.grayColors
+								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
 								changed = true
 							}
@@ -769,7 +1004,9 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 
 			if changed {
 				status = newStatus
-				redraw()
+				if err := redraw(); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -834,6 +1071,16 @@ func recenterForMode(state *viewState, orig image.Image, termCols, termRows int,
 	state.panX, state.panY = oldQ.Recenter(srcW, srcH, termCols, termRows, state.zoom, oldQ, newQ, state.panX, state.panY)
 }
 
+func preserveZoomForMode(state *viewState, orig image.Image, termCols, termRows int, oldRC, newRC renderCfg) {
+	info, ok := currentZoomInfo(*state, orig, termCols, termRows, oldRC)
+	if !ok || info.RawK <= 0 {
+		return
+	}
+	b := orig.Bounds()
+	mz := maxZoom(b.Dx(), b.Dy(), termCols, termRows, newRC.mode)
+	state.zoom = newRC.mode.viewSpec().ZoomRatioForK(mz, info.RawK)
+}
+
 // ── zoom helpers ─────────────────────────────────────────────────────────────
 
 // zoomAtCursor adjusts state so the pixel under the cursor (0-indexed terminal
@@ -864,15 +1111,27 @@ func buildViewport(orig image.Image, state *viewState, termCols, termRows int, r
 	scaled := halfblock.ScaleNN(orig, dims.ScaledW, dims.ScaledH)
 
 	dims.ClampPan(&state.panX, &state.panY)
-	return imgutil.CropImage(scaled, state.panX, state.panY, dims.ViewW, dims.ViewH)
+	viewW, viewH := alignViewportSize(dims.ViewW, dims.ViewH, rc)
+	vp := imgutil.CropImage(scaled, state.panX, state.panY, viewW, viewH)
+	targetCells := expectedCellSize(orig, *state, termCols, termRows, rc)
+	targetW, targetH := viewportPixelSizeForCells(targetCells, rc)
+	if targetW > 0 && targetH > 0 {
+		b := vp.Bounds()
+		if b.Dx() != targetW || b.Dy() != targetH {
+			vp = halfblock.ScaleNN(vp, targetW, targetH)
+		}
+	}
+	return vp
 }
 
 // renderView renders the current viewport to stdout and returns it for callers
 // that need the pixel data (e.g. to compute SSIM).
-func renderView(orig image.Image, state *viewState, termCols, termRows int, rc renderCfg) image.Image {
+func renderView(orig image.Image, state *viewState, termCols, termRows int, rc renderCfg) (image.Image, error) {
 	vp := buildViewport(orig, state, termCols, termRows, rc)
-	_ = rc.render(os.Stdout, vp)
-	return vp
+	if err := renderValidated(os.Stdout, orig, vp, *state, termCols, termRows, rc); err != nil {
+		return vp, err
+	}
+	return vp, nil
 }
 
 // interactiveVideo plays a video file in the terminal using the caller's shared
@@ -1013,6 +1272,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 	var buttons []menuButton
 	activeAction := ""
 	var status string
+	var infoVisible bool
 	var lastKey string
 	var statusClearAt time.Time
 	termCols, termRows := resolveTermSize(initWidth, initHeight)
@@ -1062,6 +1322,12 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 
 	var lastFrame image.Image
 	var lastRawFrame image.Image
+	switchVideoMode := func(oldRC renderCfg) {
+		if lastRawFrame != nil {
+			preserveZoomForMode(&state, lastRawFrame, termCols, max(1, termRows-2), oldRC, rc)
+			recenterForMode(&state, lastRawFrame, termCols, max(1, termRows-2), oldRC, rc)
+		}
+	}
 
 	// setPaused updates the paused flag and suspends/resumes audio accordingly.
 	setPaused := func(p bool) {
@@ -1104,6 +1370,11 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 							}
 							statusClearAt = time.Now().Add(3 * time.Second)
 						}
+					case "show_info":
+						if lastRawFrame != nil {
+							infoVisible = !infoVisible
+							status = ""
+						}
 					case "inc_zoom":
 						if lastSrcW > 0 {
 							steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
@@ -1123,20 +1394,25 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 							}
 						}
 					case "cycle_render":
+						oldRC := rc
 						rc, modeName = cycleRenderCfg(rc)
+						switchVideoMode(oldRC)
 						rerenderLastFrame()
 					case "cycle_render_prev":
+						oldRC := rc
 						rc, modeName = cycleRenderCfgPrev(rc)
+						switchVideoMode(oldRC)
 						rerenderLastFrame()
 					case "toggle_gray":
 						cycleGray(&rc)
 						rerenderLastFrame()
 					case "toggle_halfblock":
+						oldRC := rc
 						graySaved := rc.gray
 						grayColorsSaved := rc.grayColors
 						if rc.mode.useQuad() {
 							lastNonHBID = rc.id
-							if m, n, ok := findRenderModeByID(4); ok {
+							if m, n, ok := findRenderModeByID(0); ok {
 								rc, modeName = m, n
 							}
 						} else if lastNonHBID >= 0 {
@@ -1148,6 +1424,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						}
 						rc.gray = graySaved
 						rc.grayColors = grayColorsSaved
+						switchVideoMode(oldRC)
 						rerenderLastFrame()
 					case "go_back", "quit":
 						return true
@@ -1224,6 +1501,12 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						statusClearAt = time.Now().Add(3 * time.Second)
 					}
 
+				case "show_info":
+					if lastRawFrame != nil {
+						infoVisible = !infoVisible
+						status = ""
+					}
+
 				case "inc_zoom":
 					if lastSrcW > 0 {
 						steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
@@ -1268,11 +1551,15 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					}
 
 				case "cycle_render":
+					oldRC := rc
 					rc, modeName = cycleRenderCfg(rc)
+					switchVideoMode(oldRC)
 					rerenderLastFrame()
 
 				case "cycle_render_prev":
+					oldRC := rc
 					rc, modeName = cycleRenderCfgPrev(rc)
+					switchVideoMode(oldRC)
 					rerenderLastFrame()
 
 				case "toggle_gray":
@@ -1280,11 +1567,12 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					rerenderLastFrame()
 
 				case "toggle_halfblock":
+					oldRC := rc
 					graySaved := rc.gray
 					grayColorsSaved := rc.grayColors
 					if rc.mode.useQuad() {
 						lastNonHBID = rc.id
-						if m, n, ok := findRenderModeByID(4); ok {
+						if m, n, ok := findRenderModeByID(0); ok {
 							rc, modeName = m, n
 						}
 					} else if lastNonHBID >= 0 {
@@ -1296,6 +1584,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					}
 					rc.gray = graySaved
 					rc.grayColors = grayColorsSaved
+					switchVideoMode(oldRC)
 					rerenderLastFrame()
 
 				}
@@ -1326,7 +1615,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 				}
 				if paused && lastFrame != nil {
 					halfblock.CursorHome(os.Stdout)
-					if err := rc.render(os.Stdout, lastFrame); err != nil {
+					if err := renderValidated(os.Stdout, lastRawFrame, lastFrame, state, termCols, max(1, termRows-2), rc); err != nil {
 						return err
 					}
 					halfblock.EraseDown(os.Stdout)
@@ -1348,7 +1637,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			}
 			if paused && lastFrame != nil {
 				halfblock.CursorHome(os.Stdout)
-				if err := rc.render(os.Stdout, lastFrame); err != nil {
+				if err := renderValidated(os.Stdout, lastRawFrame, lastFrame, state, termCols, max(1, termRows-2), rc); err != nil {
 					return err
 				}
 				halfblock.EraseDown(os.Stdout)
@@ -1382,20 +1671,20 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			if lastFrame == nil {
 				continue
 			}
-			if !paused {
-				halfblock.CursorHome(os.Stdout)
-				if err := rc.render(os.Stdout, lastFrame); err != nil {
-					return err
-				}
-				halfblock.EraseDown(os.Stdout)
+			halfblock.CursorHome(os.Stdout)
+			if err := renderValidated(os.Stdout, lastRawFrame, lastFrame, state, termCols, max(1, termRows-2), rc); err != nil {
+				return err
 			}
+			halfblock.EraseDown(os.Stdout)
 			conditions := map[string]bool{"playing": !paused}
 			buttons = drawBottomMenu(os.Stdout, termRows, "video_player", activeAction, style, labels, viewBtnRows, conditions, btnActions, nil)
-			if status != "" && time.Now().After(statusClearAt) {
+			if !infoVisible && status != "" && time.Now().After(statusClearAt) {
 				status = ""
 			}
 			hint := labels["hint_viewer"]
-			if status != "" {
+			if infoVisible && lastRawFrame != nil {
+				hint = formatZoomInfo(state, lastRawFrame, termCols, max(1, termRows-2), rc)
+			} else if status != "" {
 				hint = status
 			}
 			fileMeta.DispW = fmt.Sprintf("%d", termCols)
@@ -1405,13 +1694,17 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			if rc.gray {
 				graySuffix = fmt.Sprintf(" (gray%d)", grayColorsCount(rc.grayColors))
 			}
+			zoomLabel := rc.mode.viewSpec().ZoomLevel(state.zoom, lastSrcW, lastSrcH, termCols, max(1, termRows-2))
+			if lastRawFrame != nil {
+				zoomLabel = zoomLevel(state, lastRawFrame, termCols, max(1, termRows-2), rc)
+			}
 			hintVars := viewerHintVars(fileMeta, termCols, hint, map[string]string{
 				"last_key":    lastKey,
 				"ssim":        fmt.Sprintf("%.3f", curQ.SSIM),
 				"blockiness":  fmt.Sprintf("%.3f", curQ.Blockiness),
 				"edge_cont":   fmt.Sprintf("%.3f", curQ.EdgeCont),
 				"render_mode": modeName + graySuffix,
-				"zoom_level":  rc.mode.viewSpec().ZoomLevel(state.zoom, lastSrcW, lastSrcH, termCols, max(1, termRows-2)),
+				"zoom_level":  zoomLabel,
 			})
 			drawHintBar(os.Stdout, termRows, hint, hintVars, style)
 		}
