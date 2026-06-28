@@ -93,7 +93,7 @@ website_url:        # URL opened by the open_website action
 | `last_key` | all hints | Human-readable name of last input event (`"j"`, `"Up"`, `"Scroll Up"`, …) |
 | `ssim` | `hint_viewer` | SSIM quality score as `"0.823"` |
 | `render_mode` | `hint_viewer` | Current rendering mode name (`"halfblock"`, `"spark/quad"`, `"quad/splithalf"`, …) |
-| `zoom_level` | `hint_viewer` | Visible source pixels per terminal cell, e.g. `"src px/cell=4"`; mode-independent for the same viewport |
+| `zoom_level` | `hint_viewer` | Nearest ladder source pixels per rendered terminal cell, e.g. `"src px/cell=1.25"`; raw crop ratio is shown by the `Info` action |
 | `meta.name` | browser + viewer | Base filename |
 | `meta.name_short` | `hint_viewer` | Base filename shortened with `...` to fit the hint bar |
 | `meta.ext` | browser + viewer | Lowercase extension without dot |
@@ -124,6 +124,8 @@ All `meta.*` keys are always present in the vars map (empty string when unknown)
 ### 3.5 `spec/buttons.yaml` — button definitions (single source)
 
 Cap characters come from `style.yaml buttons.left_cap`/`right_cap` and are applied at load time by `loadButtons(leftCap, rightCap)`. Button text supports the full template engine syntax including inline `{ 'literal' | mod }` styling.
+
+Each button also declares `prio` for narrow terminals. Lower-priority buttons collapse to compact labels first, then are hidden first if the compact row still does not fit. Key maps are built from the full view row before responsive layout, so hotkeys remain active even when a visual button is hidden.
 
 ```yaml
 buttons:
@@ -164,12 +166,12 @@ Each view is a list of stacked rows. The first non-hint `row:` per view drives `
 views:
   browser:
     - area: grid
-    - row: "{ prev } { next } | { settings } { about } | { quit }"
+    - row: "{ prev } { next } { back } | { settings } { mode } { about } | { quit }"
     - row: "{ hint_browser }"
 
   video_player:
     - area: canvas
-    - row: "{ zoom_in } { zoom_out } { if(playing, pause, play) } { back } { quit }"
+    - row: "{ halfblock } { gray } { zoom_in } { zoom_out } { if(playing, pause, play) } { info } { copy_viewport } { render } { back } { quit }"
     - row: "{ hint_viewer }"
 ```
 

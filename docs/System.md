@@ -99,7 +99,23 @@ The stable zoom and viewport helpers now live in `internal/viewgeom`. The app la
 
 **Mode separation.** Zoom changes size only. Sampling phase / subcell offsets are a separate axis for later testing-only controls such as quadshift. SSIM and other quality metrics should compare through a common analysis grid so new glyph families can still be evaluated against the same baseline.
 
+**Render-mode identity.** `renderCfg{}` is halfblock and id `0` must stay
+halfblock. CLI startup canonicalizes the flag-derived renderer into the active
+cycle entry so display names, geometry, metrics, and `r`/`R` cycling all agree.
+The main app cycle is currently `halfblock → quad/splithalf → quad/edge-snap →
+spark/quad`; `-q=0` starts at halfblock, while the default `--quad` setting
+starts at `quad/splithalf`.
+
 **Panning invariant.** Pan state is the upper-left origin of the visible viewport in the scaled image. Halfblock, quad, and spark all use the same state and clamp path. Mode-specific code may translate terminal-cell deltas to viewport pixels through `viewSpec()`, but it must not pan a renderer-local output frame independently of the source viewport.
+
+**Render-size invariant.** The interactive renderer validates terminal-cell size
+before emitting ANSI. The expected footprint is derived from the untrimmed
+source crop and zoom ladder first: columns are `ceil(cropW / k)`, rows are
+`ceil(cropH / (2k))`. Renderer-specific lattice details, such as quad's even
+pixel crop or spark's `4×8` glyph block, are applied after that and then
+normalized back to the same terminal-cell footprint. Pressing `r` must not
+change the image size; render-size mismatches after viewport construction are
+hard errors, not best-effort renders.
 
 **Decoupled step generation.** `zoomSteps(mz, srcW) []float64` returns a descending slice of zoom values. Handlers (`inc_zoom`, `dec_zoom`, scroll wheel) consume it via `stepIdx(zoom, steps) int` and never compute steps directly.
 
@@ -133,7 +149,7 @@ This caps zoom at the 1-source-pixel-per-cell-column limit regardless of termina
 
 The naive `steps[len-1-i]` reversed-index pattern is wrong — it produces ascending zoom, breaking `stepIdx`.
 
-**Zoom level display.** The current source-pixels-per-cell value is shown in the hint bar using `%.3g` format (e.g. `src px/cell=0.75`, `src px/cell=1.25`). It is computed from the visible source crop width divided by terminal columns, not from a renderer's internal pixel footprint, so halfblock, quad, and spark modes report the same value for the same visible viewport. Example: a `364`-source-pixel visible crop over `91` terminal columns reports `src px/cell=4` in every render mode.
+**Zoom level display.** The normal hint bar shows the nearest zoom ladder value using `%.3g` format (e.g. `src px/cell=0.75`, `src px/cell=1.25`). It is based on the rendered terminal-cell width, not the physical terminal width: small images can render narrower than the terminal, and a `32×32` image rendered as `32×16` cells reports `src px/cell=1`, not `0.4` in an 80-column terminal. The `Info` action (`i`) reports raw crop ratio, nearest ladder value, crop, aligned view size, trim, rendered cell size, and source size separately.
 
 **Renderer reconstruction for quality metrics.** SSIM, blockiness, and edge continuity compare the ideal source crop against a reconstruction of what the terminal renderer actually emits. Halfblock is represented by the viewport image itself, quad uses `quadblock.RenderToImage`, and spark uses `sparkline.RenderToImage`. The rendered reconstruction is normalized to the common `metrics.GridK × metrics.GridK` per-terminal-cell quality grid: smaller outputs are nearest-neighbour upscaled, while denser outputs are pyramid-downscaled. Never compare spark quality against the raw NN viewport; that scores the sampler, not the glyph renderer.
 

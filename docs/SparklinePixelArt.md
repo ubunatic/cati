@@ -74,6 +74,13 @@ The legacy 1D split logic requires that the pixel array passed to the error mini
     cell selection and mask semantics as `RenderOpts`. The app uses it for SSIM
     and other quality metrics, so changing glyph masks requires updating both
     ANSI rendering and image reconstruction together.
+*   **Display-size contract**: The `4×8` sparkline footprint is a renderer-local
+    glyph grid, not permission to shrink the visible terminal cell rectangle.
+    Interactive viewport construction expands spark crops to the footprint
+    required by the shared `src px/cell` zoom model, then validates the emitted
+    cell size. A small `32×32` source at fit/1:1 must render as `32×16` cells,
+    not silently become `8×4` cells just because one spark cell analyzes a
+    `4×8` block.
 
 > [!WARNING]
 > Reintroducing horizontal 1/8 block modes under `4×8` geometry will be
