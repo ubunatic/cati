@@ -2,6 +2,7 @@ package viewgeom
 
 import (
 	"fmt"
+	"image"
 	"math"
 	"sort"
 	"strconv"
@@ -19,6 +20,27 @@ type Spec struct {
 	CellW   int
 	CellH   int
 	AspectX int
+}
+
+// Dims contains all viewport-space dimensions derived from a source image,
+// terminal size, zoom, and renderer geometry.
+type Dims struct {
+	PixCols int
+	PixRows int
+	ScaledW int
+	ScaledH int
+	ViewW   int
+	ViewH   int
+}
+
+// PanAnchor records the terminal-cell coordinate and viewport-pixel pan where
+// an absolute drag gesture began.
+type PanAnchor struct {
+	Active    bool
+	StartCol  int
+	StartRow  int
+	StartPanX int
+	StartPanY int
 }
 
 // ZoomStepSpec carries the spec-driven k ladder inputs.
@@ -86,6 +108,31 @@ func (s Spec) ViewportDims(srcW, srcH, termCols, termRows int, zoom float64) (pi
 	return
 }
 
+// Dims returns ViewportDims as a named value for callers that need to pass the
+// same geometry through pan, clamp, crop, and analysis paths.
+func (s Spec) Dims(srcW, srcH, termCols, termRows int, zoom float64) Dims {
+	pixCols, pixRows, scaledW, scaledH, viewW, viewH := s.ViewportDims(srcW, srcH, termCols, termRows, zoom)
+	return Dims{
+		PixCols: pixCols,
+		PixRows: pixRows,
+		ScaledW: scaledW,
+		ScaledH: scaledH,
+		ViewW:   viewW,
+		ViewH:   viewH,
+	}
+}
+
+// ClampPan clamps pan offsets to the scaled image bounds for this viewport.
+func (d Dims) ClampPan(panX, panY *int) {
+	*panX = max(0, min(*panX, max(0, d.ScaledW-d.PixCols)))
+	*panY = max(0, min(*panY, max(0, d.ScaledH-d.PixRows)))
+}
+
+// VisibleSize returns the viewport pixel size available from the current pan.
+func (d Dims) VisibleSize(panX, panY int) (int, int) {
+	return min(d.ViewW, d.ScaledW-panX), min(d.ViewH, d.ScaledH-panY)
+}
+
 // SrcCrop maps viewport pixel coords back to source image coords.
 func SrcCrop(srcW, srcH, panX, panY, scaledW, scaledH, viewW, viewH int) (x0, y0, x1, y1 int) {
 	x0 = panX * srcW / scaledW
@@ -101,19 +148,29 @@ func SrcCrop(srcW, srcH, panX, panY, scaledW, scaledH, viewW, viewH int) (x0, y0
 	return
 }
 
+// SrcCrop maps the visible viewport rectangle back to source image coordinates.
+func (d Dims) SrcCrop(srcW, srcH, panX, panY int) image.Rectangle {
+	viewW, viewH := d.VisibleSize(panX, panY)
+	if viewW <= 0 || viewH <= 0 {
+		return image.Rectangle{}
+	}
+	x0, y0, x1, y1 := SrcCrop(srcW, srcH, panX, panY, d.ScaledW, d.ScaledH, viewW, viewH)
+	return image.Rect(x0, y0, x1, y1)
+}
+
 // VisibleCrop returns the visible source rectangle size for the current state.
 func (s Spec) VisibleCrop(srcW, srcH int, zoom float64, panX, panY, termCols, termRows int) (int, int) {
 	if srcW <= 0 || srcH <= 0 {
 		return 0, 0
 	}
-	_, _, scaledW, scaledH, viewW, viewH := s.ViewportDims(srcW, srcH, termCols, termRows, zoom)
-	vw := min(viewW, scaledW-panX)
-	vh := min(viewH, scaledH-panY)
+	dims := s.Dims(srcW, srcH, termCols, termRows, zoom)
+	dims.ClampPan(&panX, &panY)
+	vw, vh := dims.VisibleSize(panX, panY)
 	if vw <= 0 || vh <= 0 {
 		return 0, 0
 	}
-	x0, y0, x1, y1 := SrcCrop(srcW, srcH, panX, panY, scaledW, scaledH, vw, vh)
-	return max(1, x1-x0), max(1, y1-y0)
+	crop := dims.SrcCrop(srcW, srcH, panX, panY)
+	return max(1, crop.Dx()), max(1, crop.Dy())
 }
 
 // ZoomAtCursor adjusts pan so the pixel under the cursor stays fixed.
@@ -126,19 +183,44 @@ func (s Spec) ZoomAtCursor(zoom *float64, panX, panY *int, newZoom float64, col,
 	*zoom = newZoom
 }
 
+// NewPanAnchor creates an anchor for absolute grab-and-pull panning.
+func NewPanAnchor(col, row, panX, panY int) PanAnchor {
+	return PanAnchor{
+		Active:    true,
+		StartCol:  col,
+		StartRow:  row,
+		StartPanX: panX,
+		StartPanY: panY,
+	}
+}
+
+// PanFromAnchor returns the pan offsets for a grab-and-pull gesture at col,row.
+func (s Spec) PanFromAnchor(anchor PanAnchor, col, row int) (int, int) {
+	return anchor.StartPanX - (col-anchor.StartCol)*s.CellW,
+		anchor.StartPanY - (row-anchor.StartRow)*s.CellH
+}
+
+// PanByCells applies a relative terminal-cell pan delta to viewport-pixel pan.
+func (s Spec) PanByCells(panX, panY *int, cols, rows int) {
+	*panX += cols * s.CellW
+	*panY += rows * s.CellH
+}
+
 // Recenter adjusts pan after a mode switch to keep the same source region visible.
 func (s Spec) Recenter(srcW, srcH, termCols, termRows int, zoom float64, oldQ, newQ Spec, panX, panY int) (int, int) {
 	if srcW <= 0 || srcH <= 0 {
 		return 0, 0
 	}
-	_, _, scaledW, scaledH, viewW, viewH := oldQ.ViewportDims(srcW, srcH, termCols, termRows, zoom)
-	centerX := (float64(panX) + float64(viewW)/2) * float64(srcW) / float64(scaledW)
-	centerY := (float64(panY) + float64(viewH)/2) * float64(srcH) / float64(scaledH)
+	oldDims := oldQ.Dims(srcW, srcH, termCols, termRows, zoom)
+	oldDims.ClampPan(&panX, &panY)
+	centerX := (float64(panX) + float64(oldDims.ViewW)/2) * float64(srcW) / float64(oldDims.ScaledW)
+	centerY := (float64(panY) + float64(oldDims.ViewH)/2) * float64(srcH) / float64(oldDims.ScaledH)
 
-	_, _, scaledW2, scaledH2, viewW2, viewH2 := newQ.ViewportDims(srcW, srcH, termCols, termRows, zoom)
-	panX2 := int(math.Round(centerX*float64(scaledW2)/float64(srcW) - float64(viewW2)/2))
-	panY2 := int(math.Round(centerY*float64(scaledH2)/float64(srcH) - float64(viewH2)/2))
-	return max(0, min(panX2, max(0, scaledW2-viewW2))), max(0, min(panY2, max(0, scaledH2-viewH2)))
+	newDims := newQ.Dims(srcW, srcH, termCols, termRows, zoom)
+	panX2 := int(math.Round(centerX*float64(newDims.ScaledW)/float64(srcW) - float64(newDims.ViewW)/2))
+	panY2 := int(math.Round(centerY*float64(newDims.ScaledH)/float64(srcH) - float64(newDims.ViewH)/2))
+	newDims.ClampPan(&panX2, &panY2)
+	return panX2, panY2
 }
 
 // ZoomLevel formats the current source-pixels-per-cell value.

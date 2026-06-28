@@ -75,10 +75,10 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 		sb.WriteString(ansiLinePrefix)
 
 		for tc := 0; tc < outCols; tc++ {
-			x0 := min(tc*cellW, pixW)
-			x1 := min(x0+cellW, pixW) - 1
-			y0 := min(tr*cellH, pixH)
-			y1 := min(y0+cellH, pixH) - 1
+			x0 := b.Min.X + min(tc*cellW, pixW)
+			x1 := b.Min.X + min(tc*cellW+cellW, pixW) - 1
+			y0 := b.Min.Y + min(tr*cellH, pixH)
+			y1 := b.Min.Y + min(tr*cellH+cellH, pixH) - 1
 			if x1 < x0 || y1 < y0 {
 				continue
 			}
@@ -98,6 +98,46 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 	return nil
 }
 
+// RenderToImage runs the same cell selection as RenderOpts but writes the
+// reconstructed glyph image instead of ANSI escape codes.
+func RenderToImage(img image.Image, outCols, outRows int, mode Mode) image.Image {
+	b := img.Bounds()
+	pixW := b.Dx()
+	pixH := b.Dy()
+
+	cellW := max(1, pixW/outCols)
+	cellH := max(1, pixH/outRows)
+
+	dst := image.NewRGBA(b)
+
+	for tr := 0; tr < outRows; tr++ {
+		for tc := 0; tc < outCols; tc++ {
+			x0 := b.Min.X + min(tc*cellW, pixW)
+			x1 := b.Min.X + min(tc*cellW+cellW, pixW) - 1
+			y0 := b.Min.Y + min(tr*cellH, pixH)
+			y1 := b.Min.Y + min(tr*cellH+cellH, pixH) - 1
+			if x1 < x0 || y1 < y0 {
+				continue
+			}
+
+			cell := FindBestCell(img, b, x0, x1, y0, y1, mode)
+			cw := x1 - x0 + 1
+			ch := y1 - y0 + 1
+
+			for y := y0; y <= y1; y++ {
+				for x := x0; x <= x1; x++ {
+					c := cell.BG
+					if maskContains(cell.Ch, x-x0, y-y0, cw, ch) {
+						c = cell.FG
+					}
+					dst.Set(x, y, c)
+				}
+			}
+		}
+	}
+	return dst
+}
+
 type cellResult struct {
 	Ch  rune
 	FG  color.RGBA
@@ -108,6 +148,44 @@ type cellResult struct {
 type candidate struct {
 	ch   rune
 	mask func(x, y, w, h int) bool
+}
+
+func maskContains(ch rune, x, y, w, h int) bool {
+	switch ch {
+	case ' ':
+		return false
+	case '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█':
+		level := map[rune]int{'▁': 1, '▂': 2, '▃': 3, '▄': 4, '▅': 5, '▆': 6, '▇': 7, '█': 8}[ch]
+		return (h-y)*8 <= level*h
+	case '▘':
+		return x*2 < w && y*2 < h
+	case '▝':
+		return x*2 >= w && y*2 < h
+	case '▖':
+		return x*2 < w && y*2 >= h
+	case '▗':
+		return x*2 >= w && y*2 >= h
+	case '▀':
+		return y*2 < h
+	case '▌':
+		return x*2 < w
+	case '▐':
+		return x*2 >= w
+	case '▚':
+		return (x*2 < w && y*2 < h) || (x*2 >= w && y*2 >= h)
+	case '▞':
+		return (x*2 >= w && y*2 < h) || (x*2 < w && y*2 >= h)
+	case '▛':
+		return !(x*2 >= w && y*2 >= h)
+	case '▜':
+		return !(x*2 < w && y*2 >= h)
+	case '▙':
+		return !(x*2 >= w && y*2 < h)
+	case '▟':
+		return !(x*2 < w && y*2 < h)
+	default:
+		return true
+	}
 }
 
 func verticalCandidates() []candidate {

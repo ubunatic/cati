@@ -92,7 +92,8 @@ website_url:        # URL opened by the open_website action
 | `queue_size` | `hint_browser` | Pending thumb-load jobs: `↻N` or `""` when idle |
 | `last_key` | all hints | Human-readable name of last input event (`"j"`, `"Up"`, `"Scroll Up"`, …) |
 | `ssim` | `hint_viewer` | SSIM quality score as `"0.823"` |
-| `render_mode` | `hint_viewer` | Current rendering mode name (`"halfblock"`, `"quad/pca2"`, …) |
+| `render_mode` | `hint_viewer` | Current rendering mode name (`"halfblock"`, `"spark/quad"`, `"quad/splithalf"`, …) |
+| `zoom_level` | `hint_viewer` | Visible source pixels per terminal cell, e.g. `"src px/cell=4"`; mode-independent for the same viewport |
 | `meta.name` | browser + viewer | Base filename |
 | `meta.name_short` | `hint_viewer` | Base filename shortened with `...` to fit the hint bar |
 | `meta.ext` | browser + viewer | Lowercase extension without dot |
@@ -282,6 +283,11 @@ row (effHeight):    hint bar       — drawHintBar()
 
 - Image viewer: renders image in `termRows-2` rows; button bar at `termRows-1`; hint bar at `termRows`. Button actions: `zoom_in`, `zoom_out`, `back`, `quit`.
 - Video viewer: same layout. Adds `paused bool`; Space bar toggles. `conditions["playing"] = !paused` passed to `drawBottomMenu` so `{ if(playing, pause, play) }` resolves at render time. Mouse tracking is enabled on entry (the browser disables it before calling the viewer).
+
+Viewer quality values compare a reconstruction of the terminal glyph output
+against a common quality-grid source reference. Quad uses
+`quadblock.RenderToImage`; spark uses `sparkline.RenderToImage`; halfblock uses
+the viewport image directly.
 
 ## 8. Audio (`internal/audio`)
 

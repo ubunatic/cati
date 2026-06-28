@@ -11,7 +11,10 @@ import (
 
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/input"
+	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
+	"codeberg.org/ubunatic/cati/internal/sparkline"
+	"codeberg.org/ubunatic/cati/internal/viewgeom"
 	spec "codeberg.org/ubunatic/cati/spec"
 )
 
@@ -137,19 +140,12 @@ func TestSGRPredicates(t *testing.T) {
 
 func TestDragPanMath(t *testing.T) {
 	// Start drag at terminal column 40, row 10, with pan (20, 10).
-	drag := dragState{
-		active:    true,
-		startCol:  40,
-		startRow:  10,
-		startPanX: 20,
-		startPanY: 10,
-	}
+	drag := viewgeom.NewPanAnchor(40, 10, 20, 10)
 	state := viewState{zoom: 2.0, panX: 20, panY: 10}
 
 	// Simulate drag 10 cols right, 3 rows down.
 	c, r := 50, 13
-	state.panX = drag.startPanX - (c - drag.startCol)
-	state.panY = drag.startPanY - (r-drag.startRow)*2
+	state.panX, state.panY = modeHalfblock.viewSpec().PanFromAnchor(drag, c, r)
 
 	// Dragging right (image moves right → panX decreases).
 	if state.panX != 10 {
@@ -158,6 +154,29 @@ func TestDragPanMath(t *testing.T) {
 	// Dragging down 3 rows = 6 pixel rows → panY decreases.
 	if state.panY != 4 {
 		t.Errorf("panY = %d, want 4", state.panY)
+	}
+}
+
+func TestPanMathUsesModeFootprint(t *testing.T) {
+	tests := []struct {
+		name  string
+		mode  renderMode
+		wantX int
+		wantY int
+	}{
+		{"halfblock", modeHalfblock, 10, 4},
+		{"quad", modeQuad, 0, 4},
+		{"spark", modeSpark, -20, -14},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			geom := tc.mode.viewSpec()
+			anchor := viewgeom.NewPanAnchor(40, 10, 20, 10)
+			gotX, gotY := geom.PanFromAnchor(anchor, 50, 13)
+			if gotX != tc.wantX || gotY != tc.wantY {
+				t.Fatalf("PanFromAnchor = %d,%d, want %d,%d", gotX, gotY, tc.wantX, tc.wantY)
+			}
+		})
 	}
 }
 
@@ -300,6 +319,59 @@ func TestViewerHintVarsFitsWidth(t *testing.T) {
 	}
 	if got := vars["meta.name_short"]; got == meta.Name && len([]rune(meta.Name)) > 0 {
 		t.Fatal("viewer hint did not shorten an overlong filename")
+	}
+}
+
+func TestZoomLevelReportsTerminalCellSourceWidthAcrossModes(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 728, 592))
+	state := viewState{zoom: 2.0}
+	const termCols, termRows = 91, 37
+	modes := []struct {
+		name string
+		rc   renderCfg
+	}{
+		{"halfblock", renderCfg{id: 4}},
+		{"quad", renderCfg{id: 0, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}},
+		{"spark", renderCfg{id: 14, mode: modeSpark, sparkMode: sparkline.Quad}},
+	}
+	for _, tc := range modes {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := zoomLevel(state, src, termCols, termRows, tc.rc); got != "src px/cell=4" {
+				t.Fatalf("zoomLevel = %q, want src px/cell=4", got)
+			}
+		})
+	}
+}
+
+func TestBuildRefUsesCommonQualityGridAcrossModes(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 728, 592))
+	state := viewState{zoom: 2.0}
+	const termCols, termRows = 91, 37
+	modes := []struct {
+		name    string
+		rc      renderCfg
+		wantW   int
+		wantH   int
+	}{
+		// halfblock and quad use the common GridK×GridK quality grid per terminal cell.
+		{"halfblock", renderCfg{id: 4}, termCols * metrics.GridK, termRows * metrics.GridK},
+		{"quad", renderCfg{id: 0, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, termCols * metrics.GridK, termRows * metrics.GridK},
+		// spark has CellH=8 so the common quality grid (GridK=4 per cell) would be
+		// at viewH/2 — smaller than RenderToImage output.  buildRef falls through to
+		// viewW×viewH so that rendered and ref are compared at the same resolution
+		// without a 2× downscale that would alias the character fill pattern.
+		{"spark", renderCfg{id: 14, mode: modeSpark, sparkMode: sparkline.Quad}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
+	}
+	for _, tc := range modes {
+		t.Run(tc.name, func(t *testing.T) {
+			st := state
+			_ = buildViewport(src, &st, termCols, termRows, tc.rc)
+			ref := buildRef(src, st, termCols, termRows, tc.rc, metrics.GridK, false)
+			b := ref.Bounds()
+			if b.Dx() != tc.wantW || b.Dy() != tc.wantH {
+				t.Fatalf("ref size = %dx%d, want %dx%d", b.Dx(), b.Dy(), tc.wantW, tc.wantH)
+			}
+		})
 	}
 }
 
@@ -587,4 +659,3 @@ func TestSpecZoomKKeyBindings(t *testing.T) {
 		}
 	}
 }
-

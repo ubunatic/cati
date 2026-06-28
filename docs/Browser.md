@@ -233,12 +233,23 @@ Space OFF → \x1b[?1002h\x1b[?1006h   (button-event: reports moves only while b
 ```
 
 The first motion event after entering pan mode sets an anchor (`dragState`). Subsequent events
-compute pan as an absolute delta from that anchor — identical math to left-button drag:
+compute pan as an absolute delta from that anchor — identical math to left-button drag. The
+translation from terminal-cell deltas to viewport pixels is owned by `internal/viewgeom`, so
+halfblock, quad, and spark modes all pan the same source-space region through their own cell
+footprint:
 
 ```go
-state.panX = anchor.startPanX - (col - anchor.startCol)
-state.panY = anchor.startPanY - (row - anchor.startRow)*2
+state.panX, state.panY = geom.PanFromAnchor(anchor, col, row)
 ```
+
+Any-motion tracking emits pure move events (`IsMove`) as well as drag events.
+Space-pan must accept both; otherwise entering pan mode enables the terminal
+protocol but ignores the bare mouse motion it asked for.
+
+The pan values always describe the upper-left origin of the visible viewport in
+the scaled image. Renderers receive a cropped image and must respect its
+`Bounds().Min`; panning should not be reimplemented inside a renderer as
+movement of an output frame or background.
 
 The anchor resets each time pan mode is toggled on, so re-entering always anchors to the
 current cursor position.

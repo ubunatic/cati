@@ -181,6 +181,67 @@ func TestRenderOptsOutput(t *testing.T) {
 		t.Error("RenderOpts output missing block characters")
 	}
 }
+
+func TestRenderOptsHonorsNonZeroBounds(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 12, 8))
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 12; x++ {
+			src.Set(x, y, color.RGBA{R: uint8(20 * x), G: uint8(30 * y), B: 90, A: 255})
+		}
+	}
+
+	crop := src.SubImage(image.Rect(4, 0, 8, 8))
+	normalized := image.NewRGBA(image.Rect(0, 0, 4, 8))
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 4; x++ {
+			normalized.Set(x, y, src.At(4+x, y))
+		}
+	}
+
+	var got, want strings.Builder
+	if err := RenderOpts(&got, crop, 1, 1, Vertical); err != nil {
+		t.Fatalf("RenderOpts(crop): %v", err)
+	}
+	if err := RenderOpts(&want, normalized, 1, 1, Vertical); err != nil {
+		t.Fatalf("RenderOpts(normalized): %v", err)
+	}
+	if got.String() != want.String() {
+		t.Fatalf("RenderOpts(non-zero bounds) differed from zero-origin copy\ngot:  %q\nwant: %q", got.String(), want.String())
+	}
+}
+
+func TestRenderToImageHonorsNonZeroBounds(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 12, 8))
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 12; x++ {
+			src.Set(x, y, color.RGBA{R: uint8(20 * x), G: uint8(30 * y), B: 90, A: 255})
+		}
+	}
+
+	crop := src.SubImage(image.Rect(4, 0, 8, 8))
+	normalized := image.NewRGBA(image.Rect(0, 0, 4, 8))
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 4; x++ {
+			normalized.Set(x, y, src.At(4+x, y))
+		}
+	}
+
+	got := RenderToImage(crop, 1, 1, Vertical)
+	want := RenderToImage(normalized, 1, 1, Vertical)
+	if got.Bounds().Dx() != want.Bounds().Dx() || got.Bounds().Dy() != want.Bounds().Dy() {
+		t.Fatalf("RenderToImage bounds = %v, want dims %v", got.Bounds(), want.Bounds())
+	}
+	gb := got.Bounds()
+	wb := want.Bounds()
+	for y := 0; y < gb.Dy(); y++ {
+		for x := 0; x < gb.Dx(); x++ {
+			if got.At(gb.Min.X+x, gb.Min.Y+y) != want.At(wb.Min.X+x, wb.Min.Y+y) {
+				t.Fatalf("RenderToImage pixel %d,%d differs", x, y)
+			}
+		}
+	}
+}
+
 func TestRenderOptsSparkQuad(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 4, 8))
 	for y := 0; y < 8; y++ {

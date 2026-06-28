@@ -301,15 +301,15 @@ func TestPyramidDownscale_Large(t *testing.T) {
 
 func TestQualityGridDims(t *testing.T) {
 	tests := []struct {
-		name               string
-		vpW, vpH           int
+		name                 string
+		vpW, vpH             int
 		pixPerCol, pixPerRow int
-		k                  int
-		wantW, wantH       int
+		k                    int
+		wantW, wantH         int
 	}{
 		{"halfblock, K=4, 80x40", 80, 40, 1, 2, 4, 320, 80},
 		{"quad, K=4, 80x40", 80, 40, 2, 2, 4, 160, 80},
-		{"sparkline, K=4, 80x40", 80, 40, 1, 1, 4, 320, 160},
+		{"sparkline, K=4, 320x320", 320, 320, 4, 8, 4, 320, 160},
 		{"halfblock, K=2, 40x20", 40, 20, 1, 2, 2, 80, 20},
 		{"quad, K=2, 40x20", 40, 20, 2, 2, 2, 40, 20},
 	}

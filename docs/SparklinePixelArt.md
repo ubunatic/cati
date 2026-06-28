@@ -17,6 +17,10 @@ Cati provides two sparkline-family modes:
 | `Vertical` (`spark/vert`) | ` ▂▃▄▅▆▇█` | Bottom-to-Top (Upward) | `U+2581` – `U+2588` |
 | `Quad` (`spark/quad`) | vertical spark blocks plus `▘▝▖▗▀▄▌▐▚▞▛▜▙▟█` | Best 2D mask | fractional block + quad block candidates |
 
+`spark/quad` is the only spark mode currently exposed in the main interactive
+render-mode cycle. `spark/vert` remains in the library and test suite as a
+useful scalar baseline.
+
 ### Removed Modes
 Earlier versions included `spark/upper`, `spark/right`, and `spark/left`.
 `spark/upper` and `spark/right` were redundant foreground/background inversions.
@@ -60,6 +64,16 @@ The legacy 1D split logic requires that the pixel array passed to the error mini
 
 *   **Vertical Spark Mode (`Vertical`)**: Must scan pixels in **row-major** order (row 0, row 1, ..., row H-1). A horizontal split boundary in 1D then maps to a horizontal boundary dividing the top and bottom rows of the cell block.
 *   **Quad Combo Mode (`Quad`)**: Uses explicit 2D masks instead of scan-order-dependent splits.
+*   **Cropped image bounds**: Interactive panning passes cropped `SubImage`
+    values into the renderer. These images may have non-zero `Bounds().Min`.
+    Sparkline sampling must add `b.Min.X` / `b.Min.Y` when deriving `x0`,
+    `x1`, `y0`, and `y1`; sampling from relative `(0,0)` coordinates reads
+    out-of-bounds black pixels and makes the background appear to pan while the
+    image stays pinned.
+*   **Rendering reconstruction**: `sparkline.RenderToImage` must share the same
+    cell selection and mask semantics as `RenderOpts`. The app uses it for SSIM
+    and other quality metrics, so changing glyph masks requires updating both
+    ANSI rendering and image reconstruction together.
 
 > [!WARNING]
 > Reintroducing horizontal 1/8 block modes under `4×8` geometry will be

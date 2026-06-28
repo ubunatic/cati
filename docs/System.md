@@ -78,11 +78,12 @@ The quality metrics, image-geometry helpers, and pixel-art pre-scalers were extr
 
 ### Viewport Geometry Extraction (June 2026)
 
-The viewport geometry math (`pixelColumns ← termCols × (2 if quad else 1)`, then fit, zoom, clamp, crop) was duplicated across three functions. It was extracted into two shared helpers that now serve all callers:
+The viewport geometry math (`term cells → renderer pixels → fit → zoom → clamp → crop`) is centralized in `internal/viewgeom` and consumed through thin app-layer wrappers:
 
-*   **`viewportDims`** — computes derived pixel dimensions from source size, terminal size, zoom, and pixel-aspect mode. Returns `(pixCols, pixRows, scaledW, scaledH, viewW, viewH)` in a single call.
-*   **`srcCrop`** — maps viewport pixel coords back to source image coords, returning the visible source rectangle. Used by `buildRef` for SSIM reference generation and by the hint-bar for `meta.src_res` (now shows the visible crop region when zoomed/panning instead of always showing full source resolution).
-*   Both functions live in `cmd/` because they depend on the project-specific `useQuad` concept. They are pure (no I/O), table-driven test candidates.
+*   **`Spec.ViewportDims` / `Spec.Dims`** — computes derived pixel dimensions from source size, terminal size, zoom, and renderer geometry. `Dims` is the preferred named result for callers that need to share the same geometry across pan, crop, reference generation, and rendering.
+*   **`Dims.ClampPan`** — clamps pan offsets to the scaled image bounds. Panning must move the viewport origin (`panX`, `panY`) only; do not add mode-specific "frame" panning or snap grids unless a separate phase-control feature is being designed.
+*   **`Dims.SrcCrop`** — maps viewport pixel coords back to source image coords. Used by `buildRef` for SSIM reference generation and by the hint-bar for `meta.src_res` (now shows the visible crop region when zoomed/panning instead of always showing full source resolution).
+*   **`PanAnchor` / `Spec.PanFromAnchor` / `Spec.PanByCells`** — shared drag and keyboard-pan primitives. Individual render modes provide only their cell footprint via `viewSpec()`.
 
 ### Cell-Quantum Zoom Model (June 2026, revised June 2026)
 
@@ -97,6 +98,8 @@ The stable zoom and viewport helpers now live in `internal/viewgeom`. The app la
 **Ladder, not linear steps.** Zoom changes should move through distinct rendered footprints, not through arbitrary arithmetic increments in `k`. The step generator should derive candidate cell footprints from the image dimensions and render quantum, convert them to `src px / cell`, and drop states that do not change the actual output after rounding. This keeps small images from accumulating useless tail states and gives every mode one geometry path.
 
 **Mode separation.** Zoom changes size only. Sampling phase / subcell offsets are a separate axis for later testing-only controls such as quadshift. SSIM and other quality metrics should compare through a common analysis grid so new glyph families can still be evaluated against the same baseline.
+
+**Panning invariant.** Pan state is the upper-left origin of the visible viewport in the scaled image. Halfblock, quad, and spark all use the same state and clamp path. Mode-specific code may translate terminal-cell deltas to viewport pixels through `viewSpec()`, but it must not pan a renderer-local output frame independently of the source viewport.
 
 **Decoupled step generation.** `zoomSteps(mz, srcW) []float64` returns a descending slice of zoom values. Handlers (`inc_zoom`, `dec_zoom`, scroll wheel) consume it via `stepIdx(zoom, steps) int` and never compute steps directly.
 
@@ -130,7 +133,9 @@ This caps zoom at the 1-source-pixel-per-cell-column limit regardless of termina
 
 The naive `steps[len-1-i]` reversed-index pattern is wrong — it produces ascending zoom, breaking `stepIdx`.
 
-**Zoom level display.** The current source-pixels-per-cell value is shown in the hint bar using `%.3g` format (e.g. `src px/cell=0.75`, `src px/cell=1.25`), computed from `maxZoom / zoom`. No rounding, no clamp — fractional values are displayed as-is.
+**Zoom level display.** The current source-pixels-per-cell value is shown in the hint bar using `%.3g` format (e.g. `src px/cell=0.75`, `src px/cell=1.25`). It is computed from the visible source crop width divided by terminal columns, not from a renderer's internal pixel footprint, so halfblock, quad, and spark modes report the same value for the same visible viewport. Example: a `364`-source-pixel visible crop over `91` terminal columns reports `src px/cell=4` in every render mode.
+
+**Renderer reconstruction for quality metrics.** SSIM, blockiness, and edge continuity compare the ideal source crop against a reconstruction of what the terminal renderer actually emits. Halfblock is represented by the viewport image itself, quad uses `quadblock.RenderToImage`, and spark uses `sparkline.RenderToImage`. The rendered reconstruction is normalized to the common `metrics.GridK × metrics.GridK` per-terminal-cell quality grid: smaller outputs are nearest-neighbour upscaled, while denser outputs are pyramid-downscaled. Never compare spark quality against the raw NN viewport; that scores the sampler, not the glyph renderer.
 
 ### Phony Sentinels in Makefiles
 To keep targets phony without polluting the `Makefile` with lists of names, a sentinel target `⚙️` is used:

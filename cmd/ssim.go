@@ -3,9 +3,11 @@ package cmd
 import (
 	"image"
 
+	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
+	"codeberg.org/ubunatic/cati/internal/sparkline"
 )
 
 // buildRef returns a pyramid-downscale reference at the quality-grid resolution
@@ -27,21 +29,26 @@ func buildRef(orig image.Image, state viewState, termCols, termRows int, rc rend
 	if srcW == 0 || srcH == 0 {
 		return orig
 	}
-	_, _, scaledW, scaledH, viewW, viewH := viewportDims(srcW, srcH, termCols, termRows, state.zoom, rc.mode)
+	dims := rc.mode.viewSpec().Dims(srcW, srcH, termCols, termRows, state.zoom)
+	dims.ClampPan(&state.panX, &state.panY)
 
-	viewW = min(viewW, scaledW-state.panX)
-	viewH = min(viewH, scaledH-state.panY)
+	viewW, viewH := dims.VisibleSize(state.panX, state.panY)
 	if viewW <= 0 || viewH <= 0 {
 		return orig
 	}
-	x0, y0, x1, y1 := srcCrop(srcW, srcH, state.panX, state.panY, scaledW, scaledH, viewW, viewH)
-	region := imgutil.CropImage(orig, x0, y0, x1-x0, y1-y0)
+	crop := dims.SrcCrop(srcW, srcH, state.panX, state.panY)
+	region := imgutil.CropImage(orig, crop.Min.X, crop.Min.Y, crop.Dx(), crop.Dy())
 	if fullComp {
 		return metrics.PyramidDownscale(region, viewW, viewH)
 	}
 	if qualityK > 0 {
 		gw, gh := metrics.QualityGridDims(viewW, viewH, rc.mode.pixCols(1), rc.mode.pixRows(1), qualityK)
-		return metrics.PyramidDownscale(region, gw, gh)
+		if gh >= viewH {
+			return metrics.PyramidDownscale(region, gw, gh)
+		}
+		// Quality grid is coarser than native render resolution (e.g. spark CellH=8
+		// yields gh=viewH/2). Compare at full viewport dims to avoid 2× downscale
+		// mismatch that penalises correct spark reconstructions.
 	}
 	return metrics.PyramidDownscale(region, viewW, viewH)
 }
@@ -55,6 +62,22 @@ func buildRef(orig image.Image, state viewState, termCols, termRows int, rc rend
 func renderSSIM(ref, vp image.Image, rc renderCfg) float64 {
 	if rc.mode.useQuad() {
 		return metrics.SSIMLuminance(ref, quadblock.RenderToImage(vp, rc.quadOpts))
+	}
+	if rc.mode.useSpark() {
+		b := vp.Bounds()
+		outCols := max(1, b.Dx()/rc.mode.pixCols(1))
+		outRows := max(1, b.Dy()/rc.mode.pixRows(1))
+		rendered := sparkline.RenderToImage(vp, outCols, outRows, rc.sparkMode)
+		rb := ref.Bounds()
+		vb := rendered.Bounds()
+		if rb.Dx() != vb.Dx() || rb.Dy() != vb.Dy() {
+			if vb.Dx() > rb.Dx() || vb.Dy() > rb.Dy() {
+				rendered = metrics.PyramidDownscale(rendered, rb.Dx(), rb.Dy())
+			} else {
+				rendered = halfblock.ScaleNN(rendered, rb.Dx(), rb.Dy())
+			}
+		}
+		return metrics.SSIMLuminance(ref, rendered)
 	}
 	return metrics.SSIMLuminance(ref, vp)
 }

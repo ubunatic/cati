@@ -135,7 +135,7 @@ func (rc renderCfg) scaleToFit(img image.Image, cols, rows int) image.Image {
 	}
 	switch rc.mode {
 	case modeSpark:
-		return sparkline.ScaleToFit(img, cols, rows)
+		return sparkline.ScaleToFit(img, rc.mode.pixCols(cols), rc.mode.pixRows(rows))
 	case modeQuad:
 		return quadblock.ScaleToFit(img, cols, rows)
 	default:
@@ -203,16 +203,15 @@ var renderModes = []struct {
 	cfg  renderCfg
 }{
 	{"halfblock", renderCfg{id: 4}},
-	{"spark/vert", renderCfg{id: 13, mode: modeSpark, sparkMode: sparkline.Vertical}},
 	{"spark/quad", renderCfg{id: 14, mode: modeSpark, sparkMode: sparkline.Quad}},
 	// {"halfblock+sharp", renderCfg{id: 10, preScale: pixelart.Sharpen05}},
 	// {"halfblock+epx2x", renderCfg{id: 8, preScale: pixelart.Scale2x}},
-	{"quad/pca2", renderCfg{id: 6, mode: modeQuad, quadOpts: quadblock.Options{PCA2: true}}},
+	// {"quad/pca2", renderCfg{id: 6, mode: modeQuad, quadOpts: quadblock.Options{PCA2: true}}},
 	// {"quad/default", renderCfg{id: 7, mode: modeQuad}},
 	// {"quad/lum+ambig", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{LumSplit: true, Blend: quadblock.BlendAmbiguous}}},
 	// {"quad/pca2+ambig", renderCfg{id: 2, mode: modeQuad, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguous}}},
 	// {"quad/splithalf+ambig", renderCfg{id: 3, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguous}}},
-	{"quad/lum-split", renderCfg{id: 5, mode: modeQuad, quadOpts: quadblock.Options{LumSplit: true}}},
+	// {"quad/lum-split", renderCfg{id: 5, mode: modeQuad, quadOpts: quadblock.Options{LumSplit: true}}},
 	{"quad/splithalf", renderCfg{id: 0, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}},
 	//{"quad/splithalf+sharp", renderCfg{id: 11, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen05}},
 	//{"quad/splithalf+epx2x", renderCfg{id: 9, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale2x}},
@@ -333,7 +332,11 @@ func parseZoomK(s string) float64 {
 // zoomLevel returns the current source-pixels-per-cell value formatted for the hint bar.
 func zoomLevel(state viewState, orig image.Image, termCols, termRows int, rc renderCfg) string {
 	b := orig.Bounds()
-	return rc.mode.viewSpec().ZoomLevel(state.zoom, b.Dx(), b.Dy(), termCols, termRows)
+	cropW, _ := visibleCrop(b.Dx(), b.Dy(), state, termCols, termRows, rc)
+	if cropW <= 0 || termCols <= 0 {
+		return rc.mode.viewSpec().ZoomLevel(state.zoom, b.Dx(), b.Dy(), termCols, termRows)
+	}
+	return fmt.Sprintf("src px/cell=%.3g", float64(cropW)/float64(termCols))
 }
 
 // ── viewState ────────────────────────────────────────────────────────────────
@@ -345,16 +348,8 @@ type viewState struct {
 	panY int // pixel offset into the zoomed image (y)
 }
 
-// ── dragState ────────────────────────────────────────────────────────────────
-
-// dragState tracks an in-progress left-button drag used to pan the image.
-type dragState struct {
-	active    bool
-	startCol  int // 0-indexed terminal column where drag began
-	startRow  int // 0-indexed terminal row    where drag began
-	startPanX int // state.panX at drag start
-	startPanY int // state.panY at drag start
-}
+// dragState tracks an in-progress pan gesture in terminal-cell coordinates.
+type dragState = viewgeom.PanAnchor
 
 // ── interactive ──────────────────────────────────────────────────────────────
 
@@ -511,8 +506,8 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 			mz := maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode)
 			k := max(1, int(math.Round(mz/state.zoom))) // source columns per cell
 			geom := rc.mode.viewSpec()
-			hStep := max(1, min(termCols/8, k)) * geom.CellW // pixel columns
-			vStep := max(1, min(viewRows/8, k)) * geom.CellH // pixel rows
+			hStep := max(1, min(termCols/8, k))
+			vStep := max(1, min(viewRows/8, k))
 
 			changed := false
 			newStatus := ""
@@ -610,40 +605,26 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 						}
 
 					// ── Space-pan: any mouse motion pans when Space is held ───────
-					case spacePan && m.IsDrag() && !m.IsScroll():
-						if !spacePanAnchor.active {
-							spacePanAnchor = dragState{
-								active:    true,
-								startCol:  c,
-								startRow:  r,
-								startPanX: state.panX,
-								startPanY: state.panY,
-							}
+					case spacePan && (m.IsMove() || m.IsDrag()) && !m.IsScroll():
+						if !spacePanAnchor.Active {
+							spacePanAnchor = viewgeom.NewPanAnchor(c, r, state.panX, state.panY)
 						}
-						state.panX = spacePanAnchor.startPanX - (c-spacePanAnchor.startCol)*geom.CellW
-						state.panY = spacePanAnchor.startPanY - (r-spacePanAnchor.startRow)*geom.CellH
+						state.panX, state.panY = geom.PanFromAnchor(spacePanAnchor, c, r)
 						changed = true
 
 					// ── Left press: start drag ────────────────────────────────────
 					case !spacePan && !m.IsScroll() && !m.IsDrag() && m.Button == 0 && !m.Release:
-						drag = dragState{
-							active:    true,
-							startCol:  c,
-							startRow:  r,
-							startPanX: state.panX,
-							startPanY: state.panY,
-						}
+						drag = viewgeom.NewPanAnchor(c, r, state.panX, state.panY)
 
 					// ── Left drag: update pan ─────────────────────────────────────
-					case !spacePan && m.IsDrag() && m.Button == 0 && drag.active:
+					case !spacePan && m.IsDrag() && m.Button == 0 && drag.Active:
 						// Grab-and-pull: dragging right shows more of the left side.
-						state.panX = drag.startPanX - (c-drag.startCol)*geom.CellW
-						state.panY = drag.startPanY - (r-drag.startRow)*geom.CellH
+						state.panX, state.panY = geom.PanFromAnchor(drag, c, r)
 						changed = true
 
 					// ── Left release: end drag ────────────────────────────────────
 					case !m.IsScroll() && !m.IsDrag() && m.Button == 0 && m.Release:
-						drag.active = false
+						drag.Active = false
 					}
 
 				} else {
@@ -653,19 +634,19 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 						shouldQuit = true
 
 					case "\x1b[A": // ↑ — structural pan (no button equiv)
-						state.panY -= vStep
+						geom.PanByCells(&state.panX, &state.panY, 0, -vStep)
 						changed = true
 
 					case "\x1b[B": // ↓ — structural pan
-						state.panY += vStep
+						geom.PanByCells(&state.panX, &state.panY, 0, vStep)
 						changed = true
 
 					case "\x1b[C": // → — structural pan
-						state.panX += hStep
+						geom.PanByCells(&state.panX, &state.panY, hStep, 0)
 						changed = true
 
 					case "\x1b[D": // ← — structural pan
-						state.panX -= hStep
+						geom.PanByCells(&state.panX, &state.panY, -hStep, 0)
 						changed = true
 
 					default:
@@ -886,13 +867,12 @@ func buildViewport(orig image.Image, state *viewState, termCols, termRows int, r
 	if srcW == 0 || srcH == 0 {
 		return orig
 	}
-	pixCols, pixRows, scaledW, scaledH, viewW, viewH := viewportDims(srcW, srcH, termCols, termRows, state.zoom, rc.mode)
+	dims := rc.mode.viewSpec().Dims(srcW, srcH, termCols, termRows, state.zoom)
 
-	scaled := halfblock.ScaleNN(orig, scaledW, scaledH)
+	scaled := halfblock.ScaleNN(orig, dims.ScaledW, dims.ScaledH)
 
-	state.panX = max(0, min(state.panX, max(0, scaledW-pixCols)))
-	state.panY = max(0, min(state.panY, max(0, scaledH-pixRows)))
-	return imgutil.CropImage(scaled, state.panX, state.panY, viewW, viewH)
+	dims.ClampPan(&state.panX, &state.panY)
+	return imgutil.CropImage(scaled, state.panX, state.panY, dims.ViewW, dims.ViewH)
 }
 
 // renderView renders the current viewport to stdout and returns it for callers

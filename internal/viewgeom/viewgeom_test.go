@@ -91,6 +91,39 @@ func TestRecenterPreservesSourceCenter(t *testing.T) {
 	}
 }
 
+func TestPanByCellHasConsistentSourceDeltaAcrossModes(t *testing.T) {
+	specs := []struct {
+		name string
+		spec Spec
+	}{
+		{"halfblock", NewCell(1, 2, 1)},
+		{"quad", NewCell(2, 2, 2)},
+		{"spark", NewCell(4, 8, 1)},
+	}
+
+	const srcW, srcH = 1920, 1080
+	const termCols, termRows = 80, 38
+	const zoom = 4.0
+
+	var wantX, wantY float64
+	for i, tc := range specs {
+		t.Run(tc.name, func(t *testing.T) {
+			dims := tc.spec.Dims(srcW, srcH, termCols, termRows, zoom)
+			panX, panY := 0, 0
+			tc.spec.PanByCells(&panX, &panY, 1, 1)
+			gotX := float64(panX) * float64(srcW) / float64(dims.ScaledW)
+			gotY := float64(panY) * float64(srcH) / float64(dims.ScaledH)
+			if i == 0 {
+				wantX, wantY = gotX, gotY
+				return
+			}
+			if gotX != wantX || gotY != wantY {
+				t.Fatalf("source delta = %.6g,%.6g, want %.6g,%.6g", gotX, gotY, wantX, wantY)
+			}
+		})
+	}
+}
+
 func TestZoomSteps(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -122,10 +122,10 @@ func RenderToImage(img image.Image, outCols, outRows int, mode sparkline.Mode) i
 
 	for tr := 0; tr < outRows; tr++ {
 		for tc := 0; tc < outCols; tc++ {
-			x0 := min(tc*cellW, pixW)
-			x1 := min(x0+cellW, pixW) - 1
-			y0 := min(tr*cellH, pixH)
-			y1 := min(y0+cellH, pixH) - 1
+			x0 := b.Min.X + min(tc*cellW, pixW)
+			x1 := b.Min.X + min(tc*cellW+cellW, pixW) - 1
+			y0 := b.Min.Y + min(tr*cellH, pixH)
+			y1 := b.Min.Y + min(tr*cellH+cellH, pixH) - 1
 			if x1 < x0 || y1 < y0 {
 				continue
 			}
