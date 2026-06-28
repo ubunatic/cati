@@ -1091,19 +1091,19 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 
 		if viewMode == "about" {
 			drawAboutPage(os.Stdout, termCols, effHeight, style)
-			buttons = drawBottomMenu(os.Stdout, effHeight, "about", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions, nil)
-			drawHintBar(os.Stdout, effHeight, labels["hint_about"], map[string]string{"last_key": lastKey}, style)
+			buttons = drawBottomMenu(os.Stdout, effHeight, termCols, "about", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions, nil)
+			drawHintBar(os.Stdout, effHeight, termCols, labels["hint_about"], map[string]string{"last_key": lastKey}, style)
 			return
 		}
 
 		if viewMode == "settings" {
 			drawSettingsPage(os.Stdout, termCols, effHeight, controls, tempCfg, activeSettingsField, labels)
-			buttons = drawBottomMenu(os.Stdout, effHeight, "settings", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions, nil)
+			buttons = drawBottomMenu(os.Stdout, effHeight, termCols, "settings", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions, nil)
 			activeSetting := ""
 			if activeSettingsField >= 0 && activeSettingsField < len(controls) {
 				activeSetting = settingsFieldLabel(controls[activeSettingsField].Key)
 			}
-			drawHintBar(os.Stdout, effHeight, labels["hint_settings"], map[string]string{"active_setting": activeSetting, "last_key": lastKey}, style)
+			drawHintBar(os.Stdout, effHeight, termCols, labels["hint_settings"], map[string]string{"active_setting": activeSetting, "last_key": lastKey}, style)
 			return
 		}
 
@@ -1442,7 +1442,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 		fmt.Fprintf(os.Stdout, "\x1b[1;1H\x1b[K%s%s\x1b[m", baseAnsi, hdrText)
 
 		// Print bottom menu buttons
-		buttons = drawBottomMenu(os.Stdout, effHeight, "grid", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions, nil)
+		buttons = drawBottomMenu(os.Stdout, effHeight, termCols, "grid", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions, nil)
 
 		// Print hint bar
 		activeFileName := ""
@@ -1492,7 +1492,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 		for k, v := range currentMeta.Vars() {
 			hintVars[k] = v
 		}
-		drawHintBar(os.Stdout, effHeight, labels["hint_browser"], hintVars, style)
+		drawHintBar(os.Stdout, effHeight, termCols, labels["hint_browser"], hintVars, style)
 	}
 
 	redraw()
@@ -2239,10 +2239,14 @@ func loadViewRowYaml(includeHidden bool) map[string]string {
 }
 
 // drawHintBar renders the hint text line (last terminal row) for the current view.
-func drawHintBar(w io.Writer, termRow int, label string, vars map[string]string, style *StyleConfig) {
+func drawHintBar(w io.Writer, termRow, termCols int, label string, vars map[string]string, style *StyleConfig) {
 	ctrlAnsi := styleBG(style.ControlBarBg, "") + styleFG(style.ControlBarFg, "")
 	text := renderTpl(label, vars, ctrlAnsi)
-	if cols := writerTermCols(w); cols > 2 {
+	cols := writerTermCols(w)
+	if cols <= 0 {
+		cols = termCols
+	}
+	if cols > 2 {
 		text = truncateANSI(text, cols-2)
 	}
 	fmt.Fprintf(w, "\x1b[%d;1H\x1b[K%s %s \x1b[m", termRow, ctrlAnsi, text)
@@ -2302,7 +2306,7 @@ func truncateANSI(s string, maxWidth int) string {
 // drawBottomMenu renders the button bar for the given view using the row template from views.yaml.
 // conditions is an optional map of runtime boolean flags (e.g. "playing") used by if() expressions.
 // btnActions maps button key names to their registered action names (from spec/buttons.yaml); nil means use key name as action.
-func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, conditions map[string]bool, btnActions map[string]string, altBtnActions map[string]string) []menuButton {
+func drawBottomMenu(w io.Writer, termRows, termCols int, viewMode string, activeAction string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, conditions map[string]bool, btnActions map[string]string, altBtnActions map[string]string) []menuButton {
 	if style == nil {
 		style = loadStyle()
 	}
@@ -2315,6 +2319,9 @@ func drawBottomMenu(w io.Writer, termRows int, viewMode string, activeAction str
 	ctrlAnsi := styleBG(style.ControlBarBg, "") + styleFG(style.ControlBarFg, "")
 	fmt.Fprintf(w, "\x1b[%d;1H\x1b[K%s", termRows-1, ctrlAnsi)
 	maxCols := writerTermCols(w)
+	if maxCols <= 0 {
+		maxCols = termCols
+	}
 
 	tpl := viewBtnRows[viewName]
 	if tpl == "" {

@@ -28,7 +28,7 @@ func TestBrowser_DrawBottomMenu(t *testing.T) {
 		{"settings", []string{"save_settings", "cancel_settings", "quit"}},
 	}
 	for _, tc := range cases {
-		btns := drawBottomMenu(&buf, 24, tc.view, "", style, labels, rows, nil, btnActions, nil)
+		btns := drawBottomMenu(&buf, 24, 80, tc.view, "", style, labels, rows, nil, btnActions, nil)
 		if len(btns) != len(tc.actions) {
 			t.Errorf("view %q: expected %d buttons, got %d", tc.view, len(tc.actions), len(btns))
 			continue

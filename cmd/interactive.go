@@ -574,7 +574,6 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		inputSpec, _ = input.Load(fs.FS(spec.FS))
 	}
 
-	// Load the original image once; it is never mutated.
 	orig, err := halfblock.LoadImage(path)
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
@@ -596,13 +595,11 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		viewKeyMaps = buildViewKeyMaps(viewBtnRows, loadButtonKeyDefs(inputSpec))
 	}
 	btnActions := loadButtonActions()
-	// altBtnActions := loadAltButtonActions()
 
-	// ── Raw terminal mode ─────────────────────────────────────────────────────
 	fd := int(os.Stdin.Fd())
 	oldState, err := term.MakeRaw(fd)
 	if err != nil {
-		oldState = nil // stdin not a tty (e.g. in tests)
+		oldState = nil
 	}
 	defer func() {
 		if oldState != nil {
@@ -610,12 +607,10 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		}
 	}()
 
-	// ── Signal handling ───────────────────────────────────────────────────────
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigs)
 
-	// ── Input reader (goroutine or shared) ────────────────────────────────────
 	inputs := sharedInputs
 	if inputs == nil {
 		inputs = make(chan string, 32)
@@ -630,7 +625,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 					if strings.HasPrefix(tok, "\x1b[<") {
 						select {
 						case inputs <- tok:
-						default: // drop mouse events when buffer is full
+						default:
 						}
 					} else {
 						inputs <- tok
@@ -640,7 +635,6 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		}()
 	}
 
-	// ── Enter visual mode ─────────────────────────────────────────────────────
 	halfblock.HideCursor(os.Stdout)
 	halfblock.ClearScreen(os.Stdout)
 	halfblock.EnableMouse(os.Stdout)
@@ -648,68 +642,49 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		halfblock.DisableMouse(os.Stdout)
 		halfblock.EraseDown(os.Stdout)
 		halfblock.ShowCursor(os.Stdout)
-		fmt.Fprint(os.Stdout, "\r\n") // CR+LF: ensure col 0 so the shell won't show a stray '%'
+		fmt.Fprint(os.Stdout, "\r\n")
 	}()
 
-	termCols, termRows := resolveTermSize(initWidth, initHeight)
+	vc := newViewerCore("image_viewer", initWidth, initHeight, rc, fullComp, inputSpec, style, labels, viewBtnRows, viewKeyMaps, btnActions)
+	b := orig.Bounds()
+	vc.lastSrcW, vc.lastSrcH = b.Dx(), b.Dy()
+	vc.src = orig
+	vc.state.zoom = initialZoomRatio(initialZoom, vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc.mode)
+	vc.rerender = func() {
+		vp := buildViewport(orig, &vc.state, vc.termCols, vc.viewRows(), vc.rc)
+		ref := buildRef(orig, vc.state, vc.termCols, vc.viewRows(), vc.rc, metrics.GridK, vc.fullComp)
+		vc.curQ = computeQuality(ref, vp, vc.rc)
+		vc.lastVP = vp
+	}
+	vc.rerender()
 
-	viewRows := max(1, termRows-2)
-	state := viewState{zoom: initialZoomRatio(initialZoom, orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode)}
-	var drag dragState
 	var spacePan bool
 	var spacePanAnchor dragState
-
-	var buttons []menuButton
-	activeAction := ""
-	var status string
-	var infoVisible bool
-	var lastKey string
-	modeName := rcModeName(rc)
-	lastNonHBID := rc.id // last non-halfblock mode id; used by toggle_halfblock
-	if rc.mode != modeQuad {
-		lastNonHBID = -1
-	}
-	var curQ metrics.RenderQuality
 	fileMeta := loadMediaMeta(path, false)
+	srcW, srcH := b.Dx(), b.Dy()
+
 	redraw := func() error {
 		halfblock.CursorHome(os.Stdout)
-		vp, err := renderView(orig, &state, termCols, max(1, termRows-2), rc)
-		if err != nil {
+		if err := renderValidated(os.Stdout, orig, vc.lastVP, vc.state, vc.termCols, vc.viewRows(), vc.rc); err != nil {
 			return err
 		}
-		ref := buildRef(orig, state, termCols, max(1, termRows-2), rc, metrics.GridK, fullComp)
-		curQ = computeQuality(ref, vp, rc)
 		halfblock.EraseDown(os.Stdout)
-		buttons = drawBottomMenu(os.Stdout, termRows, "image_viewer", activeAction, style, labels, viewBtnRows, nil, btnActions, nil)
-		hint := labels["hint_viewer"]
-		if infoVisible {
-			hint = formatZoomInfo(state, orig, termCols, max(1, termRows-2), rc)
-		} else if status != "" {
-			hint = status
+		vc.drawMenu(os.Stdout, nil)
+		hint := vc.labels["hint_viewer"]
+		if vc.infoVisible {
+			hint = formatZoomInfo(vc.state, orig, vc.termCols, vc.viewRows(), vc.rc)
+		} else if vc.status != "" {
+			hint = vc.status
 		}
-		fileMeta.DispW = fmt.Sprintf("%d", termCols)
-		fileMeta.DispH = fmt.Sprintf("%d", max(1, termRows-2))
+		fileMeta.DispW = fmt.Sprintf("%d", vc.termCols)
+		fileMeta.DispH = fmt.Sprintf("%d", vc.viewRows())
 		fileMeta.DispMode = "half"
-		graySuffix := ""
-		if rc.gray {
-			graySuffix = fmt.Sprintf(" (gray%d)", grayColorsCount(rc.grayColors))
+		extra := map[string]string{}
+		cw, ch := vc.rc.mode.viewSpec().VisibleCrop(srcW, srcH, vc.state.zoom, vc.state.panX, vc.state.panY, vc.termCols, vc.viewRows())
+		if cw > 0 && ch > 0 && (cw != srcW || ch != srcH) {
+			extra["meta.src_res"] = fmt.Sprintf("%d×%d", cw, ch)
 		}
-		hintVars := viewerHintVars(fileMeta, termCols, hint, map[string]string{
-			"last_key":    lastKey,
-			"ssim":        fmt.Sprintf("%.3f", curQ.SSIM),
-			"blockiness":  fmt.Sprintf("%.3f", curQ.Blockiness),
-			"edge_cont":   fmt.Sprintf("%.3f", curQ.EdgeCont),
-			"render_mode": modeName + graySuffix,
-			"zoom_level":  zoomLevel(state, orig, termCols, max(1, termRows-2), rc),
-		})
-		// Override src_res with visible crop region when zoomed/panning.
-		b := orig.Bounds()
-		if cw, ch := visibleCrop(b.Dx(), b.Dy(), state, termCols, max(1, termRows-2), rc); cw > 0 && ch > 0 {
-			if cw != b.Dx() || ch != b.Dy() {
-				hintVars["meta.src_res"] = fmt.Sprintf("%d×%d", cw, ch)
-			}
-		}
-		drawHintBar(os.Stdout, termRows, hint, hintVars, style)
+		vc.drawHint(os.Stdout, hint, vc.hintVars(fileMeta, hint, extra))
 		return nil
 	}
 	if err := redraw(); err != nil {
@@ -722,273 +697,62 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 			return nil
 
 		case in := <-inputs:
-			termCols, termRows = resolveTermSize(initWidth, initHeight)
-			viewRows = max(1, termRows-2)
-			mz := maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode)
-			k := max(1, int(math.Round(mz/state.zoom))) // source columns per cell
-			geom := rc.mode.viewSpec()
-			hStep := max(1, min(termCols/8, k))
-			vStep := max(1, min(viewRows/8, k))
+			vc.termCols, vc.termRows = resolveTermSize(initWidth, initHeight)
 
 			changed := false
-			newStatus := ""
 			shouldQuit := false
 
 			processInput := func(tok string) {
-				lastKey = inputSpec.EventName(inputSpec.Classify(tok))
-				// ── SGR mouse event ───────────────────────────────────────────────
 				if m, ok := inputSpec.ParseMouse(tok); ok {
-					// Col/Row are 1-indexed terminal coordinates → convert to 0-indexed.
 					c, r := m.Col-1, m.Row-1
-
-					// ── Button bar (row termRows-1) ───────────────────────────────
-					if m.Row == termRows-1 {
-						newAction := ""
-						for _, b := range buttons {
-							if m.Col >= b.col && m.Col < b.col+b.width {
-								newAction = b.action
-								break
-							}
+					// Space-pan: intercept canvas mouse motion when active.
+					if spacePan && (m.IsMove() || m.IsDrag()) && !m.IsScroll() && m.Row != vc.termRows-1 {
+						if !spacePanAnchor.Active {
+							spacePanAnchor = viewgeom.NewPanAnchor(c, r, vc.state.panX, vc.state.panY)
 						}
-						if newAction != activeAction {
-							activeAction = newAction
-							changed = true
-						}
-						if m.Release && newAction != "" {
-							switch newAction {
-							case "inc_zoom":
-								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
-								i := stepIdx(state.zoom, steps)
-								if i > 0 {
-									state.zoom = steps[i-1]
-									changed = true
-								}
-							case "dec_zoom":
-								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
-								i := stepIdx(state.zoom, steps)
-								if i < len(steps)-1 {
-									state.zoom = steps[i+1]
-									changed = true
-								}
-							case "cycle_render":
-								oldRC := rc
-								rc, modeName = cycleRenderCfg(rc)
-								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								changed = true
-							case "cycle_render_prev":
-								oldRC := rc
-								rc, modeName = cycleRenderCfgPrev(rc)
-								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								changed = true
-							case "toggle_gray":
-								cycleGray(&rc)
-								changed = true
-							case "show_info":
-								infoVisible = !infoVisible
-								newStatus = ""
-								changed = true
-							case "toggle_halfblock":
-								oldRC := rc
-								if rc.mode.useQuad() {
-									lastNonHBID = rc.id
-									if m, n, ok := findRenderModeByID(0); ok {
-										rc, modeName = m, n
-									}
-								} else if lastNonHBID >= 0 {
-									if m, n, ok := findRenderModeByID(lastNonHBID); ok {
-										rc, modeName = m, n
-									}
-								} else {
-									rc, modeName = cycleRenderCfg(rc)
-								}
-								rc.gray = oldRC.gray
-								rc.grayColors = oldRC.grayColors
-								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								changed = true
-							case "go_back", "quit":
-								shouldQuit = true
-							}
-						}
+						vc.state.panX, vc.state.panY = vc.rc.mode.viewSpec().PanFromAnchor(spacePanAnchor, c, r)
+						vc.rerender()
+						changed = true
 						return
 					}
-					if activeAction != "" {
-						activeAction = ""
-						changed = true
-					}
-
-					switch {
-					// ── Scroll wheel: zoom at cursor ──────────────────────────────
-					case m.IsScroll() && !m.Release:
-						steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
-						i := stepIdx(state.zoom, steps)
-						if m.ScrollDir() < 0 && i > 0 {
-							zoomAtCursor(&state, steps[i-1], c, r, rc.mode)
-							changed = true
-						} else if m.ScrollDir() >= 0 && i < len(steps)-1 {
-							zoomAtCursor(&state, steps[i+1], c, r, rc.mode)
-							changed = true
-						}
-
-					// ── Space-pan: any mouse motion pans when Space is held ───────
-					case spacePan && (m.IsMove() || m.IsDrag()) && !m.IsScroll():
-						if !spacePanAnchor.Active {
-							spacePanAnchor = viewgeom.NewPanAnchor(c, r, state.panX, state.panY)
-						}
-						state.panX, state.panY = geom.PanFromAnchor(spacePanAnchor, c, r)
-						changed = true
-
-					// ── Left press: start drag ────────────────────────────────────
-					case !spacePan && !m.IsScroll() && !m.IsDrag() && m.Button == 0 && !m.Release:
-						drag = viewgeom.NewPanAnchor(c, r, state.panX, state.panY)
-
-					// ── Left drag: update pan ─────────────────────────────────────
-					case !spacePan && m.IsDrag() && m.Button == 0 && drag.Active:
-						// Grab-and-pull: dragging right shows more of the left side.
-						state.panX, state.panY = geom.PanFromAnchor(drag, c, r)
-						changed = true
-
-					// ── Left release: end drag ────────────────────────────────────
-					case !m.IsScroll() && !m.IsDrag() && m.Button == 0 && m.Release:
-						drag.Active = false
-					}
-
-				} else {
-					// ── Keyboard event ────────────────────────────────────────────
-					switch tok {
-					case "\x03": // ctrl-c always quits regardless of spec
+					quit, ch, _ := vc.handleMouse(m)
+					if quit {
 						shouldQuit = true
-
-					case "\x1b[A": // ↑ — structural pan (no button equiv)
-						geom.PanByCells(&state.panX, &state.panY, 0, -vStep)
+					}
+					if ch {
 						changed = true
-
-					case "\x1b[B": // ↓ — structural pan
-						geom.PanByCells(&state.panX, &state.panY, 0, vStep)
+					}
+				} else {
+					quit, ch, unhandled := vc.handleKey(tok)
+					if quit {
+						shouldQuit = true
+						return
+					}
+					if ch {
 						changed = true
-
-					case "\x1b[C": // → — structural pan
-						geom.PanByCells(&state.panX, &state.panY, hStep, 0)
-						changed = true
-
-					case "\x1b[D": // ← — structural pan
-						geom.PanByCells(&state.panX, &state.panY, -hStep, 0)
-						changed = true
-
-					default:
-						if action, ok := viewKeyMaps["image_viewer"][tok]; ok {
-							switch action {
-							case "go_back", "quit":
-								shouldQuit = true
-							case "zoom_k":
-								k := 1.0
-								if len(tok) == 1 && tok[0] >= '0' && tok[0] <= '9' {
-									val := int(tok[0] - '0')
-									if val == 0 {
-										state.zoom = 1.0
-										changed = true
-										break
-									}
-									if val == 1 {
-										k = 1.0
-									} else {
-										k = float64(val)
-									}
-								}
-								srcW := orig.Bounds().Dx()
-								if srcW > 0 {
-									k = math.Max(k, 1.0/float64(srcW))
-									k = math.Min(k, float64(srcW))
-								}
-								mz := maxZoom(srcW, orig.Bounds().Dy(), termCols, viewRows, rc.mode)
-								state.zoom = rc.mode.viewSpec().ZoomRatioForK(mz, k)
-								changed = true
-							case "inc_zoom":
-								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
-								i := stepIdx(state.zoom, steps)
-								if i > 0 {
-									state.zoom = steps[i-1]
-									changed = true
-								}
-							case "dec_zoom":
-								steps := zoomSteps(maxZoom(orig.Bounds().Dx(), orig.Bounds().Dy(), termCols, viewRows, rc.mode), orig.Bounds().Dx())
-								i := stepIdx(state.zoom, steps)
-								if i < len(steps)-1 {
-									state.zoom = steps[i+1]
-									changed = true
-								}
-							case "toggle_pan":
-								spacePan = !spacePan
-								spacePanAnchor = dragState{}
-								if spacePan {
-									fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h")
-									newStatus = "pan  —  move mouse to pan · Space to exit"
-								} else {
-									fmt.Fprint(os.Stdout, "\x1b[?1002h\x1b[?1006h")
-									newStatus = ""
-								}
-								changed = true
-							case "copy_viewport":
-								vp := buildViewport(orig, &state, termCols, termRows, rc)
-								if copyErr := copyImageToClipboard(vp); copyErr != nil {
-									newStatus = "⚠ copy failed: " + copyErr.Error()
-								} else {
-									newStatus = "✓ copied to clipboard"
-								}
-								changed = true
-							case "show_info":
-								infoVisible = !infoVisible
-								newStatus = ""
-								changed = true
-							case "cycle_render":
-								oldRC := rc
-								rc, modeName = cycleRenderCfg(rc)
-								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								changed = true
-							case "cycle_render_prev":
-								oldRC := rc
-								rc, modeName = cycleRenderCfgPrev(rc)
-								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								changed = true
-							case "toggle_gray":
-								cycleGray(&rc)
-								changed = true
-							case "toggle_halfblock":
-								oldRC := rc
-								if rc.mode.useQuad() {
-									lastNonHBID = rc.id
-									if m, n, ok := findRenderModeByID(0); ok {
-										rc, modeName = m, n
-									}
-								} else if lastNonHBID >= 0 {
-									if m, n, ok := findRenderModeByID(lastNonHBID); ok {
-										rc, modeName = m, n
-									}
-								} else {
-									rc, modeName = cycleRenderCfg(rc)
-								}
-								rc.gray = oldRC.gray
-								rc.grayColors = oldRC.grayColors
-								preserveZoomForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								recenterForMode(&state, orig, termCols, max(1, termRows-2), oldRC, rc)
-								changed = true
-							}
+						return
+					}
+					// Image-viewer-specific: toggle_pan.
+					if unhandled == "toggle_pan" {
+						spacePan = !spacePan
+						spacePanAnchor = dragState{}
+						if spacePan {
+							fmt.Fprint(os.Stdout, "\x1b[?1003h\x1b[?1006h")
+							vc.status = "pan  —  move mouse to pan · Space to exit"
+						} else {
+							fmt.Fprint(os.Stdout, "\x1b[?1002h\x1b[?1006h")
+							vc.status = ""
 						}
+						changed = true
 					}
 				}
 			}
 
-			// Process first event
 			processInput(in)
 			if shouldQuit {
 				return nil
 			}
 
-			// Coalesce / drain consecutive events
 			draining := true
 			for draining {
 				select {
@@ -1003,7 +767,6 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 			}
 
 			if changed {
-				status = newStatus
 				if err := redraw(); err != nil {
 					return err
 				}
@@ -1032,30 +795,6 @@ func resolveTermSize(width, height int) (cols, rows int) {
 		rows = 24
 	}
 	return
-}
-
-// viewportDims computes the derived pixel dimensions for a given view state.
-//
-//	pixCols  — pixel budget per row (termCols × 2 for quad, else termCols)
-//	pixRows  — pixel budget per column (termRows × 2, termRows for sparkline)
-//	scaledW  — full NN-scaled width  after zoom (≥ pixCols on zoom-in)
-//	scaledH  — full NN-scaled height after zoom (≥ pixRows on zoom-in)
-//	viewW    — viewport width  clamped to min(pixCols, scaledW)
-//	viewH    — viewport height clamped to min(pixRows, scaledH)
-func viewportDims(srcW, srcH, termCols, termRows int, zoom float64, mode renderMode) (pixCols, pixRows, scaledW, scaledH, viewW, viewH int) {
-	return mode.viewSpec().ViewportDims(srcW, srcH, termCols, termRows, zoom)
-}
-
-// srcCrop maps viewport pixel coords back to source image coords and returns
-// the visible source rectangle.
-func srcCrop(srcW, srcH, panX, panY, scaledW, scaledH, viewW, viewH int) (x0, y0, x1, y1 int) {
-	return viewgeom.SrcCrop(srcW, srcH, panX, panY, scaledW, scaledH, viewW, viewH)
-}
-
-// visibleCrop returns the size of the visible source region in source pixels
-// for the current view state. Returns (0, 0) when the image is empty.
-func visibleCrop(srcW, srcH int, state viewState, termCols, termRows int, rc renderCfg) (int, int) {
-	return rc.mode.viewSpec().VisibleCrop(srcW, srcH, state.zoom, state.panX, state.panY, termCols, termRows)
 }
 
 // recenterForMode adjusts panX/panY after a render-mode switch so the same
@@ -1124,16 +863,6 @@ func buildViewport(orig image.Image, state *viewState, termCols, termRows int, r
 	return vp
 }
 
-// renderView renders the current viewport to stdout and returns it for callers
-// that need the pixel data (e.g. to compute SSIM).
-func renderView(orig image.Image, state *viewState, termCols, termRows int, rc renderCfg) (image.Image, error) {
-	vp := buildViewport(orig, state, termCols, termRows, rc)
-	if err := renderValidated(os.Stdout, orig, vp, *state, termCols, termRows, rc); err != nil {
-		return vp, err
-	}
-	return vp, nil
-}
-
 // interactiveVideo plays a video file in the terminal using the caller's shared
 // input channel so that keyboard events are routed through the browser's tokenizer.
 // openAudio starts audio playback for path if the file has an audio stream.
@@ -1158,8 +887,6 @@ func stopAudio(p *audio.Player) {
 }
 
 func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec, fullComp bool, initialZoom string) error {
-	// The browser restores cooked-mode before calling us.  We must enter raw
-	// mode ourselves so single keypresses are readable without Enter.
 	fd := int(os.Stdin.Fd())
 	oldState, err := term.MakeRaw(fd)
 	if err != nil {
@@ -1177,7 +904,6 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 	if inputSpec == nil {
 		inputSpec, _ = input.Load(fs.FS(spec.FS))
 	}
-
 	if style == nil {
 		style = loadStyle()
 	}
@@ -1194,15 +920,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 		viewKeyMaps = buildViewKeyMaps(viewBtnRows, loadButtonKeyDefs(inputSpec))
 	}
 	btnActions := loadButtonActions()
-	//altBtnActions := loadAltButtonActions()
 
-	// keyInputs carries keyboard tokens and sits in the blocking select so keys
-	// are processed immediately.  mouseInputs carries SGR mouse tokens and is
-	// drained (with drop-on-full) before the select so mouse events never block
-	// keyboard delivery.
-	//
-	// When a shared channel is provided (browser mode) we split it into the same
-	// two logical streams by type-sniffing on receive.
 	keyInputs := make(chan string, 4)
 	mouseInputs := make(chan string, 32)
 
@@ -1218,20 +936,18 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					if strings.HasPrefix(tok, "\x1b[<") {
 						select {
 						case mouseInputs <- tok:
-						default: // drop mouse events when buffer is full
+						default:
 						}
 					} else {
 						select {
 						case keyInputs <- tok:
-						default: // drop keys only when key buffer is also full (rare)
+						default:
 						}
 					}
 				}
 			}
 		}()
 	} else {
-		// Re-route tokens from the shared channel into the two typed channels.
-		// The goroutine exits when ctx is cancelled (video viewer returns).
 		go func() {
 			for {
 				select {
@@ -1267,28 +983,9 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 		fmt.Fprint(os.Stdout, "\r\n")
 	}()
 
-	paused := false
-	videoEnded := false
-	var buttons []menuButton
-	activeAction := ""
-	var status string
-	var infoVisible bool
-	var lastKey string
-	var statusClearAt time.Time
-	termCols, termRows := resolveTermSize(initWidth, initHeight)
-	modeName := rcModeName(rc)
-	lastNonHBID := rc.id
-	if !rc.mode.useQuad() {
-		lastNonHBID = -1
-	}
-	var curQ metrics.RenderQuality
-	state := viewState{zoom: 1.0}
-	var lastSrcW, lastSrcH int
-	var drag dragState
-	var rerenderLastFrame func()
+	vc := newViewerCore("video_player", initWidth, initHeight, rc, fullComp, inputSpec, style, labels, viewBtnRows, viewKeyMaps, btnActions)
 	fileMeta := loadMediaMeta(path, true)
 
-	// Probe native fps for smooth playback.
 	displayFPS := 24.0
 	if native, err := halfblock.ProbeVideoFPS(path); err == nil && native > 0 {
 		displayFPS = native
@@ -1309,7 +1006,6 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 
 	var audioPlayer *audio.Player
 
-	// restartStream reopens the video and audio streams from the beginning.
 	restartStream := func() {
 		cleanup()
 		frames, cleanup, err = halfblock.OpenVideoStream(ctx, path, displayFPS)
@@ -1320,16 +1016,21 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 		audioPlayer = openAudio(ctx, path)
 	}
 
-	var lastFrame image.Image
+	paused := false
+	videoEnded := false
+	var statusClearAt time.Time
 	var lastRawFrame image.Image
-	switchVideoMode := func(oldRC renderCfg) {
-		if lastRawFrame != nil {
-			preserveZoomForMode(&state, lastRawFrame, termCols, max(1, termRows-2), oldRC, rc)
-			recenterForMode(&state, lastRawFrame, termCols, max(1, termRows-2), oldRC, rc)
+
+	vc.rerender = func() {
+		if lastRawFrame == nil {
+			return
 		}
+		vp := buildViewport(lastRawFrame, &vc.state, vc.termCols, vc.viewRows(), vc.rc)
+		ref := buildRef(lastRawFrame, vc.state, vc.termCols, vc.viewRows(), vc.rc, metrics.GridK, vc.fullComp)
+		vc.curQ = computeQuality(ref, vp, vc.rc)
+		vc.lastVP = vp
 	}
 
-	// setPaused updates the paused flag and suspends/resumes audio accordingly.
 	setPaused := func(p bool) {
 		paused = p
 		if p {
@@ -1339,286 +1040,82 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 		}
 	}
 
-	processToken := func(tok string) (quit bool) {
-		lastKey = inputSpec.EventName(inputSpec.Classify(tok))
-		if m, ok := inputSpec.ParseMouse(tok); ok {
-			if m.Row == termRows-1 {
-				newAction := ""
-				for _, b := range buttons {
-					if m.Col >= b.col && m.Col < b.col+b.width {
-						newAction = b.action
-						break
-					}
-				}
-				activeAction = newAction
-				if m.Release && newAction != "" {
-					switch newAction {
-					case "toggle_play_pause":
-						if videoEnded {
-							restartStream()
-							videoEnded = false
-							setPaused(false)
-						} else {
-							setPaused(!paused)
-						}
-					case "copy_viewport":
-						if lastFrame != nil {
-							if copyErr := copyImageToClipboard(lastFrame); copyErr != nil {
-								status = "⚠ copy failed: " + copyErr.Error()
-							} else {
-								status = "✓ copied to clipboard"
-							}
-							statusClearAt = time.Now().Add(3 * time.Second)
-						}
-					case "show_info":
-						if lastRawFrame != nil {
-							infoVisible = !infoVisible
-							status = ""
-						}
-					case "inc_zoom":
-						if lastSrcW > 0 {
-							steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
-							i := stepIdx(state.zoom, steps)
-							if i > 0 {
-								state.zoom = steps[i-1]
-								rerenderLastFrame()
-							}
-						}
-					case "dec_zoom":
-						if lastSrcW > 0 {
-							steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
-							i := stepIdx(state.zoom, steps)
-							if i < len(steps)-1 {
-								state.zoom = steps[i+1]
-								rerenderLastFrame()
-							}
-						}
-					case "cycle_render":
-						oldRC := rc
-						rc, modeName = cycleRenderCfg(rc)
-						switchVideoMode(oldRC)
-						rerenderLastFrame()
-					case "cycle_render_prev":
-						oldRC := rc
-						rc, modeName = cycleRenderCfgPrev(rc)
-						switchVideoMode(oldRC)
-						rerenderLastFrame()
-					case "toggle_gray":
-						cycleGray(&rc)
-						rerenderLastFrame()
-					case "toggle_halfblock":
-						oldRC := rc
-						graySaved := rc.gray
-						grayColorsSaved := rc.grayColors
-						if rc.mode.useQuad() {
-							lastNonHBID = rc.id
-							if m, n, ok := findRenderModeByID(0); ok {
-								rc, modeName = m, n
-							}
-						} else if lastNonHBID >= 0 {
-							if m, n, ok := findRenderModeByID(lastNonHBID); ok {
-								rc, modeName = m, n
-							}
-						} else {
-							rc, modeName = cycleRenderCfg(rc)
-						}
-						rc.gray = graySaved
-						rc.grayColors = grayColorsSaved
-						switchVideoMode(oldRC)
-						rerenderLastFrame()
-					case "go_back", "quit":
-						return true
-					}
-				}
-			}
-			// Canvas area (not button bar): scroll=zoom, drag=pan.
-			c, r := m.Col-1, m.Row-1
-			geomV := rc.mode.viewSpec()
-			switch {
-			case m.IsScroll() && !m.Release && lastSrcW > 0:
-				steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
-				i := stepIdx(state.zoom, steps)
-				if m.ScrollDir() < 0 && i > 0 {
-					zoomAtCursor(&state, steps[i-1], c, r, rc.mode)
-					rerenderLastFrame()
-				} else if m.ScrollDir() >= 0 && i < len(steps)-1 {
-					zoomAtCursor(&state, steps[i+1], c, r, rc.mode)
-					rerenderLastFrame()
-				}
-			case !m.IsScroll() && !m.IsDrag() && m.Button == 0 && !m.Release:
-				drag = viewgeom.NewPanAnchor(c, r, state.panX, state.panY)
-			case m.IsDrag() && m.Button == 0 && drag.Active:
-				state.panX, state.panY = geomV.PanFromAnchor(drag, c, r)
-				rerenderLastFrame()
-			case !m.IsScroll() && !m.IsDrag() && m.Button == 0 && m.Release:
-				drag.Active = false
-			}
-			return false
+	renderCurrent := func() error {
+		if vc.lastVP == nil {
+			return nil
 		}
-		geom := rc.mode.viewSpec()
-		mz := 1.0
-		if lastSrcW > 0 {
-			mz = maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode)
+		halfblock.CursorHome(os.Stdout)
+		if err := renderValidated(os.Stdout, lastRawFrame, vc.lastVP, vc.state, vc.termCols, vc.viewRows(), vc.rc); err != nil {
+			return err
 		}
-		k := max(1, int(math.Round(mz/state.zoom)))
-		hStep := max(1, min(termCols/8, k))
-		vStep := max(1, min(max(1, termRows-2)/8, k))
-		switch tok {
-		case "\x03": // ctrl-c always quits regardless of spec
+		halfblock.EraseDown(os.Stdout)
+		return nil
+	}
+
+	handleVideoAction := func(action string) bool {
+		switch action {
+		case "toggle_play_pause":
+			if videoEnded {
+				restartStream()
+				videoEnded = false
+				setPaused(false)
+			} else {
+				setPaused(!paused)
+			}
 			return true
-		case "\x1b[A": // ↑ — structural pan
-			geom.PanByCells(&state.panX, &state.panY, 0, -vStep)
-			rerenderLastFrame()
-		case "\x1b[B": // ↓ — structural pan
-			geom.PanByCells(&state.panX, &state.panY, 0, vStep)
-			rerenderLastFrame()
-		case "\x1b[C": // → — structural pan
-			geom.PanByCells(&state.panX, &state.panY, hStep, 0)
-			rerenderLastFrame()
-		case "\x1b[D": // ← — structural pan
-			geom.PanByCells(&state.panX, &state.panY, -hStep, 0)
-			rerenderLastFrame()
-		default:
-			if action, ok := viewKeyMaps["video_player"][tok]; ok {
-				switch action {
-				case "go_back", "quit":
-					return true
-				case "toggle_play_pause":
-					if videoEnded {
-						restartStream()
-						videoEnded = false
-						setPaused(false)
-					} else {
-						setPaused(!paused)
-					}
-				case "copy_viewport":
-					if lastFrame != nil {
-						if copyErr := copyImageToClipboard(lastFrame); copyErr != nil {
-							status = "⚠ copy failed: " + copyErr.Error()
-						} else {
-							status = "✓ copied to clipboard"
-						}
-						statusClearAt = time.Now().Add(3 * time.Second)
-					}
-
-				case "show_info":
-					if lastRawFrame != nil {
-						infoVisible = !infoVisible
-						status = ""
-					}
-
-				case "inc_zoom":
-					if lastSrcW > 0 {
-						steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
-						i := stepIdx(state.zoom, steps)
-						if i > 0 {
-							state.zoom = steps[i-1]
-							rerenderLastFrame()
-						}
-					}
-
-				case "dec_zoom":
-					if lastSrcW > 0 {
-						steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
-						i := stepIdx(state.zoom, steps)
-						if i < len(steps)-1 {
-							state.zoom = steps[i+1]
-							rerenderLastFrame()
-						}
-					}
-
-				case "zoom_k":
-					if lastSrcW > 0 {
-						k := 1.0
-						if len(tok) == 1 && tok[0] >= '0' && tok[0] <= '9' {
-							val := int(tok[0] - '0')
-							if val == 0 {
-								state.zoom = 1.0
-								rerenderLastFrame()
-								break
-							}
-							if val == 1 {
-								k = 1.0
-							} else {
-								k = float64(val)
-							}
-						}
-						k = math.Max(k, 1.0/float64(lastSrcW))
-						k = math.Min(k, float64(lastSrcW))
-						mz := maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode)
-						state.zoom = rc.mode.viewSpec().ZoomRatioForK(mz, k)
-						rerenderLastFrame()
-					}
-
-				case "cycle_render":
-					oldRC := rc
-					rc, modeName = cycleRenderCfg(rc)
-					switchVideoMode(oldRC)
-					rerenderLastFrame()
-
-				case "cycle_render_prev":
-					oldRC := rc
-					rc, modeName = cycleRenderCfgPrev(rc)
-					switchVideoMode(oldRC)
-					rerenderLastFrame()
-
-				case "toggle_gray":
-					cycleGray(&rc)
-					rerenderLastFrame()
-
-				case "toggle_halfblock":
-					oldRC := rc
-					graySaved := rc.gray
-					grayColorsSaved := rc.grayColors
-					if rc.mode.useQuad() {
-						lastNonHBID = rc.id
-						if m, n, ok := findRenderModeByID(0); ok {
-							rc, modeName = m, n
-						}
-					} else if lastNonHBID >= 0 {
-						if m, n, ok := findRenderModeByID(lastNonHBID); ok {
-							rc, modeName = m, n
-						}
-					} else {
-						rc, modeName = cycleRenderCfg(rc)
-					}
-					rc.gray = graySaved
-					rc.grayColors = grayColorsSaved
-					switchVideoMode(oldRC)
-					rerenderLastFrame()
-
-				}
-			}
 		}
 		return false
 	}
-	rerenderLastFrame = func() {
-		if lastRawFrame != nil {
-			lastFrame = buildViewport(lastRawFrame, &state, termCols, max(1, termRows-2), rc)
-			ref := buildRef(lastRawFrame, state, termCols, max(1, termRows-2), rc, metrics.GridK, fullComp)
-			curQ = computeQuality(ref, lastFrame, rc)
+
+	processToken := func(tok string) (quit bool) {
+		if m, ok := inputSpec.ParseMouse(tok); ok {
+			prevStatus := vc.status
+			q, changed, unhandled := vc.handleMouse(m)
+			if q {
+				return true
+			}
+			if unhandled != "" {
+				if handleVideoAction(unhandled) {
+					changed = true
+				}
+			}
+			if vc.status != prevStatus && vc.status != "" {
+				statusClearAt = time.Now().Add(3 * time.Second)
+			}
+			if changed && paused {
+				_ = renderCurrent()
+			}
+			return false
 		}
+		prevStatus := vc.status
+		quit, changed, unhandled := vc.handleKey(tok)
+		if quit {
+			return true
+		}
+		if unhandled != "" {
+			if handleVideoAction(unhandled) {
+				changed = true
+			}
+		}
+		if vc.status != prevStatus && vc.status != "" {
+			statusClearAt = time.Now().Add(3 * time.Second)
+		}
+		if changed && paused {
+			_ = renderCurrent()
+		}
+		return false
 	}
 
-	// Audio: start playback alongside video.
 	audioPlayer = openAudio(ctx, path)
 	defer stopAudio(audioPlayer)
 
 	for {
-		// Drain pending mouse events (drop-on-full already handled at source).
 	drainMouse:
 		for {
 			select {
 			case tok := <-mouseInputs:
 				if processToken(tok) {
 					return nil
-				}
-				if paused && lastFrame != nil {
-					halfblock.CursorHome(os.Stdout)
-					if err := renderValidated(os.Stdout, lastRawFrame, lastFrame, state, termCols, max(1, termRows-2), rc); err != nil {
-						return err
-					}
-					halfblock.EraseDown(os.Stdout)
 				}
 			default:
 				break drainMouse
@@ -1630,22 +1127,11 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			return nil
 
 		case tok := <-keyInputs:
-			// Keys are in the blocking select so they are processed immediately,
-			// not deferred to the next ticker tick.
 			if processToken(tok) {
 				return nil
 			}
-			if paused && lastFrame != nil {
-				halfblock.CursorHome(os.Stdout)
-				if err := renderValidated(os.Stdout, lastRawFrame, lastFrame, state, termCols, max(1, termRows-2), rc); err != nil {
-					return err
-				}
-				halfblock.EraseDown(os.Stdout)
-			}
 
 		case <-ticker.C:
-			// Pull exactly one frame per tick (non-blocking) so playback advances
-			// at displayFPS without fast-forwarding between ticks.
 			if !paused {
 				select {
 				case img, ok := <-frames:
@@ -1657,56 +1143,36 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						audioPlayer = nil
 					} else {
 						lastRawFrame = img
+						vc.src = img
 						b := img.Bounds()
-						lastSrcW, lastSrcH = b.Dx(), b.Dy()
-						lastFrame = buildViewport(img, &state, termCols, max(1, termRows-2), rc)
-						ref := buildRef(img, state, termCols, max(1, termRows-2), rc, metrics.GridK, fullComp)
-						curQ = computeQuality(ref, lastFrame, rc)
+						vc.lastSrcW, vc.lastSrcH = b.Dx(), b.Dy()
+						vc.rerender()
 					}
 				default:
-					// no frame ready — keep showing lastFrame
 				}
 			}
 
-			if lastFrame == nil {
+			if vc.lastVP == nil {
 				continue
 			}
-			halfblock.CursorHome(os.Stdout)
-			if err := renderValidated(os.Stdout, lastRawFrame, lastFrame, state, termCols, max(1, termRows-2), rc); err != nil {
+			if err := renderCurrent(); err != nil {
 				return err
 			}
-			halfblock.EraseDown(os.Stdout)
 			conditions := map[string]bool{"playing": !paused}
-			buttons = drawBottomMenu(os.Stdout, termRows, "video_player", activeAction, style, labels, viewBtnRows, conditions, btnActions, nil)
-			if !infoVisible && status != "" && time.Now().After(statusClearAt) {
-				status = ""
+			vc.drawMenu(os.Stdout, conditions)
+			if !vc.infoVisible && vc.status != "" && time.Now().After(statusClearAt) {
+				vc.status = ""
 			}
-			hint := labels["hint_viewer"]
-			if infoVisible && lastRawFrame != nil {
-				hint = formatZoomInfo(state, lastRawFrame, termCols, max(1, termRows-2), rc)
-			} else if status != "" {
-				hint = status
+			hint := vc.labels["hint_viewer"]
+			if vc.infoVisible && vc.src != nil {
+				hint = formatZoomInfo(vc.state, vc.src, vc.termCols, vc.viewRows(), vc.rc)
+			} else if vc.status != "" {
+				hint = vc.status
 			}
-			fileMeta.DispW = fmt.Sprintf("%d", termCols)
-			fileMeta.DispH = fmt.Sprintf("%d", max(1, termRows-2))
+			fileMeta.DispW = fmt.Sprintf("%d", vc.termCols)
+			fileMeta.DispH = fmt.Sprintf("%d", vc.viewRows())
 			fileMeta.DispMode = "half"
-			graySuffix := ""
-			if rc.gray {
-				graySuffix = fmt.Sprintf(" (gray%d)", grayColorsCount(rc.grayColors))
-			}
-			zoomLabel := rc.mode.viewSpec().ZoomLevel(state.zoom, lastSrcW, lastSrcH, termCols, max(1, termRows-2))
-			if lastRawFrame != nil {
-				zoomLabel = zoomLevel(state, lastRawFrame, termCols, max(1, termRows-2), rc)
-			}
-			hintVars := viewerHintVars(fileMeta, termCols, hint, map[string]string{
-				"last_key":    lastKey,
-				"ssim":        fmt.Sprintf("%.3f", curQ.SSIM),
-				"blockiness":  fmt.Sprintf("%.3f", curQ.Blockiness),
-				"edge_cont":   fmt.Sprintf("%.3f", curQ.EdgeCont),
-				"render_mode": modeName + graySuffix,
-				"zoom_level":  zoomLabel,
-			})
-			drawHintBar(os.Stdout, termRows, hint, hintVars, style)
+			vc.drawHint(os.Stdout, hint, vc.hintVars(fileMeta, hint, nil))
 		}
 	}
 }
