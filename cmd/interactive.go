@@ -1024,6 +1024,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 	var curQ metrics.RenderQuality
 	state := viewState{zoom: 1.0}
 	var lastSrcW, lastSrcH int
+	var drag dragState
 	var rerenderLastFrame func()
 	fileMeta := loadMediaMeta(path, true)
 
@@ -1153,11 +1154,53 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 					}
 				}
 			}
+			// Canvas area (not button bar): scroll=zoom, drag=pan.
+			c, r := m.Col-1, m.Row-1
+			geomV := rc.mode.viewSpec()
+			switch {
+			case m.IsScroll() && !m.Release && lastSrcW > 0:
+				steps := zoomSteps(maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode), lastSrcW)
+				i := stepIdx(state.zoom, steps)
+				if m.ScrollDir() < 0 && i > 0 {
+					zoomAtCursor(&state, steps[i-1], c, r, rc.mode)
+					rerenderLastFrame()
+				} else if m.ScrollDir() >= 0 && i < len(steps)-1 {
+					zoomAtCursor(&state, steps[i+1], c, r, rc.mode)
+					rerenderLastFrame()
+				}
+			case !m.IsScroll() && !m.IsDrag() && m.Button == 0 && !m.Release:
+				drag = viewgeom.NewPanAnchor(c, r, state.panX, state.panY)
+			case m.IsDrag() && m.Button == 0 && drag.Active:
+				state.panX, state.panY = geomV.PanFromAnchor(drag, c, r)
+				rerenderLastFrame()
+			case !m.IsScroll() && !m.IsDrag() && m.Button == 0 && m.Release:
+				drag.Active = false
+			}
 			return false
 		}
+		geom := rc.mode.viewSpec()
+		mz := 1.0
+		if lastSrcW > 0 {
+			mz = maxZoom(lastSrcW, lastSrcH, termCols, max(1, termRows-2), rc.mode)
+		}
+		k := max(1, int(math.Round(mz/state.zoom)))
+		hStep := max(1, min(termCols/8, k))
+		vStep := max(1, min(max(1, termRows-2)/8, k))
 		switch tok {
 		case "\x03": // ctrl-c always quits regardless of spec
 			return true
+		case "\x1b[A": // ↑ — structural pan
+			geom.PanByCells(&state.panX, &state.panY, 0, -vStep)
+			rerenderLastFrame()
+		case "\x1b[B": // ↓ — structural pan
+			geom.PanByCells(&state.panX, &state.panY, 0, vStep)
+			rerenderLastFrame()
+		case "\x1b[C": // → — structural pan
+			geom.PanByCells(&state.panX, &state.panY, hStep, 0)
+			rerenderLastFrame()
+		case "\x1b[D": // ← — structural pan
+			geom.PanByCells(&state.panX, &state.panY, -hStep, 0)
+			rerenderLastFrame()
 		default:
 			if action, ok := viewKeyMaps["video_player"][tok]; ok {
 				switch action {
