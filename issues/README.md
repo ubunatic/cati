@@ -19,6 +19,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [016](016-worker-copy-consolidation.md) | Worker-copy render paths: keep clones for tuning, consolidate later | 🔴 Open |
 | [017](017-gpu-glyph-mapping-spark-mode.md) | GPU assistance for glyph mapping, starting with spark mode | 🔴 Open |
 | [018](018-sparkline-allocation-reduction.md) | Reduce allocation pressure in spark mode | 🔴 Open |
+| [019](019-video-audio-drift-on-long-playback.md) | Video audio drift on longer playback | 🔴 Open |
 
 ## Archived
 
