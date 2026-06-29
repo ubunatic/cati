@@ -43,13 +43,13 @@ demo-widths: ⚙️ build  ## render main demo assets as terminal comparison tab
 	go run scripts/demo_widths.go -bin ./$(BINARY)
 
 demo-darth: ⚙️ build  ## render the Darth Daughter sample at scaled demo widths
-	go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -i darth=assets/samples/sample-003-darth-daughter.jpg
+	@go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -i darth=assets/samples/sample-003-darth-daughter.jpg
 
 demo-solder: ⚙️ build  ## render the soldering practice sample at scaled demo widths
-	go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -i solder=assets/samples/sample-001-soldering-practice-2025.jpg
+	@go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -i solder=assets/samples/sample-001-soldering-practice-2025.jpg
 
 demo-vacation: ⚙️ build  ## render the summer vacation sample at scaled demo widths
-	go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -i vacation=assets/samples/sample-002-summer-vacation.jpg
+	@go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -i vacation=assets/samples/sample-002-summer-vacation.jpg
 
 BABY_VIDEO   ?= assets/baby-360p.mp4
 BABY_AT      ?= 1s

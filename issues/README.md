@@ -15,6 +15,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [009](009-explore-more-sparkline-rendering-modes.md) | Explore more sparkline rendering modes (triangles, curves, fractional shading) | 🔴 Open |
 | [011](011-sparkline-inversion-and-stripe-bugs.md) | Sparkline inversion (upper/right) and stripe/comb line (left/right) bugs | ✅ Closed |
 | [013](013-shared-analysis-grid-for-halfblock-and-quadblock.md) | Shared analysis grid for halfblock/quadblock convergence on small images | 🔴 Open |
+| [015](015-spark-bottom-row-halfcell-fit.md) | Spark/quad garbled bottom row at mid-cell fit heights (half-cell snap) | ✅ Closed |
 
 ## Archived
 

@@ -257,8 +257,9 @@ func goldenLoad(t *testing.T, path string) image.Image {
 // TestGoldenTransparentBound asserts that no golden PNG has more than half a
 // char of transparent BG pixels per column (= 4 golden pixel rows).
 //
-// Why the pipeline guarantees this: fitRenderedImage resizes to rawH (natural)
-// and appends extH = CellH-rem transparent rows, where rem = rawH%CellH ≥ CellH/2.
+// Why the pipeline guarantees this: FitDims snaps the partial last row to the
+// nearest half-cell boundary, so extH is either 0 (full content cell) or exactly
+// CellH/2 (a top half-cell of content plus a transparent bottom half → ▀).
 // Therefore extH ≤ CellH/2 rendered pixels, which upscales to
 // (CellH/2)×(8/CellH) = 4 golden pixel rows — exactly half a char, regardless
 // of algorithm.

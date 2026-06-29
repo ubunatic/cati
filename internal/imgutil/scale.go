@@ -102,11 +102,12 @@ func AppendTransparentRows(img image.Image, addH int) image.Image {
 // cols×rows terminal viewport with the given cell geometry, allowing upscale.
 //
 // Returns:
-//   - targetW, targetH: dimensions to resize to (aligned to cell boundaries)
-//   - extH: transparent rows to append after resize; non-zero only when the
-//     natural height extends into the next cell by at least half a cell — this
-//     keeps the partial char row visible while limiting BG transparency to ≤ CellH/2
-//     pixels per column (half a char).
+//   - targetW, targetH: dimensions to resize to (targetH snapped to a half-cell
+//     boundary so the last char row is always a representable glyph)
+//   - extH: transparent rows to append after resize; either 0 or exactly CellH/2.
+//     It is CellH/2 only when the natural height ends on a top half-cell, so the
+//     partial char renders as a clean upper-half block (▀) with its transparent
+//     bottom half left for the terminal background — never more than half a char.
 //
 // Either cols or rows may be 0 (unconstrained). Both 0 returns source dimensions.
 func FitDims(srcW, srcH, cellW, cellH, aspectX, cols, rows int) (targetW, targetH, extH int) {
@@ -142,18 +143,33 @@ func FitDims(srcW, srcH, cellW, cellH, aspectX, cols, rows int) (targetW, target
 
 	targetW, targetH = AlignCellSize(rawW, rawH, cellW, cellH)
 
-	// Partial extension: when rawH is not aligned to cellH and the remainder
-	// occupies at least half a cell, resize to rawH (keeping the partial row
-	// visible) and append only the remaining transparent pixels.
+	// Half-cell snap: a terminal char is two stacked half-cells (CellH/2 px
+	// each). For the partial last char row to map onto a representable block
+	// glyph, its content must align to a half-cell boundary — otherwise no
+	// glyph can describe a mid-cell remainder (e.g. 6 content + 2 transparent
+	// rows), and the renderer falls back to wrong quadrant/diagonal chars whose
+	// colour bleeds into the transparent area (garbled bottom row).
 	//
-	// The guard rawH >= cellH was intentionally removed: we also extend images
-	// shorter than one cell (rawH < cellH) so that block renderers receive a
-	// complete input block and the half-char invariant (≤ CellH/2 transparent
-	// rows) still holds.
+	// When the natural height ends mid-cell with a remainder of at least half a
+	// cell, snap it to the NEAREST half-cell boundary:
+	//   - closer to one half-cell of content → keep a top half-cell and append
+	//     CellH/2 transparent rows; the char renders as a clean ▀.
+	//   - closer to a full cell → round up to the full cell with no transparent
+	//     padding; the char renders as a full content row.
+	// Either way the half-char transparency invariant (≤ CellH/2 transparent
+	// rows) holds and the last char is always a representable glyph. Remainders
+	// below half a cell are dropped by AlignCellSize above (unchanged).
 	if cellH > 1 {
-		if rem := rawH % cellH; rem > 0 && rem*2 >= cellH {
-			targetH = rawH
-			extH = cellH - rem
+		half := cellH / 2
+		if rem := rawH % cellH; rem >= half {
+			lowH := rawH - rem
+			if rem-half <= cellH-rem { // nearer to lowH+half than to lowH+cellH
+				targetH = lowH + half
+				extH = half
+			} else {
+				targetH = lowH + cellH
+				extH = 0
+			}
 		}
 	}
 

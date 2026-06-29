@@ -79,6 +79,27 @@ source pixel that falls inside a coloured region accumulates
 candidates that extend colour into transparent rows to lose to candidates that
 leave those rows empty, overriding what a pure RGB SSE would prefer.
 
+### Half-cell fit: where the transparent rows come from
+
+A terminal char is two stacked half-cells (`CellH/2` px each). When the
+aspect-preserving scaled height ends mid-cell, `imgutil.FitDims` snaps the
+partial last row to the **nearest half-cell boundary** so it maps onto a
+representable glyph:
+
+- **nearer a top half-cell** → keep `CellH/2` rows of content and append exactly
+  `CellH/2` transparent rows (`extH = CellH/2`). The last char renders as a clean
+  upper-half block `▀` — FG = content colour, BG region fully transparent so no
+  BG sequence is emitted.
+- **nearer a full cell** → round up to a full content cell (`extH = 0`); the last
+  char is an ordinary content row.
+
+Snapping to the *nearest half-cell* (rather than keeping the raw remainder and
+padding `CellH − rem` transparent rows) is essential: a mid-cell remainder such
+as 6 content + 2 transparent rows matches no block glyph, so the selector would
+fall back to quadrant/diagonal chars (`▌ ▚ ▘`) whose colour bleeds into the
+transparent area — a garbled bottom row in `RenderOpts`. The snap guarantees
+`extH ∈ {0, CellH/2}`, upholding the half-char transparency invariant.
+
 ---
 
 ## 3. Pixel Scanning Traversal & Pitfalls
