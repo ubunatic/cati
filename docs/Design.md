@@ -92,7 +92,7 @@ website_url:        # URL opened by the open_website action
 | `queue_size` | `hint_browser` | Pending thumb-load jobs: `↻N` or `""` when idle |
 | `last_key` | all hints | Human-readable name of last input event (`"j"`, `"Up"`, `"Scroll Up"`, …) |
 | `ssim` | `hint_viewer` | SSIM quality score as `"0.823"` |
-| `render_mode` | `hint_viewer` | Current rendering mode name (`"halfblock"`, `"spark/quad"`, `"quad/splithalf"`, …) |
+| `render_mode` | `hint_viewer` | Current rendering mode name (`"halfblock"`, `"spark/quad"`, `"quad/splithalf"`, `"quad/edge-snap"`, …) |
 | `zoom_level` | `hint_viewer` | Nearest ladder source pixels per rendered terminal cell, e.g. `"src px/cell=1.25"`; raw crop ratio is shown by the `Info` action |
 | `meta.name` | browser + viewer | Base filename |
 | `meta.name_short` | `hint_viewer` | Base filename shortened with `...` to fit the hint bar |
@@ -104,7 +104,7 @@ website_url:        # URL opened by the open_website action
 | `meta.src_res` | browser + viewer | `"1920×1080"` or `""` if unknown |
 | `meta.disp_w` | browser + viewer | Display area width in chars |
 | `meta.disp_h` | browser + viewer | Display area height in chars |
-| `meta.disp_mode` | browser + viewer | `"half"` or `"quad"` |
+| `meta.disp_mode` | browser + viewer | `"half"`, `"quad"`, or `"spark"` |
 | `meta.disp_res` | browser + viewer | `"80×24 half"` or `""` |
 | `meta.duration` | browser + viewer | `"1:23"`, `"45s"`, or `""` |
 | `meta.fps` | browser + viewer | Frame rate (`"29.97"`) or `""` |
@@ -232,13 +232,14 @@ row (effHeight-1):  button bar     — drawBottomMenu()
 row (effHeight):    hint bar       — drawHintBar()
 ```
 
-`drawBottomMenu(w, termRows, viewMode, activeAction, style, labels, viewBtnRows, conditions)`:
+`drawBottomMenu(w, termRows, termCols, viewMode, activeAction, style, labels, viewBtnRows, conditions)`:
 - Reads the button row template from `viewBtnRows[viewName]`
 - Resolves `if()` conditionals using the `conditions` map
 - Renders literal content between `{ }` blocks with `ctrlAnsi` styling
 - Returns `[]menuButton` with `{label, action, col, width}` for click detection
+- `termCols` is a fallback column budget used when `writerTermCols(w)` returns 0 (non-tty); production callers pass the live terminal width, test callers pass their test budget (e.g. 80)
 
-`drawHintBar(w, termRow, label, vars, style)`:
+`drawHintBar(w, termRow, termCols, label, vars, style)`:
 - Calls `renderTpl(label, vars, ctrlAnsi)`
 - `vars` provides runtime values like `active_file` and `active_setting`
 

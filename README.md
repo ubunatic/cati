@@ -106,7 +106,7 @@ Support for more formats (GIF, WebP, …) can be added by importing the relevant
 
 ## Roadmap
 
-- [ ] Quad-block mode (`--quad`) for 2× horizontal pixel resolution
+- [ ] Quad-block mode (`--mode=quad`) for 2× horizontal pixel resolution
 - [ ] Kitty graphics protocol (`--kitty`)
 - [ ] Sixel output (`--sixel`)
 - [ ] Per-frame delay from manifest (non-uniform animation)
@@ -117,4 +117,3 @@ Support for more formats (GIF, WebP, …) can be added by importing the relevant
 ## License
 
 AGPL-3.0-or-later
-

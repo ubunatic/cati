@@ -126,7 +126,7 @@ func TestInteractiveGradientHintShowsSourcePixelsPerCell(t *testing.T) {
 	}
 }
 
-func TestInteractiveQZeroStartsHalfblockAndCyclesToQuad(t *testing.T) {
+func TestInteractiveModeHalfStartsHalfblockAndCyclesToQuad(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping PTY integration test in short mode")
 	}
@@ -146,7 +146,7 @@ func TestInteractiveQZeroStartsHalfblockAndCyclesToQuad(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := runCatiPTY(t, bin, []string{"-i", "testdata/gradient_horiz_32x32.png", "-q=0"}, tc.keys)
+			out, err := runCatiPTY(t, bin, []string{"-i", "testdata/gradient_horiz_32x32.png", "--mode=half"}, tc.keys)
 			if err != nil {
 				t.Fatalf("cati exited with error: %v\noutput:\n%s", err, stripANSIForTest(out))
 			}
@@ -154,6 +154,54 @@ func TestInteractiveQZeroStartsHalfblockAndCyclesToQuad(t *testing.T) {
 				t.Fatalf("output missing mode %q\noutput:\n%s", tc.want, stripANSIForTest(out))
 			}
 		})
+	}
+}
+
+func TestInteractiveAndStaticHalfblockRenderMatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping PTY integration test in short mode")
+	}
+	if _, err := os.Stat("assets/samples/sample-003-darth-daughter.jpg"); err != nil {
+		t.Fatalf("test fixture missing: %v", err)
+	}
+
+	bin := buildCatiForTest(t)
+	args := []string{"assets/samples/sample-003-darth-daughter.jpg", "-m=h", "-w", "50"}
+
+	staticCmd := exec.Command(bin, args...)
+	staticCmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	staticOut, err := staticCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("static cati exited with error: %v\noutput:\n%s", err, stripANSIForTest(string(staticOut)))
+	}
+
+	interactiveOut, err := runCatiPTYSize(t, bin, append([]string{"-i"}, args...), "q", 120, 80)
+	if err != nil {
+		t.Fatalf("interactive cati exited with error: %v\noutput:\n%s", err, stripANSIForTest(interactiveOut))
+	}
+
+	gotStatic := normalizedRenderOutputForTest(string(staticOut))
+	gotInteractive := normalizedRenderOutputForTest(firstRenderedFrameForTest(interactiveOut))
+	if gotInteractive != gotStatic {
+		intLines := strings.Split(gotInteractive, "\n")
+		statLines := strings.Split(gotStatic, "\n")
+		max := len(intLines)
+		if len(statLines) > max {
+			max = len(statLines)
+		}
+		for i := 0; i < max; i++ {
+			var in, st string
+			if i < len(intLines) {
+				in = intLines[i]
+			}
+			if i < len(statLines) {
+				st = statLines[i]
+			}
+			if in != st {
+				t.Fatalf("interactive and static render output differ at line %d\ninteractive: %q\nstatic: %q", i+1, in, st)
+			}
+		}
+		t.Fatalf("interactive and static render output differ")
 	}
 }
 
@@ -209,7 +257,7 @@ func TestInteractiveGradientInfoShowsZoomDerivation(t *testing.T) {
 	for _, want := range []string{
 		"info raw=1.23",
 		"ladder=1.25",
-		"trim=1x0",
+		"trim=none",
 		"cells=26x13",
 		"src=32x32",
 	} {
@@ -259,7 +307,7 @@ func TestInteractiveGradientConvergentModesShowPerfectSSIM(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := runCatiPTY(t, bin, []string{"-i", "testdata/gradient_32x32.png", "-z=1"}, tc.keys)
+			out, err := runCatiPTY(t, bin, []string{"-i", "testdata/gradient_32x32.png", "-z=1", "--mode=quad"}, tc.keys)
 			if err != nil {
 				t.Fatalf("cati exited with error: %v\noutput:\n%s", err, stripANSIForTest(out))
 			}
@@ -292,7 +340,7 @@ func TestInteractiveSolidRedAllModesShowPerfectSSIM(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := runCatiPTY(t, bin, []string{"-i", "testdata/solid_red_4x4.png", "-z=1"}, tc.keys)
+			out, err := runCatiPTY(t, bin, []string{"-i", "testdata/solid_red_4x4.png", "-z=1", "--mode=quad"}, tc.keys)
 			if err != nil {
 				t.Fatalf("cati exited with error: %v\noutput:\n%s", err, stripANSIForTest(out))
 			}
@@ -418,6 +466,25 @@ func lastSSIMForModeForTest(out, mode string) string {
 		return ""
 	}
 	return matches[len(matches)-1][1]
+}
+
+func firstRenderedFrameForTest(out string) string {
+	start := strings.Index(out, "\x1b[H")
+	if start < 0 {
+		return out
+	}
+	end := strings.Index(out[start:], "\x1b[J")
+	if end < 0 {
+		return out[start:]
+	}
+	return out[start : start+end]
+}
+
+func normalizedRenderOutputForTest(out string) string {
+	plain := stripANSIForTest(out)
+	plain = strings.ReplaceAll(plain, "\r", "")
+	plain = strings.TrimSuffix(plain, "\n")
+	return plain
 }
 
 type frameBlockSize struct {

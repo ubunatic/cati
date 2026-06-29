@@ -34,3 +34,16 @@ The current behavior is defensible, but it is not always desirable for bench/dem
 ## Notes
 
 Do not treat this as a bug in the quad glyph chooser. The vertical `▌`/`▐` work improved quadblock’s local glyph selection, but it did not address the shared-footprint question between the two renderers.
+
+## Related: Failing Test
+
+`internal/sparkline/testhelper/verify_left_half_test.go` (uncommitted) asserts that
+halfblock and normal quad produce SSE>0 on `testdata/left_red_right_blue_8x8.png`
+(a left-half red, right-half blue 8×8 image), while spark/quad produces SSE=0.
+Currently halfblock and normal quad also give SSE=0, meaning the test assumptions
+about representation limits no longer hold — possibly because the NN downscale
+path maps boundary columns into a single-color cell, making the split invisible.
+This is _not_ a regression: the renderers produce correct output; the test's
+expectation is stale. Fix: either update test expectations or implement the
+shared analysis grid this issue describes, then reintroduce the test with
+correct thresholds.

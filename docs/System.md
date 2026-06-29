@@ -103,8 +103,9 @@ The stable zoom and viewport helpers now live in `internal/viewgeom`. The app la
 halfblock. CLI startup canonicalizes the flag-derived renderer into the active
 cycle entry so display names, geometry, metrics, and `r`/`R` cycling all agree.
 The main app cycle is currently `halfblock → quad/splithalf → quad/edge-snap →
-spark/quad`; `-q=0` starts at halfblock, while the default `--quad` setting
-starts at `quad/splithalf`.
+spark/quad`; `--mode=h` starts at halfblock, `--mode=qs` starts at
+`quad/splithalf`, `--mode=qe` starts at `quad/edge-snap`, and `--mode=sq`
+starts at `spark/quad`.
 
 **Panning invariant.** Pan state is the upper-left origin of the visible viewport in the scaled image. Halfblock, quad, and spark all use the same state and clamp path. Mode-specific code may translate terminal-cell deltas to viewport pixels through `viewSpec()`, but it must not pan a renderer-local output frame independently of the source viewport.
 
@@ -152,6 +153,32 @@ The naive `steps[len-1-i]` reversed-index pattern is wrong — it produces ascen
 **Zoom level display.** The normal hint bar shows the nearest zoom ladder value using `%.3g` format (e.g. `src px/cell=0.75`, `src px/cell=1.25`). It is based on the rendered terminal-cell width, not the physical terminal width: small images can render narrower than the terminal, and a `32×32` image rendered as `32×16` cells reports `src px/cell=1`, not `0.4` in an 80-column terminal. The `Info` action (`i`) reports raw crop ratio, nearest ladder value, crop, aligned view size, trim, rendered cell size, and source size separately.
 
 **Renderer reconstruction for quality metrics.** SSIM, blockiness, and edge continuity compare the ideal source crop against a reconstruction of what the terminal renderer actually emits. Halfblock is represented by the viewport image itself, quad uses `quadblock.RenderToImage`, and spark uses `sparkline.RenderToImage`. The rendered reconstruction is normalized to the common `metrics.GridK × metrics.GridK` per-terminal-cell quality grid: smaller outputs are nearest-neighbour upscaled, while denser outputs are pyramid-downscaled. Never compare spark quality against the raw NN viewport; that scores the sampler, not the glyph renderer.
+
+### Viewer Core Consolidation (June 2026)
+
+`interactiveWithChan` (image viewer) and `interactiveVideo` (video viewer) shared ~80% of their logic as independent duplicates. Every fix — zoom, pan, render-mode switch, `show_info`, `preserveZoomForMode` — had to be applied twice. The solution is `cmd/viewer_core.go`, a thin coordinator struct that both callers delegate to:
+
+*   **`viewerCore` struct** holds all shared mutable state: `rc renderCfg`, `state viewState`, `drag dragState`, `curQ RenderQuality`, `modeName`, `lastNonHBID`, `buttons`, `activeAction`, `status`, `infoVisible`, `lastKey`, `lastVP`, `src image.Image`.
+*   **`rerender func()`** is a callback set by the owning viewer: for images it builds from `orig`, for video it builds from `lastRawFrame`. The callback updates `vc.lastVP` and `vc.curQ` only — it never writes to screen.
+*   **`handleAction(action, tok)`** owns all shared spec actions (`inc_zoom`, `dec_zoom`, `zoom_k`, `cycle_render*`, `toggle_gray`, `toggle_halfblock`, `copy_viewport`, `show_info`, `go_back`, `quit`). Returns `(false, false)` for viewer-specific actions so the caller can handle them.
+*   **`handleKey` / `handleMouse`** return `(quit, changed bool, unhandledAction string)`. An `unhandledAction` is a spec action that the core did not claim — the owning viewer handles it (`toggle_pan` for image viewer, `toggle_play_pause` for video viewer).
+*   **`switchMode(oldRC)`** calls `preserveZoomForMode` + `recenterForMode` in one step; replaces the inline duplicate in the image viewer and the `switchVideoMode` closure in the video viewer.
+
+What stays local to each viewer: `spacePan`/`toggle_pan` (image), `paused`/`videoEnded`/`restartStream`/`setPaused`/`statusClearAt` (video). The ticker loop, frame channel, audio player, and input splitter remain in `interactiveVideo`.
+
+Net result: `interactiveWithChan` 447→95 lines, `interactiveVideo` 553→115 lines, four dead wrapper functions deleted (`viewportDims`, `srcCrop`, `visibleCrop`, `renderView`).
+
+### Line-Width Invariant (June 2026)
+
+Every output path must emit at most `termCols` visible characters per terminal row. A silent overrun wraps to the next row, corrupting the layout without any error.
+
+*   **Button bar** (`drawBottomMenu`): enforced via `fitMenuItems(items, maxCols)`. `maxCols` is `writerTermCols(w)` with `termCols` as fallback for non-tty writers (tests, pipes).
+*   **Hint bar** (`drawHintBar`): enforced via `truncateANSI(text, cols-2)`. Same fallback logic.
+*   **Pixel renders** (`rc.render`): pre-validated by `validateRenderSize` before ANSI emission; actual output width is verified in tests via `lineCapWriter`.
+
+`lineCapWriter` (in `cmd/linecap_test.go`) is an `io.Writer` that decodes ANSI CSI sequences (skipping escape bytes) and counts visible UTF-8 runes per line, recording the maximum column reached. Tests call `lc.AssertFits(t, 80)` for all render modes and UI components.
+
+The `termCols` fallback parameter was added to both `drawBottomMenu` and `drawHintBar` in the same step as the test addition, closing the gap where non-tty enforcement was silently skipped.
 
 ### Phony Sentinels in Makefiles
 To keep targets phony without polluting the `Makefile` with lists of names, a sentinel target `⚙️` is used:

@@ -4,13 +4,11 @@ package cmd
 import (
 	"fmt"
 	"io/fs"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
-	"codeberg.org/ubunatic/cati/internal/quadblock"
 	"github.com/spf13/cobra"
 )
 
@@ -32,7 +30,8 @@ func New() *cobra.Command {
 	var fps int
 	var width int
 	var height int
-	var quadMode string
+	var renderMode string
+	var prescaler string
 	var fullComp bool
 	var initialZoom string
 
@@ -59,6 +58,14 @@ Press Ctrl+C to stop playback.`,
 			if len(args) == 0 {
 				return fmt.Errorf("requires at least 1 arg(s), only received 0")
 			}
+			rc, err := parseRenderMode(renderMode)
+			if err != nil {
+				return err
+			}
+			rc.prescaler, err = parsePrescaleMode(prescaler)
+			if err != nil {
+				return err
+			}
 			return run(opts{
 				ansi:        ansiMode,
 				recursive:   recursive,
@@ -68,10 +75,9 @@ Press Ctrl+C to stop playback.`,
 				fps:         fps,
 				width:       width,
 				height:      height,
-				quadMode:    quadMode,
 				fullComp:    fullComp,
 				initialZoom: initialZoom,
-			}, args)
+			}, rc, args)
 		},
 	}
 
@@ -83,12 +89,11 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().IntVar(&fps, "fps", 0, "frames per second (0 = auto: native fps for video, 15 for images)")
 	root.Flags().IntVarP(&width, "width", "w", 0, "target width in terminal columns (0 = auto)")
 	root.Flags().IntVar(&height, "height", 0, "target height in terminal rows (0 = auto)")
-	root.Flags().StringVarP(&quadMode, "quad", "q", "", "quad-block render mode: default, hb2, splithalf, splithalf-nb, lum-split, edge-snap")
+	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half|halfblock, qs|quad, qe, sq|spark")
+	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
 	root.Flags().BoolVar(&inputTest, "input-test", false, "")
-	// Allow -q without a value (bare -q means "default").
-	root.Flags().Lookup("quad").NoOptDefVal = "default"
 	// Hide the debug flag from help output.
 	_ = root.Flags().MarkHidden("input-test")
 
@@ -106,14 +111,13 @@ type opts struct {
 	fps         int
 	width       int    // terminal columns; 0 = auto
 	height      int    // terminal rows;   0 = auto
-	quadMode    string // "" = splithalf; "default"|"hb2"|"splithalf"|"splithalf-nb"|"lum-split" = quad
 	fullComp    bool   // compare render quality against original source pixels
 	initialZoom string // zoom level: 0 → fit to viewport; 1, 1.0, 100%, 1:1 → pixel-perfect (k=1)
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────
 
-func run(o opts, args []string) error {
+func run(o opts, rc renderCfg, args []string) error {
 	if !o.ansi {
 		return fmt.Errorf("only --ansi mode is supported in this version")
 	}
@@ -124,21 +128,13 @@ func run(o opts, args []string) error {
 		return err
 	}
 
-	quadOpts, useQuad, err := parseQuadMode(o.quadMode)
-	if err != nil {
-		return err
-	}
-	rc := renderCfg{quadOpts: quadOpts}
-	if useQuad {
-		rc.mode = modeQuad
-	}
 	rc = canonicalRenderCfg(rc)
 
 	if o.playMode {
 		if len(paths) == 0 {
 			return fmt.Errorf("no supported images found")
 		}
-		return play(paths, o.fps, o.width, o.height)
+		return play(paths, o.fps, o.width, o.height, rc)
 	}
 
 	if o.interactive {
@@ -169,6 +165,11 @@ func run(o opts, args []string) error {
 	// Determine display dimensions: explicit flags take priority; fall back to
 	// the terminal size when both are zero.
 	multi := len(paths) > 1
+	termCols, termRows := o.width, o.height
+	if termCols == 0 && termRows == 0 {
+		termCols = halfblock.TermWidth()
+		termRows = halfblock.TermHeight()
+	}
 	for _, path := range paths {
 		if multi && !o.noHeader {
 			fmt.Printf("# %s\n", path)
@@ -179,102 +180,41 @@ func run(o opts, args []string) error {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 
-		b := img.Bounds()
-		if o.initialZoom == "w" {
-			var termCols int
-			if o.width > 0 {
-				termCols = o.width
-			} else {
-				termCols = halfblock.TermWidth()
-			}
-			if b.Dx() > 0 && b.Dy() > 0 {
-				if useQuad {
-					targetW := termCols * 2
-					targetH := max(1, b.Dy()*termCols/b.Dx())
-					img = halfblock.ScaleNN(img, targetW, targetH)
-				} else {
-					targetW := termCols
-					targetH := max(1, b.Dy()*targetW/b.Dx())
-					img = halfblock.ScaleNN(img, targetW, targetH)
-				}
-			}
-		} else if o.initialZoom == "h" {
-			var termRows int
-			if o.height > 0 {
-				termRows = o.height
-			} else {
-				termRows = halfblock.TermHeight()
-			}
-			if b.Dx() > 0 && b.Dy() > 0 {
-				if useQuad {
-					targetH := termRows * 2
-					targetW := max(1, (b.Dx()*2)*targetH/b.Dy())
-					img = halfblock.ScaleNN(img, targetW, targetH)
-				} else {
-					targetH := termRows * 2
-					targetW := max(1, b.Dx()*targetH/b.Dy())
-					img = halfblock.ScaleNN(img, targetW, targetH)
-				}
-			}
-		} else {
-			cols, rows := o.width, o.height
-			if o.initialZoom != "" {
-				k := parseZoomK(o.initialZoom)
-				if k > 0 && b.Dx() > 0 {
-					cols = max(1, int(math.Round(float64(b.Dx())/k)))
-					rows = max(1, int(math.Round(float64(b.Dy())/(2*k))))
-				}
-			} else {
-				if cols == 0 && rows == 0 {
-					cols = halfblock.TermWidth()
-				}
-			}
-
-			if useQuad {
-				if cols > 0 || rows > 0 {
-					img = quadblock.ScaleToFit(img, cols, rows)
-				}
-			} else {
-				if cols > 0 || rows > 0 {
-					img = halfblock.ScaleToFit(img, cols, rows)
-				}
-			}
+		img = prepareRenderedImage(img, nil, termCols, termRows, rc, o.initialZoom)
+		if img.Bounds().Dx() <= 0 || img.Bounds().Dy() <= 0 {
+			continue
 		}
-
-		if useQuad {
-			if err := quadblock.RenderOpts(os.Stdout, img, quadOpts); err != nil {
-				return fmt.Errorf("%s: %w", path, err)
-			}
-		} else {
-			if err := halfblock.Render(os.Stdout, img); err != nil {
-				return fmt.Errorf("%s: %w", path, err)
-			}
+		if err := rc.render(os.Stdout, img); err != nil {
+			return fmt.Errorf("%s: %w", path, err)
 		}
 	}
 	return nil
 }
 
-// parseQuadMode converts a --quad flag value into Options and a useQuad bool.
-// Returns an error for unrecognised mode names.
-func parseQuadMode(mode string) (quadblock.Options, bool, error) {
-	switch mode {
-	case "off", "none", "0":
-		return quadblock.Options{}, false, nil
-	case "", "splithalf": // splithalf is current default
-		return quadblock.Options{SplitHalf: true}, true, nil
-	case "default":
-		return quadblock.Options{}, true, nil
-	case "hb2":
-		return quadblock.Options{HalfblockThreshold: 2}, true, nil
-	case "splithalf-nb":
-		return quadblock.Options{SplitHalf: true, SplitHalfNeighbors: true}, true, nil
-	case "lum-split":
-		return quadblock.Options{LumSplit: true}, true, nil
-	case "edge-snap":
-		return quadblock.Options{EdgeSnap: true}, true, nil
+// parseRenderMode converts a --mode flag value into a canonical renderCfg.
+// The empty value defaults to halfblock.
+func parseRenderMode(mode string) (renderCfg, error) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "h", "half", "halfblock":
+		return findRenderModeByName("halfblock")
+	case "qs", "quad", "quad/splithalf", "splithalf":
+		return findRenderModeByName("quad/splithalf")
+	case "qe", "quad/edge-snap", "edge-snap":
+		return findRenderModeByName("quad/edge-snap")
+	case "sq", "spark", "spark/quad":
+		return findRenderModeByName("spark/quad")
 	default:
-		return quadblock.Options{}, false, fmt.Errorf("unknown --quad mode %q; valid: default, hb2, splithalf, splithalf-nb, lum-split, edge-snap", mode)
+		return renderCfg{}, fmt.Errorf("unknown --mode %q; valid: h, qs, qe, sq", mode)
 	}
+}
+
+func findRenderModeByName(name string) (renderCfg, error) {
+	for _, m := range renderModes {
+		if m.name == name {
+			return m.cfg, nil
+		}
+	}
+	return renderCfg{}, fmt.Errorf("unknown render mode %q", name)
 }
 
 // ── directory expansion ───────────────────────────────────────────────────────

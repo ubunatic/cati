@@ -2,7 +2,7 @@
 
 Welcome to the Cati developer documentation. The following resources cover our project guides, code rules, and architecture:
 
-*   [System Documentation](System.md) — Rendering pipeline, design decisions, offline website asset generation, and licensing.
+*   [System Documentation](System.md) — Rendering pipeline, design decisions, viewer core consolidation, line-width invariant, offline website asset generation, and licensing.
     *   [Video & Audio Pipeline](Video.md) — FPS/dimension probing, rawvideo pipe, one-frame-per-tick loop, play-once vs loop, input resilience, audio via ffplay.
     *   [Interactive Grid Browser](Browser.md) — Page layouts, composite thumbnail grids, mouse tracking, async thumb loading, space-pan, raw terminal swaps.
 *   [Terminal Input System](Input.md) — `spec/input.yaml` decision tree, `internal/input` package, SGR 1006 mouse protocol, UTF-8 tokenization, move vs drag, `--input-test` TUI. **Read before touching input handling or `spec/input.yaml`.**

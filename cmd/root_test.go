@@ -1,10 +1,14 @@
 package cmd
 
 import (
+	"image"
+	"image/color"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
 )
 
@@ -155,37 +159,275 @@ func TestZoomFlagShorthand(t *testing.T) {
 	}
 }
 
-func TestParseQuadMode(t *testing.T) {
+func TestParseRenderMode(t *testing.T) {
 	tests := []struct {
-		name    string
-		mode    string
-		useQuad bool
-		check   func(t *testing.T, opts quadblock.Options)
+		name  string
+		mode  string
+		want  string
+		check func(t *testing.T, opts quadblock.Options)
 	}{
-		{"off zero", "0", false, nil},
-		{"default empty is splithalf", "", true, func(t *testing.T, opts quadblock.Options) {
+		{"default empty is halfblock", "", "halfblock", nil},
+		{"halfblock short", "h", "halfblock", nil},
+		{"halfblock alias", "half", "halfblock", nil},
+		{"quad split-half", "qs", "quad/splithalf", func(t *testing.T, opts quadblock.Options) {
 			if !opts.SplitHalf {
-				t.Fatal("empty quad mode should enable SplitHalf")
+				t.Fatal("qs mode should enable SplitHalf")
 			}
 		}},
-		{"edge snap", "edge-snap", true, func(t *testing.T, opts quadblock.Options) {
+		{"quad alias", "quad", "quad/splithalf", func(t *testing.T, opts quadblock.Options) {
+			if !opts.SplitHalf {
+				t.Fatal("quad alias should enable SplitHalf")
+			}
+		}},
+		{"quad edge snap", "qe", "quad/edge-snap", func(t *testing.T, opts quadblock.Options) {
 			if !opts.EdgeSnap {
-				t.Fatal("edge-snap mode should enable EdgeSnap")
+				t.Fatal("qe mode should enable EdgeSnap")
+			}
+		}},
+		{"spark quad", "sq", "spark/quad", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("sq mode should not set quad options, got %#v", opts)
+			}
+		}},
+		{"spark alias", "spark", "spark/quad", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("spark alias should not set quad options, got %#v", opts)
 			}
 		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			opts, useQuad, err := parseQuadMode(tc.mode)
+			rc, err := parseRenderMode(tc.mode)
 			if err != nil {
-				t.Fatalf("parseQuadMode(%q): %v", tc.mode, err)
+				t.Fatalf("parseRenderMode(%q): %v", tc.mode, err)
 			}
-			if useQuad != tc.useQuad {
-				t.Fatalf("useQuad = %v, want %v", useQuad, tc.useQuad)
+			if got := rcModeName(rc); got != tc.want {
+				t.Fatalf("rcModeName(parseRenderMode(%q)) = %q, want %q", tc.mode, got, tc.want)
 			}
 			if tc.check != nil {
-				tc.check(t, opts)
+				tc.check(t, rc.quadOpts)
 			}
 		})
 	}
+}
+
+func TestModeFlagShorthand(t *testing.T) {
+	cmd := New()
+	if err := cmd.ParseFlags([]string{"-m", "qe"}); err != nil {
+		t.Fatalf("failed to parse -m: %v", err)
+	}
+	got, err := cmd.Flags().GetString("mode")
+	if err != nil {
+		t.Fatalf("failed to get mode flag: %v", err)
+	}
+	if got != "qe" {
+		t.Fatalf("expected mode flag to be 'qe', got %q", got)
+	}
+
+	cmd = New()
+	if err := cmd.ParseFlags([]string{"--mode", "spark"}); err != nil {
+		t.Fatalf("failed to parse --mode: %v", err)
+	}
+	got, err = cmd.Flags().GetString("mode")
+	if err != nil {
+		t.Fatalf("failed to get mode flag: %v", err)
+	}
+	if got != "spark" {
+		t.Fatalf("expected mode flag to be 'spark', got %q", got)
+	}
+
+	cmd = New()
+	if err := cmd.ParseFlags([]string{"-S", "pyramid"}); err != nil {
+		t.Fatalf("failed to parse -S: %v", err)
+	}
+	got, err = cmd.Flags().GetString("prescaler")
+	if err != nil {
+		t.Fatalf("failed to get prescaler flag: %v", err)
+	}
+	if got != "pyramid" {
+		t.Fatalf("expected prescaler flag to be 'pyramid', got %q", got)
+	}
+}
+
+func TestParsePrescaleMode(t *testing.T) {
+	tests := []struct {
+		name string
+		mode string
+		want prescaleMode
+	}{
+		{"default", "", prescaleNearestNeighbor},
+		{"nn", "nn", prescaleNearestNeighbor},
+		{"nearest", "nearest-neighbor", prescaleNearestNeighbor},
+		{"pyramid", "pyramid", prescalePyramid},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parsePrescaleMode(tc.mode)
+			if err != nil {
+				t.Fatalf("parsePrescaleMode(%q): %v", tc.mode, err)
+			}
+			if got != tc.want {
+				t.Fatalf("parsePrescaleMode(%q) = %v, want %v", tc.mode, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAlignScaledSize(t *testing.T) {
+	tests := []struct {
+		name  string
+		rc    renderCfg
+		w     int
+		h     int
+		wantW int
+		wantH int
+	}{
+		{"halfblock keeps width, trims height", renderCfg{}, 11, 13, 11, 12},
+		{"quad trims both axes", renderCfg{mode: modeQuad}, 11, 13, 10, 12},
+		{"spark trims to cell quantum", renderCfg{mode: modeSpark}, 11, 13, 8, 8},
+		{"small quad image stays visible", renderCfg{mode: modeQuad}, 1, 1, 1, 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := tc.rc.mode.viewSpec()
+			gotW, gotH := imgutil.AlignCellSize(tc.w, tc.h, spec.CellW, spec.CellH)
+			if gotW != tc.wantW || gotH != tc.wantH {
+				t.Fatalf("AlignCellSize(%d,%d,cw=%d,ch=%d) = %dx%d, want %dx%d", tc.w, tc.h, spec.CellW, spec.CellH, gotW, gotH, tc.wantW, tc.wantH)
+			}
+		})
+	}
+}
+
+func TestResizeRenderedImageDownscaleNNCentered(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 4, 1))
+	cols := []color.RGBA{
+		{R: 10, A: 255},
+		{R: 20, A: 255},
+		{R: 30, A: 255},
+		{R: 40, A: 255},
+	}
+	for x, c := range cols {
+		src.SetRGBA(x, 0, c)
+	}
+
+	got := resizeRenderedImage(src, 2, 1, renderCfg{})
+	if got.Bounds().Dx() != 2 || got.Bounds().Dy() != 1 {
+		t.Fatalf("resizeRenderedImage size = %dx%d, want 2x1", got.Bounds().Dx(), got.Bounds().Dy())
+	}
+
+	left := got.At(0, 0).(color.RGBA)
+	right := got.At(1, 0).(color.RGBA)
+	if left != cols[0] {
+		t.Fatalf("left pixel = %#v, want %#v", left, cols[0])
+	}
+	if right != cols[2] {
+		t.Fatalf("right pixel = %#v, want %#v", right, cols[2])
+	}
+}
+
+func TestResizeRenderedImagePyramid(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 4, 1))
+	cols := []color.RGBA{
+		{R: 10, A: 255},
+		{R: 20, A: 255},
+		{R: 30, A: 255},
+		{R: 40, A: 255},
+	}
+	for x, c := range cols {
+		src.SetRGBA(x, 0, c)
+	}
+
+	got := resizeRenderedImage(src, 2, 1, renderCfg{prescaler: prescalePyramid})
+	if got.Bounds().Dx() != 2 || got.Bounds().Dy() != 1 {
+		t.Fatalf("resizeRenderedImage size = %dx%d, want 2x1", got.Bounds().Dx(), got.Bounds().Dy())
+	}
+
+	left := got.At(0, 0).(color.RGBA)
+	right := got.At(1, 0).(color.RGBA)
+	if left == cols[0] && right == cols[2] {
+		t.Fatalf("pyramid mode should not behave like centered NN")
+	}
+}
+
+func TestSampleDarthDaughterNoDuplicateRenderedPixelRows(t *testing.T) {
+	src, err := halfblock.LoadImage("assets/samples/sample-003-darth-daughter.jpg")
+	if err != nil {
+		t.Fatalf("load sample: %v", err)
+	}
+
+	modes := []string{"h", "qs", "qe", "sq"}
+	widths := []int{20, 30, 40, 50}
+	for _, mode := range modes {
+		rc, err := parseRenderMode(mode)
+		if err != nil {
+			t.Fatalf("parseRenderMode(%q): %v", mode, err)
+		}
+		for _, width := range widths {
+			t.Run(mode+"-w"+itoa(width), func(t *testing.T) {
+				vp := staticViewportForTest(src, width, rc)
+				if vp.Bounds().Dx() <= 0 || vp.Bounds().Dy() <= 0 {
+					t.Fatalf("empty viewport for mode=%s width=%d", mode, width)
+				}
+				rendered := rowDuplicateSignalImageForTest(vp, rc)
+				if row := firstDuplicatePixelRow(rendered); row >= 0 {
+					vb := vp.Bounds()
+					rb := rendered.Bounds()
+					vpDup := row+1 < vb.Dy() && equalPixelRows(vp, vb.Min.Y+row, vb.Min.Y+row+1)
+					t.Fatalf("mode=%s width=%d duplicated rendered pixel rows %d and %d viewport=%dx%d rendered=%dx%d viewport-dup=%v",
+						mode, width, row, row+1, vb.Dx(), vb.Dy(), rb.Dx(), rb.Dy(), vpDup)
+				}
+			})
+		}
+	}
+}
+
+func staticViewportForTest(src image.Image, width int, rc renderCfg) image.Image {
+	return prepareRenderedImage(src, nil, width, 0, rc, "")
+}
+
+func rowDuplicateSignalImageForTest(vp image.Image, rc renderCfg) image.Image {
+	switch {
+	case rc.mode.useQuad():
+		return quadblock.RenderToImage(vp, rc.quadOpts)
+	case rc.mode.useSpark():
+		return vp
+	default:
+		return halfblock.RenderToImage(vp)
+	}
+}
+
+func firstDuplicatePixelRow(img image.Image) int {
+	b := img.Bounds()
+	for y := b.Min.Y; y+1 < b.Max.Y; y++ {
+		if equalPixelRows(img, y, y+1) {
+			return y - b.Min.Y
+		}
+	}
+	return -1
+}
+
+func equalPixelRows(img image.Image, y0, y1 int) bool {
+	bounds := img.Bounds()
+	for x := bounds.Min.X; x < bounds.Max.X; x++ {
+		r0, g0, b0, a0 := img.At(x, y0).RGBA()
+		r1, g1, b1, a1 := img.At(x, y1).RGBA()
+		if r0 != r1 || g0 != g1 || b0 != b1 || a0 != a1 {
+			return false
+		}
+	}
+	return true
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(buf[i:])
 }

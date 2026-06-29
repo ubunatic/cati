@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bytes"
 	"image"
 	"image/color"
 	"io"
+	"strings"
 	"testing"
 	"unicode/utf8"
 
@@ -78,6 +80,43 @@ func testLabelsForLinecap() map[string]string {
 		labels[k] = v
 	}
 	return labels
+}
+
+func TestHintBarAndBottomBarUseStyleNotHardcodedReverseVideo(t *testing.T) {
+	style := testStyleForLinecap()
+	labels := testLabelsForLinecap()
+	hint := labels["hint_viewer"]
+	vars := map[string]string{
+		"meta.name":       "test.png",
+		"meta.name_short": "test.png",
+		"meta.ext":        "png",
+		"meta.src_res":    "1920×1080",
+		"meta.disp_res":   "80×22",
+		"render_mode":     "halfblock",
+		"zoom_level":      "src px/cell=1",
+		"ssim":            "0.950",
+		"blockiness":      "0.010",
+		"edge_cont":       "0.800",
+		"last_key":        "r",
+	}
+
+	// hint bar
+	var hintBuf bytes.Buffer
+	drawHintBar(&hintBuf, 24, 80, hint, vars, style)
+	if out := hintBuf.String(); strings.Contains(out, "\x1b[7m") {
+		t.Error("hint bar output contains hardcoded reverse-video escape \\x1b[7m; use style.yaml control_bar colors instead")
+	}
+
+	// button bar for all views
+	rows := loadViewButtonRows()
+	btnActions := loadButtonActions()
+	for _, view := range []string{"image_viewer", "video_player", "browser", "settings", "about"} {
+		var btnBuf bytes.Buffer
+		drawBottomMenu(&btnBuf, 24, 80, view, "", style, labels, rows, nil, btnActions, nil)
+		if out := btnBuf.String(); strings.Contains(out, "\x1b[7m") {
+			t.Errorf("button bar for view %q contains hardcoded reverse-video escape \\x1b[7m; use style.yaml colors instead", view)
+		}
+	}
 }
 
 func TestLineWidthHintBar80(t *testing.T) {

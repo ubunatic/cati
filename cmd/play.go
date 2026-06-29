@@ -17,17 +17,17 @@ import (
 // It dispatches to playImages (pre-load loop) or playVideos (streaming)
 // depending on whether any path is a video file.
 // width and height are in terminal characters (0 = auto-detect from terminal).
-func play(paths []string, fps, width, height int) error {
+func play(paths []string, fps, width, height int, rc renderCfg) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("no images to play")
 	}
 
 	for _, p := range paths {
 		if halfblock.IsVideo(p) {
-			return playVideos(paths, fps, width, height)
+			return playVideos(paths, fps, width, height, rc)
 		}
 	}
-	return playImages(paths, fps, width, height)
+	return playImages(paths, fps, width, height, rc)
 }
 
 // ── shared terminal setup ─────────────────────────────────────────────────────
@@ -73,14 +73,14 @@ func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}) {
 // ── image sequence mode ───────────────────────────────────────────────────────
 
 // playImages pre-loads all frames and loops them at fps.
-func playImages(paths []string, fps, width, height int) error {
+func playImages(paths []string, fps, width, height int, rc renderCfg) error {
 	if fps <= 0 {
 		fps = 15
 	}
 
 	cols, rows := width, height
 	if cols == 0 && rows == 0 {
-		cols = halfblock.TermWidth()
+		cols, rows = halfblock.TermWidth(), halfblock.TermHeight()
 	}
 
 	// Pre-load & scale all frames.
@@ -90,9 +90,7 @@ func playImages(paths []string, fps, width, height int) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
-		if cols > 0 || rows > 0 {
-			img = halfblock.ScaleToFit(img, cols, rows)
-		}
+		img = prepareRenderedImage(img, nil, cols, rows, rc, "")
 		frames = append(frames, img)
 	}
 
@@ -117,7 +115,7 @@ func playImages(paths []string, fps, width, height int) error {
 			return nil
 		case <-ticker.C:
 			halfblock.CursorHome(os.Stdout)
-			if err := halfblock.Render(os.Stdout, frames[i]); err != nil {
+			if err := rc.render(os.Stdout, frames[i]); err != nil {
 				return err
 			}
 			halfblock.EraseDown(os.Stdout)
@@ -130,7 +128,7 @@ func playImages(paths []string, fps, width, height int) error {
 
 // playVideos streams one or more video files sequentially, playing each once.
 // All paths must be video files.
-func playVideos(paths []string, fps, width, height int) error {
+func playVideos(paths []string, fps, width, height int, rc renderCfg) error {
 	// Validate: all paths must be video files.
 	for _, p := range paths {
 		if !halfblock.IsVideo(p) {
@@ -224,9 +222,7 @@ func playVideos(paths []string, fps, width, height int) error {
 					continue
 				}
 				currentVideoHadFrames = true
-				if cols > 0 || rows > 0 {
-					img = halfblock.ScaleToFit(img, cols, rows)
-				}
+				img = prepareRenderedImage(img, nil, cols, rows, rc, "")
 				lastFrame = img
 			default:
 				// No frame ready — keep showing the current frame.
@@ -236,7 +232,7 @@ func playVideos(paths []string, fps, width, height int) error {
 				continue
 			}
 			halfblock.CursorHome(os.Stdout)
-			if err := halfblock.Render(os.Stdout, lastFrame); err != nil {
+			if err := rc.render(os.Stdout, lastFrame); err != nil {
 				return err
 			}
 			halfblock.EraseDown(os.Stdout)

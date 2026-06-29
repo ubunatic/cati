@@ -53,3 +53,4 @@ Rules:
 - Run `go vet ./... && make install` when a feature is ready — this is the authority on build correctness.
 - LSP diagnostics are hints only; `go build` / `make` output is authoritative. Do not fix or report errors that `go build` does not reproduce.
 - Issues found during work go in `issues/` immediately — don't save them for the end.
+- After implementing a plan, run `/evergreen` to update docs and close issues in the same commit.

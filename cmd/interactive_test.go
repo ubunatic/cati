@@ -9,7 +9,6 @@ import (
 	"math"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/input"
 	"codeberg.org/ubunatic/cati/internal/metrics"
@@ -765,7 +764,7 @@ func TestZoomLevelPixels(t *testing.T) {
 
 		expectState := viewState{zoom: zoom, panX: 0, panY: 0}
 		dims := rc.mode.viewSpec().Dims(20, 10, termCols, termRows, expectState.zoom)
-		scaled := halfblock.ScaleNN(src, dims.ScaledW, dims.ScaledH)
+		scaled := resizeRenderedImage(src, dims.ScaledW, dims.ScaledH, rc)
 		dims.ClampPan(&expectState.panX, &expectState.panY)
 		viewW, viewH := alignViewportSize(dims.ViewW, dims.ViewH, rc)
 		wantVP := imgutil.CropImage(scaled, expectState.panX, expectState.panY, viewW, viewH)
@@ -774,7 +773,7 @@ func TestZoomLevelPixels(t *testing.T) {
 		if targetW > 0 && targetH > 0 {
 			wb := wantVP.Bounds()
 			if wb.Dx() != targetW || wb.Dy() != targetH {
-				wantVP = halfblock.ScaleNN(wantVP, targetW, targetH)
+				wantVP = resizeRenderedImage(wantVP, targetW, targetH, rc)
 			}
 		}
 

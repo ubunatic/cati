@@ -3,7 +3,6 @@ package cmd
 import (
 	"image"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
@@ -72,11 +71,7 @@ func renderSSIM(ref, vp image.Image, rc renderCfg) float64 {
 		rb := ref.Bounds()
 		vb := rendered.Bounds()
 		if rb.Dx() != vb.Dx() || rb.Dy() != vb.Dy() {
-			if vb.Dx() > rb.Dx() || vb.Dy() > rb.Dy() {
-				rendered = metrics.PyramidDownscale(rendered, rb.Dx(), rb.Dy())
-			} else {
-				rendered = halfblock.ScaleNN(rendered, rb.Dx(), rb.Dy())
-			}
+			rendered = resizeRenderedImage(rendered, rb.Dx(), rb.Dy(), rc)
 		}
 		return metrics.SSIMLuminance(ref, rendered)
 	}
@@ -92,4 +87,16 @@ func rcModeName(rc renderCfg) string {
 		}
 	}
 	return "?"
+}
+
+// rcDispMode returns the coarse display-geometry label used in metadata.
+func rcDispMode(rc renderCfg) string {
+	switch {
+	case rc.mode.useQuad():
+		return "quad"
+	case rc.mode.useSpark():
+		return "spark"
+	default:
+		return "half"
+	}
 }

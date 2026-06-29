@@ -1,6 +1,6 @@
 # 008 — Spaghetti Code & Viewport Geometry Refactoring Plan
 
-**Status:** 🔴 Open  
+**Status:** 🔄 In Progress  
 **Refs:** AGENTS.md (Spec System rules), [Design.md](../docs/Design.md), [010](010-unified-zoom-geometry-and-ladder.md), [012](012-viewport-geometry-mode-switch-regression.md)
 
 ---
@@ -11,12 +11,28 @@ Static analysis of the 24 non-test Go source files (8,423 lines total) reveals s
 
 ## Progress Update
 
-The refactor has already started to chip away at the analysis above:
-
+### Round 1 (earlier June 2026)
 - `spec/load.go` now centralizes typed YAML loaders for `style`, `labels`, `buttons`, `views`, `config`, `controls`, `about`, and `zoom_levels`
 - `cmd/browser.go` no longer line-parses `views.yaml`, `about.yaml`, `config.yaml`, `controls.yaml`, or `zoom_levels.yaml`
 - the browser now consumes `loadViewButtonRows()` and `loadViewKeyRows()` as thin adapters over `spec.LoadViews()`
 - the remaining manual spec parsing is now much smaller and mostly concentrated in `internal/input/input.go`
+
+### Round 2 (June 2026) — viewerCore consolidation
+- **B2 resolved**: `interactiveWithChan` and `interactiveVideo` no longer duplicate terminal boilerplate independently; shared setup (raw mode, signal handling, mouse, cursor) is done once and state lives in `viewerCore`
+- **B3 resolved**: duplicate action handlers (toggle_play_pause, copy_viewport, cycle_render*, go_back/quit) collapsed into a single `viewerCore.handleAction()` method
+- **G2 resolved**: `viewerCore.switchMode(oldRC)` calls `preserveZoomForMode` + `recenterForMode` atomically; no longer implemented as two separate inline blocks or a duplicated closure (`switchVideoMode` removed)
+- **F3 resolved**: 10-parameter function signatures for both viewer functions remain but the body delegates to `viewerCore`; the state bag pattern replaces the long parameter chain internally
+- **C2/C3 resolved**: `interactiveWithChan` 447→95 lines, `interactiveVideo` 553→115 lines; four dead wrapper functions deleted (`viewportDims`, `srcCrop`, `visibleCrop`, `renderView`)
+- **Line-width invariant added**: `drawBottomMenu`/`drawHintBar` now accept `termCols int` fallback; `lineCapWriter` test helper + 4 width tests verify all render modes and UI components at 80 columns
+
+### What remains open
+- **A** (12 YAML parsers): `internal/input/input.go:parse()` and several parsers in `browser.go` are still manual
+- **B1** (ANSI helpers duplicated between halfblock/quadblock): still unextracted
+- **B4–B7** (image blitting, thumbnail list, ffprobe, compileCell): still duplicated
+- **C1** (`browser()` god function, ~1,200 lines): untouched
+- **E2–E4** (hardcoded Go fallback labels/controls/config): still present
+- **F1** (`cmd/` god package): still one flat package
+- **F4** (`renderCfg` semantic overlaps): still present
 
 ---
 

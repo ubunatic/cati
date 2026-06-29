@@ -3,7 +3,6 @@ package cmd
 import (
 	"image"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
 	"codeberg.org/ubunatic/cati/internal/sparkline"
@@ -12,7 +11,7 @@ import (
 // computeQuality returns all perceptual quality metrics for a rendered frame.
 //
 //   - ref  — pyramid-downscale reference (at viewport or quality-grid resolution)
-//   - vp   — NN-scaled viewport from rc.scaleToFit()
+//   - vp   — NN-scaled viewport from the shared render pipeline
 //   - rc   — active render configuration
 //
 // The rendered terminal reconstruction is normalized to ref dimensions before
@@ -36,11 +35,7 @@ func computeQuality(ref, vp image.Image, rc renderCfg) metrics.RenderQuality {
 	vb := rendered.Bounds()
 
 	if rb.Dx() != vb.Dx() || rb.Dy() != vb.Dy() {
-		if vb.Dx() > rb.Dx() || vb.Dy() > rb.Dy() {
-			rendered = metrics.PyramidDownscale(rendered, rb.Dx(), rb.Dy())
-		} else {
-			rendered = halfblock.ScaleNN(rendered, rb.Dx(), rb.Dy())
-		}
+		rendered = resizeRenderedImage(rendered, rb.Dx(), rb.Dy(), rc)
 	}
 
 	refLuma := metrics.LumaGrid(ref)

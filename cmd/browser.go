@@ -360,6 +360,9 @@ func styleItemAnsi(style *StyleConfig) string {
 	return styleFG(style.GridItemFg, "") + styleBG(style.GridItemBg, "")
 }
 
+// loadStyle loads colors/structure from spec/style.yaml.
+// FIXME(#004-item-C): spec.LoadTheme() tokens exist but are never applied.
+// spec/buttons.yaml's style: fields (danger, primary, etc.) are ignored.
 func loadStyle() *StyleConfig {
 	cfg := &StyleConfig{
 		AppBorderStyle:     "box",
@@ -1477,7 +1480,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 				}
 				currentMeta.DispW = fmt.Sprintf("%d", cellW)
 				currentMeta.DispH = fmt.Sprintf("%d", cellH-1)
-				currentMeta.DispMode = "half"
+				currentMeta.DispMode = rcDispMode(rc)
 			}
 		}
 		if n := tq.Len(); n > 0 {

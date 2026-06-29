@@ -32,7 +32,7 @@ type MediaMeta struct {
 	// Display context — caller sets these from the current layout
 	DispW    string // terminal chars wide
 	DispH    string // terminal chars tall
-	DispMode string // "half" or "quad"
+	DispMode string // "half", "quad", or "spark"
 
 	// Video/audio
 	Duration  string // "1:23:45", "1:23", or "45s"
