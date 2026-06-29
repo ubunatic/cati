@@ -37,6 +37,9 @@ reuse: ⚙️  ## verify license compliance linting
 	reuse lint
 
 
+demo-widths: ⚙️ install  ## render main demo assets at widths 1..6, printed as a table
+	go run scripts/demo_widths.go
+
 generate: ⚙️  ## generate static assets/code (e.g., inlined docs/index.html pixel colors)
 	go run scripts/generate_pixels.go
 

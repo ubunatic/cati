@@ -16,7 +16,6 @@ import (
 
 	"codeberg.org/ubunatic/cati/internal/audio"
 	"codeberg.org/ubunatic/cati/internal/halfblock"
-	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/input"
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
@@ -77,8 +76,9 @@ type renderCfg struct {
 	sparkMode  sparkline.Mode
 	quadOpts   quadblock.Options
 	preScale   func(image.Image) image.Image // optional pre-scaler applied before ScaleToFit
-	gray       bool                          // when true, convert image to grayscale before rendering
-	grayColors quadblock.ColorReduction      // active grayscale palette level (ColorGray4/8/64/256)
+	prescaler  prescaleMode
+	gray       bool                     // when true, convert image to grayscale before rendering
+	grayColors quadblock.ColorReduction // active grayscale palette level (ColorGray4/8/64/256)
 }
 
 // grayLevels is the cycle order for the G key: off → 256 → 64 → 8 → 4 → off.
@@ -130,17 +130,7 @@ func grayColorsCount(cr quadblock.ColorReduction) int {
 }
 
 func (rc renderCfg) scaleToFit(img image.Image, cols, rows int) image.Image {
-	if rc.preScale != nil {
-		img = rc.preScale(img)
-	}
-	switch rc.mode {
-	case modeSpark:
-		return sparkline.ScaleToFit(img, rc.mode.pixCols(cols), rc.mode.pixRows(rows))
-	case modeQuad:
-		return quadblock.ScaleToFit(img, cols, rows)
-	default:
-		return halfblock.ScaleToFit(img, cols, rows)
-	}
+	return fitRenderedImage(img, cols, rows, rc)
 }
 
 // preScaleName returns a short suffix for the pre-scaler name, or "".
@@ -334,6 +324,7 @@ func canonicalRenderCfg(rc renderCfg) renderCfg {
 	for _, m := range renderModes {
 		if sameRenderMode(rc, m.cfg) {
 			canon := m.cfg
+			canon.prescaler = rc.prescaler
 			canon.gray = rc.gray
 			canon.grayColors = rc.grayColors
 			return canon
@@ -358,12 +349,14 @@ func cycleRenderCfg(rc renderCfg) (renderCfg, string) {
 	for i, m := range renderModes {
 		if m.cfg.id == rc.id {
 			next := renderModes[(i+1)%len(renderModes)]
+			next.cfg.prescaler = rc.prescaler
 			next.cfg.gray = rc.gray
 			next.cfg.grayColors = rc.grayColors
 			return next.cfg, next.name
 		}
 	}
 	next := renderModes[0]
+	next.cfg.prescaler = rc.prescaler
 	next.cfg.gray = rc.gray
 	next.cfg.grayColors = rc.grayColors
 	return next.cfg, next.name
@@ -376,12 +369,14 @@ func cycleRenderCfgPrev(rc renderCfg) (renderCfg, string) {
 	for i, m := range renderModes {
 		if m.cfg.id == rc.id {
 			prev := renderModes[(i+n-1)%n]
+			prev.cfg.prescaler = rc.prescaler
 			prev.cfg.gray = rc.gray
 			prev.cfg.grayColors = rc.grayColors
 			return prev.cfg, prev.name
 		}
 	}
 	prev := renderModes[n-1]
+	prev.cfg.prescaler = rc.prescaler
 	prev.cfg.gray = rc.gray
 	prev.cfg.grayColors = rc.grayColors
 	return prev.cfg, prev.name
@@ -649,8 +644,22 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	b := orig.Bounds()
 	vc.lastSrcW, vc.lastSrcH = b.Dx(), b.Dy()
 	vc.src = orig
+	if initWidth > 0 && initHeight == 0 && initialZoom == "" {
+		if cells := fittedCellSize(orig, initWidth, 0, vc.rc); cells.Rows > 0 {
+			vc.termRows = cells.Rows + 2
+		}
+	}
+	fitInitialFrame := initWidth > 0 && initHeight == 0 && initialZoom == ""
 	vc.state.zoom = initialZoomRatio(initialZoom, vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc.mode)
 	vc.rerender = func() {
+		if fitInitialFrame {
+			vp := prepareRenderedImage(orig, nil, initWidth, 0, vc.rc, "")
+			b := vp.Bounds()
+			ref := metrics.PyramidDownscale(orig, b.Dx(), b.Dy())
+			vc.curQ = computeQuality(ref, vp, vc.rc)
+			vc.lastVP = vp
+			return
+		}
 		vp := buildViewport(orig, &vc.state, vc.termCols, vc.viewRows(), vc.rc)
 		ref := buildRef(orig, vc.state, vc.termCols, vc.viewRows(), vc.rc, metrics.GridK, vc.fullComp)
 		vc.curQ = computeQuality(ref, vp, vc.rc)
@@ -678,7 +687,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		}
 		fileMeta.DispW = fmt.Sprintf("%d", vc.termCols)
 		fileMeta.DispH = fmt.Sprintf("%d", vc.viewRows())
-		fileMeta.DispMode = "half"
+		fileMeta.DispMode = rcDispMode(vc.rc)
 		extra := map[string]string{}
 		cw, ch := vc.rc.mode.viewSpec().VisibleCrop(srcW, srcH, vc.state.zoom, vc.state.panX, vc.state.panY, vc.termCols, vc.viewRows())
 		if cw > 0 && ch > 0 && (cw != srcW || ch != srcH) {
@@ -703,6 +712,9 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 			shouldQuit := false
 
 			processInput := func(tok string) {
+				if tok != "q" {
+					fitInitialFrame = false
+				}
 				if m, ok := inputSpec.ParseMouse(tok); ok {
 					c, r := m.Col-1, m.Row-1
 					// Space-pan: intercept canvas mouse motion when active.
@@ -837,30 +849,7 @@ func zoomAtCursor(state *viewState, newZoom float64, col, row int, mode renderMo
 // buildViewport returns the cropped+scaled image for the current view state.
 // It also clamps state.panX/panY in-place so they never exceed image bounds.
 func buildViewport(orig image.Image, state *viewState, termCols, termRows int, rc renderCfg) image.Image {
-	if rc.gray {
-		orig = quadblock.ReduceColors(orig, rc.grayColors)
-	}
-	b := orig.Bounds()
-	srcW, srcH := b.Dx(), b.Dy()
-	if srcW == 0 || srcH == 0 {
-		return orig
-	}
-	dims := rc.mode.viewSpec().Dims(srcW, srcH, termCols, termRows, state.zoom)
-
-	scaled := halfblock.ScaleNN(orig, dims.ScaledW, dims.ScaledH)
-
-	dims.ClampPan(&state.panX, &state.panY)
-	viewW, viewH := alignViewportSize(dims.ViewW, dims.ViewH, rc)
-	vp := imgutil.CropImage(scaled, state.panX, state.panY, viewW, viewH)
-	targetCells := expectedCellSize(orig, *state, termCols, termRows, rc)
-	targetW, targetH := viewportPixelSizeForCells(targetCells, rc)
-	if targetW > 0 && targetH > 0 {
-		b := vp.Bounds()
-		if b.Dx() != targetW || b.Dy() != targetH {
-			vp = halfblock.ScaleNN(vp, targetW, targetH)
-		}
-	}
-	return vp
+	return prepareRenderedImage(orig, state, termCols, termRows, rc, "")
 }
 
 // interactiveVideo plays a video file in the terminal using the caller's shared
@@ -1171,7 +1160,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			}
 			fileMeta.DispW = fmt.Sprintf("%d", vc.termCols)
 			fileMeta.DispH = fmt.Sprintf("%d", vc.viewRows())
-			fileMeta.DispMode = "half"
+			fileMeta.DispMode = rcDispMode(vc.rc)
 			vc.drawHint(os.Stdout, hint, vc.hintVars(fileMeta, hint, nil))
 		}
 	}

@@ -12,6 +12,43 @@ import (
 	"path/filepath"
 )
 
+// GenerateFixtures creates special regression fixture images under testdataDir.
+// Each image is placed in its own subdirectory as source.png.
+//
+// Fixtures:
+//   - solid_red_4x4/source.png: 4×4 opaque red image (regression: partial-char transparency)
+func GenerateFixtures(testdataDir string) error {
+	fixtures := []struct {
+		dir string
+		img *image.RGBA
+	}{
+		{
+			"solid_red_4x4",
+			func() *image.RGBA {
+				img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+				for y := range 4 {
+					for x := range 4 {
+						img.SetRGBA(x, y, color.RGBA{R: 255, A: 255})
+					}
+				}
+				return img
+			}(),
+		},
+	}
+	for _, f := range fixtures {
+		dir := filepath.Join(testdataDir, f.dir)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return err
+		}
+		if err := SavePNG(filepath.Join(dir, "source.png"), f.img, map[string]string{
+			"Description": f.dir,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // GenerateGradients generates the horizontal and vertical gradients at 20x20, 4x4, 2x2, 1x1.
 // Base colors are Blue (0,0,255) and Yellow (255,255,0).
 func GenerateGradients(testdataDir string) error {

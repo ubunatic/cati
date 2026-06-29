@@ -888,7 +888,7 @@ func RenderToImage(img image.Image, opts Options) *image.RGBA {
 			mask := charToMask(c.ch)
 			bg := c.bg
 			if !c.hasBG {
-				bg = color.RGBA{A: 255} // terminal default bg (black)
+				bg = color.RGBA{} // transparent = terminal default bg
 			}
 			fg := c.fg
 			if !c.hasFG {
@@ -900,7 +900,10 @@ func RenderToImage(img image.Image, opts Options) *image.RGBA {
 					dy := qDY[q]
 					px, py := tc*2+dx, tr*2+dy
 					if px < pixW && py < pixH {
-						if dx == 0 {
+						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
+						if src.A == 0 {
+							dst.SetRGBA(px, py, color.RGBA{})
+						} else if dx == 0 {
 							dst.SetRGBA(px, py, fg)
 						} else {
 							dst.SetRGBA(px, py, bg)
@@ -912,7 +915,10 @@ func RenderToImage(img image.Image, opts Options) *image.RGBA {
 					dy := qDY[q]
 					px, py := tc*2+dx, tr*2+dy
 					if px < pixW && py < pixH {
-						if dx == 1 {
+						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
+						if src.A == 0 {
+							dst.SetRGBA(px, py, color.RGBA{})
+						} else if dx == 1 {
 							dst.SetRGBA(px, py, fg)
 						} else {
 							dst.SetRGBA(px, py, bg)
@@ -924,7 +930,10 @@ func RenderToImage(img image.Image, opts Options) *image.RGBA {
 					dx, dy := qDX[q], qDY[q]
 					px, py := tc*2+dx, tr*2+dy
 					if px < pixW && py < pixH {
-						if mask&bit != 0 {
+						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
+						if src.A == 0 {
+							dst.SetRGBA(px, py, color.RGBA{})
+						} else if mask&bit != 0 {
 							dst.SetRGBA(px, py, fg)
 						} else {
 							dst.SetRGBA(px, py, bg)

@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"image"
-	"image/color"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -33,6 +32,9 @@ func TestGoldenRenders(t *testing.T) {
 	if err := testhelper.GenerateGradients(testdataDir); err != nil {
 		t.Fatalf("GenerateGradients: %v", err)
 	}
+	if err := testhelper.GenerateFixtures(testdataDir); err != nil {
+		t.Fatalf("GenerateFixtures: %v", err)
+	}
 
 	type tc struct {
 		folder string
@@ -49,8 +51,28 @@ func TestGoldenRenders(t *testing.T) {
 		{"demo_verti_20x20", 5},
 		{"demo_verti_20x20", 10},
 		{"demo_verti_20x20", 20},
-		// Vertical split at x=2/8: spark picks ▌ (SSE=0); halfblock cannot.
+		// Small gradient edge cases.
+		{"demo_horiz_4x4", 1},
+		{"demo_horiz_4x4", 2},
+		{"demo_horiz_4x4", 4},
+		{"demo_verti_4x4", 1},
+		{"demo_verti_4x4", 2},
+		{"demo_verti_4x4", 4},
+		{"demo_horiz_2x2", 1},
+		{"demo_horiz_2x2", 2},
+		{"demo_verti_2x2", 1},
+		{"demo_verti_2x2", 2},
+		{"demo_horiz_1x1", 1},
+		{"demo_verti_1x1", 1},
+		// Vertical split: test boundary char, partial rows, and nose regression.
+		{"demo_vert_split_8x8", 1},
 		{"demo_vert_split_8x8", 2},
+		{"demo_vert_split_8x8", 3},
+		{"demo_vert_split_8x8", 4},
+		{"demo_vert_split_8x8", 5},
+		// Solid-colour regression: w=1 must produce ▀ (half-height), not █ (full).
+		{"solid_red_4x4", 1},
+		{"solid_red_4x4", 2},
 	}
 
 	type algoSpec struct {
@@ -113,100 +135,27 @@ func TestGoldenRenders(t *testing.T) {
 	}
 }
 
-// goldenRenderToImage renders scaled through the native algorithm, clears pixels
-// that came from transparent source rows (the BG extension lower half) back to
-// transparent, then upscales to 4×8 pixels per terminal char.
+// goldenRenderToImage renders scaled through the native algorithm and upscales
+// the result to 4×8 pixels per terminal char for golden comparison.
 //
-// The pipeline resizes to rawH (natural), so the extension char has real content
-// in its upper half and transparent padding in its lower half. Renderers produce
-// black for transparent inputs; clearTransparentSourceRows restores them.
+// Transparent extension rows (appended by FitDims when the image ends mid-cell)
+// are preserved as transparent pixels by each renderer: halfblock.RenderToImage
+// uses transparent for terminal-default BG, sparkline.RenderToImage preserves
+// source alpha. No post-processing is needed.
 func goldenRenderToImage(scaled image.Image, rc renderCfg) image.Image {
 	b := scaled.Bounds()
 	var rendered image.Image
 	switch rc.mode {
 	case modeSpark:
-		// Spark analyzes full 4×8 blocks; transparent extension rows (value 0)
-		// corrupt character selection. Fill them with the last content row so
-		// spark picks characters based on actual gradient content, then
-		// clearTransparentSourceRows restores transparency afterwards.
 		outCols := max(1, b.Dx()/4)
 		outRows := max(1, b.Dy()/8)
-		rendered = sparkline.RenderToImage(fillTransparentRows(scaled), outCols, outRows, rc.sparkMode)
+		rendered = sparkline.RenderToImage(scaled, outCols, outRows, rc.sparkMode)
 	case modeQuad:
 		rendered = quadblock.RenderToImage(scaled, rc.quadOpts)
 	default:
 		rendered = halfblock.RenderToImage(scaled)
 	}
-	rendered = clearTransparentSourceRows(scaled, rendered)
 	return upscaleToCharRes(rendered, rc)
-}
-
-// fillTransparentRows replaces fully-transparent rows at the bottom of img with
-// the last opaque row, so that block renderers (spark) analyze actual content
-// rather than treating the BG extension as dark black pixels.
-func fillTransparentRows(img image.Image) image.Image {
-	b := img.Bounds()
-	lastOpaque := -1
-	for y := b.Max.Y - 1; y >= b.Min.Y; y-- {
-		_, _, _, a := img.At(b.Min.X, y).RGBA()
-		if a != 0 {
-			lastOpaque = y
-			break
-		}
-	}
-	if lastOpaque < 0 || lastOpaque == b.Max.Y-1 {
-		return img
-	}
-	out := image.NewRGBA(b)
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		srcY := y
-		if y > lastOpaque {
-			srcY = lastOpaque
-		}
-		for x := b.Min.X; x < b.Max.X; x++ {
-			out.Set(x, y-b.Min.Y, img.At(x, srcY))
-		}
-	}
-	return out
-}
-
-// clearTransparentSourceRows sets pixels to transparent in rendered for every
-// row where the corresponding scaled source row is fully transparent.
-// This undoes the black pixels that renderers produce for BG extension rows.
-func clearTransparentSourceRows(scaled, rendered image.Image) image.Image {
-	sb := scaled.Bounds()
-	rb := rendered.Bounds()
-	hasBG := false
-	for y := sb.Min.Y; y < sb.Max.Y; y++ {
-		_, _, _, a := scaled.At(sb.Min.X, y).RGBA()
-		if a == 0 {
-			hasBG = true
-			break
-		}
-	}
-	if !hasBG {
-		return rendered
-	}
-	out := image.NewRGBA(rb)
-	for y := rb.Min.Y; y < rb.Max.Y; y++ {
-		for x := rb.Min.X; x < rb.Max.X; x++ {
-			out.Set(x, y, rendered.At(x, y))
-		}
-	}
-	for y := sb.Min.Y; y < sb.Max.Y; y++ {
-		_, _, _, a := scaled.At(sb.Min.X, y).RGBA()
-		if a != 0 {
-			continue
-		}
-		ry := rb.Min.Y + (y - sb.Min.Y)
-		if ry < rb.Min.Y || ry >= rb.Max.Y {
-			continue
-		}
-		for x := rb.Min.X; x < rb.Max.X; x++ {
-			out.SetRGBA(x, ry, color.RGBA{})
-		}
-	}
-	return out
 }
 
 // upscaleToCharRes upscales rendered to 4×8 pixels per terminal char so that

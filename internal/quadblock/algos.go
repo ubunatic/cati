@@ -222,13 +222,21 @@ func twoColorCell(pixels [4]color.RGBA, fg, bg color.RGBA) quadCell {
 	return maybeVerticalize(pixels, quadCell{ch: quadChar[mask], fg: fg, bg: bg, hasFG: true, hasBG: true})
 }
 
+// transparentPixelCost is added to cellError for each transparent source pixel
+// that falls in a region that would be covered by an emitted colour sequence
+// (hasFG for FG region, hasBG for BG region).  This steers maybeVerticalize
+// away from ▌/▐ and towards half-block characters (▀/▄) that leave the
+// transparent quadrants in the unemitted BG region so the terminal's default
+// background shows through.  Value = 3×255² = max possible squared RGB distance.
+const transparentPixelCost = 3 * 255 * 255
+
 // cellError returns the sum of squared distances from each source pixel to the
-// colour the rendered cell would display at that quadrant.
+// colour the rendered cell would display at that quadrant.  Transparent source
+// pixels that would be painted over by an emitted colour sequence are penalised
+// by transparentPixelCost each; transparent pixels in an unemitted region (BG
+// when hasBG=false) contribute zero error.
 func cellError(pixels [4]color.RGBA, c quadCell) int {
-	if c.transparent {
-		return 0
-	}
-	if c.ch == ' ' {
+	if c.transparent || c.ch == ' ' {
 		return 0
 	}
 	switch c.ch {
@@ -246,10 +254,16 @@ func cellError(pixels [4]color.RGBA, c quadCell) int {
 
 	total := 0
 	for i, p := range pixels {
+		isFG := mask&(1<<(3-i)) != 0
 		if isTransparent(p) {
+			if isFG && c.hasFG {
+				total += transparentPixelCost
+			} else if !isFG && c.hasBG {
+				total += transparentPixelCost
+			}
 			continue
 		}
-		if mask&(1<<(3-i)) != 0 {
+		if isFG {
 			total += colorDist2(p, c.fg)
 		} else if c.hasBG {
 			total += colorDist2(p, c.bg)
@@ -265,12 +279,17 @@ func cellError(pixels [4]color.RGBA, c quadCell) int {
 func sideError(pixels [4]color.RGBA, fgLeft bool, c quadCell) int {
 	var total int
 	for i, p := range pixels {
-		if isTransparent(p) {
-			continue
-		}
 		isFg := (i == 0 || i == 2)
 		if !fgLeft {
 			isFg = !isFg
+		}
+		if isTransparent(p) {
+			if isFg && c.hasFG {
+				total += transparentPixelCost
+			} else if !isFg && c.hasBG {
+				total += transparentPixelCost
+			}
+			continue
 		}
 		if isFg {
 			total += colorDist2(p, c.fg)

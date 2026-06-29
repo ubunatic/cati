@@ -85,8 +85,12 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 
 			cell := FindBestCell(img, b, x0, x1, y0, y1, mode)
 
-			sb.WriteString(bgRGB(cell.BG))
-			sb.WriteString(fgRGB(cell.FG))
+			if cell.BG.A != 0 {
+				sb.WriteString(bgRGB(cell.BG))
+			}
+			if cell.FG.A != 0 {
+				sb.WriteString(fgRGB(cell.FG))
+			}
 			sb.WriteRune(cell.Ch)
 			sb.WriteString(ansiReset)
 		}
@@ -126,6 +130,11 @@ func RenderToImage(img image.Image, outCols, outRows int, mode Mode) image.Image
 
 			for y := y0; y <= y1; y++ {
 				for x := x0; x <= x1; x++ {
+					src := toRGBA(img.At(x, y))
+					if src.A == 0 {
+						dst.Set(x, y, color.RGBA{})
+						continue
+					}
 					c := cell.BG
 					if maskContains(cell.Ch, x-x0, y-y0, cw, ch) {
 						c = cell.FG
@@ -260,13 +269,24 @@ func findBestCandidate(img image.Image, _ image.Rectangle, x0, x1, y0, y1 int, c
 	}
 
 	best := cellResult{Ch: ' ', Err: math.MaxFloat64}
+	bestFGTransparent := math.MaxInt
+	bestSplitPenalty := math.MaxInt
 	for _, cand := range candidates {
 		var fgSum, bgSum acc
-		var fgN, bgN int
+		var fgN, bgN, fgTransparent, bgTransparent int
 		for y := 0; y < blockH; y++ {
 			for x := 0; x < blockW; x++ {
 				p := toRGBA(img.At(x0+x, y0+y))
-				if cand.mask(x, y, blockW, blockH) {
+				isFG := cand.mask(x, y, blockW, blockH)
+				if p.A == 0 {
+					if isFG {
+						fgTransparent++
+					} else {
+						bgTransparent++
+					}
+					continue
+				}
+				if isFG {
 					fgSum.r += float64(p.R)
 					fgSum.g += float64(p.G)
 					fgSum.b += float64(p.B)
@@ -280,13 +300,18 @@ func findBestCandidate(img image.Image, _ image.Rectangle, x0, x1, y0, y1 int, c
 			}
 		}
 
-		fgAvg := avgColor(fgSum, fgN, bgSum, bgN)
-		bgAvg := avgColor(bgSum, bgN, fgSum, fgN)
+		// avgColorOpaque returns transparent (A=0) when the region has no
+		// opaque pixels; RenderOpts/RenderToImage treat A=0 as "no sequence".
+		fgAvg := avgColorOpaque(fgSum, fgN)
+		bgAvg := avgColorOpaque(bgSum, bgN)
 
 		var err float64
 		for y := 0; y < blockH; y++ {
 			for x := 0; x < blockW; x++ {
 				p := toRGBA(img.At(x0+x, y0+y))
+				if p.A == 0 {
+					continue // transparent pixels contribute no error
+				}
 				if cand.mask(x, y, blockW, blockH) {
 					err += sqDist(p, fgAvg)
 				} else {
@@ -295,18 +320,47 @@ func findBestCandidate(img image.Image, _ image.Rectangle, x0, x1, y0, y1 int, c
 			}
 		}
 
-		if err < best.Err {
+		// Add a large per-pixel penalty for transparent source pixels that would
+		// be covered by an emitted BG or FG colour sequence.  This makes
+		// characters that map transparent pixels to the emitted region more
+		// expensive than characters that isolate them in a non-emitted region
+		// (bgAvg.A==0 → no BG sequence → no terminal colour bleeds into what
+		// should be transparent rows).  The constant is 3×255² = the maximum
+		// possible squared colour distance, large enough to dominate any real
+		// colour error but without causing overflow on float64.
+		const transparentPixelCost = 3 * 255 * 255
+		if bgAvg.A != 0 {
+			err += float64(bgTransparent) * transparentPixelCost
+		}
+		if fgAvg.A != 0 {
+			err += float64(fgTransparent) * transparentPixelCost
+		}
+
+		// Secondary tiebreakers (applied in order when primary SSE+cost ties):
+		// 1. Prefer fewer transparent pixels in the FG region (▀ over ▁).
+		// 2. Prefer chars that emit at most one colour sequence (█ over ▁▂…▇
+		//    when the block is a solid colour): splitPenalty=0 when BG is
+		//    transparent (not emitted), 1 when both FG and BG are emitted.
+		splitPenalty := 0
+		if fgAvg.A != 0 && bgAvg.A != 0 {
+			splitPenalty = 1
+		}
+		better := err < best.Err ||
+			(err == best.Err && fgTransparent < bestFGTransparent) ||
+			(err == best.Err && fgTransparent == bestFGTransparent && splitPenalty < bestSplitPenalty)
+		if better {
 			best = cellResult{Ch: cand.ch, FG: fgAvg, BG: bgAvg, Err: err}
+			bestFGTransparent = fgTransparent
+			bestSplitPenalty = splitPenalty
 		}
 	}
 	return best
 }
 
-func avgColor(sum acc, n int, fallback acc, fallbackN int) color.RGBA {
-	if n == 0 {
-		sum = fallback
-		n = fallbackN
-	}
+// avgColorOpaque returns the average of n opaque pixels. Returns transparent
+// (A=0) when n==0 so callers can skip the ANSI colour sequence entirely and
+// let the terminal's default background show through.
+func avgColorOpaque(sum acc, n int) color.RGBA {
 	if n == 0 {
 		return color.RGBA{}
 	}

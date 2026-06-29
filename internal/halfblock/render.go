@@ -280,7 +280,7 @@ func RenderToImage(img image.Image) *image.RGBA {
 			} else {
 				bg := c.bg
 				if !c.hasBG {
-					bg = color.RGBA{A: 255} // terminal default bg (black)
+					bg = color.RGBA{} // transparent = terminal default bg
 				}
 				fg := c.fg
 				if !c.hasFG {
