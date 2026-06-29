@@ -51,6 +51,12 @@ demo-solder: ⚙️ build  ## render the soldering practice sample at scaled dem
 demo-vacation: ⚙️ build  ## render the summer vacation sample at scaled demo widths
 	go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -i vacation=assets/samples/sample-002-summer-vacation.jpg
 
+BABY_VIDEO   ?= assets/baby-360p.mp4
+BABY_AT      ?= 1s
+
+demo-baby: ⚙️ build  ## compare video frames from baby-360p.mp4 across all render modes (BABY_AT=t1,t2,... BABY_VIDEO=path)
+	go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -v baby=$(BABY_VIDEO) -at $(BABY_AT)
+
 preflight: ⚙️ build  ## pre-commit checks: vet + verify demo-widths renders without errors
 	go vet ./...
 	@echo "Checking demo-widths for render errors..."
