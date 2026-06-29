@@ -52,6 +52,10 @@ func main() {
 		{"verti_20x20", "testdata/demo_verti_20x20/source.png"},
 		{"vert_split", "testdata/demo_vert_split_8x8/source.png"},
 		{"solid_red", "testdata/solid_red_4x4.png"},
+		{"diag", "testdata/demo_diag_20x20/source.png"},
+		{"circle", "testdata/demo_circle_20x20/source.png"},
+		{"checker", "testdata/demo_checker_20x20/source.png"},
+		{"cross", "testdata/demo_cross_20x20/source.png"},
 	}
 	modes := []mode{
 		{"halfblock", "halfblock"},
