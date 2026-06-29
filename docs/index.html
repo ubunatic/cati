@@ -182,6 +182,137 @@
     }
     .px { aspect-ratio: 1; border-radius: 1px; transition: opacity .3s; }
 
+    /* ── Spark overlay showcase ────────────────────────────────── */
+    .spark-showcase { padding: 5rem 0; background: var(--bg2); }
+    .spark-showcase .section-header p { max-width: 680px; margin-left: auto; margin-right: auto; }
+    .spark-controls {
+      display: flex; justify-content: center; flex-wrap: wrap; gap: .5rem;
+      margin: 1.5rem 0 1.75rem;
+    }
+    .spark-control {
+      display: inline-flex; align-items: center; gap: .35rem;
+      padding: .55rem .9rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: .8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color .2s, color .2s, background .2s, transform .2s;
+    }
+    .spark-control:hover { transform: translateY(-1px); border-color: var(--muted); color: var(--text); }
+    .spark-control[aria-pressed="true"] {
+      color: var(--text);
+      border-color: rgba(240,180,41,.55);
+      background: rgba(240,180,41,.08);
+    }
+    .spark-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+    }
+    .spark-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 20px 48px rgba(0,0,0,.22);
+      transition: transform .2s, border-color .2s;
+    }
+    .spark-card:hover { transform: translateY(-3px); border-color: rgba(240,180,41,.4); }
+    .spark-stage {
+      position: relative;
+      aspect-ratio: 1.22;
+      background: #0a0c11;
+      overflow: hidden;
+    }
+    .spark-stage img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: .75rem;
+      opacity: .18;
+      transform: scale(1);
+      transition: opacity .28s ease, transform .28s ease;
+      image-rendering: auto;
+    }
+    .spark-stage::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,.22));
+      pointer-events: none;
+    }
+    .spark-card:hover .spark-stage img { transform: scale(1.01); }
+    .spark-badge {
+      position: absolute;
+      top: .75rem;
+      left: .75rem;
+      z-index: 2;
+      padding: .2rem .55rem;
+      border-radius: 99px;
+      background: rgba(13,15,20,.72);
+      border: 1px solid rgba(255,255,255,.08);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: .7rem;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .spark-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 1rem;
+      padding: .9rem 1rem 1rem;
+      border-top: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,0));
+    }
+    .spark-footer h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: -.01em;
+      margin-bottom: .2rem;
+    }
+    .spark-footer p {
+      color: var(--muted);
+      font-size: .83rem;
+      max-width: 22rem;
+    }
+    .spark-meta {
+      flex: none;
+      text-align: right;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      line-height: 1.5;
+    }
+    .spark-showcase[data-mode="orig"] .spark-stage .layer-orig { opacity: 1; }
+    .spark-showcase[data-mode="orig"] .spark-stage .layer-half { opacity: .34; }
+    .spark-showcase[data-mode="orig"] .spark-stage .layer-quad { opacity: .24; }
+    .spark-showcase[data-mode="orig"] .spark-stage .layer-spark { opacity: .18; }
+    .spark-showcase[data-mode="half"] .spark-stage .layer-orig { opacity: .34; }
+    .spark-showcase[data-mode="half"] .spark-stage .layer-half { opacity: 1; }
+    .spark-showcase[data-mode="half"] .spark-stage .layer-quad { opacity: .56; }
+    .spark-showcase[data-mode="half"] .spark-stage .layer-spark { opacity: .34; }
+    .spark-showcase[data-mode="quad"] .spark-stage .layer-orig { opacity: .24; }
+    .spark-showcase[data-mode="quad"] .spark-stage .layer-half { opacity: .56; }
+    .spark-showcase[data-mode="quad"] .spark-stage .layer-quad { opacity: 1; }
+    .spark-showcase[data-mode="quad"] .spark-stage .layer-spark { opacity: .68; }
+    .spark-showcase[data-mode="spark"] .spark-stage .layer-orig { opacity: .18; }
+    .spark-showcase[data-mode="spark"] .spark-stage .layer-half { opacity: .34; }
+    .spark-showcase[data-mode="spark"] .spark-stage .layer-quad { opacity: .58; }
+    .spark-showcase[data-mode="spark"] .spark-stage .layer-spark { opacity: 1; }
+    @media (max-width: 768px) {
+      .spark-footer { flex-direction: column; align-items: flex-start; }
+      .spark-meta { text-align: left; }
+    }
+
     /* ── Usage ──────────────────────────────────────────────────── */
     .usage { padding: 5rem 0; background: var(--bg2); }
     .usage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.25rem; }
@@ -347,6 +478,80 @@
   </div>
 </section>
 
+<!-- ── Spark overlay showcase ─────────────────────────────────── -->
+<section class="spark-showcase" id="spark">
+  <div class="container">
+    <div class="section-header">
+      <span class="tag">spark overlay</span>
+      <h2>Orig, half, quad, spark.</h2>
+      <p>
+        Compare the same samples across the full rendering ladder. The stack
+        stays live, but the spark layer is the one doing the least work per cell.
+      </p>
+    </div>
+
+    <div class="spark-controls" id="spark-controls" aria-label="Spark comparison mode">
+      <button class="spark-control" type="button" data-mode="orig" aria-pressed="false">orig</button>
+      <button class="spark-control" type="button" data-mode="half" aria-pressed="false">half</button>
+      <button class="spark-control" type="button" data-mode="quad" aria-pressed="false">quad</button>
+      <button class="spark-control" type="button" data-mode="spark" aria-pressed="true">spark</button>
+    </div>
+
+    <div class="spark-grid" id="spark-showcase" data-mode="spark">
+      <article class="spark-card">
+        <div class="spark-stage">
+          <div class="spark-badge">soldering practice</div>
+          <img class="layer-orig" src="../assets/samples/sample-001-soldering-practice-2025.jpg" alt="Original soldering practice sample" />
+          <img class="layer-half" src="../testdata/sample_soldering_practice/render_halfblock_30ch.png" alt="Half-block render of soldering practice sample" />
+          <img class="layer-quad" src="../testdata/sample_soldering_practice/render_quad_30ch.png" alt="Quad-block render of soldering practice sample" />
+          <img class="layer-spark" src="../testdata/sample_soldering_practice/render_spark_30ch.png" alt="Spark render of soldering practice sample" />
+        </div>
+        <div class="spark-footer">
+          <div>
+            <h3>Golden 001</h3>
+            <p>Source image and three renderer outputs stacked from least to most cell-efficient.</p>
+          </div>
+          <div class="spark-meta">30ch goldens<br>all from the same input</div>
+        </div>
+      </article>
+
+      <article class="spark-card">
+        <div class="spark-stage">
+          <div class="spark-badge">summer vacation</div>
+          <img class="layer-orig" src="../assets/samples/sample-002-summer-vacation.jpg" alt="Original summer vacation sample" />
+          <img class="layer-half" src="../testdata/sample_summer_vacation/render_halfblock_30ch.png" alt="Half-block render of summer vacation sample" />
+          <img class="layer-quad" src="../testdata/sample_summer_vacation/render_quad_30ch.png" alt="Quad-block render of summer vacation sample" />
+          <img class="layer-spark" src="../testdata/sample_summer_vacation/render_spark_30ch.png" alt="Spark render of summer vacation sample" />
+        </div>
+        <div class="spark-footer">
+          <div>
+            <h3>Golden 002</h3>
+            <p>The spark layer keeps the composition legible while spending fewer cells on the same crop.</p>
+          </div>
+          <div class="spark-meta">30ch goldens<br>same source, different glyphs</div>
+        </div>
+      </article>
+
+      <article class="spark-card">
+        <div class="spark-stage">
+          <div class="spark-badge">darth daughter</div>
+          <img class="layer-orig" src="../assets/samples/sample-003-darth-daughter.jpg" alt="Original darth daughter sample" />
+          <img class="layer-half" src="../testdata/sample_darth_daughter/render_halfblock_30ch.png" alt="Half-block render of darth daughter sample" />
+          <img class="layer-quad" src="../testdata/sample_darth_daughter/render_quad_30ch.png" alt="Quad-block render of darth daughter sample" />
+          <img class="layer-spark" src="../testdata/sample_darth_daughter/render_spark_30ch.png" alt="Spark render of darth daughter sample" />
+        </div>
+        <div class="spark-footer">
+          <div>
+            <h3>Golden 003</h3>
+            <p>The same source makes a clean side-by-side for how the renderer trades detail for density.</p>
+          </div>
+          <div class="spark-meta">30ch goldens<br>overlay view</div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
 <!-- ── Usage ─────────────────────────────────────────────────────── -->
 <section class="usage" id="usage">
   <div class="container">
@@ -471,6 +676,23 @@
     });
     scan++;
   }, 500);
+
+  // ── Spark showcase: switch which layer is dominant ───────────
+  const showcase = document.getElementById('spark-showcase');
+  const controls = document.querySelectorAll('#spark-controls .spark-control');
+  if (showcase && controls.length) {
+    const setMode = (mode) => {
+      showcase.dataset.mode = mode;
+      controls.forEach((btn) => {
+        const active = btn.dataset.mode === mode;
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+    };
+    controls.forEach((btn) => {
+      btn.addEventListener('click', () => setMode(btn.dataset.mode));
+    });
+    setMode('spark');
+  }
 
 })();
 </script>
