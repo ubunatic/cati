@@ -109,6 +109,15 @@ func AppendTransparentRows(img image.Image, addH int) image.Image {
 //     partial char renders as a clean upper-half block (▀) with its transparent
 //     bottom half left for the terminal background — never more than half a char.
 //
+// Resolution-independent geometry: every render mode is built so that
+// CellW/(AspectX·CellH) = 1/2, which means the *continuous* display height in
+// char rows, srcH·cols/(2·srcW), is identical across modes. The half-cell snap
+// below is therefore computed from that continuous height (carried as the exact
+// ratio hNum/hDen), NOT from a height already floored to integer pixels. Flooring
+// first would lose up to ~half a char at low resolutions (halfblock/quad at
+// 2 px/char) but almost nothing at high resolution (spark at 8 px/char), so the
+// modes would disagree on the bottom-row geometry for the same source and width.
+//
 // Either cols or rows may be 0 (unconstrained). Both 0 returns source dimensions.
 func FitDims(srcW, srcH, cellW, cellH, aspectX, cols, rows int) (targetW, targetH, extH int) {
 	if srcW == 0 || srcH == 0 {
@@ -119,58 +128,75 @@ func FitDims(srcW, srcH, cellW, cellH, aspectX, cols, rows int) (targetW, target
 
 	// Compute aspect-preserving dimensions, allowing upscale.
 	// Unconstrained dimensions are handled separately to avoid integer overflow
-	// when the unconstrained max would be MaxInt.
+	// when the unconstrained max would be MaxInt. When height is the *derived*
+	// dimension we keep its exact continuous value as hNum/hDen (px = hNum/hDen)
+	// so the half-cell snap is not corrupted by integer-pixel flooring.
 	acSrcW := srcW * aspectX
-	var rawW, rawH int
+	var rawW int
+	var hNum, hDen int // continuous derived height in px = hNum/hDen
+	heightDerived := true
 	switch {
 	case cols <= 0 && rows <= 0:
-		rawW, rawH = srcW, srcH
+		rawW, hNum, hDen = srcW, srcH, 1
 	case rows <= 0: // width-only constraint
-		rawW = maxW
-		rawH = max(1, srcH*maxW/acSrcW)
-	case cols <= 0: // height-only constraint
-		rawH = maxH
-		rawW = max(1, acSrcW*maxH/srcH)
+		rawW, hNum, hDen = maxW, srcH*maxW, acSrcW
+	case cols <= 0: // height-only constraint — height is fixed (exact cells)
+		targetH, rawW, heightDerived = maxH, max(1, acSrcW*maxH/srcH), false
 	default: // both constrained — safe to compare (no overflow)
-		if acSrcW*maxH >= srcH*maxW { // width-bound
-			rawW = maxW
-			rawH = max(1, srcH*maxW/acSrcW)
-		} else { // height-bound
-			rawH = maxH
-			rawW = max(1, acSrcW*maxH/srcH)
+		if acSrcW*maxH >= srcH*maxW { // width-bound, height derived
+			rawW, hNum, hDen = maxW, srcH*maxW, acSrcW
+		} else { // height-bound — height is fixed (exact cells)
+			targetH, rawW, heightDerived = maxH, max(1, acSrcW*maxH/srcH), false
 		}
 	}
 
-	targetW, targetH = AlignCellSize(rawW, rawH, cellW, cellH)
-
-	// Half-cell snap: a terminal char is two stacked half-cells (CellH/2 px
-	// each). For the partial last char row to map onto a representable block
-	// glyph, its content must align to a half-cell boundary — otherwise no
-	// glyph can describe a mid-cell remainder (e.g. 6 content + 2 transparent
-	// rows), and the renderer falls back to wrong quadrant/diagonal chars whose
-	// colour bleeds into the transparent area (garbled bottom row).
-	//
-	// When the natural height ends mid-cell with a remainder of at least half a
-	// cell, snap it to the NEAREST half-cell boundary:
-	//   - closer to one half-cell of content → keep a top half-cell and append
-	//     CellH/2 transparent rows; the char renders as a clean ▀.
-	//   - closer to a full cell → round up to the full cell with no transparent
-	//     padding; the char renders as a full content row.
-	// Either way the half-char transparency invariant (≤ CellH/2 transparent
-	// rows) holds and the last char is always a representable glyph. Remainders
-	// below half a cell are dropped by AlignCellSize above (unchanged).
-	if cellH > 1 {
+	if heightDerived {
+		// Half-cell snap: a terminal char is two stacked half-cells (CellH/2 px
+		// each). For the partial last char row to map onto a representable block
+		// glyph, its content must align to a half-cell boundary — otherwise no
+		// glyph can describe a mid-cell remainder (e.g. 6 content + 2 transparent
+		// rows), and the renderer falls back to wrong quadrant/diagonal chars
+		// whose colour bleeds into the transparent area (garbled bottom row).
+		//
+		// Decide from the CONTINUOUS height hNum/hDen. Scale by hDen to stay in
+		// integers: cellScaled = CellH·hDen, the fractional part remScaled lives
+		// in [0, cellScaled). Round the fractional char to the nearest half-cell:
+		//   - below half a cell        → drop it (full content cells only)
+		//   - nearer a top half-cell   → keep it + append CellH/2 transparent rows
+		//                                (clean ▀); extH = CellH/2
+		//   - nearer a full cell       → round up to a full content cell; extH = 0
+		// Because hNum/hDen reduces to the same char-height for every mode, the
+		// chosen rows and bottom-row fill are identical across modes.
 		half := cellH / 2
-		if rem := rawH % cellH; rem >= half {
-			lowH := rawH - rem
-			if rem-half <= cellH-rem { // nearer to lowH+half than to lowH+cellH
-				targetH = lowH + half
+		if cellH > 1 && half > 0 {
+			cellScaled := cellH * hDen
+			halfScaled := half * hDen
+			full := hNum / cellScaled
+			rem := hNum - full*cellScaled // continuous fractional px, ×hDen
+			switch {
+			case rem < halfScaled: // below half a cell → drop
+				targetH = full * cellH
+			case 2*rem <= cellScaled+halfScaled: // nearer top half-cell → ▀
+				targetH = full*cellH + half
 				extH = half
-			} else {
-				targetH = lowH + cellH
-				extH = 0
+			default: // nearer full cell → round up
+				targetH = (full + 1) * cellH
 			}
+		} else {
+			targetH = max(1, hNum/hDen)
 		}
+		if targetH < 1 {
+			targetH = cellH
+		}
+	}
+
+	// Align width down to a whole cell (height is already cell-aligned above).
+	targetW = rawW
+	if cellW > 1 && targetW > cellW {
+		targetW -= targetW % cellW
+	}
+	if targetW < 1 {
+		targetW = 1
 	}
 
 	return targetW, targetH, extH

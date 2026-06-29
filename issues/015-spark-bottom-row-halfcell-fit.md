@@ -54,3 +54,25 @@ changed (source 1042×1383 lands at `rem=7`); both now render a full content
 bottom row instead of the mid-cell remainder. All square-source goldens scale to
 `rawH = 4n` (`rem ∈ {0,4}`) and are unaffected. `TestGoldenTransparentBound`
 still holds (`extH ≤ CellH/2`).
+
+## Follow-up: the same bug in halfblock/quad (cross-mode unification)
+
+The first fix snapped to the nearest half-cell using `rawH` **already floored to
+integer pixels**. Comparing all three modes at the same width revealed that
+halfblock/quad rendered a `▀` half-row where spark (and the true geometry)
+rendered a full row — they were "too short" by half a char.
+
+Root cause: every mode satisfies `CellW/(AspectX·CellH) = 1/2`, so the continuous
+display height `srcH·cols/(2·srcW)` is identical across modes — but each mode
+floored that height to *its own* pixel grid before snapping. At 2 px/char
+(halfblock/quad) the floor discards up to ~½ a char; at 8 px/char (spark) almost
+nothing. The half-cell snap then faithfully preserved the divergence.
+
+Fix: `FitDims` now makes the half-cell decision from the **continuous** height
+(carried as exact integer `hNum/hDen`), not from a pre-floored pixel value. All
+modes land on the same rows and bottom-row fill. Locked in by
+`TestFitDimsUnifiedGeometry` and `TestFitDimsHalfCellInvariant`.
+
+Golden impact: `sample_summer_vacation` `render_halfblock_{24,30}ch.png` and
+`render_quad_{24,30}ch.png` now match the (already-corrected) spark height —
+4 goldens, full bottom row instead of `▀`.

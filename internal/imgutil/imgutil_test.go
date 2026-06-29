@@ -18,6 +18,81 @@ func solidImage(w, h int, c color.RGBA) image.Image {
 	return img
 }
 
+// ── FitDims ──────────────────────────────────────────────────────────────────
+
+// realCells are the three production render-mode cell geometries:
+// {cellW, cellH, aspectX}. All satisfy cellW/(aspectX*cellH) = 1/2, so they
+// must agree on char-row count and bottom-row fill for any source and width.
+var realCells = []struct {
+	name                   string
+	cellW, cellH, aspectX int
+}{
+	{"halfblock", 1, 2, 1},
+	{"quad", 2, 2, 2},
+	{"spark", 4, 8, 1},
+}
+
+// fitGeom reduces a FitDims result to resolution-independent geometry:
+// the number of char rows and whether the bottom row is a half (▀) or full row.
+func fitGeom(cellH, targetH, extH int) (rows int, halfBottom bool) {
+	rows = (targetH + extH) / cellH
+	return rows, extH > 0
+}
+
+// TestFitDimsUnifiedGeometry asserts that all three render modes produce the
+// SAME half-cell geometry (rows + bottom fill) for the same source and width.
+// This is the invariant that was violated when the height was floored to integer
+// pixels before the half-cell snap (halfblock/quad rendered "too short").
+func TestFitDimsUnifiedGeometry(t *testing.T) {
+	type src struct {
+		name       string
+		srcW, srcH int
+	}
+	sources := []src{
+		{"vacation", 1042, 1383},
+		{"darth", 687, 1168},
+		{"soldering", 640, 480},
+		{"baby", 640, 360},
+		{"cross", 20, 20},
+		{"tall", 100, 333},
+		{"wide", 333, 100},
+	}
+	for _, s := range sources {
+		for _, cols := range []int{1, 2, 3, 5, 6, 7, 10, 12, 17, 24, 30, 41} {
+			var wantRows int
+			var wantHalf bool
+			for i, c := range realCells {
+				_, tH, extH := FitDims(s.srcW, s.srcH, c.cellW, c.cellH, c.aspectX, cols, 0)
+				rows, half := fitGeom(c.cellH, tH, extH)
+				if i == 0 {
+					wantRows, wantHalf = rows, half
+					continue
+				}
+				if rows != wantRows || half != wantHalf {
+					t.Errorf("%s -w%d: mode %s geometry {rows=%d half=%v} != halfblock {rows=%d half=%v}",
+						s.name, cols, c.name, rows, half, wantRows, wantHalf)
+				}
+			}
+		}
+	}
+}
+
+// TestFitDimsHalfCellInvariant asserts extH is always 0 or exactly CellH/2, so
+// the transparent tail never exceeds half a char (TestGoldenTransparentBound).
+func TestFitDimsHalfCellInvariant(t *testing.T) {
+	for _, c := range realCells {
+		for _, cols := range []int{1, 3, 6, 7, 13, 24, 31, 100} {
+			for _, srcH := range []int{100, 333, 360, 480, 1168, 1383} {
+				_, _, extH := FitDims(1000, srcH, c.cellW, c.cellH, c.aspectX, cols, 0)
+				if extH != 0 && extH != c.cellH/2 {
+					t.Errorf("%s srcH=%d -w%d: extH=%d, want 0 or %d",
+						c.name, srcH, cols, extH, c.cellH/2)
+				}
+			}
+		}
+	}
+}
+
 // ── FitPixelDims ───────────────────────────────────────────────────────────────
 
 func TestFitPixelDims(t *testing.T) {

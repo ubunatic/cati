@@ -100,6 +100,18 @@ fall back to quadrant/diagonal chars (`▌ ▚ ▘`) whose colour bleeds into th
 transparent area — a garbled bottom row in `RenderOpts`. The snap guarantees
 `extH ∈ {0, CellH/2}`, upholding the half-char transparency invariant.
 
+**Resolution-independent — the snap is shared by all render modes.** Every mode
+is built so that `CellW / (AspectX · CellH) = 1/2` (halfblock `1/(1·2)`, quad
+`2/(2·2)`, spark `4/(1·8)`), so the *continuous* display height in char rows,
+`srcH · cols / (2 · srcW)`, is identical regardless of mode. `FitDims` makes the
+half-cell decision from that continuous ratio (carried as exact integer
+`hNum/hDen`), **not** from a height already floored to integer pixels. Flooring
+first would discard up to ~½ a char at 2 px/char (halfblock, quad) but almost
+nothing at 8 px/char (spark), so the modes would disagree on the bottom-row
+geometry for the same source and width (halfblock/quad rendering "too short").
+Deciding in the shared continuous unit makes all modes land on the same rows and
+the same bottom-row fill. See `TestFitDimsUnifiedGeometry`.
+
 ---
 
 ## 3. Pixel Scanning Traversal & Pitfalls
