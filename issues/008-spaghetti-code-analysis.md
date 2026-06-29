@@ -29,7 +29,7 @@ Static analysis of the 24 non-test Go source files (8,423 lines total) reveals s
 - **Split-penalty tiebreaker**: `findBestCandidate` in `internal/sparkline/render.go` now ranks non-splitting chars higher when SSE is equal; solid-colour blocks produce `█` instead of `▁`
 - **Transparent-pixel cost**: `transparentPixelCost = 3 × 255²` per pixel penalises chars that extend colour into transparent rows; halfblock `▀` correctly wins over `▁` for partial source images
 - **Golden suite expanded**: added `solid_red_4x4` regression fixture; small gradient cases (4×4, 2×2, 1×1); `demo_vert_split_8x8` at widths 1/3/4/5; 4 geometric 20×20 images (diag, circle, checker, cross); total ~110 new PNG + ANSI goldens
-- **`make demo-widths`**: interactive render table comparing all demo images at widths 1–6 across three modes (halfblock, quad/splithalf, spark/quad)
+- **Demo render tables**: `make demo-widths` compares the default demo set; `make demo-darth`, `make demo-solder`, and `make demo-vacation` compare the sample photos. `scripts/demo_widths.go` accepts repeatable `-image`/`-i`, `-w` max width, and `-n` downscale-step count; single-image runs show render modes side by side.
 
 ### What remains open
 - **A** (12 YAML parsers): `internal/input/input.go:parse()` and several parsers in `browser.go` are still manual
@@ -404,7 +404,7 @@ When the user switches modes (e.g., from halfblock to sparkline), the terminal-c
    state.zoom = state.zoom * (newMZ / oldMZ)
    ```
 3. **Viewport Clamping and Bounds Alignment**: Align `buildViewport` and `buildRef` to ensure they both use `viewgeom.Spec` for calculating dimensions and cropping regions.
-4. **Fix Copy Viewport**: Correct the discrepancy in `copy_viewport` where it calls `buildViewport` with `termRows` instead of `max(1, termRows-2)`.
+4. **Fix Copy Viewport**: Correct the discrepancy in `copy_viewport` where it calls `buildViewport` with total terminal rows instead of the viewer render area (`viewRows = termRows - viewerChromeRows`).
 
 ### Phase 3: God Function Deconstruction & Refactoring (P1)
 1. Break up the 1,200+ line `browser()` function by extracting:

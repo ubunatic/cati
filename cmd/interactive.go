@@ -645,7 +645,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	vc.lastSrcW, vc.lastSrcH = b.Dx(), b.Dy()
 	vc.src = orig
 	if initWidth > 0 && initHeight == 0 && initialZoom == "" {
-		if cells := fittedCellSize(orig, initWidth, 0, vc.rc); cells.Rows > 0 {
+		if cells := fittedCellSize(orig, vc.termCols, 0, vc.rc); cells.Rows > 0 {
 			vc.termRows = cells.Rows + 2
 		}
 	}
@@ -653,7 +653,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	vc.state.zoom = initialZoomRatio(initialZoom, vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc.mode)
 	vc.rerender = func() {
 		if fitInitialFrame {
-			vp := prepareRenderedImage(orig, nil, initWidth, 0, vc.rc, "")
+			vp := prepareRenderedImage(orig, nil, vc.termCols, 0, vc.rc, "")
 			b := vp.Bounds()
 			ref := metrics.PyramidDownscale(orig, b.Dx(), b.Dy())
 			vc.curQ = computeQuality(ref, vp, vc.rc)
@@ -706,7 +706,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 			return nil
 
 		case in := <-inputs:
-			vc.termCols, vc.termRows = resolveTermSize(initWidth, initHeight)
+			vc.termCols, vc.termRows = resolveViewerTermSize(initWidth, initHeight)
 
 			changed := false
 			shouldQuit := false
@@ -807,6 +807,21 @@ func resolveTermSize(width, height int) (cols, rows int) {
 		rows = 24
 	}
 	return
+}
+
+func resolveViewerTermSize(width, height int) (cols, rows int) {
+	autoCols, autoRows := resolveTermSize(0, 0)
+	cols = autoCols
+	if width > 0 {
+		cols = min(width, autoCols)
+	}
+
+	viewRows := max(1, autoRows-viewerChromeRows)
+	if height > 0 {
+		viewRows = min(height, viewRows)
+	}
+	rows = min(autoRows, viewRows+viewerChromeRows)
+	return cols, rows
 }
 
 // recenterForMode adjusts panX/panY after a render-mode switch so the same

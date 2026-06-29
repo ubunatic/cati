@@ -160,9 +160,14 @@ go test ./cmd/... -update
 
 ```bash
 make demo-widths
+make demo-darth
+make demo-solder DEMO_WIDTH=80 DEMO_STEPS=3
 ```
 
 Runs `scripts/demo_widths.go` (build-tag `ignore`, excluded from normal builds)
-and prints all demo images rendered at widths 1–6, one column per image, one
-row-group per width. Useful for a quick visual sanity check of all render modes
-after algorithm changes.
+and prints demo renders in terminal tables. Multi-image runs group by render
+mode with one image per column. Single-image runs group by image with
+`halfblock`, `quad/splithalf`, and `spark/quad` side by side. `-w` selects the
+maximum render width and `-n` selects how many 80% downscale steps to show
+(default 2). Useful for a quick visual sanity check of all render modes after
+algorithm changes.

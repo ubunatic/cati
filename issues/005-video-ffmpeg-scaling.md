@@ -51,6 +51,6 @@ func OpenVideoStream(ctx context.Context, path string, displayFPS float64, pixW,
 
 Call sites must supply terminal pixel dimensions:
 - `playVideos`: `pixW = cols, pixH = rows*2` (halfblock: 2 px per terminal row)
-- `interactiveVideo`: `pixW = termCols, pixH = (termRows-2)*2`
+- `interactiveVideo`: `pixW = termCols, pixH = viewRows*2` where `viewRows = termRows - viewerChromeRows`
 
 On terminal resize, the stream must be restarted (already the case in `interactiveVideo`).

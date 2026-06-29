@@ -3,6 +3,8 @@ BINARY  := cati
 PREFIX  ?= /usr/local
 DEMO_DIR = ../emojig/spec/art/frames
 DEMO     = $(DEMO_DIR)/emojig_fall_*.png
+DEMO_WIDTH ?= 30
+DEMO_STEPS ?= 2
 
 help: ⚙️  ## show this help
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -37,13 +39,22 @@ reuse: ⚙️  ## verify license compliance linting
 	reuse lint
 
 
-demo-widths: ⚙️ install  ## render main demo assets at widths 1..6, printed as a table
-	go run scripts/demo_widths.go
+demo-widths: ⚙️ build  ## render main demo assets as terminal comparison tables
+	go run scripts/demo_widths.go -bin ./$(BINARY)
 
-preflight: ⚙️ install  ## pre-commit checks: vet + verify demo-widths renders without errors
+demo-darth: ⚙️ build  ## render the Darth Daughter sample at scaled demo widths
+	go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -i darth=assets/samples/sample-003-darth-daughter.jpg
+
+demo-solder: ⚙️ build  ## render the soldering practice sample at scaled demo widths
+	go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -i solder=assets/samples/sample-001-soldering-practice-2025.jpg
+
+demo-vacation: ⚙️ build  ## render the summer vacation sample at scaled demo widths
+	go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -i vacation=assets/samples/sample-002-summer-vacation.jpg
+
+preflight: ⚙️ build  ## pre-commit checks: vet + verify demo-widths renders without errors
 	go vet ./...
 	@echo "Checking demo-widths for render errors..."
-	@go run scripts/demo_widths.go 2>&1 | grep -i "err\|panic\|fail" && echo "FAIL: render errors found" && exit 1 || echo "OK: no render errors"
+	@go run scripts/demo_widths.go -bin ./$(BINARY) 2>&1 | grep -i "err\|panic\|fail" && echo "FAIL: render errors found" && exit 1 || echo "OK: no render errors"
 
 generate: ⚙️  ## generate static assets/code (e.g., inlined docs/index.html pixel colors)
 	go run scripts/generate_pixels.go

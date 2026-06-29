@@ -87,8 +87,8 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().BoolVarP(&playMode, "play", "p", false, "animate frames in a loop (Ctrl+C to stop)")
 	root.Flags().BoolVarP(&interactMode, "interactive", "i", false, "interactive viewer: +/- zoom, arrow keys pan, q quit")
 	root.Flags().IntVar(&fps, "fps", 0, "frames per second (0 = auto: native fps for video, 15 for images)")
-	root.Flags().IntVarP(&width, "width", "w", 0, "target width in terminal columns (0 = auto)")
-	root.Flags().IntVar(&height, "height", 0, "target height in terminal rows (0 = auto)")
+	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto; clamped to terminal in -i)")
+	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto; clamped to terminal in -i)")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half|halfblock, qs|quad, qe, sq|spark")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -110,7 +110,7 @@ type opts struct {
 	interactive bool
 	fps         int
 	width       int    // terminal columns; 0 = auto
-	height      int    // terminal rows;   0 = auto
+	height      int    // image/render rows; 0 = auto
 	fullComp    bool   // compare render quality against original source pixels
 	initialZoom string // zoom level: 0 → fit to viewport; 1, 1.0, 100%, 1:1 → pixel-perfect (k=1)
 }

@@ -15,7 +15,7 @@
 
 ✅ **Fixed** — chose option 2 (keep external viewers, pass button context into them).
 
-`interactiveWithChan` and `interactiveVideo` now accept `style`, `labels`, `viewBtnRows` and call `drawBottomMenu`/`drawHintBar` during their redraw. The image takes `termRows-2` rows; the bottom 2 rows are the button bar and hint bar.
+`interactiveWithChan` and `interactiveVideo` now accept `style`, `labels`, `viewBtnRows` and call `drawBottomMenu`/`drawHintBar` during their redraw. The image takes `viewRows = termRows - viewerChromeRows`; explicit CLI `--height` sets `viewRows` and oversized interactive dimensions are clamped to the current terminal. The current bottom chrome is the button bar and hint bar.
 
 `interactiveVideo` also:
 - Enables mouse tracking on entry (so buttons are clickable)

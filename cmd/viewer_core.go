@@ -51,13 +51,15 @@ type viewerCore struct {
 	rerender func()
 }
 
+const viewerChromeRows = 2
+
 func newViewerCore(
 	viewName string, initWidth, initHeight int, rc renderCfg, fullComp bool,
 	inputSpec *input.Spec, style *StyleConfig, labels map[string]string,
 	viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string,
 	btnActions map[string]string,
 ) *viewerCore {
-	cols, rows := resolveTermSize(initWidth, initHeight)
+	cols, rows := resolveViewerTermSize(initWidth, initHeight)
 	modeName := rcModeName(rc)
 	lastNonHBID := rc.id
 	if !rc.mode.useQuad() {
@@ -83,7 +85,7 @@ func newViewerCore(
 }
 
 func (vc *viewerCore) viewRows() int {
-	return max(1, vc.termRows-2)
+	return max(1, vc.termRows-viewerChromeRows)
 }
 
 // switchMode adjusts pan and preserves the zoom k-value after a render-mode

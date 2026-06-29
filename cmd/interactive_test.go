@@ -217,6 +217,60 @@ func TestCropImage(t *testing.T) {
 	}
 }
 
+func TestResolveViewerTermSizeTreatsHeightAsImageRows(t *testing.T) {
+	autoCols, autoRows := resolveTermSize(0, 0)
+	width := min(80, autoCols)
+	imageRows := min(22, max(1, autoRows-viewerChromeRows))
+	cols, rows := resolveViewerTermSize(width, imageRows)
+	if cols != width {
+		t.Fatalf("cols = %d, want %d", cols, width)
+	}
+	wantRows := min(autoRows, imageRows+viewerChromeRows)
+	if rows != wantRows {
+		t.Fatalf("rows = %d, want image rows %d + chrome rows %d", rows, imageRows, viewerChromeRows)
+	}
+
+	vc := newViewerCore("image_viewer", width, imageRows, renderCfg{}, false, input.DefaultSpec(), nil, nil, nil, nil, nil)
+	if got := vc.viewRows(); got != imageRows {
+		t.Fatalf("viewRows = %d, want explicit image height %d", got, imageRows)
+	}
+}
+
+func TestResolveViewerTermSizeClampsOversizedExplicitDimensions(t *testing.T) {
+	autoCols, autoRows := resolveTermSize(0, 0)
+	cols, rows := resolveViewerTermSize(autoCols+1000, autoRows+1000)
+	if cols != autoCols {
+		t.Fatalf("cols = %d, want terminal width %d", cols, autoCols)
+	}
+	if rows != autoRows {
+		t.Fatalf("rows = %d, want terminal height %d", rows, autoRows)
+	}
+	if got := (&viewerCore{termRows: rows}).viewRows(); got != max(1, autoRows-viewerChromeRows) {
+		t.Fatalf("viewRows = %d, want clamped image rows %d", got, max(1, autoRows-viewerChromeRows))
+	}
+}
+
+func TestStaticAndInteractiveExplicitHeightUseSameImageRows(t *testing.T) {
+	src := horizontalGradientNRGBA(32, 32)
+	rc := renderCfg{}
+	const width, imageRows = 20, 7
+
+	static := prepareRenderedImage(src, nil, width, imageRows, rc, "")
+	state := viewState{zoom: initialZoomRatio("", src.Bounds().Dx(), src.Bounds().Dy(), width, imageRows, rc.mode)}
+	interactive := buildViewport(src, &state, width, imageRows, rc)
+
+	var staticOut, interactiveOut bytes.Buffer
+	if err := rc.render(&staticOut, static); err != nil {
+		t.Fatalf("static render: %v", err)
+	}
+	if err := rc.render(&interactiveOut, interactive); err != nil {
+		t.Fatalf("interactive render: %v", err)
+	}
+	if staticOut.String() != interactiveOut.String() {
+		t.Fatalf("static and interactive image output differ\n%s", diffTermOutput(staticOut.String(), interactiveOut.String()))
+	}
+}
+
 // ── maxZoom ──────────────────────────────────────────────────────────────────
 
 func TestMaxZoom(t *testing.T) {

@@ -399,11 +399,25 @@ func rowDuplicateSignalImageForTest(vp image.Image, rc renderCfg) image.Image {
 func firstDuplicatePixelRow(img image.Image) int {
 	b := img.Bounds()
 	for y := b.Min.Y; y+1 < b.Max.Y; y++ {
+		if transparentPixelRow(img, y) && transparentPixelRow(img, y+1) {
+			continue
+		}
 		if equalPixelRows(img, y, y+1) {
 			return y - b.Min.Y
 		}
 	}
 	return -1
+}
+
+func transparentPixelRow(img image.Image, y int) bool {
+	bounds := img.Bounds()
+	for x := bounds.Min.X; x < bounds.Max.X; x++ {
+		_, _, _, a := img.At(x, y).RGBA()
+		if a != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func equalPixelRows(img image.Image, y0, y1 int) bool {

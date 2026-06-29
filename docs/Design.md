@@ -284,7 +284,7 @@ row (effHeight):    hint bar       — drawHintBar()
 
 `interactiveWithChan` (image) and `interactiveVideo` accept `style`, `labels`, `viewBtnRows` from the browser:
 
-- Image viewer: renders image in `termRows-2` rows; button bar at `termRows-1`; hint bar at `termRows`. Button actions: `zoom_in`, `zoom_out`, `back`, `quit`.
+- Image viewer: renders image in `viewRows = termRows - viewerChromeRows`; explicit CLI `--height` sets `viewRows`, not total terminal rows. The current chrome uses a button bar at `termRows-1` and a hint bar at `termRows`. Button actions: `zoom_in`, `zoom_out`, `back`, `quit`.
 - Video viewer: same layout. Adds `paused bool`; Space bar toggles. `conditions["playing"] = !paused` passed to `drawBottomMenu` so `{ if(playing, pause, play) }` resolves at render time. Mouse tracking is enabled on entry (the browser disables it before calling the viewer).
 
 Viewer quality values compare a reconstruction of the terminal glyph output
