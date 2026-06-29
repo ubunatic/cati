@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 )
@@ -42,6 +43,111 @@ func GenerateFixtures(testdataDir string) error {
 		}
 		if err := SavePNG(filepath.Join(dir, "source.png"), f.img, map[string]string{
 			"Description": f.dir,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GenerateGeometrics creates 20×20 geometric test images under testdataDir.
+// Each image uses pure saturated colours so block-char algorithms have
+// unambiguous ground truth at every cell boundary.
+//
+// Images generated:
+//   - demo_diag_20x20:    red/blue split along the 45° diagonal (top-left red)
+//   - demo_circle_20x20:  yellow filled disc (r=8) on blue background
+//   - demo_checker_20x20: red/blue checkerboard with 4×4-pixel cells
+//   - demo_cross_20x20:   yellow 4-pixel-wide cross on blue background
+func GenerateGeometrics(testdataDir string) error {
+	const sz = 20
+	red  := color.RGBA{R: 255, A: 255}
+	blue := color.RGBA{B: 255, A: 255}
+	yell := color.RGBA{R: 255, G: 255, A: 255}
+
+	type geom struct {
+		dir string
+		img *image.RGBA
+	}
+
+	geoms := []geom{
+		{
+			"demo_diag_20x20",
+			func() *image.RGBA {
+				img := image.NewRGBA(image.Rect(0, 0, sz, sz))
+				for y := range sz {
+					for x := range sz {
+						if x+y < sz {
+							img.SetRGBA(x, y, red)
+						} else {
+							img.SetRGBA(x, y, blue)
+						}
+					}
+				}
+				return img
+			}(),
+		},
+		{
+			"demo_circle_20x20",
+			func() *image.RGBA {
+				img := image.NewRGBA(image.Rect(0, 0, sz, sz))
+				cx, cy, r := 9.5, 9.5, 8.0
+				for y := range sz {
+					for x := range sz {
+						dx := float64(x) - cx
+						dy := float64(y) - cy
+						if math.Sqrt(dx*dx+dy*dy) <= r {
+							img.SetRGBA(x, y, yell)
+						} else {
+							img.SetRGBA(x, y, blue)
+						}
+					}
+				}
+				return img
+			}(),
+		},
+		{
+			"demo_checker_20x20",
+			func() *image.RGBA {
+				img := image.NewRGBA(image.Rect(0, 0, sz, sz))
+				for y := range sz {
+					for x := range sz {
+						if (x/4+y/4)%2 == 0 {
+							img.SetRGBA(x, y, red)
+						} else {
+							img.SetRGBA(x, y, blue)
+						}
+					}
+				}
+				return img
+			}(),
+		},
+		{
+			"demo_cross_20x20",
+			func() *image.RGBA {
+				img := image.NewRGBA(image.Rect(0, 0, sz, sz))
+				for y := range sz {
+					for x := range sz {
+						onBar := (x >= 8 && x <= 11) || (y >= 8 && y <= 11)
+						if onBar {
+							img.SetRGBA(x, y, yell)
+						} else {
+							img.SetRGBA(x, y, blue)
+						}
+					}
+				}
+				return img
+			}(),
+		},
+	}
+
+	for _, g := range geoms {
+		dir := filepath.Join(testdataDir, g.dir)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return err
+		}
+		if err := SavePNG(filepath.Join(dir, "source.png"), g.img, map[string]string{
+			"Description": g.dir,
 		}); err != nil {
 			return err
 		}

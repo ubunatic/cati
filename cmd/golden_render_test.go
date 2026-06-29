@@ -35,6 +35,9 @@ func TestGoldenRenders(t *testing.T) {
 	if err := testhelper.GenerateFixtures(testdataDir); err != nil {
 		t.Fatalf("GenerateFixtures: %v", err)
 	}
+	if err := testhelper.GenerateGeometrics(testdataDir); err != nil {
+		t.Fatalf("GenerateGeometrics: %v", err)
+	}
 
 	type tc struct {
 		folder string
@@ -73,6 +76,27 @@ func TestGoldenRenders(t *testing.T) {
 		// Solid-colour regression: w=1 must produce ▀ (half-height), not █ (full).
 		{"solid_red_4x4", 1},
 		{"solid_red_4x4", 2},
+		// Geometric shapes: diagonal edge, curved edge, high-frequency, straight bars.
+		{"demo_diag_20x20", 2},
+		{"demo_diag_20x20", 4},
+		{"demo_diag_20x20", 5},
+		{"demo_diag_20x20", 10},
+		{"demo_diag_20x20", 20},
+		{"demo_circle_20x20", 2},
+		{"demo_circle_20x20", 4},
+		{"demo_circle_20x20", 5},
+		{"demo_circle_20x20", 10},
+		{"demo_circle_20x20", 20},
+		{"demo_checker_20x20", 2},
+		{"demo_checker_20x20", 4},
+		{"demo_checker_20x20", 5},
+		{"demo_checker_20x20", 10},
+		{"demo_checker_20x20", 20},
+		{"demo_cross_20x20", 2},
+		{"demo_cross_20x20", 4},
+		{"demo_cross_20x20", 5},
+		{"demo_cross_20x20", 10},
+		{"demo_cross_20x20", 20},
 	}
 
 	type algoSpec struct {
