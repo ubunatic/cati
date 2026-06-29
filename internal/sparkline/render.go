@@ -320,19 +320,17 @@ func findBestCandidate(img image.Image, _ image.Rectangle, x0, x1, y0, y1 int, c
 			}
 		}
 
-		// Add a large per-pixel penalty for transparent source pixels that would
-		// be covered by an emitted BG or FG colour sequence.  This makes
-		// characters that map transparent pixels to the emitted region more
-		// expensive than characters that isolate them in a non-emitted region
-		// (bgAvg.A==0 → no BG sequence → no terminal colour bleeds into what
-		// should be transparent rows).  The constant is 3×255² = the maximum
-		// possible squared colour distance, large enough to dominate any real
-		// colour error but without causing overflow on float64.
+		// Penalise transparent pixels that will be tainted by an emitted colour.
+		// • If bgAvg is emitted (A≠0): BG colour bleeds into bgTransparent pixels.
+		// • If fgAvg is emitted (A≠0): FG colour bleeds into fgTransparent pixels.
+		// • If fgAvg is NOT emitted but bgAvg IS: the terminal renders the glyph
+		//   character pixels in the default foreground colour (typically white),
+		//   so fgTransparent pixels are still tainted — charge the same penalty.
 		const transparentPixelCost = 3 * 255 * 255
 		if bgAvg.A != 0 {
 			err += float64(bgTransparent) * transparentPixelCost
 		}
-		if fgAvg.A != 0 {
+		if fgAvg.A != 0 || bgAvg.A != 0 {
 			err += float64(fgTransparent) * transparentPixelCost
 		}
 

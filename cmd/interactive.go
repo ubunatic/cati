@@ -1002,7 +1002,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigs)
 
-	frames, cleanup, err := halfblock.OpenVideoStream(ctx, path, displayFPS)
+	frames, cleanup, err := halfblock.OpenVideoStream(ctx, path, displayFPS, 0, 0)
 	if err != nil {
 		return fmt.Errorf("open video: %w", err)
 	}
@@ -1012,7 +1012,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 
 	restartStream := func() {
 		cleanup()
-		frames, cleanup, err = halfblock.OpenVideoStream(ctx, path, displayFPS)
+		frames, cleanup, err = halfblock.OpenVideoStream(ctx, path, displayFPS, 0, 0)
 		if err != nil {
 			frames = nil
 		}

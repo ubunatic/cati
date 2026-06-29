@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"fmt"
+	"image"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -34,6 +35,7 @@ func New() *cobra.Command {
 	var prescaler string
 	var fullComp bool
 	var initialZoom string
+	var timeRange string
 
 	root := &cobra.Command{
 		Use:   "cati [flags] <image|dir> [image|dir ...]",
@@ -77,6 +79,7 @@ Press Ctrl+C to stop playback.`,
 				height:      height,
 				fullComp:    fullComp,
 				initialZoom: initialZoom,
+				timeRange:   timeRange,
 			}, rc, args)
 		},
 	}
@@ -93,6 +96,7 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
+	root.Flags().StringVar(&timeRange, "range", "", `playback window: "5s" plays first 5 s; "5s:7s" plays 5 s–7 s (supports s/m/h suffixes, bare seconds, mm:ss)`)
 	root.Flags().BoolVar(&inputTest, "input-test", false, "")
 	// Hide the debug flag from help output.
 	_ = root.Flags().MarkHidden("input-test")
@@ -113,6 +117,7 @@ type opts struct {
 	height      int    // image/render rows; 0 = auto
 	fullComp    bool   // compare render quality against original source pixels
 	initialZoom string // zoom level: 0 → fit to viewport; 1, 1.0, 100%, 1:1 → pixel-perfect (k=1)
+	timeRange   string // raw --range value; parsed in run()
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────
@@ -134,7 +139,11 @@ func run(o opts, rc renderCfg, args []string) error {
 		if len(paths) == 0 {
 			return fmt.Errorf("no supported images found")
 		}
-		return play(paths, o.fps, o.width, o.height, rc)
+		tr, err := parseTimeRange(o.timeRange)
+		if err != nil {
+			return err
+		}
+		return play(paths, o.fps, o.width, o.height, rc, tr)
 	}
 
 	if o.interactive {
@@ -170,12 +179,25 @@ func run(o opts, rc renderCfg, args []string) error {
 		termCols = halfblock.TermWidth()
 		termRows = halfblock.TermHeight()
 	}
+
+	// Parse --range: for video files in static mode we seek to tr.Start so
+	// the displayed frame matches the play-mode entry point.
+	tr, err := parseTimeRange(o.timeRange)
+	if err != nil {
+		return err
+	}
+
 	for _, path := range paths {
 		if multi && !o.noHeader {
 			fmt.Printf("# %s\n", path)
 		}
 
-		img, err := halfblock.LoadImage(path)
+		var img image.Image
+		if halfblock.IsVideo(path) && tr.Start > 0 {
+			img, err = halfblock.LoadVideoFrameAt(path, tr.Start)
+		} else {
+			img, err = halfblock.LoadImage(path)
+		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}

@@ -167,18 +167,32 @@ func LoadVideoFrameAt(path string, offsetSec float64) (image.Image, error) {
 // outputs every 2nd frame but plays in the same real time.
 // Pass displayFPS ≤ 0 to disable rate limiting (decodes as fast as possible).
 //
+// startSec and endSec define an optional playback window.
+// startSec > 0 seeks to that position before decoding (fast input seek).
+// endSec > startSec limits output duration to (endSec - startSec) seconds.
+// Pass both as 0 for unrestricted playback.
+//
 // The caller must invoke the returned cleanup function to release resources
 // (safe to call more than once).
 //
 // It requires ffmpeg to be on $PATH.
-func OpenVideoStream(ctx context.Context, path string, displayFPS float64) (<-chan image.Image, func(), error) {
+func OpenVideoStream(ctx context.Context, path string, displayFPS, startSec, endSec float64) (<-chan image.Image, func(), error) {
 	// Probe source dimensions so we can read fixed-size raw frames.
 	w, h, err := ProbeVideoDimensions(path)
 	if err != nil {
 		return nil, nil, fmt.Errorf("probe video dimensions: %w", err)
 	}
 
-	args := []string{"-v", "quiet", "-i", path}
+	// -ss before -i: fast keyframe seek (may be up to one keyframe early).
+	var args []string
+	if startSec > 0 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", startSec))
+	}
+	args = append(args, "-v", "quiet", "-i", path)
+	// -t after -i: limit output duration to (end - start) seconds.
+	if endSec > 0 && endSec > startSec {
+		args = append(args, "-t", fmt.Sprintf("%.3f", endSec-startSec))
+	}
 	if displayFPS > 0 {
 		args = append(args, "-vf", fmt.Sprintf("fps=%.6g", displayFPS))
 		args = append(args, "-threads", "4")

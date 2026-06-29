@@ -17,17 +17,17 @@ import (
 // It dispatches to playImages (pre-load loop) or playVideos (streaming)
 // depending on whether any path is a video file.
 // width and height are in terminal characters (0 = auto-detect from terminal).
-func play(paths []string, fps, width, height int, rc renderCfg) error {
+func play(paths []string, fps, width, height int, rc renderCfg, tr TimeRange) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("no images to play")
 	}
 
 	for _, p := range paths {
 		if halfblock.IsVideo(p) {
-			return playVideos(paths, fps, width, height, rc)
+			return playVideos(paths, fps, width, height, rc, tr)
 		}
 	}
-	return playImages(paths, fps, width, height, rc)
+	return playImages(paths, fps, width, height, rc, tr)
 }
 
 // ── shared terminal setup ─────────────────────────────────────────────────────
@@ -73,7 +73,7 @@ func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}) {
 // ── image sequence mode ───────────────────────────────────────────────────────
 
 // playImages pre-loads all frames and loops them at fps.
-func playImages(paths []string, fps, width, height int, rc renderCfg) error {
+func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRange) error {
 	if fps <= 0 {
 		fps = 15
 	}
@@ -83,9 +83,26 @@ func playImages(paths []string, fps, width, height int, rc renderCfg) error {
 		cols, rows = halfblock.TermWidth(), halfblock.TermHeight()
 	}
 
-	// Pre-load & scale all frames.
-	frames := make([]image.Image, 0, len(paths))
-	for _, p := range paths {
+	// Apply time range: convert seconds → frame indices.
+	// For image sequences the frame rate defines the mapping.
+	startFrame := 0
+	if tr.Start > 0 {
+		startFrame = int(tr.Start * float64(fps))
+	}
+	endFrame := len(paths) // exclusive; 0 means open-ended
+	if tr.End > 0 {
+		ef := int(tr.End * float64(fps))
+		if ef < endFrame {
+			endFrame = ef
+		}
+	}
+	if startFrame >= len(paths) {
+		return fmt.Errorf("--range start (%.3fs) is beyond the last frame", tr.Start)
+	}
+
+	// Pre-load & scale the selected frame window.
+	frames := make([]image.Image, 0, endFrame-startFrame)
+	for _, p := range paths[startFrame:endFrame] {
 		img, err := halfblock.LoadImage(p)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
@@ -128,7 +145,7 @@ func playImages(paths []string, fps, width, height int, rc renderCfg) error {
 
 // playVideos streams one or more video files sequentially, playing each once.
 // All paths must be video files.
-func playVideos(paths []string, fps, width, height int, rc renderCfg) error {
+func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRange) error {
 	// Validate: all paths must be video files.
 	for _, p := range paths {
 		if !halfblock.IsVideo(p) {
@@ -173,7 +190,7 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg) error {
 
 	// index into paths; restartStream opens a fresh stream for paths[videoIdx].
 	videoIdx := 0
-	frames, cleanup, err := halfblock.OpenVideoStream(ctx, paths[videoIdx], displayFPS)
+	frames, cleanup, err := halfblock.OpenVideoStream(ctx, paths[videoIdx], displayFPS, tr.Start, tr.End)
 	if err != nil {
 		return fmt.Errorf("open video stream: %w", err)
 	}
@@ -214,7 +231,8 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg) error {
 						return fmt.Errorf("failed to decode any frames from video stream(s)")
 					}
 					currentVideoHadFrames = false
-					frames, cleanup, err = halfblock.OpenVideoStream(ctx, paths[videoIdx], displayFPS)
+					// Subsequent videos in a playlist play without range restriction.
+					frames, cleanup, err = halfblock.OpenVideoStream(ctx, paths[videoIdx], displayFPS, 0, 0)
 					if err != nil {
 						return fmt.Errorf("open video stream: %w", err)
 					}
