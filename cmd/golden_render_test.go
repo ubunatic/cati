@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
@@ -40,63 +41,71 @@ func TestGoldenRenders(t *testing.T) {
 	}
 
 	type tc struct {
-		folder string
-		n      int // square char request: cols = rows = n
+		folder     string
+		sourcePath string
+		n          int // square char request: cols = rows = n
 	}
 	cases := []tc{
-		{"demo_horiz_20x20", 2},
-		{"demo_horiz_20x20", 4},
-		{"demo_horiz_20x20", 5},
-		{"demo_horiz_20x20", 10},
-		{"demo_horiz_20x20", 20},
-		{"demo_verti_20x20", 2},
-		{"demo_verti_20x20", 4},
-		{"demo_verti_20x20", 5},
-		{"demo_verti_20x20", 10},
-		{"demo_verti_20x20", 20},
+		{"demo_horiz_20x20", "", 2},
+		{"demo_horiz_20x20", "", 4},
+		{"demo_horiz_20x20", "", 5},
+		{"demo_horiz_20x20", "", 10},
+		{"demo_horiz_20x20", "", 20},
+		{"demo_verti_20x20", "", 2},
+		{"demo_verti_20x20", "", 4},
+		{"demo_verti_20x20", "", 5},
+		{"demo_verti_20x20", "", 10},
+		{"demo_verti_20x20", "", 20},
 		// Small gradient edge cases.
-		{"demo_horiz_4x4", 1},
-		{"demo_horiz_4x4", 2},
-		{"demo_horiz_4x4", 4},
-		{"demo_verti_4x4", 1},
-		{"demo_verti_4x4", 2},
-		{"demo_verti_4x4", 4},
-		{"demo_horiz_2x2", 1},
-		{"demo_horiz_2x2", 2},
-		{"demo_verti_2x2", 1},
-		{"demo_verti_2x2", 2},
-		{"demo_horiz_1x1", 1},
-		{"demo_verti_1x1", 1},
+		{"demo_horiz_4x4", "", 1},
+		{"demo_horiz_4x4", "", 2},
+		{"demo_horiz_4x4", "", 4},
+		{"demo_verti_4x4", "", 1},
+		{"demo_verti_4x4", "", 2},
+		{"demo_verti_4x4", "", 4},
+		{"demo_horiz_2x2", "", 1},
+		{"demo_horiz_2x2", "", 2},
+		{"demo_verti_2x2", "", 1},
+		{"demo_verti_2x2", "", 2},
+		{"demo_horiz_1x1", "", 1},
+		{"demo_verti_1x1", "", 1},
 		// Vertical split: test boundary char, partial rows, and nose regression.
-		{"demo_vert_split_8x8", 1},
-		{"demo_vert_split_8x8", 2},
-		{"demo_vert_split_8x8", 3},
-		{"demo_vert_split_8x8", 4},
-		{"demo_vert_split_8x8", 5},
+		{"demo_vert_split_8x8", "", 1},
+		{"demo_vert_split_8x8", "", 2},
+		{"demo_vert_split_8x8", "", 3},
+		{"demo_vert_split_8x8", "", 4},
+		{"demo_vert_split_8x8", "", 5},
 		// Solid-colour regression: w=1 must produce ▀ (half-height), not █ (full).
-		{"solid_red_4x4", 1},
-		{"solid_red_4x4", 2},
+		{"solid_red_4x4", "", 1},
+		{"solid_red_4x4", "", 2},
 		// Geometric shapes: diagonal edge, curved edge, high-frequency, straight bars.
-		{"demo_diag_20x20", 2},
-		{"demo_diag_20x20", 4},
-		{"demo_diag_20x20", 5},
-		{"demo_diag_20x20", 10},
-		{"demo_diag_20x20", 20},
-		{"demo_circle_20x20", 2},
-		{"demo_circle_20x20", 4},
-		{"demo_circle_20x20", 5},
-		{"demo_circle_20x20", 10},
-		{"demo_circle_20x20", 20},
-		{"demo_checker_20x20", 2},
-		{"demo_checker_20x20", 4},
-		{"demo_checker_20x20", 5},
-		{"demo_checker_20x20", 10},
-		{"demo_checker_20x20", 20},
-		{"demo_cross_20x20", 2},
-		{"demo_cross_20x20", 4},
-		{"demo_cross_20x20", 5},
-		{"demo_cross_20x20", 10},
-		{"demo_cross_20x20", 20},
+		{"demo_diag_20x20", "", 2},
+		{"demo_diag_20x20", "", 4},
+		{"demo_diag_20x20", "", 5},
+		{"demo_diag_20x20", "", 10},
+		{"demo_diag_20x20", "", 20},
+		{"demo_circle_20x20", "", 2},
+		{"demo_circle_20x20", "", 4},
+		{"demo_circle_20x20", "", 5},
+		{"demo_circle_20x20", "", 10},
+		{"demo_circle_20x20", "", 20},
+		{"demo_checker_20x20", "", 2},
+		{"demo_checker_20x20", "", 4},
+		{"demo_checker_20x20", "", 5},
+		{"demo_checker_20x20", "", 10},
+		{"demo_checker_20x20", "", 20},
+		{"demo_cross_20x20", "", 2},
+		{"demo_cross_20x20", "", 4},
+		{"demo_cross_20x20", "", 5},
+		{"demo_cross_20x20", "", 10},
+		{"demo_cross_20x20", "", 20},
+		// Photo samples used by the demo make targets.
+		{"sample_darth_daughter", "assets/samples/sample-003-darth-daughter.jpg", 24},
+		{"sample_darth_daughter", "assets/samples/sample-003-darth-daughter.jpg", 30},
+		{"sample_soldering_practice", "assets/samples/sample-001-soldering-practice-2025.jpg", 24},
+		{"sample_soldering_practice", "assets/samples/sample-001-soldering-practice-2025.jpg", 30},
+		{"sample_summer_vacation", "assets/samples/sample-002-summer-vacation.jpg", 24},
+		{"sample_summer_vacation", "assets/samples/sample-002-summer-vacation.jpg", 30},
 	}
 
 	type algoSpec struct {
@@ -118,9 +127,16 @@ func TestGoldenRenders(t *testing.T) {
 
 	for _, c := range cases {
 		folderPath := filepath.Join(testdataDir, c.folder)
-		orig := goldenLoad(t, filepath.Join(folderPath, "source.png"))
+		sourcePath := c.sourcePath
+		if sourcePath == "" {
+			sourcePath = filepath.Join(folderPath, "source.png")
+		}
+		orig := goldenSourceLoad(t, sourcePath)
 		if orig == nil {
 			continue
+		}
+		if err := os.MkdirAll(folderPath, 0o755); err != nil {
+			t.Fatalf("create %s: %v", folderPath, err)
 		}
 		for _, a := range algos {
 			renderName := fmt.Sprintf("render_%s_%dch.png", a.name, c.n)
@@ -207,6 +223,20 @@ func upscaleToCharRes(rendered image.Image, rc renderCfg) image.Image {
 	return out
 }
 
+func goldenSourceLoad(t *testing.T, path string) image.Image {
+	t.Helper()
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".jpg", ".jpeg":
+		img, err := halfblock.LoadImage(path)
+		if err != nil {
+			t.Errorf("load %s: %v", path, err)
+			return nil
+		}
+		return img
+	default:
+		return goldenLoad(t, path)
+	}
+}
 
 func goldenLoad(t *testing.T, path string) image.Image {
 	t.Helper()
