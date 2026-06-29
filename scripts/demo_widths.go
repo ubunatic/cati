@@ -48,13 +48,13 @@ func render(path, modeFlag string, w int) []string {
 
 func main() {
 	images := []image{
-		{"horiz_20x20", "testdata/demo_horiz_20x20/source.png"},
-		{"verti_20x20", "testdata/demo_verti_20x20/source.png"},
-		{"vert_split", "testdata/demo_vert_split_8x8/source.png"},
-		{"solid_red", "testdata/solid_red_4x4.png"},
+		{"horiz", "testdata/demo_horiz_20x20/source.png"},
+		{"verti", "testdata/demo_verti_20x20/source.png"},
+		{"split", "testdata/demo_vert_split_8x8/source.png"},
+		{"red", "testdata/solid_red_4x4.png"},
 		{"diag", "testdata/demo_diag_20x20/source.png"},
-		{"circle", "testdata/demo_circle_20x20/source.png"},
-		{"checker", "testdata/demo_checker_20x20/source.png"},
+		{"circ", "testdata/demo_circle_20x20/source.png"},
+		{"chkr", "testdata/demo_checker_20x20/source.png"},
 		{"cross", "testdata/demo_cross_20x20/source.png"},
 	}
 	modes := []mode{
@@ -89,40 +89,33 @@ func main() {
 			}
 		}
 
+		const gap = "  " // column gap (no pipe)
+
 		// Header row.
-		sep := func(ch string) string { return strings.Repeat(ch, 2) }
-		fmt.Printf("%s-+", sep("-"))
+		fmt.Printf("w  ")
 		for ii, img := range images {
-			fmt.Printf("-%-*s", colW[ii], img.name)
+			fmt.Printf(" %-*s", colW[ii], img.name)
 			if ii < len(images)-1 {
-				fmt.Printf("-+-")
+				fmt.Print(gap)
 			}
 		}
-		fmt.Println("-")
+		fmt.Println()
 
 		// Separator.
-		fmt.Printf("%s-+", sep("-"))
+		fmt.Printf("---")
 		for ii := range images {
-			fmt.Printf("-%s", strings.Repeat("-", colW[ii]))
+			fmt.Printf(" %s", strings.Repeat("-", colW[ii]))
 			if ii < len(images)-1 {
-				fmt.Printf("-+-")
+				fmt.Print(gap)
 			}
 		}
-		fmt.Println("-")
+		fmt.Println()
 
 		// Data rows.
 		for wi, w := range widths {
 			if wi > 0 {
-				fmt.Printf("   |")
-				for ii := range images {
-					fmt.Printf(" %s", strings.Repeat(" ", colW[ii]))
-					if ii < len(images)-1 {
-						fmt.Printf(" |")
-					}
-				}
-				fmt.Println()
+				fmt.Println() // blank line between width groups
 			}
-			// How many output lines does the tallest cell have?
 			maxLines := 1
 			for ii := range images {
 				if n := len(cells[ii][wi]); n > maxLines {
@@ -131,9 +124,9 @@ func main() {
 			}
 			for li := range maxLines {
 				if li == 0 {
-					fmt.Printf("%-2d |", w)
+					fmt.Printf("%-2d ", w)
 				} else {
-					fmt.Printf("   |")
+					fmt.Printf("   ")
 				}
 				for ii := range images {
 					var line string
@@ -143,7 +136,7 @@ func main() {
 					pad := colW[ii] - visLen(line)
 					fmt.Printf(" %s%s", line, strings.Repeat(" ", pad))
 					if ii < len(images)-1 {
-						fmt.Printf(" |")
+						fmt.Print(gap)
 					}
 				}
 				fmt.Println()
