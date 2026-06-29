@@ -51,6 +51,9 @@ Rules:
 
 ## General Rules
 - Run `go vet ./... && make install` when a feature is ready — this is the authority on build correctness.
+- Run `make preflight` before committing — it runs `go vet` and verifies demo scripts render without errors (`make test` is the full test suite, run separately).
 - LSP diagnostics are hints only; `go build` / `make` output is authoritative. Do not fix or report errors that `go build` does not reproduce.
 - Issues found during work go in `issues/` immediately — don't save them for the end.
 - After implementing a plan, run `/evergreen` to update docs and close issues in the same commit.
+- **After any rendering algorithm change**, update the relevant section of `docs/SparklinePixelArt.md` in the same commit — do not defer to the end of the session.
+- **After context compaction / session resume**: run `git status` and `git log -5` before touching any file — cheapest way to recover ground truth without re-reading files you already read.

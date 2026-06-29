@@ -40,6 +40,11 @@ reuse: ⚙️  ## verify license compliance linting
 demo-widths: ⚙️ install  ## render main demo assets at widths 1..6, printed as a table
 	go run scripts/demo_widths.go
 
+preflight: ⚙️ install  ## pre-commit checks: vet + verify demo-widths renders without errors
+	go vet ./...
+	@echo "Checking demo-widths for render errors..."
+	@go run scripts/demo_widths.go 2>&1 | grep -i "err\|panic\|fail" && echo "FAIL: render errors found" && exit 1 || echo "OK: no render errors"
+
 generate: ⚙️  ## generate static assets/code (e.g., inlined docs/index.html pixel colors)
 	go run scripts/generate_pixels.go
 
