@@ -33,6 +33,7 @@ Adhere to the following conventions.
 - Before starting any feature or fix, skim any Open/In-Progress issues that touch the area you're working in — the index is short and pays for itself immediately.
 - When you change an interface, function signature, or data flow, update the relevant section of the Evergreen doc in the same logical step — not at the end of the session.
 - **Golden Image Verification**: Any new visual rendering mode or algorithm must have a corresponding golden image test under `testhelper` or `testdata` with descriptive metadata (like algorithm name and parameters) embedded as custom PNG `tEXt` chunks.
+- **Rendering bugs & golden changes**: follow @docs/RenderingBugPlaybook.md — prove the root cause with numbers before touching code, predict which goldens change, and regenerate a golden only when you can name the wrong pixel and why. Never `-update` to make the suite green.
 
 ## Spec System (`spec/`)
 
