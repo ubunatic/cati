@@ -25,6 +25,12 @@ Static analysis of the 24 non-test Go source files (8,423 lines total) reveals s
 - **C2/C3 resolved**: `interactiveWithChan` 447→95 lines, `interactiveVideo` 553→115 lines; four dead wrapper functions deleted (`viewportDims`, `srcCrop`, `visibleCrop`, `renderView`)
 - **Line-width invariant added**: `drawBottomMenu`/`drawHintBar` now accept `termCols int` fallback; `lineCapWriter` test helper + 4 width tests verify all render modes and UI components at 80 columns
 
+### Round 3 (June 2026) — rendering quality & test coverage
+- **Split-penalty tiebreaker**: `findBestCandidate` in `internal/sparkline/render.go` now ranks non-splitting chars higher when SSE is equal; solid-colour blocks produce `█` instead of `▁`
+- **Transparent-pixel cost**: `transparentPixelCost = 3 × 255²` per pixel penalises chars that extend colour into transparent rows; halfblock `▀` correctly wins over `▁` for partial source images
+- **Golden suite expanded**: added `solid_red_4x4` regression fixture; small gradient cases (4×4, 2×2, 1×1); `demo_vert_split_8x8` at widths 1/3/4/5; 4 geometric 20×20 images (diag, circle, checker, cross); total ~110 new PNG + ANSI goldens
+- **`make demo-widths`**: interactive render table comparing all demo images at widths 1–6 across three modes (halfblock, quad/splithalf, spark/quad)
+
 ### What remains open
 - **A** (12 YAML parsers): `internal/input/input.go:parse()` and several parsers in `browser.go` are still manual
 - **B1** (ANSI helpers duplicated between halfblock/quadblock): still unextracted

@@ -56,6 +56,29 @@ Quad candidates are upsampled to `4×8`: each quadrant covers a `2×4` rectangle
 This keeps `spark/quad` in the sparkline geometry family and avoids changing the
 pure `quadblock` renderer.
 
+### Tiebreaker: prefer non-splitting characters
+
+When two candidates have equal primary SSE, a secondary tiebreaker is applied
+to avoid artifacts on solid-colour regions.
+
+**Split penalty** is `0` if at most one of (FG colour, BG colour) would emit an
+ANSI colour sequence (i.e. at least one region is transparent / empty), and `1`
+if both regions need a colour sequence. For a fully opaque solid-colour block:
+
+- `█` (full block): the background region is empty (`bgN = 0`) → `bgAvg.A = 0`
+  → only FG sequence needed → `splitPenalty = 0`
+- `▁`–`▇` (partial vertical): both regions are opaque → `splitPenalty = 1`
+
+So `█` wins all ties on uniform blocks, producing clean single-colour output
+with one sequence per cell instead of two. For mixed blocks the penalty is
+irrelevant because SSE differs.
+
+**Transparent-pixel cost** is a separate primary-tier mechanism: any transparent
+source pixel that falls inside a coloured region accumulates
+`transparentPixelCost = 3 × 255²` per pixel added to the SSE. This forces
+candidates that extend colour into transparent rows to lose to candidates that
+leave those rows empty, overriding what a pure RGB SSE would prefer.
+
 ---
 
 ## 3. Pixel Scanning Traversal & Pitfalls
@@ -91,12 +114,55 @@ The legacy 1D split logic requires that the pixel array passed to the error mini
 
 ## 4. Verification & The Test Helper Suite
 
-The [testhelper](file:///home/uwe/projects/cati/internal/sparkline/testhelper/testhelper.go) package provides automated validation and visualization of all Cati renderers:
+The `testhelper` package (`internal/sparkline/testhelper/`) provides automated
+validation and visualization of all Cati renderers. It exposes three generator
+functions that create source images on the fly so no static binaries need to be
+committed to the repo for these test cases.
 
-*   **Base Gradient Generation**: Generates horizontal and vertical gradients from Blue `(0, 0, 255)` to Yellow `(255, 255, 0)` at scales of `20x20`, `4x4`, `2x2`, and `1x1`.
-*   **Visual Reconstruction**: Renders the gradients using all active algorithms (sparkline modes, `halfblock`, and `quadblock`) and outputs visual PNG reconstructions to subdirectories in `testdata/` (e.g. `testdata/demo_horiz_20x20/`).
-*   **Embedded Metadata**: Custom text chunks (`tEXt`) are injected into the generated PNG byte streams to identify the rendering `Algorithm` and `Parameters` (e.g., `outCols`, `outRows`, `KMeans`) used.
-*   **Golden Comparison**: [testhelper_test.go](file:///home/uwe/projects/cati/internal/sparkline/testhelper/testhelper_test.go) runs pixel-for-pixel comparisons against these golden files to prevent regressions. You can update golden expectations via:
-    ```bash
-    go test ./internal/sparkline/testhelper -args -update
-    ```
+### Generator functions
+
+| Function | What it produces | Located under |
+|---|---|---|
+| `GenerateGradients` | Horizontal + vertical blue→yellow gradients at 20×20, 4×4, 2×2, 1×1 | `testdata/demo_horiz_NxN/`, `testdata/demo_verti_NxN/` |
+| `GenerateFixtures` | Solid-red 4×4 regression fixture | `testdata/solid_red_4x4/` |
+| `GenerateGeometrics` | Four 20×20 geometric images (see below) | `testdata/demo_*_20x20/` |
+
+**Geometric images** (`GenerateGeometrics`):
+
+| Subfolder | Description | Colours |
+|---|---|---|
+| `demo_diag_20x20` | 45° diagonal split (top-left vs bottom-right) | red / blue |
+| `demo_circle_20x20` | Filled disc, radius 8, centred at (9.5, 9.5) | yellow / blue |
+| `demo_checker_20x20` | Checkerboard with 4×4 px cells | red / blue |
+| `demo_cross_20x20` | 4-pixel-wide cross centred on image | yellow / blue |
+
+Pure saturated colours give each algorithm unambiguous ground truth at every
+cell boundary: a correct renderer must produce the source colour with no bleed
+across a hard edge.
+
+### Golden comparison
+
+`TestGoldenRenders` (in `cmd/golden_render_test.go`) runs every combination of
+`(source image, char width, algorithm)` and compares against a stored PNG.
+Goldens are stored at **4×8 px/char** — the sparkline native resolution — so all
+three algorithms (halfblock 1×2, quad 2×2, spark 4×8) are upscaled to the same
+common resolution before comparison.
+
+`TestCLIRender` (in `cmd/cli_render_test.go`) does the same for ANSI terminal
+output, storing `.ansi` golden files.
+
+Run with `-update` to regenerate all goldens:
+```bash
+go test ./cmd/... -update
+```
+
+### Interactive demo table
+
+```bash
+make demo-widths
+```
+
+Runs `scripts/demo_widths.go` (build-tag `ignore`, excluded from normal builds)
+and prints all demo images rendered at widths 1–6, one column per image, one
+row-group per width. Useful for a quick visual sanity check of all render modes
+after algorithm changes.
