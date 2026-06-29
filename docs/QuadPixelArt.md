@@ -206,6 +206,11 @@ img = quadblock.ReduceColors(img, quadblock.ColorANSI256)
 Nearest-colour matching uses squared Euclidean distance in linear RGB.
 Transparent pixels are preserved.
 
+The renderer also has worker-aware copies of `RenderOpts` and `RenderToImage`.
+The serial code remains the baseline implementation; the parallel copies are
+called only when the CLI job count is greater than 1, so the current algorithm
+behaviour stays pinned while the worker path is exercised separately.
+
 ### LumSplit algorithm
 
 For each 2×2 cell:

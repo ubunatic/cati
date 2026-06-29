@@ -16,7 +16,9 @@ import (
 	"image/color"
 	"io"
 	"math"
+	"runtime"
 	"strings"
+	"sync"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
 )
@@ -944,4 +946,223 @@ func RenderToImage(img image.Image, opts Options) *image.RGBA {
 		}
 	}
 	return dst
+}
+
+// RenderJ is a worker-aware copy of Render.
+// FIXME: copied from Render; consolidate once the worker path stabilizes.
+func RenderJ(w io.Writer, img image.Image, opts Options, jobs int) error {
+	if jobs <= 1 {
+		return RenderOpts(w, img, opts)
+	}
+	b := img.Bounds()
+	pixW := b.Dx()
+	pixH := b.Dy()
+	tcCols := (pixW + 1) / 2
+	trRows := (pixH + 1) / 2
+	cells, err := computeQuadCellsJ(img, b, opts, tcCols, trRows, jobs)
+	if err != nil {
+		return err
+	}
+
+	for tr := 0; tr < trRows; tr++ {
+		var sb strings.Builder
+		sb.WriteString(ansiLinePrefix)
+		for tc := 0; tc < tcCols; tc++ {
+			c := cells[tr*tcCols+tc]
+			if c.transparent {
+				sb.WriteRune(' ')
+				continue
+			}
+			if c.hasBG {
+				sb.WriteString(bgRGB(c.bg))
+			}
+			sb.WriteString(fgRGB(c.fg))
+			sb.WriteRune(c.ch)
+			sb.WriteString(ansiReset)
+		}
+		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
+			return fmt.Errorf("quadblock render: %w", err)
+		}
+	}
+	return nil
+}
+
+// RenderToImageJ is a worker-aware copy of RenderToImage.
+// FIXME: copied from RenderToImage; consolidate once the worker path settles.
+func RenderToImageJ(img image.Image, opts Options, jobs int) *image.RGBA {
+	if jobs <= 1 {
+		return RenderToImage(img, opts)
+	}
+	b := img.Bounds()
+	pixW, pixH := b.Dx(), b.Dy()
+	dst := image.NewRGBA(image.Rect(0, 0, pixW, pixH))
+
+	tcCols := (pixW + 1) / 2
+	trRows := (pixH + 1) / 2
+	cells, err := computeQuadCellsJ(img, b, opts, tcCols, trRows, jobs)
+	if err != nil {
+		return dst
+	}
+
+	quadBit := [4]uint8{bitUL, bitUR, bitLL, bitLR}
+	qDX := [4]int{0, 1, 0, 1}
+	qDY := [4]int{0, 0, 1, 1}
+
+	for tr := 0; tr < trRows; tr++ {
+		for tc := 0; tc < tcCols; tc++ {
+			c := cells[tr*tcCols+tc]
+			px0 := b.Min.X + tc*2
+			py0 := b.Min.Y + tr*2
+			if px0 >= pixW || py0 >= pixH {
+				continue
+			}
+
+			mask := charToMask(c.ch)
+			bg := c.bg
+			if !c.hasBG {
+				bg = color.RGBA{}
+			}
+			fg := c.fg
+			if !c.hasFG {
+				fg = bg
+			}
+			switch c.ch {
+			case '▌':
+				for q, dx := range []int{0, 1, 0, 1} {
+					dy := qDY[q]
+					px, py := tc*2+dx, tr*2+dy
+					if px < pixW && py < pixH {
+						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
+						if src.A == 0 {
+							dst.SetRGBA(px, py, color.RGBA{})
+						} else if dx == 0 {
+							dst.SetRGBA(px, py, fg)
+						} else {
+							dst.SetRGBA(px, py, bg)
+						}
+					}
+				}
+			case '▐':
+				for q, dx := range []int{0, 1, 0, 1} {
+					dy := qDY[q]
+					px, py := tc*2+dx, tr*2+dy
+					if px < pixW && py < pixH {
+						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
+						if src.A == 0 {
+							dst.SetRGBA(px, py, color.RGBA{})
+						} else if dx == 1 {
+							dst.SetRGBA(px, py, fg)
+						} else {
+							dst.SetRGBA(px, py, bg)
+						}
+					}
+				}
+			default:
+				for q, bit := range quadBit {
+					dx, dy := qDX[q], qDY[q]
+					px, py := tc*2+dx, tr*2+dy
+					if px < pixW && py < pixH {
+						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
+						if src.A == 0 {
+							dst.SetRGBA(px, py, color.RGBA{})
+						} else if mask&bit != 0 {
+							dst.SetRGBA(px, py, fg)
+						} else {
+							dst.SetRGBA(px, py, bg)
+						}
+					}
+				}
+			}
+		}
+	}
+	return dst
+}
+
+func computeQuadCellsJ(img image.Image, b image.Rectangle, opts Options, tcCols, trRows, jobs int) ([]quadCell, error) {
+	cells := make([]quadCell, tcCols*trRows)
+	if jobs <= 1 || tcCols == 0 || trRows == 0 {
+		for tr := 0; tr < trRows; tr++ {
+			for tc := 0; tc < tcCols; tc++ {
+				cells[tr*tcCols+tc] = computeQuadCell(img, b, opts, cells, tr, tc, tcCols, trRows)
+			}
+		}
+		return cells, nil
+	}
+
+	type diagTask struct {
+		tr int
+		tc int
+	}
+
+	for diag := 0; diag < tcCols+trRows-1; diag++ {
+		firstTC := max(0, diag-(trRows-1))
+		lastTC := min(tcCols-1, diag)
+		if firstTC > lastTC {
+			continue
+		}
+		taskCount := lastTC - firstTC + 1
+		workerN := jobs
+		if workerN > taskCount {
+			workerN = taskCount
+		}
+		if workerN > runtime.NumCPU() {
+			workerN = runtime.NumCPU()
+		}
+		tasks := make(chan diagTask)
+		var wg sync.WaitGroup
+		for range workerN {
+			go func() {
+				for task := range tasks {
+					cells[task.tr*tcCols+task.tc] = computeQuadCell(img, b, opts, cells, task.tr, task.tc, tcCols, trRows)
+					wg.Done()
+				}
+			}()
+		}
+		for tc := firstTC; tc <= lastTC; tc++ {
+			wg.Add(1)
+			tasks <- diagTask{tr: diag - tc, tc: tc}
+		}
+		close(tasks)
+		wg.Wait()
+	}
+	return cells, nil
+}
+
+// computeQuadCell is the worker-copy cell compiler used by RenderJ and
+// RenderToImageJ.
+// FIXME: copied from the Render/RenderToImage pixel-selection path; consider
+// consolidating once the worker path settles.
+func computeQuadCell(img image.Image, b image.Rectangle, opts Options, cells []quadCell, tr, tc, tcCols, trRows int) quadCell {
+	cellAt := func(row, col int) *quadCell {
+		if row < 0 || col < 0 || row >= trRows || col >= tcCols {
+			return nil
+		}
+		return &cells[row*tcCols+col]
+	}
+
+	py0 := b.Min.Y + tr*2
+	py1 := py0 + 1
+	px0 := b.Min.X + tc*2
+	px1 := px0 + 1
+
+	var pixels [4]color.RGBA
+	pixels[0] = samplePixel(img, px0, py0, b, opts)
+	pixels[1] = samplePixel(img, px1, py0, b, opts)
+	pixels[2] = samplePixel(img, px0, py1, b, opts)
+	pixels[3] = samplePixel(img, px1, py1, b, opts)
+
+	if opts.Blend == BlendAmbiguous || opts.Blend == BlendAmbiguousWide {
+		if len(collectUnique(pixels)) >= 3 {
+			radius := 1
+			if opts.Blend == BlendAmbiguousWide {
+				radius = 2
+			}
+			pixels[0] = blendedPixelR(img, px0, py0, b, radius)
+			pixels[1] = blendedPixelR(img, px1, py0, b, radius)
+			pixels[2] = blendedPixelR(img, px0, py1, b, radius)
+			pixels[3] = blendedPixelR(img, px1, py1, b, radius)
+		}
+	}
+
+	return compileCell(pixels, cellAt(tr, tc-1), cellAt(tr-1, tc), opts)
 }

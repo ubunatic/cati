@@ -21,12 +21,20 @@ func computeQuality(ref, vp image.Image, rc renderCfg) metrics.RenderQuality {
 	var rendered image.Image
 	switch {
 	case rc.mode.useQuad():
-		rendered = quadblock.RenderToImage(vp, rc.quadOpts)
+		if rc.jobs > 1 {
+			rendered = quadblock.RenderToImageJ(vp, rc.quadOpts, rc.jobs)
+		} else {
+			rendered = quadblock.RenderToImage(vp, rc.quadOpts)
+		}
 	case rc.mode.useSpark():
 		b := vp.Bounds()
 		outCols := max(1, b.Dx()/rc.mode.pixCols(1))
 		outRows := max(1, b.Dy()/rc.mode.pixRows(1))
-		rendered = sparkline.RenderToImage(vp, outCols, outRows, rc.sparkMode)
+		if rc.jobs > 1 {
+			rendered = sparkline.RenderToImageJ(vp, outCols, outRows, rc.sparkMode, rc.jobs)
+		} else {
+			rendered = sparkline.RenderToImage(vp, outCols, outRows, rc.sparkMode)
+		}
 	default:
 		rendered = vp
 	}

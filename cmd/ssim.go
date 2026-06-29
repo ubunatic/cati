@@ -61,12 +61,24 @@ func buildRef(orig image.Image, state viewState, termCols, termRows int, rc rend
 // downsample of the original source region.
 func renderSSIM(ref, vp image.Image, rc renderCfg) float64 {
 	if rc.mode.useQuad() {
+		if rc.jobs > 1 {
+			return metrics.SSIMLuminance(ref, quadblock.RenderToImageJ(vp, rc.quadOpts, rc.jobs))
+		}
 		return metrics.SSIMLuminance(ref, quadblock.RenderToImage(vp, rc.quadOpts))
 	}
 	if rc.mode.useSpark() {
 		b := vp.Bounds()
 		outCols := max(1, b.Dx()/rc.mode.pixCols(1))
 		outRows := max(1, b.Dy()/rc.mode.pixRows(1))
+		if rc.jobs > 1 {
+			rendered := sparkline.RenderToImageJ(vp, outCols, outRows, rc.sparkMode, rc.jobs)
+			rb := ref.Bounds()
+			vb := rendered.Bounds()
+			if rb.Dx() != vb.Dx() || rb.Dy() != vb.Dy() {
+				rendered = resizeRenderedImage(rendered, rb.Dx(), rb.Dy(), rc)
+			}
+			return metrics.SSIMLuminance(ref, rendered)
+		}
 		rendered := sparkline.RenderToImage(vp, outCols, outRows, rc.sparkMode)
 		rb := ref.Bounds()
 		vb := rendered.Bounds()

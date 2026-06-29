@@ -6,7 +6,9 @@ import (
 	"image/color"
 	"io"
 	"math"
+	"runtime"
 	"strings"
+	"sync"
 )
 
 const (
@@ -144,6 +146,137 @@ func RenderToImage(img image.Image, outCols, outRows int, mode Mode) image.Image
 			}
 		}
 	}
+	return dst
+}
+
+// RenderJ is a worker-aware copy of RenderOpts.
+// FIXME: copied from RenderOpts; consolidate once the worker path settles.
+func RenderJ(w io.Writer, img image.Image, outCols, outRows int, mode Mode, jobs int) error {
+	if jobs <= 1 {
+		return RenderOpts(w, img, outCols, outRows, mode)
+	}
+	b := img.Bounds()
+	pixW := b.Dx()
+	pixH := b.Dy()
+	cellW := max(1, pixW/outCols)
+	cellH := max(1, pixH/outRows)
+
+	rows := make([]string, outRows)
+	jobsCh := make(chan int)
+	var wg sync.WaitGroup
+	workerN := jobs
+	if workerN > outRows {
+		workerN = outRows
+	}
+	if workerN > runtime.NumCPU() {
+		workerN = runtime.NumCPU()
+	}
+	for range workerN {
+		go func() {
+			for tr := range jobsCh {
+				var sb strings.Builder
+				sb.WriteString(ansiLinePrefix)
+				for tc := 0; tc < outCols; tc++ {
+					x0 := b.Min.X + min(tc*cellW, pixW)
+					x1 := b.Min.X + min(tc*cellW+cellW, pixW) - 1
+					y0 := b.Min.Y + min(tr*cellH, pixH)
+					y1 := b.Min.Y + min(tr*cellH+cellH, pixH) - 1
+					if x1 < x0 || y1 < y0 {
+						continue
+					}
+					cell := FindBestCell(img, b, x0, x1, y0, y1, mode)
+					if cell.BG.A != 0 {
+						sb.WriteString(bgRGB(cell.BG))
+					}
+					if cell.FG.A != 0 {
+						sb.WriteString(fgRGB(cell.FG))
+					}
+					sb.WriteRune(cell.Ch)
+					sb.WriteString(ansiReset)
+				}
+				rows[tr] = sb.String()
+				wg.Done()
+			}
+		}()
+	}
+	for tr := 0; tr < outRows; tr++ {
+		wg.Add(1)
+		jobsCh <- tr
+	}
+	close(jobsCh)
+	wg.Wait()
+
+	for _, row := range rows {
+		if _, err := fmt.Fprintln(w, row); err != nil {
+			return fmt.Errorf("sparkline render: %w", err)
+		}
+	}
+	return nil
+}
+
+// RenderToImageJ is a worker-aware copy of RenderToImage.
+// FIXME: copied from RenderToImage; consolidate once the worker path settles.
+func RenderToImageJ(img image.Image, outCols, outRows int, mode Mode, jobs int) image.Image {
+	if jobs <= 1 {
+		return RenderToImage(img, outCols, outRows, mode)
+	}
+	b := img.Bounds()
+	pixW := b.Dx()
+	pixH := b.Dy()
+	cellW := max(1, pixW/outCols)
+	cellH := max(1, pixH/outRows)
+
+	dst := image.NewRGBA(b)
+
+	jobsCh := make(chan int)
+	var wg sync.WaitGroup
+	workerN := jobs
+	if workerN > outRows {
+		workerN = outRows
+	}
+	if workerN > runtime.NumCPU() {
+		workerN = runtime.NumCPU()
+	}
+	for range workerN {
+		go func() {
+			for tr := range jobsCh {
+				for tc := 0; tc < outCols; tc++ {
+					x0 := b.Min.X + min(tc*cellW, pixW)
+					x1 := b.Min.X + min(tc*cellW+cellW, pixW) - 1
+					y0 := b.Min.Y + min(tr*cellH, pixH)
+					y1 := b.Min.Y + min(tr*cellH+cellH, pixH) - 1
+					if x1 < x0 || y1 < y0 {
+						continue
+					}
+
+					cell := FindBestCell(img, b, x0, x1, y0, y1, mode)
+					cw := x1 - x0 + 1
+					ch := y1 - y0 + 1
+					for y := y0; y <= y1; y++ {
+						for x := x0; x <= x1; x++ {
+							src := toRGBA(img.At(x, y))
+							if src.A == 0 {
+								dst.Set(x, y, color.RGBA{})
+								continue
+							}
+							c := cell.BG
+							if maskContains(cell.Ch, x-x0, y-y0, cw, ch) {
+								c = cell.FG
+							}
+							dst.Set(x, y, c)
+						}
+					}
+				}
+				wg.Done()
+			}
+		}()
+	}
+	for tr := 0; tr < outRows; tr++ {
+		wg.Add(1)
+		jobsCh <- tr
+	}
+	close(jobsCh)
+	wg.Wait()
 	return dst
 }
 

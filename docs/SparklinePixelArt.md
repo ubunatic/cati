@@ -152,6 +152,11 @@ validation and visualization of all Cati renderers. It exposes three generator
 functions that create source images on the fly so no static binaries need to be
 committed to the repo for these test cases.
 
+The renderer now has worker-aware copies of `RenderOpts` and `RenderToImage`.
+The serial functions remain the baseline implementation; the worker copies are
+used by the CLI when `-j/--jobs > 1` so the existing output path stays stable
+while the parallel path is isolated for comparison and consolidation later.
+
 ### Generator functions
 
 | Function | What it produces | Located under |

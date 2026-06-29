@@ -69,6 +69,7 @@ Press Ctrl+C to stop playback.`,
 			if err != nil {
 				return err
 			}
+			rc.jobs = jobs
 			return run(opts{
 				ansi:        ansiMode,
 				recursive:   recursive,

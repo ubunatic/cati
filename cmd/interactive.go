@@ -77,6 +77,7 @@ type renderCfg struct {
 	quadOpts   quadblock.Options
 	preScale   func(image.Image) image.Image // optional pre-scaler applied before ScaleToFit
 	prescaler  prescaleMode
+	jobs       int
 	gray       bool                     // when true, convert image to grayscale before rendering
 	grayColors quadblock.ColorReduction // active grayscale palette level (ColorGray4/8/64/256)
 }
@@ -178,10 +179,19 @@ func (rc renderCfg) render(w io.Writer, img image.Image) error {
 		b := img.Bounds()
 		outCols := max(1, b.Dx()/4)
 		outRows := max(1, b.Dy()/8)
+		if rc.jobs > 1 {
+			return sparkline.RenderJ(w, img, outCols, outRows, rc.sparkMode, rc.jobs)
+		}
 		return sparkline.RenderOpts(w, img, outCols, outRows, rc.sparkMode)
 	case modeQuad:
+		if rc.jobs > 1 {
+			return quadblock.RenderJ(w, img, rc.quadOpts, rc.jobs)
+		}
 		return quadblock.RenderOpts(w, img, rc.quadOpts)
 	default:
+		if rc.jobs > 1 {
+			return halfblock.RenderJ(w, img, rc.jobs)
+		}
 		return halfblock.Render(w, img)
 	}
 }
@@ -325,6 +335,7 @@ func canonicalRenderCfg(rc renderCfg) renderCfg {
 		if sameRenderMode(rc, m.cfg) {
 			canon := m.cfg
 			canon.prescaler = rc.prescaler
+			canon.jobs = rc.jobs
 			canon.gray = rc.gray
 			canon.grayColors = rc.grayColors
 			return canon
@@ -350,6 +361,7 @@ func cycleRenderCfg(rc renderCfg) (renderCfg, string) {
 		if m.cfg.id == rc.id {
 			next := renderModes[(i+1)%len(renderModes)]
 			next.cfg.prescaler = rc.prescaler
+			next.cfg.jobs = rc.jobs
 			next.cfg.gray = rc.gray
 			next.cfg.grayColors = rc.grayColors
 			return next.cfg, next.name
@@ -357,6 +369,7 @@ func cycleRenderCfg(rc renderCfg) (renderCfg, string) {
 	}
 	next := renderModes[0]
 	next.cfg.prescaler = rc.prescaler
+	next.cfg.jobs = rc.jobs
 	next.cfg.gray = rc.gray
 	next.cfg.grayColors = rc.grayColors
 	return next.cfg, next.name
@@ -370,6 +383,7 @@ func cycleRenderCfgPrev(rc renderCfg) (renderCfg, string) {
 		if m.cfg.id == rc.id {
 			prev := renderModes[(i+n-1)%n]
 			prev.cfg.prescaler = rc.prescaler
+			prev.cfg.jobs = rc.jobs
 			prev.cfg.gray = rc.gray
 			prev.cfg.grayColors = rc.grayColors
 			return prev.cfg, prev.name
@@ -377,6 +391,7 @@ func cycleRenderCfgPrev(rc renderCfg) (renderCfg, string) {
 	}
 	prev := renderModes[n-1]
 	prev.cfg.prescaler = rc.prescaler
+	prev.cfg.jobs = rc.jobs
 	prev.cfg.gray = rc.gray
 	prev.cfg.grayColors = rc.grayColors
 	return prev.cfg, prev.name

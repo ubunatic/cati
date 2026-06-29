@@ -15,15 +15,17 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"runtime"
 	"strings"
+	"sync"
 )
 
 // ── ANSI helpers ─────────────────────────────────────────────────────────────
 
 const (
 	ansiReset          = "\x1b[0m"
-	ansiEraseLine      = "\x1b[2K"  // erase entire current line (any cursor column)
-	ansiCarriageReturn = "\r"        // explicit CR: go to col 0 (needed in raw tty mode)
+	ansiEraseLine      = "\x1b[2K" // erase entire current line (any cursor column)
+	ansiCarriageReturn = "\r"      // explicit CR: go to col 0 (needed in raw tty mode)
 	ansiLinePrefix     = ansiEraseLine + ansiCarriageReturn
 )
 
@@ -159,10 +161,10 @@ func ScaleNN(img image.Image, w, h int) image.Image {
 
 // cell describes one terminal cell derived from a top and bottom pixel.
 type cell struct {
-	ch         rune      // ▀, ▄, █, or ' '
-	fg, bg     color.RGBA
-	hasFG      bool
-	hasBG      bool
+	ch          rune // ▀, ▄, █, or ' '
+	fg, bg      color.RGBA
+	hasFG       bool
+	hasBG       bool
 	transparent bool // both pixels transparent → plain space, no ANSI
 }
 
@@ -309,5 +311,157 @@ func RenderToImage(img image.Image) *image.RGBA {
 			}
 		}
 	}
+	return dst
+}
+
+// RenderJ is a worker-aware copy of Render.
+// FIXME: copied from Render; consolidate the row emission path after worker
+// support stabilizes.
+func RenderJ(w io.Writer, img image.Image, jobs int) error {
+	if jobs <= 1 {
+		return Render(w, img)
+	}
+	b := img.Bounds()
+	width := b.Dx()
+	height := b.Dy()
+	rowCount := (height + 1) / 2
+	if rowCount <= 0 {
+		return nil
+	}
+
+	rows := make([]string, rowCount)
+	jobsCh := make(chan int)
+	var wg sync.WaitGroup
+	workerN := jobs
+	if workerN > rowCount {
+		workerN = rowCount
+	}
+	if workerN > runtime.NumCPU() {
+		workerN = runtime.NumCPU()
+	}
+	for range workerN {
+		go func() {
+			for row := range jobsCh {
+				topY := b.Min.Y + row*2
+				botY := topY + 1
+				var sb strings.Builder
+				sb.WriteString(ansiLinePrefix)
+				for x := b.Min.X; x < b.Min.X+width; x++ {
+					top := toRGBA(img.At(x, topY))
+					var bot color.RGBA
+					if botY < b.Min.Y+height {
+						bot = toRGBA(img.At(x, botY))
+					}
+					c := pairToCell(top, bot)
+					if c.transparent {
+						sb.WriteRune(' ')
+					} else {
+						sb.WriteString(cellEscape(c))
+						sb.WriteRune(c.ch)
+						sb.WriteString(ansiReset)
+					}
+				}
+				rows[row] = sb.String()
+				wg.Done()
+			}
+		}()
+	}
+	for row := 0; row < rowCount; row++ {
+		wg.Add(1)
+		jobsCh <- row
+	}
+	close(jobsCh)
+	wg.Wait()
+
+	for _, row := range rows {
+		if _, err := fmt.Fprintln(w, row); err != nil {
+			return fmt.Errorf("halfblock render: %w", err)
+		}
+	}
+	return nil
+}
+
+// RenderToImageJ is a worker-aware copy of RenderToImage.
+// FIXME: copied from RenderToImage; consolidate once worker support settles.
+func RenderToImageJ(img image.Image, jobs int) *image.RGBA {
+	if jobs <= 1 {
+		return RenderToImage(img)
+	}
+	b := img.Bounds()
+	width := b.Dx()
+	height := b.Dy()
+	dst := image.NewRGBA(b)
+	rowCount := (height + 1) / 2
+	if rowCount <= 0 {
+		return dst
+	}
+
+	jobsCh := make(chan int)
+	var wg sync.WaitGroup
+	workerN := jobs
+	if workerN > rowCount {
+		workerN = rowCount
+	}
+	if workerN > runtime.NumCPU() {
+		workerN = runtime.NumCPU()
+	}
+	for range workerN {
+		go func() {
+			for row := range jobsCh {
+				topY := b.Min.Y + row*2
+				botY := topY + 1
+				for x := b.Min.X; x < b.Min.X+width; x++ {
+					top := toRGBA(img.At(x, topY))
+					var bot color.RGBA
+					if botY < b.Min.Y+height {
+						bot = toRGBA(img.At(x, botY))
+					}
+					c := pairToCell(top, bot)
+
+					var topColor color.RGBA
+					var botColor color.RGBA
+					if c.transparent {
+						topColor = color.RGBA{}
+						botColor = color.RGBA{}
+					} else {
+						bg := c.bg
+						if !c.hasBG {
+							bg = color.RGBA{}
+						}
+						fg := c.fg
+						if !c.hasFG {
+							fg = bg
+						}
+						switch c.ch {
+						case '▀':
+							topColor = fg
+							botColor = bg
+						case '▄':
+							topColor = bg
+							botColor = fg
+						case '█':
+							topColor = fg
+							botColor = fg
+						default:
+							topColor = bg
+							botColor = bg
+						}
+					}
+
+					dst.SetRGBA(x, topY, topColor)
+					if botY < b.Min.Y+height {
+						dst.SetRGBA(x, botY, botColor)
+					}
+				}
+				wg.Done()
+			}
+		}()
+	}
+	for row := 0; row < rowCount; row++ {
+		wg.Add(1)
+		jobsCh <- row
+	}
+	close(jobsCh)
+	wg.Wait()
 	return dst
 }
