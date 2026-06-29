@@ -104,6 +104,16 @@ func startThumbWorkers(ctx context.Context, n int, q *thumbQueue, previewVideos 
 	}
 }
 
+func resolveWorkerCount(override, configured int) int {
+	if override > 0 {
+		return override
+	}
+	if configured > 0 {
+		return configured
+	}
+	return max(1, runtime.NumCPU()/2)
+}
+
 func thumbWorker(ctx context.Context, q *thumbQueue, previewVideos bool, nVideoFrames int, rc renderCfg, results chan<- thumbResult) {
 	for {
 		job, ok := q.next()

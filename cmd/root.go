@@ -29,6 +29,7 @@ func New() *cobra.Command {
 	var interactMode bool
 	var inputTest bool
 	var fps int
+	var jobs int
 	var width int
 	var height int
 	var renderMode string
@@ -75,6 +76,7 @@ Press Ctrl+C to stop playback.`,
 				playMode:    playMode,
 				interactive: interactMode,
 				fps:         fps,
+				jobs:        jobs,
 				width:       width,
 				height:      height,
 				fullComp:    fullComp,
@@ -90,6 +92,7 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().BoolVarP(&playMode, "play", "p", false, "animate frames in a loop (Ctrl+C to stop)")
 	root.Flags().BoolVarP(&interactMode, "interactive", "i", false, "interactive viewer: +/- zoom, arrow keys pan, q quit")
 	root.Flags().IntVar(&fps, "fps", 0, "frames per second (0 = auto: native fps for video, 15 for images)")
+	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
 	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto; clamped to terminal in -i)")
 	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto; clamped to terminal in -i)")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half|halfblock, qs|quad, qe, sq|spark")
@@ -113,6 +116,7 @@ type opts struct {
 	playMode    bool
 	interactive bool
 	fps         int
+	jobs        int
 	width       int    // terminal columns; 0 = auto
 	height      int    // image/render rows; 0 = auto
 	fullComp    bool   // compare render quality against original source pixels
@@ -125,6 +129,9 @@ type opts struct {
 func run(o opts, rc renderCfg, args []string) error {
 	if !o.ansi {
 		return fmt.Errorf("only --ansi mode is supported in this version")
+	}
+	if o.jobs < 0 {
+		return fmt.Errorf("--jobs must be 0 or greater")
 	}
 
 	// Expand args: directories → sorted image file list.
@@ -155,7 +162,7 @@ func run(o opts, rc renderCfg, args []string) error {
 			}
 		}
 		if len(args) > 1 || isDir {
-			return browser(args, o.width, o.height, rc, o.fullComp, o.initialZoom)
+			return browser(args, o.width, o.height, rc, o.fullComp, o.initialZoom, o.jobs)
 		}
 		if len(paths) == 0 {
 			return fmt.Errorf("no supported images found")

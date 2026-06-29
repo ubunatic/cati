@@ -249,6 +249,44 @@ func TestModeFlagShorthand(t *testing.T) {
 	}
 }
 
+func TestJobsFlagShorthand(t *testing.T) {
+	cmd := New()
+	if err := cmd.ParseFlags([]string{"-j", "7"}); err != nil {
+		t.Fatalf("failed to parse -j: %v", err)
+	}
+	got, err := cmd.Flags().GetInt("jobs")
+	if err != nil {
+		t.Fatalf("failed to get jobs flag: %v", err)
+	}
+	if got != 7 {
+		t.Fatalf("expected jobs flag to be 7, got %d", got)
+	}
+
+	cmd = New()
+	if err := cmd.ParseFlags([]string{"--jobs", "11"}); err != nil {
+		t.Fatalf("failed to parse --jobs: %v", err)
+	}
+	got, err = cmd.Flags().GetInt("jobs")
+	if err != nil {
+		t.Fatalf("failed to get jobs flag: %v", err)
+	}
+	if got != 11 {
+		t.Fatalf("expected jobs flag to be 11, got %d", got)
+	}
+}
+
+func TestResolveWorkerCount(t *testing.T) {
+	if got := resolveWorkerCount(9, 4); got != 9 {
+		t.Fatalf("resolveWorkerCount(9, 4) = %d, want 9", got)
+	}
+	if got := resolveWorkerCount(0, 6); got != 6 {
+		t.Fatalf("resolveWorkerCount(0, 6) = %d, want 6", got)
+	}
+	if got := resolveWorkerCount(0, 0); got < 1 {
+		t.Fatalf("resolveWorkerCount(0, 0) = %d, want >= 1", got)
+	}
+}
+
 func TestParsePrescaleMode(t *testing.T) {
 	tests := []struct {
 		name string

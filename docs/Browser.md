@@ -200,7 +200,7 @@ slice in the cache and cycled as a one-shot animation.
 | Config key | Default | Description |
 |---|---|---|
 | `preview_videos` | `true` | Whether to extract video preview frames |
-| `max_jobs` | `CPU/2` | Parallel thumbnail worker count (0 = auto) |
+| `max_jobs` | `CPU/2` | Parallel thumbnail worker count (0 = auto; overridden by `-j/--jobs`) |
 | `video_frames` | `10` | Number of frames extracted per video thumbnail |
 
 ### One-Shot Animation

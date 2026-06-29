@@ -887,8 +887,9 @@ type scrollDragState struct {
 	startY int
 }
 
-func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bool, initialZoom string) error {
+func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bool, initialZoom string, jobs int) error {
 	cfg := loadConfig()
+	cfg.MaxJobs = resolveWorkerCount(jobs, cfg.MaxJobs)
 	inputSpec, _ := input.Load(fs.FS(spec.FS))
 	style := loadStyle()
 	labels := loadLabels()
@@ -962,9 +963,6 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 	defer tq.stop()
 
 	nWorkers := cfg.MaxJobs
-	if nWorkers <= 0 {
-		nWorkers = max(1, runtime.NumCPU()/2)
-	}
 	nVideoFrames := cfg.VideoFrames
 	if nVideoFrames <= 0 {
 		nVideoFrames = 10
