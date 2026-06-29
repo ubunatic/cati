@@ -102,10 +102,14 @@ func TestGoldenRenders(t *testing.T) {
 		// Photo samples used by the demo make targets.
 		{"sample_darth_daughter", "assets/samples/sample-003-darth-daughter.jpg", 24},
 		{"sample_darth_daughter", "assets/samples/sample-003-darth-daughter.jpg", 30},
+		{"sample_darth_daughter", "assets/samples/sample-003-darth-daughter.jpg", 50},
 		{"sample_soldering_practice", "assets/samples/sample-001-soldering-practice-2025.jpg", 24},
 		{"sample_soldering_practice", "assets/samples/sample-001-soldering-practice-2025.jpg", 30},
+		{"sample_soldering_practice", "assets/samples/sample-001-soldering-practice-2025.jpg", 50},
+		{"sample_soldering_practice", "assets/samples/sample-001-soldering-practice-2025.jpg", 80},
 		{"sample_summer_vacation", "assets/samples/sample-002-summer-vacation.jpg", 24},
 		{"sample_summer_vacation", "assets/samples/sample-002-summer-vacation.jpg", 30},
+		{"sample_summer_vacation", "assets/samples/sample-002-summer-vacation.jpg", 50},
 	}
 
 	type algoSpec struct {

@@ -16,6 +16,9 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [011](011-sparkline-inversion-and-stripe-bugs.md) | Sparkline inversion (upper/right) and stripe/comb line (left/right) bugs | ✅ Closed |
 | [013](013-shared-analysis-grid-for-halfblock-and-quadblock.md) | Shared analysis grid for halfblock/quadblock convergence on small images | 🔴 Open |
 | [015](015-spark-bottom-row-halfcell-fit.md) | Spark/quad garbled bottom row at mid-cell fit heights (half-cell snap) | ✅ Closed |
+| [016](016-worker-copy-consolidation.md) | Worker-copy render paths: keep clones for tuning, consolidate later | 🔴 Open |
+| [017](017-gpu-glyph-mapping-spark-mode.md) | GPU assistance for glyph mapping, starting with spark mode | 🔴 Open |
+| [018](018-sparkline-allocation-reduction.md) | Reduce allocation pressure in spark mode | 🔴 Open |
 
 ## Archived
 

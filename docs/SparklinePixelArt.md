@@ -156,6 +156,13 @@ The renderer now has worker-aware copies of `RenderOpts` and `RenderToImage`.
 The serial functions remain the baseline implementation; the worker copies are
 used by the CLI when `-j/--jobs > 1` so the existing output path stays stable
 while the parallel path is isolated for comparison and consolidation later.
+The spark glyph candidate tables are also prebuilt once, and the mask lookup
+for reconstructed cells is kept map-free, so the hot path does not rebuild
+per-cell helper state.
+When the source or destination is already `*image.RGBA`, the renderer uses
+direct pixel access instead of generic `image.Color` sampling/writes, which
+keeps the benchmarked path allocation-free in cell selection and nearly flat in
+image reconstruction.
 
 ### Generator functions
 

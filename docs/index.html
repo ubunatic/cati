@@ -183,7 +183,11 @@
     .px { aspect-ratio: 1; border-radius: 1px; transition: opacity .3s; }
 
     /* ── Spark overlay showcase ────────────────────────────────── */
-    .spark-showcase { padding: 5rem 0; background: var(--bg2); }
+    .spark-showcase {
+      --spark-zoom: 2;
+      padding: 5rem 0;
+      background: var(--bg2);
+    }
     .spark-showcase .section-header p { max-width: 680px; margin-left: auto; margin-right: auto; }
     .spark-controls {
       display: flex; justify-content: center; flex-wrap: wrap; gap: .5rem;
@@ -208,6 +212,23 @@
       border-color: rgba(240,180,41,.55);
       background: rgba(240,180,41,.08);
     }
+    .spark-zoom {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 2.35rem; height: 2.35rem;
+      padding: 0;
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .spark-zoom-value {
+      display: inline-flex; align-items: center;
+      padding: 0 .25rem;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: .78rem;
+      font-weight: 600;
+      min-width: 4.5rem;
+      justify-content: center;
+    }
     .spark-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -227,18 +248,23 @@
       aspect-ratio: 1.22;
       background: #0a0c11;
       overflow: hidden;
+      touch-action: none;
+      cursor: grab;
+      user-select: none;
     }
+    .spark-stage.is-dragging { cursor: grabbing; }
     .spark-stage img {
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
       object-fit: contain;
-      padding: .75rem;
+      padding: .65rem;
       opacity: .18;
-      transform: scale(1);
-      transition: opacity .28s ease, transform .28s ease;
+      transform: translate(var(--spark-pan-x, 0px), var(--spark-pan-y, 0px)) scale(var(--spark-zoom));
+      transition: opacity .28s ease;
       image-rendering: auto;
+      pointer-events: none;
     }
     .spark-stage::after {
       content: "";
@@ -247,7 +273,9 @@
       background: linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,.22));
       pointer-events: none;
     }
-    .spark-card:hover .spark-stage img { transform: scale(1.01); }
+    .spark-card:hover .spark-stage img {
+      transform: translate(var(--spark-pan-x, 0px), var(--spark-pan-y, 0px)) scale(calc(var(--spark-zoom) + .04));
+    }
     .spark-badge {
       position: absolute;
       top: .75rem;
@@ -293,21 +321,29 @@
       line-height: 1.5;
     }
     .spark-showcase[data-mode="orig"] .spark-stage .layer-orig { opacity: 1; }
-    .spark-showcase[data-mode="orig"] .spark-stage .layer-half { opacity: .34; }
-    .spark-showcase[data-mode="orig"] .spark-stage .layer-quad { opacity: .24; }
-    .spark-showcase[data-mode="orig"] .spark-stage .layer-spark { opacity: .18; }
-    .spark-showcase[data-mode="half"] .spark-stage .layer-orig { opacity: .34; }
+    .spark-showcase[data-mode="orig"] .spark-stage .layer-half { opacity: 0; }
+    .spark-showcase[data-mode="orig"] .spark-stage .layer-quad { opacity: 0; }
+    .spark-showcase[data-mode="orig"] .spark-stage .layer-spark { opacity: 0; }
+    .spark-showcase[data-mode="half"] .spark-stage .layer-orig { opacity: 0; }
     .spark-showcase[data-mode="half"] .spark-stage .layer-half { opacity: 1; }
-    .spark-showcase[data-mode="half"] .spark-stage .layer-quad { opacity: .56; }
-    .spark-showcase[data-mode="half"] .spark-stage .layer-spark { opacity: .34; }
-    .spark-showcase[data-mode="quad"] .spark-stage .layer-orig { opacity: .24; }
-    .spark-showcase[data-mode="quad"] .spark-stage .layer-half { opacity: .56; }
+    .spark-showcase[data-mode="half"] .spark-stage .layer-quad { opacity: 0; }
+    .spark-showcase[data-mode="half"] .spark-stage .layer-spark { opacity: 0; }
+    .spark-showcase[data-mode="quad"] .spark-stage .layer-orig { opacity: 0; }
+    .spark-showcase[data-mode="quad"] .spark-stage .layer-half { opacity: 0; }
     .spark-showcase[data-mode="quad"] .spark-stage .layer-quad { opacity: 1; }
-    .spark-showcase[data-mode="quad"] .spark-stage .layer-spark { opacity: .68; }
-    .spark-showcase[data-mode="spark"] .spark-stage .layer-orig { opacity: .18; }
-    .spark-showcase[data-mode="spark"] .spark-stage .layer-half { opacity: .34; }
-    .spark-showcase[data-mode="spark"] .spark-stage .layer-quad { opacity: .58; }
+    .spark-showcase[data-mode="quad"] .spark-stage .layer-spark { opacity: 0; }
+    .spark-showcase[data-mode="spark"] .spark-stage .layer-orig { opacity: 0; }
+    .spark-showcase[data-mode="spark"] .spark-stage .layer-half { opacity: 0; }
+    .spark-showcase[data-mode="spark"] .spark-stage .layer-quad { opacity: 0; }
     .spark-showcase[data-mode="spark"] .spark-stage .layer-spark { opacity: 1; }
+    .spark-pan-tip {
+      margin-top: .5rem;
+      text-align: center;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      user-select: none;
+    }
     @media (max-width: 768px) {
       .spark-footer { flex-direction: column; align-items: flex-start; }
       .spark-meta { text-align: left; }
@@ -491,27 +527,31 @@
     </div>
 
     <div class="spark-controls" id="spark-controls" aria-label="Spark comparison mode">
+      <button class="spark-control spark-zoom" type="button" data-zoom="-1" aria-label="Zoom out">−</button>
+      <span class="spark-zoom-value" id="spark-zoom-value" aria-live="polite">2.0x</span>
+      <button class="spark-control spark-zoom" type="button" data-zoom="1" aria-label="Zoom in">+</button>
       <button class="spark-control" type="button" data-mode="orig" aria-pressed="false">orig</button>
       <button class="spark-control" type="button" data-mode="half" aria-pressed="false">half</button>
       <button class="spark-control" type="button" data-mode="quad" aria-pressed="false">quad</button>
       <button class="spark-control" type="button" data-mode="spark" aria-pressed="true">spark</button>
     </div>
+    <p class="spark-pan-tip">Drag any preview inside its frame to pan it.</p>
 
-    <div class="spark-grid" id="spark-showcase" data-mode="spark">
+    <div class="spark-grid" id="spark-showcase">
       <article class="spark-card">
-        <div class="spark-stage">
+        <div class="spark-stage" data-pan-x="136" data-pan-y="0">
           <div class="spark-badge">soldering practice</div>
           <img class="layer-orig" src="../assets/samples/sample-001-soldering-practice-2025.jpg" alt="Original soldering practice sample" />
-          <img class="layer-half" src="../testdata/sample_soldering_practice/render_halfblock_30ch.png" alt="Half-block render of soldering practice sample" />
-          <img class="layer-quad" src="../testdata/sample_soldering_practice/render_quad_30ch.png" alt="Quad-block render of soldering practice sample" />
-          <img class="layer-spark" src="../testdata/sample_soldering_practice/render_spark_30ch.png" alt="Spark render of soldering practice sample" />
+          <img class="layer-half" src="../testdata/sample_soldering_practice/render_halfblock_80ch.png" alt="Half-block render of soldering practice sample at 80ch" />
+          <img class="layer-quad" src="../testdata/sample_soldering_practice/render_quad_80ch.png" alt="Quad-block render of soldering practice sample at 80ch" />
+          <img class="layer-spark" src="../testdata/sample_soldering_practice/render_spark_80ch.png" alt="Spark render of soldering practice sample at 80ch" />
         </div>
         <div class="spark-footer">
           <div>
-            <h3>Golden 001</h3>
+            <h3>Example 001</h3>
             <p>Source image and three renderer outputs stacked from least to most cell-efficient.</p>
           </div>
-          <div class="spark-meta">30ch goldens<br>all from the same input</div>
+          <div class="spark-meta">80ch demo set<br>all from the same input</div>
         </div>
       </article>
 
@@ -519,33 +559,33 @@
         <div class="spark-stage">
           <div class="spark-badge">summer vacation</div>
           <img class="layer-orig" src="../assets/samples/sample-002-summer-vacation.jpg" alt="Original summer vacation sample" />
-          <img class="layer-half" src="../testdata/sample_summer_vacation/render_halfblock_30ch.png" alt="Half-block render of summer vacation sample" />
-          <img class="layer-quad" src="../testdata/sample_summer_vacation/render_quad_30ch.png" alt="Quad-block render of summer vacation sample" />
-          <img class="layer-spark" src="../testdata/sample_summer_vacation/render_spark_30ch.png" alt="Spark render of summer vacation sample" />
+          <img class="layer-half" src="../testdata/sample_summer_vacation/render_halfblock_50ch.png" alt="Half-block render of summer vacation sample at 50ch" />
+          <img class="layer-quad" src="../testdata/sample_summer_vacation/render_quad_50ch.png" alt="Quad-block render of summer vacation sample at 50ch" />
+          <img class="layer-spark" src="../testdata/sample_summer_vacation/render_spark_50ch.png" alt="Spark render of summer vacation sample at 50ch" />
         </div>
         <div class="spark-footer">
           <div>
-            <h3>Golden 002</h3>
+            <h3>Example 002</h3>
             <p>The spark layer keeps the composition legible while spending fewer cells on the same crop.</p>
           </div>
-          <div class="spark-meta">30ch goldens<br>same source, different glyphs</div>
+          <div class="spark-meta">50ch demo set<br>same source, different glyphs</div>
         </div>
       </article>
 
       <article class="spark-card">
-        <div class="spark-stage">
+        <div class="spark-stage" data-pan-x="0" data-pan-y="112">
           <div class="spark-badge">darth daughter</div>
           <img class="layer-orig" src="../assets/samples/sample-003-darth-daughter.jpg" alt="Original darth daughter sample" />
-          <img class="layer-half" src="../testdata/sample_darth_daughter/render_halfblock_30ch.png" alt="Half-block render of darth daughter sample" />
-          <img class="layer-quad" src="../testdata/sample_darth_daughter/render_quad_30ch.png" alt="Quad-block render of darth daughter sample" />
-          <img class="layer-spark" src="../testdata/sample_darth_daughter/render_spark_30ch.png" alt="Spark render of darth daughter sample" />
+          <img class="layer-half" src="../testdata/sample_darth_daughter/render_halfblock_50ch.png" alt="Half-block render of darth daughter sample at 50ch" />
+          <img class="layer-quad" src="../testdata/sample_darth_daughter/render_quad_50ch.png" alt="Quad-block render of darth daughter sample at 50ch" />
+          <img class="layer-spark" src="../testdata/sample_darth_daughter/render_spark_50ch.png" alt="Spark render of darth daughter sample at 50ch" />
         </div>
         <div class="spark-footer">
           <div>
-            <h3>Golden 003</h3>
+            <h3>Example 003</h3>
             <p>The same source makes a clean side-by-side for how the renderer trades detail for density.</p>
           </div>
-          <div class="spark-meta">30ch goldens<br>overlay view</div>
+          <div class="spark-meta">50ch demo set<br>overlay view</div>
         </div>
       </article>
     </div>
@@ -678,9 +718,20 @@
   }, 500);
 
   // ── Spark showcase: switch which layer is dominant ───────────
-  const showcase = document.getElementById('spark-showcase');
+  const showcase = document.querySelector('section.spark-showcase');
   const controls = document.querySelectorAll('#spark-controls .spark-control');
-  if (showcase && controls.length) {
+    const zoomValue = document.getElementById('spark-zoom-value');
+    if (showcase && controls.length) {
+    const zoomSteps = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0];
+    const stages = Array.from(showcase.querySelectorAll('.spark-stage'));
+    const panState = new Map(stages.map((stage) => {
+      const x = parseFloat(stage.dataset.panX || '0') || 0;
+      const y = parseFloat(stage.dataset.panY || '0') || 0;
+      stage.style.setProperty('--spark-pan-x', `${x}px`);
+      stage.style.setProperty('--spark-pan-y', `${y}px`);
+      return [stage, { x, y }];
+    }));
+    let drag = null;
     const setMode = (mode) => {
       showcase.dataset.mode = mode;
       controls.forEach((btn) => {
@@ -688,8 +739,66 @@
         btn.setAttribute('aria-pressed', active ? 'true' : 'false');
       });
     };
+    const setZoom = (zoom) => {
+      const next = Math.max(zoomSteps[0], Math.min(zoomSteps[zoomSteps.length - 1], zoom));
+      showcase.style.setProperty('--spark-zoom', next);
+      if (zoomValue) {
+        zoomValue.textContent = `${next.toFixed(next % 1 === 0 ? 0 : 2)}x`;
+      }
+    };
+    const setPan = (stage, x, y) => {
+      const state = panState.get(stage);
+      if (!state) return;
+      state.x = x;
+      state.y = y;
+      stage.style.setProperty('--spark-pan-x', `${x}px`);
+      stage.style.setProperty('--spark-pan-y', `${y}px`);
+    };
+    const currentZoom = parseFloat(getComputedStyle(showcase).getPropertyValue('--spark-zoom')) || 2.0;
+    setZoom(currentZoom);
+    stages.forEach((stage) => {
+      stage.addEventListener('pointerdown', (ev) => {
+        drag = {
+          stage,
+          id: ev.pointerId,
+          startX: ev.clientX,
+          startY: ev.clientY,
+          panX: panState.get(stage)?.x || 0,
+          panY: panState.get(stage)?.y || 0,
+        };
+        stage.classList.add('is-dragging');
+        stage.setPointerCapture(ev.pointerId);
+      });
+      stage.addEventListener('pointermove', (ev) => {
+        if (!drag || drag.stage !== stage || drag.id !== ev.pointerId) return;
+        setPan(stage, drag.panX + (ev.clientX - drag.startX), drag.panY + (ev.clientY - drag.startY));
+      });
+      const endDrag = (ev) => {
+        if (!drag || drag.stage !== stage || drag.id !== ev.pointerId) return;
+        stage.classList.remove('is-dragging');
+        drag = null;
+      };
+      stage.addEventListener('pointerup', endDrag);
+      stage.addEventListener('pointercancel', endDrag);
+      stage.addEventListener('lostpointercapture', () => {
+        stage.classList.remove('is-dragging');
+        drag = null;
+      });
+    });
     controls.forEach((btn) => {
-      btn.addEventListener('click', () => setMode(btn.dataset.mode));
+      btn.addEventListener('click', () => {
+        if (btn.dataset.mode) {
+          setMode(btn.dataset.mode);
+          return;
+        }
+        const delta = parseInt(btn.dataset.zoom, 10);
+        if (!Number.isNaN(delta)) {
+          const current = parseFloat(getComputedStyle(showcase).getPropertyValue('--spark-zoom')) || 2.0;
+          const idx = zoomSteps.findIndex((z) => z >= current - 0.001);
+          const nextIdx = delta < 0 ? Math.max(0, idx - 1) : Math.min(zoomSteps.length - 1, (idx < 0 ? 0 : idx) + 1);
+          setZoom(zoomSteps[nextIdx]);
+        }
+      });
     });
     setMode('spark');
   }

@@ -132,16 +132,16 @@ func RenderToImage(img image.Image, outCols, outRows int, mode Mode) image.Image
 
 			for y := y0; y <= y1; y++ {
 				for x := x0; x <= x1; x++ {
-					src := toRGBA(img.At(x, y))
+					src := rgbaAt(img, x, y)
 					if src.A == 0 {
-						dst.Set(x, y, color.RGBA{})
+						setRGBA(dst, x, y, color.RGBA{})
 						continue
 					}
 					c := cell.BG
 					if maskContains(cell.Ch, x-x0, y-y0, cw, ch) {
 						c = cell.FG
 					}
-					dst.Set(x, y, c)
+					setRGBA(dst, x, y, c)
 				}
 			}
 		}
@@ -254,16 +254,16 @@ func RenderToImageJ(img image.Image, outCols, outRows int, mode Mode, jobs int) 
 					ch := y1 - y0 + 1
 					for y := y0; y <= y1; y++ {
 						for x := x0; x <= x1; x++ {
-							src := toRGBA(img.At(x, y))
+							src := rgbaAt(img, x, y)
 							if src.A == 0 {
-								dst.Set(x, y, color.RGBA{})
+								setRGBA(dst, x, y, color.RGBA{})
 								continue
 							}
 							c := cell.BG
 							if maskContains(cell.Ch, x-x0, y-y0, cw, ch) {
 								c = cell.FG
 							}
-							dst.Set(x, y, c)
+							setRGBA(dst, x, y, c)
 						}
 					}
 				}
@@ -297,7 +297,7 @@ func maskContains(ch rune, x, y, w, h int) bool {
 	case ' ':
 		return false
 	case '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█':
-		level := map[rune]int{'▁': 1, '▂': 2, '▃': 3, '▄': 4, '▅': 5, '▆': 6, '▇': 7, '█': 8}[ch]
+		level := sparkLevel(ch)
 		return (h-y)*8 <= level*h
 	case '▘':
 		return x*2 < w && y*2 < h
@@ -330,7 +330,10 @@ func maskContains(ch rune, x, y, w, h int) bool {
 	}
 }
 
-func verticalCandidates() []candidate {
+var verticalCandidates = buildVerticalCandidates()
+var quadCandidates = buildQuadCandidates()
+
+func buildVerticalCandidates() []candidate {
 	out := make([]candidate, 0, len(lowerBlocks))
 	for i, ch := range lowerBlocks {
 		k := i + 1
@@ -344,8 +347,9 @@ func verticalCandidates() []candidate {
 	return out
 }
 
-func quadCandidates() []candidate {
-	out := verticalCandidates()
+func buildQuadCandidates() []candidate {
+	out := make([]candidate, 0, len(lowerBlocks)+8)
+	out = append(out, verticalCandidates...)
 	out = append(out,
 		candidate{ch: ' ', mask: func(_, _, _, _ int) bool { return false }},
 		candidate{ch: '▘', mask: quadMask(true, false, false, false)},
@@ -365,6 +369,29 @@ func quadCandidates() []candidate {
 		candidate{ch: '█', mask: func(_, _, _, _ int) bool { return true }},
 	)
 	return out
+}
+
+func sparkLevel(ch rune) int {
+	switch ch {
+	case '▁':
+		return 1
+	case '▂':
+		return 2
+	case '▃':
+		return 3
+	case '▄':
+		return 4
+	case '▅':
+		return 5
+	case '▆':
+		return 6
+	case '▇':
+		return 7
+	case '█':
+		return 8
+	default:
+		return 0
+	}
 }
 
 func quadMask(ul, ur, ll, lr bool) func(x, y, w, h int) bool {
@@ -387,9 +414,9 @@ func quadMask(ul, ur, ll, lr bool) func(x, y, w, h int) bool {
 // FindBestCell tries the active mode's glyph candidates for the pixel block
 // [x0..x1] × [y0..y1] and returns the lowest-SSE reconstruction.
 func FindBestCell(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, mode Mode) cellResult {
-	candidates := verticalCandidates()
+	candidates := verticalCandidates
 	if mode == Quad {
-		candidates = quadCandidates()
+		candidates = quadCandidates
 	}
 	return findBestCandidate(img, bounds, x0, x1, y0, y1, candidates)
 }
@@ -409,7 +436,7 @@ func findBestCandidate(img image.Image, _ image.Rectangle, x0, x1, y0, y1 int, c
 		var fgN, bgN, fgTransparent, bgTransparent int
 		for y := 0; y < blockH; y++ {
 			for x := 0; x < blockW; x++ {
-				p := toRGBA(img.At(x0+x, y0+y))
+				p := rgbaAt(img, x0+x, y0+y)
 				isFG := cand.mask(x, y, blockW, blockH)
 				if p.A == 0 {
 					if isFG {
@@ -441,7 +468,7 @@ func findBestCandidate(img image.Image, _ image.Rectangle, x0, x1, y0, y1 int, c
 		var err float64
 		for y := 0; y < blockH; y++ {
 			for x := 0; x < blockW; x++ {
-				p := toRGBA(img.At(x0+x, y0+y))
+				p := rgbaAt(img, x0+x, y0+y)
 				if p.A == 0 {
 					continue // transparent pixels contribute no error
 				}
@@ -686,6 +713,23 @@ func toRGBA(c color.Color) color.RGBA {
 		B: uint8(b >> 8),
 		A: uint8(a >> 8),
 	}
+}
+
+func rgbaAt(img image.Image, x, y int) color.RGBA {
+	if rgba, ok := img.(*image.RGBA); ok {
+		i := rgba.PixOffset(x, y)
+		p := rgba.Pix[i : i+4]
+		return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
+	}
+	return toRGBA(img.At(x, y))
+}
+
+func setRGBA(dst *image.RGBA, x, y int, c color.RGBA) {
+	i := dst.PixOffset(x, y)
+	dst.Pix[i+0] = c.R
+	dst.Pix[i+1] = c.G
+	dst.Pix[i+2] = c.B
+	dst.Pix[i+3] = c.A
 }
 
 func fgRGB(c color.RGBA) string {
