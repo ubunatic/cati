@@ -135,7 +135,7 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 			return nil
 		case <-ticker.C:
 			halfblock.CursorHome(os.Stdout)
-			if err := rc.render(os.Stdout, frames[i]); err != nil {
+			if err := renderChecked(os.Stdout, frames[i], rc); err != nil {
 				return err
 			}
 			halfblock.EraseDown(os.Stdout)
@@ -256,7 +256,7 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 				continue
 			}
 			halfblock.CursorHome(os.Stdout)
-			if err := rc.render(os.Stdout, lastFrame); err != nil {
+			if err := renderChecked(os.Stdout, lastFrame, rc); err != nil {
 				return err
 			}
 			halfblock.EraseDown(os.Stdout)

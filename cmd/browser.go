@@ -1298,7 +1298,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 		// Draw page composite image
 		halfblock.CursorHome(os.Stdout)
 		fmt.Fprintf(os.Stdout, "\x1b[%d;1H", marginTop+1)
-		_ = rc.render(os.Stdout, compImg)
+		_ = renderChecked(os.Stdout, compImg, rc)
 		halfblock.EraseDown(os.Stdout)
 
 		// Print filenames centered below thumbnails (Grid) or in dynamic vertical lists
