@@ -15,6 +15,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [009](009-explore-more-sparkline-rendering-modes.md) | Explore more sparkline rendering modes (triangles, curves, fractional shading) | 🔴 Open |
 | [011](011-sparkline-inversion-and-stripe-bugs.md) | Sparkline inversion (upper/right) and stripe/comb line (left/right) bugs | ✅ Closed |
 | [013](013-shared-analysis-grid-for-halfblock-and-quadblock.md) | Shared analysis grid for halfblock/quadblock convergence on small images | 🔴 Open |
+| [014](014-more-boxdrawing-chars-unicode-v13.md) | More box drawing chars: Unicode v13 sextant glyphs | 🔄 In Progress |
 | [015](015-spark-bottom-row-halfcell-fit.md) | Spark/quad garbled bottom row at mid-cell fit heights (half-cell snap) | ✅ Closed |
 | [016](016-worker-copy-consolidation.md) | Worker-copy render paths: keep clones for tuning, consolidate later | 🔴 Open |
 | [017](017-gpu-glyph-mapping-spark-mode.md) | GPU assistance for glyph mapping, starting with spark mode | 🔴 Open |

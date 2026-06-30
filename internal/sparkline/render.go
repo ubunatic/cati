@@ -326,12 +326,18 @@ func maskContains(ch rune, x, y, w, h int) bool {
 	case '▟':
 		return !(x*2 < w && y*2 < h)
 	default:
+		if bits, ok := sextantMaskByRune[ch]; ok {
+			return bits&(1<<uint(sextantRegion(x, y, w, h)-1)) != 0
+		}
 		return true
 	}
 }
 
+var sextantMaskByRune = map[rune]uint8{}
 var verticalCandidates = buildVerticalCandidates()
 var quadCandidates = buildQuadCandidates()
+var sextantCandidates = buildSextantCandidates()
+var bestCandidates = buildBestCandidates()
 
 func buildVerticalCandidates() []candidate {
 	out := make([]candidate, 0, len(lowerBlocks))
@@ -369,6 +375,110 @@ func buildQuadCandidates() []candidate {
 		candidate{ch: '█', mask: func(_, _, _, _ int) bool { return true }},
 	)
 	return out
+}
+
+func buildSextantCandidates() []candidate {
+	subsets := []string{
+		"1", "2", "12", "3", "13", "23", "123",
+		"4", "14", "24", "124", "34", "134", "234", "1234",
+		"5", "15", "25", "125", "35", "235", "1235",
+		"45", "145", "245", "1245", "345", "1345", "2345", "12345",
+		"6", "16", "26", "126", "36", "136", "236", "1236",
+		"46", "146", "1246", "346", "1346", "2346", "12346",
+		"56", "156", "256", "1256", "356", "1356", "2356", "12356",
+		"456", "1456", "2456", "12456", "3456", "13456", "23456",
+	}
+	out := make([]candidate, 0, len(subsets))
+	for i, subset := range subsets {
+		ch := rune(0x1FB00 + i)
+		bits := sextantBits(subset)
+		sextantMaskByRune[ch] = bits
+		out = append(out, candidate{ch: ch, mask: sextantMask(bits)})
+	}
+	return out
+}
+
+func buildBestCandidates() []candidate {
+	out := make([]candidate, 0, len(quadCandidates)+len(sextantCandidates))
+	out = append(out, quadCandidates...)
+	out = append(out, sextantCandidates...)
+	return out
+}
+
+func sextantBits(subset string) uint8 {
+	var bits uint8
+	for _, r := range subset {
+		if r < '1' || r > '6' {
+			continue
+		}
+		bits |= 1 << uint(r-'1')
+	}
+	return bits
+}
+
+func sextantMask(bits uint8) func(x, y, w, h int) bool {
+	return func(x, y, w, h int) bool {
+		return bits&(1<<uint(sextantRegion(x, y, w, h)-1)) != 0
+	}
+}
+
+func sextantRegion(x, y, w, h int) int {
+	if w <= 0 || h <= 0 {
+		return 0
+	}
+	col := (x * 2) / w
+	if col > 1 {
+		col = 1
+	}
+	row := (y * 3) / h
+	if row > 2 {
+		row = 2
+	}
+	return row*2 + col + 1
+}
+
+func diagonalBias(pixels [4]color.RGBA) int {
+	// Simple corner-luma contrast: larger values indicate a stronger diagonal.
+	ul := int(pixels[0].R) + int(pixels[0].G) + int(pixels[0].B)
+	ur := int(pixels[1].R) + int(pixels[1].G) + int(pixels[1].B)
+	ll := int(pixels[2].R) + int(pixels[2].G) + int(pixels[2].B)
+	lr := int(pixels[3].R) + int(pixels[3].G) + int(pixels[3].B)
+	return absInt((ul + lr) - (ur + ll))
+}
+
+func chooseGeomCandidates(pixels [4]color.RGBA) []candidate {
+	if diagonalBias(pixels) > 32 {
+		return sextantCandidates
+	}
+	unique := 0
+	seen := [4]color.RGBA{}
+	for _, p := range pixels {
+		if p.A == 0 {
+			continue
+		}
+		found := false
+		for i := 0; i < unique; i++ {
+			if seen[i] == p {
+				found = true
+				break
+			}
+		}
+		if !found {
+			seen[unique] = p
+			unique++
+		}
+	}
+	if unique >= 3 {
+		return sextantCandidates
+	}
+	return quadCandidates
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 func sparkLevel(ch rune) int {
@@ -415,8 +525,20 @@ func quadMask(ul, ur, ll, lr bool) func(x, y, w, h int) bool {
 // [x0..x1] × [y0..y1] and returns the lowest-SSE reconstruction.
 func FindBestCell(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, mode Mode) cellResult {
 	candidates := verticalCandidates
-	if mode == Quad {
+	switch mode {
+	case Quad:
 		candidates = quadCandidates
+	case Sextant:
+		candidates = sextantCandidates
+	case Geom:
+		var corners [4]color.RGBA
+		corners[0] = rgbaAt(img, x0, y0)
+		corners[1] = rgbaAt(img, x1, y0)
+		corners[2] = rgbaAt(img, x0, y1)
+		corners[3] = rgbaAt(img, x1, y1)
+		candidates = chooseGeomCandidates(corners)
+	case Best:
+		candidates = bestCandidates
 	}
 	return findBestCandidate(img, bounds, x0, x1, y0, y1, candidates)
 }

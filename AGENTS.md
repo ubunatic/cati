@@ -58,3 +58,4 @@ Rules:
 - After implementing a plan, run `/evergreen` to update docs and close issues in the same commit.
 - **After any rendering algorithm change**, update the relevant section of `docs/SparklinePixelArt.md` in the same commit — do not defer to the end of the session.
 - **After context compaction / session resume**: run `git status` and `git log -5` before touching any file — cheapest way to recover ground truth without re-reading files you already read.
+- **Prefer reproducible analysis tooling**: when you need glyph inspection, rasterization, or other investigation helpers, add a small script or checked-in helper over ad hoc one-off snippets so the approach can be rerun and extended later. Prefer Go for scripts, Bash for very short glue, and Python only when there is no better tool.

@@ -92,6 +92,14 @@ func fitRenderedImage(img image.Image, cols, rows int, rc renderCfg) image.Image
 		img = rc.preScale(img)
 	}
 	b := img.Bounds()
+	if spec, ok := rc.mode.v2FitSpec(); ok {
+		plan := spec.Fit(b.Dx(), b.Dy(), cols, rows, false)
+		result := resizeRenderedImage(img, plan.RenderW, plan.RenderH, rc)
+		if plan.ExtH > 0 {
+			result = imgutil.AppendTransparentRows(result, plan.ExtH)
+		}
+		return result
+	}
 	spec := rc.mode.viewSpec()
 	targetW, targetH, extH := imgutil.FitDims(b.Dx(), b.Dy(), spec.CellW, spec.CellH, spec.AspectX, cols, rows)
 	result := resizeRenderedImage(img, targetW, targetH, rc)
@@ -99,6 +107,14 @@ func fitRenderedImage(img image.Image, cols, rows int, rc renderCfg) image.Image
 		result = imgutil.AppendTransparentRows(result, extH)
 	}
 	return result
+}
+
+func alignRenderedCellSize(w, h int, rc renderCfg) (int, int) {
+	spec := rc.mode.viewSpec()
+	if rc.mode.useSextant() {
+		return imgutil.AlignCellSize(w, h, spec.CellW, 1)
+	}
+	return imgutil.AlignCellSize(w, h, spec.CellW, spec.CellH)
 }
 
 // fittedCellSize returns the cell dimensions for img fitted to the given viewport.

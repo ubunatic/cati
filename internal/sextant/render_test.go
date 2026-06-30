@@ -1,0 +1,140 @@
+package sextant
+
+import (
+	"image"
+	"image/color"
+	"testing"
+)
+
+func patternImage(mask uint8, on, off color.RGBA) image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, 2, 3))
+	for i := 0; i < 6; i++ {
+		c := off
+		if maskContains(mask, i) {
+			c = on
+		}
+		img.Set(i%2, i/2, c)
+	}
+	return img
+}
+
+func transparentImage(w, h int) image.Image {
+	return image.NewRGBA(image.Rect(0, 0, w, h))
+}
+
+func TestSextantMaskTable(t *testing.T) {
+	tests := []struct {
+		name string
+		mask uint8
+		want rune
+	}{
+		{"single top-left", sextantBit(1), '\U0001FB00'},
+		{"top row", sextantBit(1) | sextantBit(2), '\U0001FB02'},
+		{"middle pair", sextantBit(3) | sextantBit(4), '\U0001FB0B'},
+		{"bottom pair", sextantBit(5) | sextantBit(6), '\U0001FB2D'},
+		{"almost full", sextantBits("23456"), '\U0001FB3B'},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := maskName(tc.mask); got == "" && tc.mask != 0 {
+				t.Fatalf("maskName(%06b) returned empty", tc.mask)
+			}
+			if got := sextantRuneByMask[tc.mask]; got != tc.want {
+				t.Fatalf("sextantRuneByMask[%06b] = %q, want %q", tc.mask, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSextantCandidateCount(t *testing.T) {
+	if got := len(sextantMasks); got != 60 {
+		t.Fatalf("len(sextantMasks) = %d, want 60", got)
+	}
+	if got := len(sextantRuneByMask); got != 60 {
+		t.Fatalf("len(sextantRuneByMask) = %d, want 60", got)
+	}
+}
+
+func TestSextantResolveMaskFallsBackToSupportedGlyph(t *testing.T) {
+	got := resolveMask(0b111111)
+	want := sextantBits("23456")
+	if got != want {
+		t.Fatalf("resolveMask(111111) = %06b, want %06b", got, want)
+	}
+	if ch := sextantRuneByMask[got]; ch != '\U0001FB3B' {
+		t.Fatalf("resolveMask(111111) rune = %q, want %q", ch, '\U0001FB3B')
+	}
+}
+
+func TestSextantModeUsesDirectMask(t *testing.T) {
+	on := color.RGBA{R: 255, A: 255}
+	off := color.RGBA{B: 255, A: 255}
+	cases := []struct {
+		name string
+		img  image.Image
+		mask uint8
+	}{
+		{"empty", transparentImage(2, 3), 0},
+		{"single bit", patternImage(sextantBit(1), on, off), sextantBit(1)},
+		{"corner pair", patternImage(sextantBit(1)|sextantBit(6), on, off), sextantBit(1) | sextantBit(6)},
+		{"almost full", patternImage(sextantBits("23456"), on, on), sextantBits("23456")},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pixels := sampleBlock(tc.img, 0, 2, 0, 3)
+			cell := chooseCell(pixels, ModeSextant)
+			if cell.mask != tc.mask {
+				t.Fatalf("chooseCell(2x3) mask = %06b, want %06b", cell.mask, tc.mask)
+			}
+		})
+	}
+}
+
+func TestSextantHeuristicModesStayOnSupportedMasks(t *testing.T) {
+	on := color.RGBA{R: 255, A: 255}
+	off := color.RGBA{B: 255, A: 255}
+	cases := []struct {
+		name string
+		img  image.Image
+	}{
+		{"single bit", patternImage(sextantBit(1), on, off)},
+		{"almost full", patternImage(sextantBits("23456"), on, on)},
+	}
+	supported := make(map[uint8]struct{}, len(sextantMasks))
+	for _, mask := range sextantMasks {
+		supported[mask] = struct{}{}
+	}
+
+	for _, tc := range cases {
+		for _, mode := range []Mode{ModeGeom, ModeBest} {
+			t.Run(tc.name+"/"+mode.String(), func(t *testing.T) {
+				pixels := sampleBlock(tc.img, 0, 2, 0, 3)
+				cell := chooseCell(pixels, mode)
+				if _, ok := supported[cell.mask]; !ok {
+					t.Fatalf("chooseCell(%s) mask = %06b, want supported sextant mask", mode, cell.mask)
+				}
+			})
+		}
+	}
+}
+
+func TestRenderToImageRoundTrip(t *testing.T) {
+	on := color.RGBA{R: 255, A: 255}
+	off := color.RGBA{B: 255, A: 255}
+	src := patternImage(sextantBit(1)|sextantBit(6), on, off)
+	got := RenderToImage(src, ModeBest)
+	gb := got.Bounds()
+	if gb.Dx() != 2 || gb.Dy() != 3 {
+		t.Fatalf("RenderToImage size = %dx%d, want 2x3", gb.Dx(), gb.Dy())
+	}
+	for y := 0; y < 3; y++ {
+		for x := 0; x < 2; x++ {
+			gotPixel := toRGBA(got.At(x, y))
+			wantPixel := toRGBA(src.At(x, y))
+			if gotPixel != wantPixel {
+				t.Fatalf("pixel (%d,%d) = %#v, want %#v", x, y, gotPixel, wantPixel)
+			}
+		}
+	}
+}

@@ -9,10 +9,12 @@ import (
 	"math"
 	"testing"
 
+	"codeberg.org/ubunatic/cati/internal/geomshape"
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/input"
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
+	"codeberg.org/ubunatic/cati/internal/sextant"
 	"codeberg.org/ubunatic/cati/internal/sparkline"
 	"codeberg.org/ubunatic/cati/internal/viewgeom"
 	spec "codeberg.org/ubunatic/cati/spec"
@@ -167,6 +169,7 @@ func TestPanMathUsesModeFootprint(t *testing.T) {
 		{"halfblock", modeHalfblock, 10, 4},
 		{"quad", modeQuad, 0, 4},
 		{"spark", modeSpark, -20, -14},
+		{"sextant", modeSextant, 0, 1},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -417,15 +420,24 @@ func TestZoomLevelReportsTerminalCellSourceWidthAcrossModes(t *testing.T) {
 	modes := []struct {
 		name string
 		rc   renderCfg
+		want string
 	}{
-		{"halfblock", renderCfg{id: 0}},
-		{"quad", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}},
-		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}},
+		{"halfblock", renderCfg{id: 0}, "src px/cell=4"},
+		{"quad", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, "src px/cell=4"},
+		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}, "src px/cell=4"},
+		{"spark geom", renderCfg{id: 4, mode: modeSparkGeom, sparkMode: sparkline.Geom}, "src px/cell=4"},
+		{"spark best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}, "src px/cell=4"},
+		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, "src px/cell=5"},
+		{"sextant geom", renderCfg{id: 7, mode: modeSextantGeom, sextantMode: sextant.ModeGeom}, "src px/cell=5"},
+		{"sextant best", renderCfg{id: 8, mode: modeSextantBest, sextantMode: sextant.ModeBest}, "src px/cell=5"},
+		{"geomshape", renderCfg{id: 9, mode: modeGeomShape, geomShapeMode: geomshape.ModeShape}, "src px/cell=4"},
+		{"geomshape geom", renderCfg{id: 10, mode: modeGeomShapeGeom, geomShapeMode: geomshape.ModeGeom}, "src px/cell=8"},
+		{"geomshape best", renderCfg{id: 11, mode: modeGeomShapeBest, geomShapeMode: geomshape.ModeBest}, "src px/cell=8"},
 	}
 	for _, tc := range modes {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := zoomLevel(state, src, termCols, termRows, tc.rc); got != "src px/cell=4" {
-				t.Fatalf("zoomLevel = %q, want src px/cell=4", got)
+			if got := zoomLevel(state, src, termCols, termRows, tc.rc); got != tc.want {
+				t.Fatalf("zoomLevel = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -449,6 +461,14 @@ func TestBuildRefUsesCommonQualityGridAcrossModes(t *testing.T) {
 		// viewW×viewH so that rendered and ref are compared at the same resolution
 		// without a 2× downscale that would alias the character fill pattern.
 		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
+		{"spark geom", renderCfg{id: 4, mode: modeSparkGeom, sparkMode: sparkline.Geom}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
+		{"spark best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
+		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, termCols * metrics.GridK, termRows * metrics.GridK},
+		{"sextant geom", renderCfg{id: 7, mode: modeSextantGeom, sextantMode: sextant.ModeGeom}, termCols * metrics.GridK, termRows * metrics.GridK},
+		{"sextant best", renderCfg{id: 8, mode: modeSextantBest, sextantMode: sextant.ModeBest}, termCols * metrics.GridK, termRows * metrics.GridK},
+		{"geomshape", renderCfg{id: 9, mode: modeGeomShape, geomShapeMode: geomshape.ModeShape}, termCols * metrics.GridK, termRows * metrics.GridK},
+		{"geomshape geom", renderCfg{id: 10, mode: modeGeomShapeGeom, geomShapeMode: geomshape.ModeGeom}, termCols * metrics.GridK, termRows * metrics.GridK},
+		{"geomshape best", renderCfg{id: 11, mode: modeGeomShapeBest, geomShapeMode: geomshape.ModeBest}, termCols * metrics.GridK, termRows * metrics.GridK},
 	}
 	for _, tc := range modes {
 		t.Run(tc.name, func(t *testing.T) {
@@ -475,6 +495,14 @@ func TestBuildViewportExpandsSparkSmallFitToDisplaySize(t *testing.T) {
 		{"halfblock", renderCfg{id: 0}, renderCells{Cols: 32, Rows: 16}},
 		{"quad", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, renderCells{Cols: 32, Rows: 16}},
 		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}, renderCells{Cols: 32, Rows: 16}},
+		{"spark geom", renderCfg{id: 4, mode: modeSparkGeom, sparkMode: sparkline.Geom}, renderCells{Cols: 32, Rows: 16}},
+		{"spark best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}, renderCells{Cols: 32, Rows: 16}},
+		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, renderCells{Cols: 32, Rows: 16}},
+		{"sextant geom", renderCfg{id: 7, mode: modeSextantGeom, sextantMode: sextant.ModeGeom}, renderCells{Cols: 32, Rows: 16}},
+		{"sextant best", renderCfg{id: 8, mode: modeSextantBest, sextantMode: sextant.ModeBest}, renderCells{Cols: 32, Rows: 16}},
+		{"geomshape", renderCfg{id: 9, mode: modeGeomShape, geomShapeMode: geomshape.ModeShape}, renderCells{Cols: 32, Rows: 16}},
+		{"geomshape geom", renderCfg{id: 10, mode: modeGeomShapeGeom, geomShapeMode: geomshape.ModeGeom}, renderCells{Cols: 32, Rows: 16}},
+		{"geomshape best", renderCfg{id: 11, mode: modeGeomShapeBest, geomShapeMode: geomshape.ModeBest}, renderCells{Cols: 32, Rows: 16}},
 	}
 	for _, tc := range modes {
 		t.Run(tc.name, func(t *testing.T) {

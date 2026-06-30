@@ -103,11 +103,16 @@ The stable zoom and viewport helpers now live in `internal/viewgeom`. The app la
 halfblock. CLI startup canonicalizes the flag-derived renderer into the active
 cycle entry so display names, geometry, metrics, and `r`/`R` cycling all agree.
 The main app cycle is currently `halfblock → quad/splithalf → quad/edge-snap →
-spark/quad`; `--mode=h` starts at halfblock, `--mode=qs` starts at
-`quad/splithalf`, `--mode=qe` starts at `quad/edge-snap`, and `--mode=sq`
-starts at `spark/quad`.
+spark/quad → spark/geom → spark/best → sextant/2x3 → sextant/geom →
+sextant/best → geomshape/2x2 → geomshape/geom → geomshape/best`; `--mode=h`
+starts at halfblock, `--mode=qs` starts at `quad/splithalf`, `--mode=qe` starts
+at `quad/edge-snap`, `--mode=sq` starts at `spark/quad`, `--mode=sg` starts at
+`spark/geom`, `--mode=sb` starts at `spark/best`, `--mode=xs` starts at
+`sextant/2x3`, `--mode=xg` starts at `sextant/geom`, `--mode=xb` starts at
+`sextant/best`, `--mode=sh` starts at `geomshape/geom`, `--mode=shg` starts at
+`geomshape/geom`, and `--mode=shb` starts at `geomshape/best`.
 
-**Panning invariant.** Pan state is the upper-left origin of the visible viewport in the scaled image. Halfblock, quad, and spark all use the same state and clamp path. Mode-specific code may translate terminal-cell deltas to viewport pixels through `viewSpec()`, but it must not pan a renderer-local output frame independently of the source viewport.
+**Panning invariant.** Pan state is the upper-left origin of the visible viewport in the scaled image. Halfblock, quad, spark, sextant, and geomshape all use the same state and clamp path. Mode-specific code may translate terminal-cell deltas to viewport pixels through `viewSpec()`, but it must not pan a renderer-local output frame independently of the source viewport.
 
 **Render-size invariant.** The interactive renderer validates terminal-cell size
 before emitting ANSI. The expected footprint is derived from the untrimmed
@@ -117,6 +122,21 @@ pixel crop or spark's `4×8` glyph block, are applied after that and then
 normalized back to the same terminal-cell footprint. Pressing `r` must not
 change the image size; render-size mismatches after viewport construction are
 hard errors, not best-effort renders.
+
+The sextant family currently uses the copied width-first `v2` fit path for
+static image rendering. That path keeps width as the primary constraint and
+uses the rational sextant aspect correction while the original zoom/pan view
+geometry remains unchanged for the rest of the app. The new geomshape family
+shares the same 2×2 footprint as quadblock, but it stays in its own isolated
+copy for now so the glyph scoring can be tuned independently. The strict
+`geomshape/geom` path now fails fast when the chosen diagonal mask is dented,
+disconnected, or otherwise outside the supported atlas, so visible gaps are a
+hard error instead of a best-effort render. `geomshape/best` remains the
+permissive fallback for exploring the copied atlas. The sampler itself is now
+also split behind an opt-in `renderCfg` slot: `SamplerLegacy` keeps the
+midpoint partition and `SamplerV2` is a copied corner-biased sampler kept
+isolated for tuning. Legacy remains the default until the new geometry proves
+itself.
 
 **Decoupled step generation.** `zoomSteps(mz, srcW) []float64` returns a descending slice of zoom values. Handlers (`inc_zoom`, `dec_zoom`, scroll wheel) consume it via `stepIdx(zoom, steps) int` and never compute steps directly.
 

@@ -7,10 +7,13 @@ import (
 	"sort"
 	"testing"
 
+	"codeberg.org/ubunatic/cati/internal/geomshape"
 	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/pixelart"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
+	"codeberg.org/ubunatic/cati/internal/sextant"
+	"codeberg.org/ubunatic/cati/internal/sparkline"
 )
 
 // findModRoot walks up from the current working directory until it finds go.mod.
@@ -92,6 +95,17 @@ var allVariants = []struct {
 	{"quad/edge-snap", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true}}},
 	{"quad/edge-snap+ambig", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true, Blend: quadblock.BlendAmbiguous}}},
 	{"quad/edge-snap+hb3", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true, HalfblockThreshold: 3}}},
+
+	// ── sextant: 2x3 geometry strategies ────────────────────────────────────────
+	{"sextant/2x3", renderCfg{mode: modeSextant, sextantMode: sextant.ModeSextant}},
+	{"spark/geom", renderCfg{mode: modeSparkGeom, sparkMode: sparkline.Geom}},
+	{"spark/best", renderCfg{mode: modeSparkBest, sparkMode: sparkline.Best}},
+	{"sextant/geom", renderCfg{mode: modeSextantGeom, sextantMode: sextant.ModeGeom}},
+	{"sextant/best", renderCfg{mode: modeSextantBest, sextantMode: sextant.ModeBest}},
+	{"geomshape/2x2", renderCfg{mode: modeGeomShape, geomShapeMode: geomshape.ModeShape}},
+	{"geomshape/geom", renderCfg{mode: modeGeomShapeGeom, geomShapeMode: geomshape.ModeGeom}},
+	{"geomshape/best", renderCfg{mode: modeGeomShapeBest, geomShapeMode: geomshape.ModeBest}},
+	{"geomshape/v2", renderCfg{mode: modeGeomShapeBest, geomShapeMode: geomshape.ModeBest, geomShapeSampler: geomshape.SamplerV2}},
 }
 
 // TestSSIMBenchmark loads every sample image, computes SSIM for all render

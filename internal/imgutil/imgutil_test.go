@@ -24,7 +24,7 @@ func solidImage(w, h int, c color.RGBA) image.Image {
 // {cellW, cellH, aspectX}. All satisfy cellW/(aspectX*cellH) = 1/2, so they
 // must agree on char-row count and bottom-row fill for any source and width.
 var realCells = []struct {
-	name                   string
+	name                  string
 	cellW, cellH, aspectX int
 }{
 	{"halfblock", 1, 2, 1},
@@ -93,14 +93,21 @@ func TestFitDimsHalfCellInvariant(t *testing.T) {
 	}
 }
 
+func TestAlignCellSizeRoundsDownHeight(t *testing.T) {
+	gotW, gotH := AlignCellSize(11, 13, 2, 3)
+	if gotW != 10 || gotH != 12 {
+		t.Fatalf("AlignCellSize = %dx%d, want 10x12", gotW, gotH)
+	}
+}
+
 // ── FitPixelDims ───────────────────────────────────────────────────────────────
 
 func TestFitPixelDims(t *testing.T) {
 	tests := []struct {
-		name          string
-		srcW, srcH    int
-		maxW, maxH    int
-		wantW, wantH  int
+		name         string
+		srcW, srcH   int
+		maxW, maxH   int
+		wantW, wantH int
 	}{
 		{"fits exactly", 100, 50, 100, 50, 100, 50},
 		{"width constrained", 100, 50, 50, 100, 50, 25},

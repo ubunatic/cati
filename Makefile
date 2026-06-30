@@ -5,6 +5,10 @@ DEMO_DIR = ../emojig/spec/art/frames
 DEMO     = $(DEMO_DIR)/emojig_fall_*.png
 DEMO_WIDTH ?= 30
 DEMO_STEPS ?= 2
+VIDEO      ?= assets/baby-360p.mp4
+VIDEO_AT   ?= 1s
+
+export GOCACHE ?= /tmp/cati-gocache
 
 help: ⚙️  ## show this help
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
@@ -51,11 +55,9 @@ demo-solder: ⚙️ build  ## render the soldering practice sample at scaled dem
 demo-vacation: ⚙️ build  ## render the summer vacation sample at scaled demo widths
 	@go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -i vacation=assets/samples/sample-002-summer-vacation.jpg
 
-BABY_VIDEO   ?= assets/baby-360p.mp4
-BABY_AT      ?= 1s
 
-demo-baby: ⚙️ build  ## compare video frames from baby-360p.mp4 across all render modes (BABY_AT=t1,t2,... BABY_VIDEO=path)
-	go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -v baby=$(BABY_VIDEO) -at $(BABY_AT)
+demo-baby: ⚙️ build  ## compare video frames from baby-360p.mp4 across all render modes (VIDEO_AT=t1,t2,... VIDEO=path)
+	go run scripts/demo_widths.go -bin ./$(BINARY) -w $(DEMO_WIDTH) -n $(DEMO_STEPS) -v baby=$(VIDEO) -at $(VIDEO_AT)
 
 preflight: ⚙️ build  ## pre-commit checks: vet + verify demo-widths renders without errors
 	go vet ./...

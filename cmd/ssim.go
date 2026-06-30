@@ -3,9 +3,11 @@ package cmd
 import (
 	"image"
 
+	"codeberg.org/ubunatic/cati/internal/geomshape"
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
+	"codeberg.org/ubunatic/cati/internal/sextant"
 	"codeberg.org/ubunatic/cati/internal/sparkline"
 )
 
@@ -60,6 +62,18 @@ func buildRef(orig image.Image, state viewState, termCols, termRows int, rc rend
 // algorithms produce different SSIM scores. ref should be a box-filter
 // downsample of the original source region.
 func renderSSIM(ref, vp image.Image, rc renderCfg) float64 {
+	if rc.mode.useSextant() {
+		if rc.jobs > 1 {
+			return metrics.SSIMLuminance(ref, sextant.RenderToImageJ(vp, rc.sextantMode, rc.jobs))
+		}
+		return metrics.SSIMLuminance(ref, sextant.RenderToImage(vp, rc.sextantMode))
+	}
+	if rc.mode.useGeomShape() {
+		if rc.jobs > 1 {
+			return metrics.SSIMLuminance(ref, geomshape.RenderToImageJWithSampler(vp, rc.geomShapeMode, rc.geomShapeSampler, rc.jobs))
+		}
+		return metrics.SSIMLuminance(ref, geomshape.RenderToImageWithSampler(vp, rc.geomShapeMode, rc.geomShapeSampler))
+	}
 	if rc.mode.useQuad() {
 		if rc.jobs > 1 {
 			return metrics.SSIMLuminance(ref, quadblock.RenderToImageJ(vp, rc.quadOpts, rc.jobs))
@@ -104,6 +118,10 @@ func rcModeName(rc renderCfg) string {
 // rcDispMode returns the coarse display-geometry label used in metadata.
 func rcDispMode(rc renderCfg) string {
 	switch {
+	case rc.mode.useSextant():
+		return "sextant"
+	case rc.mode.useGeomShape():
+		return "geomshape"
 	case rc.mode.useQuad():
 		return "quad"
 	case rc.mode.useSpark():

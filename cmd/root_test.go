@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
-	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
 )
 
@@ -194,6 +193,46 @@ func TestParseRenderMode(t *testing.T) {
 				t.Fatalf("spark alias should not set quad options, got %#v", opts)
 			}
 		}},
+		{"spark geom", "sg", "spark/geom", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("sg mode should not set quad options, got %#v", opts)
+			}
+		}},
+		{"spark best", "sb", "spark/best", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("sb mode should not set quad options, got %#v", opts)
+			}
+		}},
+		{"sextant 2x3", "xs", "sextant/2x3", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("xs mode should not set quad options, got %#v", opts)
+			}
+		}},
+		{"sextant geom", "xg", "sextant/geom", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("xg mode should not set quad options, got %#v", opts)
+			}
+		}},
+		{"sextant best", "xb", "sextant/best", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("xb mode should not set quad options, got %#v", opts)
+			}
+		}},
+		{"geomshape 2x2", "sh", "geomshape/geom", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("sh mode should not set quad options, got %#v", opts)
+			}
+		}},
+		{"geomshape geom", "shg", "geomshape/geom", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("shg mode should not set quad options, got %#v", opts)
+			}
+		}},
+		{"geomshape best", "shb", "geomshape/best", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("shb mode should not set quad options, got %#v", opts)
+			}
+		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -234,6 +273,18 @@ func TestModeFlagShorthand(t *testing.T) {
 	}
 	if got != "spark" {
 		t.Fatalf("expected mode flag to be 'spark', got %q", got)
+	}
+
+	cmd = New()
+	if err := cmd.ParseFlags([]string{"--mode", "sextant"}); err != nil {
+		t.Fatalf("failed to parse --mode: %v", err)
+	}
+	got, err = cmd.Flags().GetString("mode")
+	if err != nil {
+		t.Fatalf("failed to get mode flag: %v", err)
+	}
+	if got != "sextant" {
+		t.Fatalf("expected mode flag to be 'sextant', got %q", got)
 	}
 
 	cmd = New()
@@ -323,14 +374,14 @@ func TestAlignScaledSize(t *testing.T) {
 		{"halfblock keeps width, trims height", renderCfg{}, 11, 13, 11, 12},
 		{"quad trims both axes", renderCfg{mode: modeQuad}, 11, 13, 10, 12},
 		{"spark trims to cell quantum", renderCfg{mode: modeSpark}, 11, 13, 8, 8},
+		{"sextant keeps odd height", renderCfg{mode: modeSextant, sextantMode: 0}, 11, 13, 10, 13},
 		{"small quad image stays visible", renderCfg{mode: modeQuad}, 1, 1, 1, 1},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			spec := tc.rc.mode.viewSpec()
-			gotW, gotH := imgutil.AlignCellSize(tc.w, tc.h, spec.CellW, spec.CellH)
+			gotW, gotH := alignRenderedCellSize(tc.w, tc.h, tc.rc)
 			if gotW != tc.wantW || gotH != tc.wantH {
-				t.Fatalf("AlignCellSize(%d,%d,cw=%d,ch=%d) = %dx%d, want %dx%d", tc.w, tc.h, spec.CellW, spec.CellH, gotW, gotH, tc.wantW, tc.wantH)
+				t.Fatalf("alignRenderedCellSize(%d,%d,%#v) = %dx%d, want %dx%d", tc.w, tc.h, tc.rc, gotW, gotH, tc.wantW, tc.wantH)
 			}
 		})
 	}

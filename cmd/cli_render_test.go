@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -29,6 +30,13 @@ func TestCLIRender(t *testing.T) {
 		{"halfblock", "halfblock"},
 		{"quad", "quad/splithalf"},
 		{"spark", "spark/quad"},
+		{"spark_geom", "spark/geom"},
+		{"spark_best", "spark/best"},
+		{"sextant", "sextant/2x3"},
+		{"geom", "sextant/geom"},
+		{"best", "sextant/best"},
+		{"geomshape", "geomshape/2x2"},
+		{"geomshape_best", "geomshape/best"},
 	}
 
 	for _, ic := range imageCases {
@@ -80,5 +88,29 @@ func TestCLIRender(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestCLIRenderGeomshapeRejectsDents(t *testing.T) {
+	src := goldenLoad(t, filepath.Join("testdata", "gradient_32x32.png"))
+	if src == nil {
+		t.Fatal("gradient source not found")
+	}
+	rc, err := findRenderModeByName("geomshape/geom")
+	if err != nil {
+		t.Fatalf("findRenderModeByName: %v", err)
+	}
+	for _, width := range []int{7, 12} {
+		t.Run(fmt.Sprintf("w%d", width), func(t *testing.T) {
+			img := prepareRenderedImage(src, nil, width, 0, rc, "")
+			var buf bytes.Buffer
+			err := rc.render(&buf, img)
+			if err == nil {
+				t.Fatalf("render(w=%d) succeeded, want geomshape validation error", width)
+			}
+			if !strings.Contains(err.Error(), "geomshape v2 mask has gap/dent/disconnection") {
+				t.Fatalf("render(w=%d) error = %v, want geomshape gap/dent validation", width, err)
+			}
+		})
 	}
 }

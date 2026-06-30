@@ -10,8 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"codeberg.org/ubunatic/cati/internal/geomshape"
 	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
+	"codeberg.org/ubunatic/cati/internal/sextant"
 	"codeberg.org/ubunatic/cati/internal/sparkline"
 	"codeberg.org/ubunatic/cati/internal/sparkline/testhelper"
 )
@@ -121,6 +124,13 @@ func TestGoldenRenders(t *testing.T) {
 		{"halfblock", "halfblock"},
 		{"quad", "quad/splithalf"},
 		{"spark", "spark/quad"},
+		{"spark_geom", "spark/geom"},
+		{"spark_best", "spark/best"},
+		{"sextant", "sextant/2x3"},
+		{"geom", "sextant/geom"},
+		{"best", "sextant/best"},
+		{"geomshape", "geomshape/2x2"},
+		{"geomshape_best", "geomshape/best"},
 	} {
 		rc, err := findRenderModeByName(pair.mode)
 		if err != nil {
@@ -139,6 +149,13 @@ func TestGoldenRenders(t *testing.T) {
 		if orig == nil {
 			continue
 		}
+		baseRC, err := findRenderModeByName("halfblock")
+		if err != nil {
+			t.Fatalf("findRenderModeByName(%q): %v", "halfblock", err)
+		}
+		baseScaled := prepareRenderedImage(orig, nil, c.n, c.n, baseRC, "")
+		baseRender := goldenRenderToImage(baseScaled, baseRC, 0, 0)
+		baseBounds := baseRender.Bounds()
 		if err := os.MkdirAll(folderPath, 0o755); err != nil {
 			t.Fatalf("create %s: %v", folderPath, err)
 		}
@@ -151,7 +168,7 @@ func TestGoldenRenders(t *testing.T) {
 			}
 
 			scaled := prepareRenderedImage(orig, nil, c.n, c.n, a.rc, "")
-			rendered := goldenRenderToImage(scaled, a.rc)
+			rendered := goldenRenderToImage(scaled, a.rc, baseBounds.Dx(), baseBounds.Dy())
 
 			if *updateGolden {
 				if err := testhelper.SavePNG(renderPath, rendered, meta); err != nil {
@@ -179,18 +196,23 @@ func TestGoldenRenders(t *testing.T) {
 	}
 }
 
-// goldenRenderToImage renders scaled through the native algorithm and upscales
-// the result to 4×8 pixels per terminal char for golden comparison.
+// goldenRenderToImage renders scaled through the native algorithm, normalizes
+// the result onto the shared comparison canvas, and then upscales to a common
+// per-cell resolution for golden comparison.
 //
 // Transparent extension rows (appended by FitDims when the image ends mid-cell)
 // are preserved as transparent pixels by each renderer: halfblock.RenderToImage
 // uses transparent for terminal-default BG, sparkline.RenderToImage preserves
 // source alpha. No post-processing is needed.
-func goldenRenderToImage(scaled image.Image, rc renderCfg) image.Image {
+func goldenRenderToImage(scaled image.Image, rc renderCfg, refW, refH int) image.Image {
 	b := scaled.Bounds()
 	var rendered image.Image
 	switch rc.mode {
-	case modeSpark:
+	case modeSextant, modeSextantGeom, modeSextantBest:
+		rendered = sextant.RenderToImage(scaled, rc.sextantMode)
+	case modeGeomShape, modeGeomShapeGeom, modeGeomShapeBest:
+		rendered = geomshape.RenderToImageWithSampler(scaled, rc.geomShapeMode, rc.geomShapeSampler)
+	case modeSpark, modeSparkGeom, modeSparkBest:
 		outCols := max(1, b.Dx()/4)
 		outRows := max(1, b.Dy()/8)
 		rendered = sparkline.RenderToImage(scaled, outCols, outRows, rc.sparkMode)
@@ -199,12 +221,16 @@ func goldenRenderToImage(scaled image.Image, rc renderCfg) image.Image {
 	default:
 		rendered = halfblock.RenderToImage(scaled)
 	}
-	return upscaleToCharRes(rendered, rc)
+	rendered = upscaleToCharRes(rendered, rc)
+	if refW > 0 && refH > 0 {
+		rendered = imgutil.ScaleNN(rendered, refW, refH)
+	}
+	return rendered
 }
 
-// upscaleToCharRes upscales rendered to 4×8 pixels per terminal char so that
-// all algorithm outputs are stored at a common resolution and are directly
-// comparable. Transparent pixels (BG extension rows) remain transparent.
+// upscaleToCharRes upscales rendered to the shared character-grid resolution so
+// that all algorithm outputs can be normalized onto the same comparison canvas.
+// Transparent pixels (BG extension rows) remain transparent.
 //
 //	halfblock: 1×2px/char → scale 4×4 → 4×8
 //	quad:      2×2px/char → scale 2×4 → 4×8

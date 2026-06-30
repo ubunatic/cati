@@ -296,18 +296,24 @@ func TestInteractiveGradientConvergentModesShowPerfectSSIM(t *testing.T) {
 	bin := buildCatiForTest(t)
 	tests := []struct {
 		name string
-		keys string
 		mode string
 	}{
-		{"default quad", "q", "quad/splithalf"},
-		{"cycled edge snap", "rq", "quad/edge-snap"},
-		{"cycled spark quad", "rrq", "spark/quad"},
-		{"cycled halfblock", "rrrq", "halfblock"},
-		{"cycled back to quad", "rrrrq", "quad/splithalf"},
+		{"default quad", "quad/splithalf"},
+		{"edge snap", "quad/edge-snap"},
+		{"spark quad", "spark/quad"},
+		{"spark geom", "spark/geom"},
+		{"spark best", "spark/best"},
+		{"sextant 2x3", "sextant/2x3"},
+		{"sextant geom", "sextant/geom"},
+		{"sextant best", "sextant/best"},
+		{"geomshape 2x2", "geomshape/2x2"},
+		{"geomshape geom", "geomshape/geom"},
+		{"geomshape best", "geomshape/best"},
+		{"halfblock", "halfblock"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := runCatiPTY(t, bin, []string{"-i", "testdata/gradient_32x32.png", "-z=1", "--mode=quad"}, tc.keys)
+			out, err := runCatiPTY(t, bin, []string{"-i", "testdata/gradient_32x32.png", "-z=1", "--mode=" + tc.mode}, "q")
 			if err != nil {
 				t.Fatalf("cati exited with error: %v\noutput:\n%s", err, stripANSIForTest(out))
 			}
@@ -330,17 +336,24 @@ func TestInteractiveSolidRedAllModesShowPerfectSSIM(t *testing.T) {
 	bin := buildCatiForTest(t)
 	tests := []struct {
 		name string
-		keys string
 		mode string
 	}{
-		{"quad splithalf", "q", "quad/splithalf"},
-		{"quad edge snap", "rq", "quad/edge-snap"},
-		{"spark quad", "rrq", "spark/quad"},
-		{"halfblock", "rrrq", "halfblock"},
+		{"quad splithalf", "quad/splithalf"},
+		{"quad edge snap", "quad/edge-snap"},
+		{"spark quad", "spark/quad"},
+		{"spark geom", "spark/geom"},
+		{"spark best", "spark/best"},
+		{"sextant 2x3", "sextant/2x3"},
+		{"sextant geom", "sextant/geom"},
+		{"sextant best", "sextant/best"},
+		{"geomshape 2x2", "geomshape/2x2"},
+		{"geomshape geom", "geomshape/geom"},
+		{"geomshape best", "geomshape/best"},
+		{"halfblock", "halfblock"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := runCatiPTY(t, bin, []string{"-i", "testdata/solid_red_4x4.png", "-z=1", "--mode=quad"}, tc.keys)
+			out, err := runCatiPTY(t, bin, []string{"-i", "testdata/solid_red_4x4.png", "-z=1", "--mode=" + tc.mode}, "q")
 			if err != nil {
 				t.Fatalf("cati exited with error: %v\noutput:\n%s", err, stripANSIForTest(out))
 			}

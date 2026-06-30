@@ -96,7 +96,7 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
 	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto; clamped to terminal in -i)")
 	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto; clamped to terminal in -i)")
-	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half|halfblock, qs|quad, qe, sq|spark")
+	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half|halfblock, qs|quad, qe, sq|spark/quad, sg|spark/geom, sb|spark/best, xs|sextant/2x3, xg|sextant/geom, xb|sextant/best, sh|geomshape/geom, shg|geomshape/geom, shb|geomshape/best")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
@@ -233,8 +233,26 @@ func parseRenderMode(mode string) (renderCfg, error) {
 		return findRenderModeByName("quad/edge-snap")
 	case "sq", "spark", "spark/quad":
 		return findRenderModeByName("spark/quad")
+	case "sg", "spark/geom":
+		return findRenderModeByName("spark/geom")
+	case "sb", "spark/best":
+		return findRenderModeByName("spark/best")
+	case "xs", "sextant", "sextant/2x3":
+		return findRenderModeByName("sextant/2x3")
+	case "xg", "geom", "sextant/geom":
+		return findRenderModeByName("sextant/geom")
+	case "xb", "best", "sextant/best":
+		return findRenderModeByName("sextant/best")
+	case "sh", "geomshape":
+		return findRenderModeByName("geomshape/geom")
+	case "geomshape/2x2":
+		return findRenderModeByName("geomshape/2x2")
+	case "shg", "geomshape/geom":
+		return findRenderModeByName("geomshape/geom")
+	case "shb", "geomshape/best":
+		return findRenderModeByName("geomshape/best")
 	default:
-		return renderCfg{}, fmt.Errorf("unknown --mode %q; valid: h, qs, qe, sq", mode)
+		return renderCfg{}, fmt.Errorf("unknown --mode %q; valid: h, qs, qe, sq, sg, sb, xs, xg, xb, sh, shg, shb", mode)
 	}
 }
 

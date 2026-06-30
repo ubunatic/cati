@@ -1198,7 +1198,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 		}
 
 		pixScale := 1
-		if rc.mode.useQuad() {
+		if rc.mode.useQuad() || rc.mode.useGeomShape() {
 			pixScale = 2
 		}
 		compW := termCols * pixScale

@@ -14,6 +14,9 @@ func TestModeName(t *testing.T) {
 	}{
 		{Vertical, "spark/vert"},
 		{Quad, "spark/quad"},
+		{Sextant, "spark/sextant"},
+		{Geom, "spark/geom"},
+		{Best, "spark/best"},
 		{Mode(99), "spark/vert"},
 	}
 	for _, tc := range tests {
@@ -25,23 +28,35 @@ func TestModeName(t *testing.T) {
 
 func TestModes(t *testing.T) {
 	ms := Modes()
-	if len(ms) != 2 {
-		t.Fatalf("Modes() returned %d entries, want 2", len(ms))
+	if len(ms) != 5 {
+		t.Fatalf("Modes() returned %d entries, want 5", len(ms))
 	}
-	if ms[0] != Vertical || ms[1] != Quad {
+	if ms[0] != Vertical || ms[1] != Quad || ms[2] != Sextant || ms[3] != Geom || ms[4] != Best {
 		t.Errorf("Modes() order incorrect: got %v", ms)
 	}
 }
 
+func TestSextantCandidateTable(t *testing.T) {
+	if got := len(sextantCandidates); got != 60 {
+		t.Fatalf("sextantCandidates = %d entries, want 60", got)
+	}
+	if got := len(bestCandidates); got != len(quadCandidates)+len(sextantCandidates) {
+		t.Fatalf("bestCandidates = %d entries, want quad+sextant=%d", got, len(quadCandidates)+len(sextantCandidates))
+	}
+}
+
 func TestCycle(t *testing.T) {
-	if got := Cycle(Quad); got != Vertical {
-		t.Errorf("Cycle(Quad) = %d, want Vertical", got)
+	if got := Cycle(Quad); got != Sextant {
+		t.Errorf("Cycle(Quad) = %d, want Sextant", got)
+	}
+	if got := Cycle(Best); got != Vertical {
+		t.Errorf("Cycle(Best) = %d, want Vertical", got)
 	}
 	if got := Cycle(Vertical); got != Quad {
 		t.Errorf("Cycle(Vertical) = %d, want Quad", got)
 	}
-	if got := CyclePrev(Vertical); got != Quad {
-		t.Errorf("CyclePrev(Vertical) = %d, want Quad", got)
+	if got := CyclePrev(Vertical); got != Best {
+		t.Errorf("CyclePrev(Vertical) = %d, want Best", got)
 	}
 	if got := CyclePrev(Quad); got != Vertical {
 		t.Errorf("CyclePrev(Quad) = %d, want Vertical", got)
@@ -263,5 +278,38 @@ func TestRenderOptsSparkQuad(t *testing.T) {
 	output := buf.String()
 	if !strings.Contains(output, "▘") {
 		t.Fatalf("RenderOpts(Quad) = %q, want upper-left quad glyph", output)
+	}
+}
+
+func TestRenderOptsSextantUsesSextantGlyphs(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 4, 8))
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 4; x++ {
+			switch {
+			case y < 3 && x < 2:
+				img.Set(x, y, color.RGBA{R: 255, A: 255})
+			case y < 3:
+				img.Set(x, y, color.RGBA{G: 255, A: 255})
+			default:
+				img.Set(x, y, color.RGBA{B: 255, A: 255})
+			}
+		}
+	}
+
+	var buf strings.Builder
+	if err := RenderOpts(&buf, img, 1, 1, Sextant); err != nil {
+		t.Fatalf("RenderOpts(Sextant): %v", err)
+	}
+
+	output := buf.String()
+	found := false
+	for _, r := range output {
+		if r >= 0x1FB00 && r <= 0x1FB3B {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("RenderOpts(Sextant) = %q, want sextant glyph", output)
 	}
 }

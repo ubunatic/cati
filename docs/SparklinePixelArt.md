@@ -163,6 +163,22 @@ When the source or destination is already `*image.RGBA`, the renderer uses
 direct pixel access instead of generic `image.Color` sampling/writes, which
 keeps the benchmarked path allocation-free in cell selection and nearly flat in
 image reconstruction.
+Current sparkline-family modes are `spark/vert`, `spark/quad`,
+`spark/geom`, `spark/best`, `spark/sextant`, `sextant/geom`, and
+`sextant/best`. The separate `geomshape` family is now also available through
+the shared render pipeline for the new diagonal block glyphs, but it remains an
+isolated copy for tuning. The strict `geomshape/geom` path now treats dented or
+disconnected masks as hard errors so the renderer does not silently print a
+broken diagonal block; `geomshape/best` remains the permissive search path for
+continued tuning. The geometry-focused sparkline modes are:
+
+- `spark/geom` uses a cheap geometry heuristic to pick between quad and
+  sextant candidates.
+- `spark/best` exhaustively scores the combined quad + sextant candidate set.
+
+The geomshape path also carries an explicit sampler slot in `renderCfg`. The
+legacy midpoint sampler stays the default; `SamplerV2` is a copied corner-biased
+sampler kept isolated until the richer geometry model is ready to replace it.
 
 ### Generator functions
 
@@ -189,9 +205,12 @@ across a hard edge.
 
 `TestGoldenRenders` (in `cmd/golden_render_test.go`) runs every combination of
 `(source image, char width, algorithm)` and compares against a stored PNG.
-Goldens are stored at **4×8 px/char** — the sparkline native resolution — so all
-three algorithms (halfblock 1×2, quad 2×2, spark 4×8) are upscaled to the same
-common resolution before comparison.
+The stored PNGs are normalized onto one shared comparison canvas per source and
+width, then rendered back through the algorithm and resized again so the corpus
+stays visually comparable in the file browser and website demos. The baseline
+canvas is the halfblock fit for that source/width; sextant outputs are mapped
+back onto that same canvas before comparison so the saved images keep the same
+overall aspect across modes.
 
 `TestCLIRender` (in `cmd/cli_render_test.go`) does the same for ANSI terminal
 output, storing `.ansi` golden files.
