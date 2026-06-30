@@ -199,12 +199,28 @@ across a hard edge.
 
 `TestGoldenRenders` (in `cmd/golden_render_test.go`) runs every combination of
 `(source image, char width, algorithm)` and compares against a stored PNG.
-The stored PNGs are normalized onto one shared comparison canvas per source and
-width, then rendered back through the algorithm and resized again so the corpus
-stays visually comparable in the file browser and website demos. The baseline
-canvas is the halfblock fit for that source/width; sextant outputs are mapped
-back onto that same canvas before comparison so the saved images keep the same
-overall aspect across modes.
+
+Each golden is stored at a **shared per-character block size** derived from the
+LCM of all registered render modes' cell geometries.  For the current four
+modes the block is **12×24 px/char** (aspect ratio 1:2, matching a real
+terminal cell):
+
+| mode | cell W×H | kX, kY | block |
+|------|----------|--------|-------|
+| halfblock | 1×2 | 12×12 | 12×24 ✓ |
+| quad      | 2×2 |  6×12 | 12×24 ✓ |
+| spark     | 4×8 |  3× 3 | 12×24 ✓ |
+| sextant   | 2×3 |  6× 8 | 12×24 ✓ |
+
+Every coarser-resolution algorithm reaches the canvas by **integer pixel
+replication only** — no NN resample.  `TestUnrepeatLossless` asserts this
+invariant: `unrepeat(upscale(native)) == native` for every mode.
+`TestGoldenBlockIntegerFactors` asserts that `blockW % CellW == 0` and
+`blockH % CellH == 0` for all modes.
+
+Adding a new render mode with a different cell geometry will automatically
+enlarge the block (computed by `goldenCharBlock()` from the live registry) so
+that all integer-replication invariants are preserved.
 
 `TestCLIRender` (in `cmd/cli_render_test.go`) does the same for ANSI terminal
 output, storing `.ansi` golden files.

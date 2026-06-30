@@ -1,7 +1,29 @@
 # 021 — Golden storage resolution that exactly covers all current & future algos
 
-**Status:** 🔴 Open  
+**Status:** 🟢 Closed  
+**Closed:** 2026-06-30  
 **Refs:** `cmd/golden_render_test.go` (`upscaleToCharRes`, `goldenRenderToImage`, `TestGoldenTransparentBound`), [SparklinePixelArt.md](../docs/SparklinePixelArt.md), #006, #008, #020
+
+## Resolution
+
+Implemented the 12×24 LCM-derived golden block in `cmd/golden_render_test.go`:
+
+- **`goldenCharBlock()`**: computes minimal aspect-correct `W×H` block from all
+  registered render modes via `lcm(CellW)` / `lcm(CellH)`, currently `W=12, H=24`.
+- **`upscaleToCharRes()`**: now uses `kX = W/CellW`, `kY = H/CellH` — pure
+  integer replication for every mode including sextant (`kX=6, kY=8`).
+- **`goldenRenderToImage()`**: trailing `ScaleNN` / halfblock-baseline resize
+  removed; all modes produce identical canvas dimensions natively.
+- **`TestGoldenTransparentBound`**: updated `halfCharGoldenPx` from hard-coded `4`
+  to `blockH/2 = 12`.
+- **`TestGoldenBlockIntegerFactors`**: new test asserting `blockW%CellW==0` and
+  `blockH%CellH==0` for all modes, and `H==2·W`.
+- **`TestUnrepeatLossless`**: new test asserting `unrepeat(upscale(native))==native`
+  for halfblock, quad, sextant, and spark — proving no smear is introduced.
+- All 295 `render_*.png` goldens regenerated at 12×24 resolution (mechanical
+  re-baseline; content unchanged, sextant goldens no longer carry NN smear).
+- `docs/SparklinePixelArt.md` golden-pipeline section updated with the new table
+  and invariant descriptions.
 
 ---
 
