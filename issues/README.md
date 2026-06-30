@@ -21,6 +21,8 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [017](017-gpu-glyph-mapping-spark-mode.md) | GPU assistance for glyph mapping, starting with spark mode | 🔴 Open |
 | [018](018-sparkline-allocation-reduction.md) | Reduce allocation pressure in spark mode | 🔴 Open |
 | [019](019-video-audio-drift-on-long-playback.md) | Video audio drift on longer playback | 🔴 Open |
+| [020](020-sextant-column-mask-nul-glyph.md) | Sextant pure-column masks emit NUL glyph (garbled right edge) | ✅ Closed |
+| [021](021-golden-storage-resolution-all-algos.md) | Golden storage resolution that exactly covers all current & future algos | 🔴 Open |
 
 ## Archived
 
