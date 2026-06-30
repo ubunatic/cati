@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/internal/geomshape"
 	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
@@ -127,10 +126,6 @@ func TestGoldenRenders(t *testing.T) {
 		{"spark_geom", "spark/geom"},
 		{"spark_best", "spark/best"},
 		{"sextant", "sextant/2x3"},
-		{"geom", "sextant/geom"},
-		{"best", "sextant/best"},
-		{"geomshape", "geomshape/2x2"},
-		{"geomshape_best", "geomshape/best"},
 	} {
 		rc, err := findRenderModeByName(pair.mode)
 		if err != nil {
@@ -208,10 +203,8 @@ func goldenRenderToImage(scaled image.Image, rc renderCfg, refW, refH int) image
 	b := scaled.Bounds()
 	var rendered image.Image
 	switch rc.mode {
-	case modeSextant, modeSextantGeom, modeSextantBest:
+	case modeSextant:
 		rendered = sextant.RenderToImage(scaled, rc.sextantMode)
-	case modeGeomShape, modeGeomShapeGeom, modeGeomShapeBest:
-		rendered = geomshape.RenderToImageWithSampler(scaled, rc.geomShapeMode, rc.geomShapeSampler)
 	case modeSpark, modeSparkGeom, modeSparkBest:
 		outCols := max(1, b.Dx()/4)
 		outRows := max(1, b.Dy()/8)

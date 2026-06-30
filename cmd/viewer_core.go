@@ -62,7 +62,7 @@ func newViewerCore(
 	cols, rows := resolveViewerTermSize(initWidth, initHeight)
 	modeName := rcModeName(rc)
 	lastNonHBID := rc.id
-	if !(rc.mode.useQuad() || rc.mode.useGeomShape()) {
+	if !rc.mode.useQuad() {
 		lastNonHBID = -1
 	}
 	return &viewerCore{
@@ -171,7 +171,7 @@ func (vc *viewerCore) handleAction(action, tok string) (quit, changed bool) {
 	case "toggle_halfblock":
 		oldRC := vc.rc
 		graySaved, grayColorsSaved := vc.rc.gray, vc.rc.grayColors
-		if vc.rc.mode.useQuad() || vc.rc.mode.useGeomShape() {
+		if vc.rc.mode.useQuad() {
 			vc.lastNonHBID = vc.rc.id
 			if m, n, ok := findRenderModeByID(0); ok {
 				vc.rc, vc.modeName = m, n

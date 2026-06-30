@@ -304,11 +304,6 @@ func TestInteractiveGradientConvergentModesShowPerfectSSIM(t *testing.T) {
 		{"spark geom", "spark/geom"},
 		{"spark best", "spark/best"},
 		{"sextant 2x3", "sextant/2x3"},
-		{"sextant geom", "sextant/geom"},
-		{"sextant best", "sextant/best"},
-		{"geomshape 2x2", "geomshape/2x2"},
-		{"geomshape geom", "geomshape/geom"},
-		{"geomshape best", "geomshape/best"},
 		{"halfblock", "halfblock"},
 	}
 	for _, tc := range tests {
@@ -344,11 +339,6 @@ func TestInteractiveSolidRedAllModesShowPerfectSSIM(t *testing.T) {
 		{"spark geom", "spark/geom"},
 		{"spark best", "spark/best"},
 		{"sextant 2x3", "sextant/2x3"},
-		{"sextant geom", "sextant/geom"},
-		{"sextant best", "sextant/best"},
-		{"geomshape 2x2", "geomshape/2x2"},
-		{"geomshape geom", "geomshape/geom"},
-		{"geomshape best", "geomshape/best"},
 		{"halfblock", "halfblock"},
 	}
 	for _, tc := range tests {

@@ -45,9 +45,5 @@ func benchmarkRenderToImage(b *testing.B, mode Mode) {
 }
 
 func BenchmarkRenderSextant(b *testing.B) { benchmarkRender(b, ModeSextant) }
-func BenchmarkRenderGeom(b *testing.B)    { benchmarkRender(b, ModeGeom) }
-func BenchmarkRenderBest(b *testing.B)    { benchmarkRender(b, ModeBest) }
 
 func BenchmarkRenderToImageSextant(b *testing.B) { benchmarkRenderToImage(b, ModeSextant) }
-func BenchmarkRenderToImageGeom(b *testing.B)    { benchmarkRenderToImage(b, ModeGeom) }
-func BenchmarkRenderToImageBest(b *testing.B)    { benchmarkRenderToImage(b, ModeBest) }

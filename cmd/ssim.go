@@ -3,7 +3,6 @@ package cmd
 import (
 	"image"
 
-	"codeberg.org/ubunatic/cati/internal/geomshape"
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
@@ -68,12 +67,6 @@ func renderSSIM(ref, vp image.Image, rc renderCfg) float64 {
 		}
 		return metrics.SSIMLuminance(ref, sextant.RenderToImage(vp, rc.sextantMode))
 	}
-	if rc.mode.useGeomShape() {
-		if rc.jobs > 1 {
-			return metrics.SSIMLuminance(ref, geomshape.RenderToImageJWithSampler(vp, rc.geomShapeMode, rc.geomShapeSampler, rc.jobs))
-		}
-		return metrics.SSIMLuminance(ref, geomshape.RenderToImageWithSampler(vp, rc.geomShapeMode, rc.geomShapeSampler))
-	}
 	if rc.mode.useQuad() {
 		if rc.jobs > 1 {
 			return metrics.SSIMLuminance(ref, quadblock.RenderToImageJ(vp, rc.quadOpts, rc.jobs))
@@ -120,8 +113,6 @@ func rcDispMode(rc renderCfg) string {
 	switch {
 	case rc.mode.useSextant():
 		return "sextant"
-	case rc.mode.useGeomShape():
-		return "geomshape"
 	case rc.mode.useQuad():
 		return "quad"
 	case rc.mode.useSpark():

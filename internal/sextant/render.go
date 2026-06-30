@@ -32,25 +32,11 @@ func min(a, b int) int {
 type Mode int
 
 const (
-	// ModeSextant uses a direct 2x3 thresholded mask.
 	ModeSextant Mode = iota
-	// ModeGeom uses a small geometry shortlist and picks the best candidate.
-	// FIXME: fold this shortlist into a shared geometry scorer once the other
-	// glyph families land.
-	ModeGeom
-	// ModeBest exhaustively scores all supported sextant candidates.
-	ModeBest
 )
 
 func (m Mode) String() string {
-	switch m {
-	case ModeGeom:
-		return "geom"
-	case ModeBest:
-		return "best"
-	default:
-		return "2x3"
-	}
+	return "2x3"
 }
 
 var (
@@ -124,28 +110,16 @@ func sextantBit(digit int) uint8 {
 	}
 }
 
-func dropHighestBit(mask uint8) uint8 {
-	for bit := 5; bit >= 0; bit-- {
-		if mask&(1<<uint(bit)) != 0 {
-			return mask &^ (1 << uint(bit))
-		}
-	}
-	return 0
-}
-
-func resolveMask(mask uint8) uint8 {
-	if mask == 0 {
-		return 0
-	}
+func displayMask(mask uint8) (uint8, bool) {
+	mask &= 0b111111
 	if _, ok := sextantRuneByMask[mask]; ok {
-		return mask
+		return mask, false
 	}
-	for fallback := dropHighestBit(mask); fallback > 0; fallback = dropHighestBit(fallback) {
-		if _, ok := sextantRuneByMask[fallback]; ok {
-			return fallback
-		}
+	inverted := ^mask & 0b111111
+	if _, ok := sextantRuneByMask[inverted]; ok {
+		return inverted, true
 	}
-	return 0
+	return 0, false
 }
 
 func bitForIndex(idx int) uint8 {
@@ -435,7 +409,7 @@ func popcount(mask uint8) int {
 }
 
 func scoreMask(pixels [6]color.RGBA, mask uint8) (cellResult, int) {
-	mask = resolveMask(mask)
+	mask &= 0b111111
 	fgPixels := make([]color.RGBA, 0, 6)
 	bgPixels := make([]color.RGBA, 0, 6)
 	var opaque int
@@ -457,16 +431,25 @@ func scoreMask(pixels [6]color.RGBA, mask uint8) (cellResult, int) {
 
 	fg := avgRGBA(fgPixels...)
 	bg := avgRGBA(bgPixels...)
-	cell := cellResult{
-		ch:   sextantRuneByMask[mask],
-		mask: mask,
-		fg:   fg,
-		bg:   bg,
+	display, inverted := displayMask(mask)
+	displayFG, displayBG := fg, bg
+	if inverted {
+		displayFG, displayBG = bg, fg
 	}
-	if fg.A != 0 {
+	cell := cellResult{
+		ch:   sextantRuneByMask[display],
+		mask: display,
+		fg:   displayFG,
+		bg:   displayBG,
+	}
+	if cell.fg.A != 0 {
 		cell.hasFG = true
 	}
-	if bg.A != 0 {
+	if cell.bg.A != 0 {
+		cell.hasBG = true
+	}
+	if opaque > 0 && !cell.hasBG {
+		cell.bg = avgRGBA(pixels[:]...)
 		cell.hasBG = true
 	}
 
@@ -482,24 +465,25 @@ func scoreMask(pixels [6]color.RGBA, mask uint8) (cellResult, int) {
 		score += rgbaDist2(p, target)
 	}
 
-	if mask == 0 {
+	if mask == 0 || mask == 0b111111 {
 		cell.ch = ' '
-		cell.transparent = true
+		cell.mask = 0
+		if mask == 0 && cell.bg.A == 0 {
+			cell.bg = avgRGBA(bgPixels...)
+			cell.hasBG = cell.bg.A != 0
+		}
+		if mask == 0b111111 && cell.bg.A == 0 {
+			cell.bg = avgRGBA(fgPixels...)
+			cell.hasBG = cell.bg.A != 0
+		}
 	}
 	return cell, score
 }
 
 func chooseCell(pixels [6]color.RGBA, mode Mode) cellResult {
-	switch mode {
-	case ModeBest:
-		return chooseBestCell(pixels, allMasks())
-	case ModeGeom:
-		return chooseBestCell(pixels, heuristicMasks(pixels))
-	default:
-		mask := directMask(pixels)
-		cell, _ := scoreMask(pixels, mask)
-		return cell
-	}
+	mask := directMask(pixels)
+	cell, _ := scoreMask(pixels, mask)
+	return cell
 }
 
 func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {

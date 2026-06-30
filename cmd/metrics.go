@@ -3,7 +3,6 @@ package cmd
 import (
 	"image"
 
-	"codeberg.org/ubunatic/cati/internal/geomshape"
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
 	"codeberg.org/ubunatic/cati/internal/sextant"
@@ -27,12 +26,6 @@ func computeQuality(ref, vp image.Image, rc renderCfg) metrics.RenderQuality {
 			rendered = sextant.RenderToImageJ(vp, rc.sextantMode, rc.jobs)
 		} else {
 			rendered = sextant.RenderToImage(vp, rc.sextantMode)
-		}
-	case rc.mode.useGeomShape():
-		if rc.jobs > 1 {
-			rendered = geomshape.RenderToImageJWithSampler(vp, rc.geomShapeMode, rc.geomShapeSampler, rc.jobs)
-		} else {
-			rendered = geomshape.RenderToImageWithSampler(vp, rc.geomShapeMode, rc.geomShapeSampler)
 		}
 	case rc.mode.useQuad():
 		if rc.jobs > 1 {
@@ -66,7 +59,7 @@ func computeQuality(ref, vp image.Image, rc renderCfg) metrics.RenderQuality {
 	rendSobel := metrics.SobelGrid(rendLuma)
 
 	boundaryStep := metrics.GridK
-	hasVerticalBoundaries := rc.mode.useQuad() || rc.mode.useSextant() || rc.mode.useGeomShape() || rc.mode.useSpark()
+	hasVerticalBoundaries := rc.mode.useQuad() || rc.mode.useSextant() || rc.mode.useSpark()
 	score := metrics.RenderQuality{
 		SSIM:       metrics.SSIMLuminance(ref, rendered),
 		Blockiness: metrics.BlockinessFromGrids(refSobel, rendSobel, hasVerticalBoundaries, boundaryStep),

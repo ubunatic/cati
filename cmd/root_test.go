@@ -5,10 +5,15 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/quadblock"
+	"codeberg.org/ubunatic/cati/internal/sextant"
+	"codeberg.org/ubunatic/cati/internal/sparkline"
+	"codeberg.org/ubunatic/cati/internal/sparkline/testhelper"
 )
 
 // ── isImageFile ───────────────────────────────────────────────────────────────
@@ -208,31 +213,6 @@ func TestParseRenderMode(t *testing.T) {
 				t.Fatalf("xs mode should not set quad options, got %#v", opts)
 			}
 		}},
-		{"sextant geom", "xg", "sextant/geom", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
-				t.Fatalf("xg mode should not set quad options, got %#v", opts)
-			}
-		}},
-		{"sextant best", "xb", "sextant/best", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
-				t.Fatalf("xb mode should not set quad options, got %#v", opts)
-			}
-		}},
-		{"geomshape 2x2", "sh", "geomshape/geom", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
-				t.Fatalf("sh mode should not set quad options, got %#v", opts)
-			}
-		}},
-		{"geomshape geom", "shg", "geomshape/geom", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
-				t.Fatalf("shg mode should not set quad options, got %#v", opts)
-			}
-		}},
-		{"geomshape best", "shb", "geomshape/best", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
-				t.Fatalf("shb mode should not set quad options, got %#v", opts)
-			}
-		}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -245,6 +225,16 @@ func TestParseRenderMode(t *testing.T) {
 			}
 			if tc.check != nil {
 				tc.check(t, rc.quadOpts)
+			}
+		})
+	}
+}
+
+func TestRemovedRenderModesAreRejected(t *testing.T) {
+	for _, mode := range []string{"xg", "xb", "geom", "best", "sextant/geom", "sextant/best", "sh", "shg", "shb", "geomshape", "geomshape/2x2", "geomshape/geom", "geomshape/best"} {
+		t.Run(mode, func(t *testing.T) {
+			if _, err := parseRenderMode(mode); err == nil {
+				t.Fatalf("parseRenderMode(%q) succeeded, want error", mode)
 			}
 		})
 	}
@@ -470,8 +460,255 @@ func TestSampleDarthDaughterNoDuplicateRenderedPixelRows(t *testing.T) {
 	}
 }
 
+func TestAllRenderModesWidthOneThroughTwentyKeepAspectAndNoGaps(t *testing.T) {
+	if err := testhelper.GenerateGradients("testdata"); err != nil {
+		t.Fatalf("GenerateGradients: %v", err)
+	}
+	if err := testhelper.GenerateFixtures("testdata"); err != nil {
+		t.Fatalf("GenerateFixtures: %v", err)
+	}
+	if err := testhelper.GenerateGeometrics("testdata"); err != nil {
+		t.Fatalf("GenerateGeometrics: %v", err)
+	}
+
+	sources := []struct {
+		name string
+		img  image.Image
+	}{
+		{"generated_gradient_32x32", opaqueGradientForTest(32, 32)},
+	}
+	for _, tc := range []struct {
+		name string
+		path string
+	}{
+		{"gradient_32x32", "testdata/gradient_32x32.png"},
+		{"solid_red_4x4", "testdata/solid_red_4x4/source.png"},
+		{"horiz_gradient_20x20", "testdata/demo_horiz_20x20/source.png"},
+		{"vert_gradient_20x20", "testdata/demo_verti_20x20/source.png"},
+		{"vert_split_8x8", "testdata/demo_vert_split_8x8/source.png"},
+		{"diag_20x20", "testdata/demo_diag_20x20/source.png"},
+		{"circle_20x20", "testdata/demo_circle_20x20/source.png"},
+		{"checker_20x20", "testdata/demo_checker_20x20/source.png"},
+		{"cross_20x20", "testdata/demo_cross_20x20/source.png"},
+	} {
+		src := goldenLoad(t, tc.path)
+		if src == nil {
+			continue
+		}
+		sources = append(sources, struct {
+			name string
+			img  image.Image
+		}{tc.name, src})
+	}
+
+	modes := []string{"h", "qs", "qe", "sq", "sg", "sb", "xs"}
+
+	for _, source := range sources {
+		for _, mode := range modes {
+			rc, err := parseRenderMode(mode)
+			if err != nil {
+				t.Fatalf("parseRenderMode(%q): %v", mode, err)
+			}
+			for width := 1; width <= 20; width++ {
+				t.Run(source.name+"/"+mode+"-w"+itoa(width), func(t *testing.T) {
+					vp, err := prepareRenderedImageChecked(source.img, nil, width, 0, rc, "")
+					if err != nil {
+						t.Fatalf("prepareRenderedImageChecked: %v", err)
+					}
+					vb := vp.Bounds()
+					if vb.Dx() <= 0 || vb.Dy() <= 0 {
+						t.Fatalf("empty viewport: %dx%d", vb.Dx(), vb.Dy())
+					}
+
+					contentH := trimTransparentTailHeight(vp)
+					if contentH <= 0 {
+						t.Fatalf("viewport has no opaque content: %dx%d", vb.Dx(), vb.Dy())
+					}
+					if err := validateStaticViewportAspectForTest(source.img.Bounds(), vb.Dx(), contentH, rc); err != nil {
+						t.Fatalf("viewport aspect: %v", err)
+					}
+
+					var ansi strings.Builder
+					if err := rc.render(&ansi, vp); err != nil {
+						t.Fatalf("render ANSI: %v", err)
+					}
+					if gap := firstDefaultBackgroundCellForOpaqueSource(ansi.String(), rc); gap.found {
+						t.Fatalf("terminal-default gap at row=%d col=%d glyph=%q viewport=%dx%d",
+							gap.row, gap.col, gap.ch, vb.Dx(), vb.Dy())
+					}
+
+					rendered := renderNativeImageForTest(vp, rc)
+					if gap := firstTransparentGap(rendered); gap >= 0 {
+						rb := rendered.Bounds()
+						t.Fatalf("transparent gap at rendered pixel %d,%d for viewport=%dx%d rendered=%dx%d",
+							gap%rb.Dx(), gap/rb.Dx(), vb.Dx(), vb.Dy(), rb.Dx(), rb.Dy())
+					}
+				})
+			}
+		}
+	}
+}
+
+type ansiGap struct {
+	found bool
+	row   int
+	col   int
+	ch    rune
+}
+
+func firstDefaultBackgroundCellForOpaqueSource(out string, rc renderCfg) ansiGap {
+	if !rc.mode.useSextant() {
+		return ansiGap{}
+	}
+	row, col := 0, 0
+	bgActive := false
+	for i := 0; i < len(out); {
+		r := rune(out[i])
+		size := 1
+		if r >= 0x80 {
+			r, size = utf8.DecodeRuneInString(out[i:])
+		}
+		if r == '\x1b' {
+			next, bg := scanANSIForBackground(out, i, bgActive)
+			i = next
+			bgActive = bg
+			continue
+		}
+		switch r {
+		case '\r':
+			col = 0
+		case '\n':
+			row++
+			col = 0
+		default:
+			if !bgActive {
+				return ansiGap{found: true, row: row, col: col, ch: r}
+			}
+			col++
+		}
+		i += size
+	}
+	return ansiGap{}
+}
+
+func scanANSIForBackground(out string, i int, bgActive bool) (int, bool) {
+	if i+1 >= len(out) || out[i+1] != '[' {
+		return i + 1, bgActive
+	}
+	j := i + 2
+	for j < len(out) && (out[j] < '@' || out[j] > '~') {
+		j++
+	}
+	if j >= len(out) {
+		return len(out), bgActive
+	}
+	if out[j] != 'm' {
+		return j + 1, bgActive
+	}
+	params := splitANSIParams(out[i+2 : j])
+	if len(params) == 0 || params[0] == "" {
+		return j + 1, false
+	}
+	for k := 0; k < len(params); k++ {
+		switch params[k] {
+		case "0":
+			bgActive = false
+		case "38":
+			if k+4 < len(params) && params[k+1] == "2" {
+				k += 4
+			}
+		case "48":
+			bgActive = true
+			if k+4 < len(params) && params[k+1] == "2" {
+				k += 4
+			}
+		}
+	}
+	return j + 1, bgActive
+}
+
+func splitANSIParams(s string) []string {
+	var out []string
+	start := 0
+	for i := 0; i <= len(s); i++ {
+		if i == len(s) || s[i] == ';' {
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	return out
+}
+
 func staticViewportForTest(src image.Image, width int, rc renderCfg) image.Image {
 	return prepareRenderedImage(src, nil, width, 0, rc, "")
+}
+
+func opaqueGradientForTest(w, h int) image.Image {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.SetRGBA(x, y, color.RGBA{
+				R: uint8(x * 255 / max(1, w-1)),
+				G: uint8(y * 255 / max(1, h-1)),
+				B: uint8((x + y) * 255 / max(1, w+h-2)),
+				A: 255,
+			})
+		}
+	}
+	return img
+}
+
+func validateStaticViewportAspectForTest(src image.Rectangle, renderW, renderH int, rc renderCfg) error {
+	if spec, ok := rc.mode.v2FitSpec(); ok {
+		return validateSourceAspectWith(rc, src, renderW, renderH, spec.AspectNum, spec.AspectDen, spec.CellW, spec.CellH)
+	}
+	return validateSourceAspect(rc, src, renderW, renderH)
+}
+
+func trimTransparentTailHeight(img image.Image) int {
+	b := img.Bounds()
+	for y := b.Max.Y - 1; y >= b.Min.Y; y-- {
+		if !transparentPixelRow(img, y) {
+			return y - b.Min.Y + 1
+		}
+	}
+	return 0
+}
+
+func renderNativeImageForTest(vp image.Image, rc renderCfg) image.Image {
+	b := vp.Bounds()
+	switch rc.mode {
+	case modeSextant:
+		return sextant.RenderToImage(vp, rc.sextantMode)
+	case modeSpark, modeSparkGeom, modeSparkBest:
+		outCols := max(1, b.Dx()/4)
+		outRows := max(1, b.Dy()/8)
+		return sparkline.RenderToImage(vp, outCols, outRows, rc.sparkMode)
+	case modeQuad:
+		return quadblock.RenderToImage(vp, rc.quadOpts)
+	default:
+		return halfblock.RenderToImage(vp)
+	}
+}
+
+func firstTransparentGap(img image.Image) int {
+	b := img.Bounds()
+	tailStart := b.Max.Y
+	for y := b.Max.Y - 1; y >= b.Min.Y; y-- {
+		if !transparentPixelRow(img, y) {
+			break
+		}
+		tailStart = y
+	}
+	for y := b.Min.Y; y < tailStart; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			_, _, _, a := img.At(x, y).RGBA()
+			if a == 0 {
+				return (y-b.Min.Y)*b.Dx() + (x - b.Min.X)
+			}
+		}
+	}
+	return -1
 }
 
 func rowDuplicateSignalImageForTest(vp image.Image, rc renderCfg) image.Image {

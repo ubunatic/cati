@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"codeberg.org/ubunatic/cati/internal/audio"
-	"codeberg.org/ubunatic/cati/internal/geomshape"
 	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/input"
 	"codeberg.org/ubunatic/cati/internal/metrics"
@@ -39,11 +38,6 @@ const (
 	modeSparkGeom
 	modeSparkBest
 	modeSextant
-	modeSextantGeom
-	modeSextantBest
-	modeGeomShape
-	modeGeomShapeGeom
-	modeGeomShapeBest
 )
 
 func (m renderMode) pixCols(termCols int) int {
@@ -60,12 +54,8 @@ func (m renderMode) viewSpec() viewgeom.Spec {
 		return viewgeom.NewCell(2, 2, 2)
 	case modeSpark, modeSparkGeom, modeSparkBest:
 		return viewgeom.NewCell(4, 8, 1)
-	case modeSextant, modeSextantGeom, modeSextantBest:
+	case modeSextant:
 		return viewgeom.NewCell(2, 3, 1)
-	case modeGeomShape:
-		return viewgeom.NewCell(2, 2, 2)
-	case modeGeomShapeGeom, modeGeomShapeBest:
-		return viewgeom.NewCell(4, 4, 1)
 	default:
 		return viewgeom.NewCell(1, 2, 1)
 	}
@@ -80,11 +70,7 @@ func (m renderMode) useSpark() bool {
 }
 
 func (m renderMode) useSextant() bool {
-	return m == modeSextant || m == modeSextantGeom || m == modeSextantBest
-}
-
-func (m renderMode) useGeomShape() bool {
-	return m == modeGeomShape || m == modeGeomShapeGeom || m == modeGeomShapeBest
+	return m == modeSextant
 }
 
 func (m renderMode) v2FitSpec() (viewgeom.V2Spec, bool) {
@@ -102,18 +88,16 @@ func (m renderMode) v2FitSpec() (viewgeom.V2Spec, bool) {
 // id is set by renderModes entries and used for equality/cycling; it must be
 // unique per renderModes element. The zero id (0) belongs to "halfblock".
 type renderCfg struct {
-	id               int
-	mode             renderMode
-	sparkMode        sparkline.Mode
-	sextantMode      sextant.Mode
-	geomShapeMode    geomshape.Mode
-	geomShapeSampler geomshape.Sampler
-	quadOpts         quadblock.Options
-	preScale         func(image.Image) image.Image // optional pre-scaler applied before ScaleToFit
-	prescaler        prescaleMode
-	jobs             int
-	gray             bool                     // when true, convert image to grayscale before rendering
-	grayColors       quadblock.ColorReduction // active grayscale palette level (ColorGray4/8/64/256)
+	id          int
+	mode        renderMode
+	sparkMode   sparkline.Mode
+	sextantMode sextant.Mode
+	quadOpts    quadblock.Options
+	preScale    func(image.Image) image.Image // optional pre-scaler applied before ScaleToFit
+	prescaler   prescaleMode
+	jobs        int
+	gray        bool                     // when true, convert image to grayscale before rendering
+	grayColors  quadblock.ColorReduction // active grayscale palette level (ColorGray4/8/64/256)
 }
 
 // grayLevels is the cycle order for the G key: off → 256 → 64 → 8 → 4 → off.
@@ -209,16 +193,11 @@ func viewerHintVars(meta MediaMeta, termCols int, hintTpl string, extra map[stri
 
 func (rc renderCfg) render(w io.Writer, img image.Image) error {
 	switch rc.mode {
-	case modeSextant, modeSextantGeom, modeSextantBest:
+	case modeSextant:
 		if rc.jobs > 1 {
 			return sextant.RenderJ(w, img, rc.sextantMode, rc.jobs)
 		}
 		return sextant.Render(w, img, rc.sextantMode)
-	case modeGeomShape, modeGeomShapeGeom, modeGeomShapeBest:
-		if rc.jobs > 1 {
-			return geomshape.RenderJWithSampler(w, img, rc.geomShapeMode, rc.geomShapeSampler, rc.jobs)
-		}
-		return geomshape.RenderWithSampler(w, img, rc.geomShapeMode, rc.geomShapeSampler)
 	case modeSpark, modeSparkGeom, modeSparkBest:
 		b := img.Bounds()
 		outCols := max(1, b.Dx()/4)
@@ -280,12 +259,8 @@ func renderedCellSize(vp image.Image, rc renderCfg) renderCells {
 
 func renderedCellSizeForPixels(w, h int, rc renderCfg) renderCells {
 	switch rc.mode {
-	case modeSextant, modeSextantGeom, modeSextantBest:
+	case modeSextant:
 		return renderCells{Cols: ceilDiv(w, 2), Rows: ceilDiv(h, 3)}
-	case modeGeomShape:
-		return renderCells{Cols: ceilDiv(w, 2), Rows: ceilDiv(h, 2)}
-	case modeGeomShapeGeom, modeGeomShapeBest:
-		return renderCells{Cols: ceilDiv(w, 4), Rows: ceilDiv(h, 4)}
 	case modeSpark, modeSparkGeom, modeSparkBest:
 		return renderCells{Cols: max(1, w/4), Rows: max(1, h/8)}
 	case modeQuad:
@@ -327,7 +302,7 @@ func viewportPixelSizeForCells(cells renderCells, rc renderCfg) (int, int) {
 }
 
 func alignViewportSize(viewW, viewH int, rc renderCfg) (int, int) {
-	if rc.mode.useQuad() || rc.mode.useSextant() || rc.mode.useGeomShape() {
+	if rc.mode.useQuad() || rc.mode.useSextant() {
 		if viewW > 1 && viewW%2 != 0 {
 			viewW--
 		}
@@ -381,11 +356,6 @@ var renderModes = []struct {
 	{"spark/geom", renderCfg{id: 4, mode: modeSparkGeom, sparkMode: sparkline.Geom}},
 	{"spark/best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}},
 	{"sextant/2x3", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}},
-	{"sextant/geom", renderCfg{id: 7, mode: modeSextantGeom, sextantMode: sextant.ModeGeom}},
-	{"sextant/best", renderCfg{id: 8, mode: modeSextantBest, sextantMode: sextant.ModeBest}},
-	{"geomshape/2x2", renderCfg{id: 9, mode: modeGeomShape, geomShapeMode: geomshape.ModeShape}},
-	{"geomshape/geom", renderCfg{id: 10, mode: modeGeomShapeGeom, geomShapeMode: geomshape.ModeGeom, geomShapeSampler: geomshape.SamplerV2}},
-	{"geomshape/best", renderCfg{id: 11, mode: modeGeomShapeBest, geomShapeMode: geomshape.ModeBest, geomShapeSampler: geomshape.SamplerV2}},
 }
 
 func canonicalRenderCfg(rc renderCfg) renderCfg {
@@ -396,7 +366,6 @@ func canonicalRenderCfg(rc renderCfg) renderCfg {
 			canon.jobs = rc.jobs
 			canon.gray = rc.gray
 			canon.grayColors = rc.grayColors
-			canon.geomShapeSampler = rc.geomShapeSampler
 			return canon
 		}
 	}
@@ -408,9 +377,6 @@ func sameRenderMode(a, b renderCfg) bool {
 		return false
 	}
 	if a.sextantMode != b.sextantMode {
-		return false
-	}
-	if a.geomShapeSampler != b.geomShapeSampler {
 		return false
 	}
 	if (a.preScale == nil) != (b.preScale == nil) {
@@ -429,7 +395,6 @@ func cycleRenderCfg(rc renderCfg) (renderCfg, string) {
 			next.cfg.jobs = rc.jobs
 			next.cfg.gray = rc.gray
 			next.cfg.grayColors = rc.grayColors
-			next.cfg.geomShapeSampler = rc.geomShapeSampler
 			return next.cfg, next.name
 		}
 	}
@@ -438,7 +403,6 @@ func cycleRenderCfg(rc renderCfg) (renderCfg, string) {
 	next.cfg.jobs = rc.jobs
 	next.cfg.gray = rc.gray
 	next.cfg.grayColors = rc.grayColors
-	next.cfg.geomShapeSampler = rc.geomShapeSampler
 	return next.cfg, next.name
 }
 
@@ -453,7 +417,6 @@ func cycleRenderCfgPrev(rc renderCfg) (renderCfg, string) {
 			prev.cfg.jobs = rc.jobs
 			prev.cfg.gray = rc.gray
 			prev.cfg.grayColors = rc.grayColors
-			prev.cfg.geomShapeSampler = rc.geomShapeSampler
 			return prev.cfg, prev.name
 		}
 	}
@@ -462,7 +425,6 @@ func cycleRenderCfgPrev(rc renderCfg) (renderCfg, string) {
 	prev.cfg.jobs = rc.jobs
 	prev.cfg.gray = rc.gray
 	prev.cfg.grayColors = rc.grayColors
-	prev.cfg.geomShapeSampler = rc.geomShapeSampler
 	return prev.cfg, prev.name
 }
 

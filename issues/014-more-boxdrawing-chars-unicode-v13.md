@@ -25,8 +25,6 @@ U+1FB6x 	🭠 	🭡 	🭢 	🭣 	🭤 	🭥 	🭦 	🭧 	🭨 	🭩 	🭪 	🭫 
 
 ## Phase 1
 - ship the dedicated 2x3 sextant mode
-- add the geometry chooser
-- add the exhaustive best-of-all mode
 - write tests
 - add to make demo-xxx cases
 - add golden imgs
@@ -37,10 +35,8 @@ U+1FB6x 	🭠 	🭡 	🭢 	🭣 	🭤 	🭥 	🭦 	🭧 	🭨 	🭩 	🭪 	🭫 
 
 ## FIXME
 - keep the sextant geometry tables local for now; consolidate them with later glyph families once the shared scorer stabilizes.
-- the new diagonal block family (`geomshape`, U+1FB40..U+1FB4F) is started as a separate copy; keep it isolated until the geometry scorer proves stable.
-- the strict geomshape pass now rejects dented, disconnected, or otherwise unsupported diagonal masks as hard errors; the remaining work is to tune the scorer so fewer real images trip the validator and to keep the reproducible glyph atlas probe around for regression.
-- the current 2x2 mask model is still too coarse for the diagonal-block family: `cati testdata/gradient_32x32.png -m=sh -w 12` now errors out instead of printing a broken first row. The atlas needs to be treated as a diagonal/line-segment family, not as a plain quadrant mask.
-- the sampler is now split behind `renderCfg` so the legacy midpoint path stays stable while `SamplerV2` stays copied and opt-in for richer geometry experiments.
+- the current 2x2 mask model is still too coarse for the diagonal-block family. The atlas needs to be treated as a diagonal/line-segment family, not as a plain quadrant mask.
+- previous search/scorer experiments were removed from the product surface; keep future diagonal work behind private verification until it passes aspect, gap, and golden-image invariants.
 
 **IMPORTANT** DO NOT BREAK the other algos
 **IMPORTANT** Make sure transparent row append works correctly to support 1x1 terminal <-> image asoect matching. 5x5px will always draw 1:1 in the term!

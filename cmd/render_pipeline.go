@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"image"
+	"math"
 	"strings"
 
 	"codeberg.org/ubunatic/cati/internal/halfblock"
@@ -45,13 +46,21 @@ func (m prescaleMode) String() string {
 // initial zoom flag. When state is non-nil, the image is treated as a viewport
 // and cropped after zoom/pan normalization.
 func prepareRenderedImage(orig image.Image, state *viewState, termCols, termRows int, rc renderCfg, initialZoom string) image.Image {
+	img, err := prepareRenderedImageChecked(orig, state, termCols, termRows, rc, initialZoom)
+	if err != nil {
+		panic(err)
+	}
+	return img
+}
+
+func prepareRenderedImageChecked(orig image.Image, state *viewState, termCols, termRows int, rc renderCfg, initialZoom string) (image.Image, error) {
 	if rc.gray {
 		orig = quadblock.ReduceColors(orig, rc.grayColors)
 	}
 	b := orig.Bounds()
 	srcW, srcH := b.Dx(), b.Dy()
 	if srcW == 0 || srcH == 0 {
-		return orig
+		return orig, nil
 	}
 
 	if state == nil {
@@ -60,13 +69,16 @@ func prepareRenderedImage(orig image.Image, state *viewState, termCols, termRows
 				termCols = halfblock.TermWidth()
 				termRows = halfblock.TermHeight()
 			}
-			return fitRenderedImage(orig, termCols, termRows, rc)
+			return fitRenderedImageChecked(orig, termCols, termRows, rc)
 		}
 		spec := rc.mode.viewSpec()
 		zoom := spec.InitialZoomRatio(initialZoom, srcW, srcH, termCols, termRows)
 		dims := spec.Dims(srcW, srcH, termCols, termRows, zoom)
 		scaledW, scaledH := imgutil.AlignCellSize(dims.ScaledW, dims.ScaledH, spec.CellW, spec.CellH)
-		return resizeRenderedImage(orig, scaledW, scaledH, rc)
+		if err := validateSourceAspect(rc, image.Rect(0, 0, srcW, srcH), scaledW, scaledH); err != nil {
+			return nil, err
+		}
+		return resizeRenderedImage(orig, scaledW, scaledH, rc), nil
 	}
 
 	spec := rc.mode.viewSpec()
@@ -84,29 +96,78 @@ func prepareRenderedImage(orig image.Image, state *viewState, termCols, termRows
 			vp = resizeRenderedImage(vp, targetW, targetH, rc)
 		}
 	}
-	return vp
+	return vp, nil
 }
 
 func fitRenderedImage(img image.Image, cols, rows int, rc renderCfg) image.Image {
+	result, err := fitRenderedImageChecked(img, cols, rows, rc)
+	if err != nil {
+		panic(err)
+	}
+	return result
+}
+
+func fitRenderedImageChecked(img image.Image, cols, rows int, rc renderCfg) (image.Image, error) {
 	if rc.preScale != nil {
 		img = rc.preScale(img)
 	}
 	b := img.Bounds()
 	if spec, ok := rc.mode.v2FitSpec(); ok {
 		plan := spec.Fit(b.Dx(), b.Dy(), cols, rows, false)
+		if err := validateSourceAspectWith(rc, b, plan.RenderW, plan.RenderH, spec.AspectNum, spec.AspectDen, spec.CellW, spec.CellH); err != nil {
+			return nil, err
+		}
 		result := resizeRenderedImage(img, plan.RenderW, plan.RenderH, rc)
 		if plan.ExtH > 0 {
 			result = imgutil.AppendTransparentRows(result, plan.ExtH)
 		}
-		return result
+		return result, nil
 	}
 	spec := rc.mode.viewSpec()
 	targetW, targetH, extH := imgutil.FitDims(b.Dx(), b.Dy(), spec.CellW, spec.CellH, spec.AspectX, cols, rows)
+	if err := validateSourceAspect(rc, b, targetW, targetH); err != nil {
+		return nil, err
+	}
 	result := resizeRenderedImage(img, targetW, targetH, rc)
 	if extH > 0 {
 		result = imgutil.AppendTransparentRows(result, extH)
 	}
-	return result
+	return result, nil
+}
+
+func validateSourceAspect(rc renderCfg, src image.Rectangle, renderW, renderH int) error {
+	aspectNum, aspectDen := rc.mode.renderAspectCorrection()
+	cellW, cellH := rc.mode.renderCellSize()
+	return validateSourceAspectWith(rc, src, renderW, renderH, aspectNum, aspectDen, cellW, cellH)
+}
+
+func validateSourceAspectWith(rc renderCfg, src image.Rectangle, renderW, renderH, aspectNum, aspectDen, cellW, cellH int) error {
+	srcW, srcH := src.Dx(), src.Dy()
+	if srcW <= 0 || srcH <= 0 || renderW <= 0 || renderH <= 0 {
+		return nil
+	}
+	got := float64(renderW*aspectDen) / float64(renderH*aspectNum)
+	want := float64(srcW) / float64(srcH)
+	if got <= 0 || want <= 0 {
+		return nil
+	}
+	relErr := math.Abs(got/want - 1)
+	tolerance := float64(cellW)/float64(renderW) + float64(cellH)/float64(renderH)
+	if relErr <= tolerance {
+		return nil
+	}
+	return fmt.Errorf("render aspect mismatch for %s: source %dx%d aspect %.4g, viewport %dx%d with correction %d:%d gives %.4g (relative error %.3g > %.3g)",
+		rcModeName(rc), srcW, srcH, want, renderW, renderH, aspectNum, aspectDen, got, relErr, tolerance)
+}
+
+func (m renderMode) renderAspectCorrection() (num, den int) {
+	spec := m.viewSpec()
+	return spec.AspectX, 1
+}
+
+func (m renderMode) renderCellSize() (cellW, cellH int) {
+	spec := m.viewSpec()
+	return spec.CellW, spec.CellH
 }
 
 func alignRenderedCellSize(w, h int, rc renderCfg) (int, int) {

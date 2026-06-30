@@ -7,7 +7,6 @@ import (
 	"sort"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/internal/geomshape"
 	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/metrics"
 	"codeberg.org/ubunatic/cati/internal/pixelart"
@@ -100,12 +99,6 @@ var allVariants = []struct {
 	{"sextant/2x3", renderCfg{mode: modeSextant, sextantMode: sextant.ModeSextant}},
 	{"spark/geom", renderCfg{mode: modeSparkGeom, sparkMode: sparkline.Geom}},
 	{"spark/best", renderCfg{mode: modeSparkBest, sparkMode: sparkline.Best}},
-	{"sextant/geom", renderCfg{mode: modeSextantGeom, sextantMode: sextant.ModeGeom}},
-	{"sextant/best", renderCfg{mode: modeSextantBest, sextantMode: sextant.ModeBest}},
-	{"geomshape/2x2", renderCfg{mode: modeGeomShape, geomShapeMode: geomshape.ModeShape}},
-	{"geomshape/geom", renderCfg{mode: modeGeomShapeGeom, geomShapeMode: geomshape.ModeGeom}},
-	{"geomshape/best", renderCfg{mode: modeGeomShapeBest, geomShapeMode: geomshape.ModeBest}},
-	{"geomshape/v2", renderCfg{mode: modeGeomShapeBest, geomShapeMode: geomshape.ModeBest, geomShapeSampler: geomshape.SamplerV2}},
 }
 
 // TestSSIMBenchmark loads every sample image, computes SSIM for all render

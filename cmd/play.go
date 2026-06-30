@@ -107,7 +107,10 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
-		img = prepareRenderedImage(img, nil, cols, rows, rc, "")
+		img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+		if err != nil {
+			return fmt.Errorf("%s: %w", p, err)
+		}
 		frames = append(frames, img)
 	}
 
@@ -240,7 +243,10 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 					continue
 				}
 				currentVideoHadFrames = true
-				img = prepareRenderedImage(img, nil, cols, rows, rc, "")
+				img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+				if err != nil {
+					return err
+				}
 				lastFrame = img
 			default:
 				// No frame ready — keep showing the current frame.

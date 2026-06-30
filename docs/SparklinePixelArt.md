@@ -163,22 +163,14 @@ When the source or destination is already `*image.RGBA`, the renderer uses
 direct pixel access instead of generic `image.Color` sampling/writes, which
 keeps the benchmarked path allocation-free in cell selection and nearly flat in
 image reconstruction.
-Current sparkline-family modes are `spark/vert`, `spark/quad`,
-`spark/geom`, `spark/best`, `spark/sextant`, `sextant/geom`, and
-`sextant/best`. The separate `geomshape` family is now also available through
-the shared render pipeline for the new diagonal block glyphs, but it remains an
-isolated copy for tuning. The strict `geomshape/geom` path now treats dented or
-disconnected masks as hard errors so the renderer does not silently print a
-broken diagonal block; `geomshape/best` remains the permissive search path for
-continued tuning. The geometry-focused sparkline modes are:
+Current sparkline-family modes are `spark/vert`, `spark/quad`, `spark/geom`,
+`spark/best`, and `spark/sextant`. The shipped sextant renderer is separate and
+kept intentionally narrow as `sextant/2x3` (`xs`). The geometry-focused
+sparkline modes are:
 
 - `spark/geom` uses a cheap geometry heuristic to pick between quad and
   sextant candidates.
 - `spark/best` exhaustively scores the combined quad + sextant candidate set.
-
-The geomshape path also carries an explicit sampler slot in `renderCfg`. The
-legacy midpoint sampler stays the default; `SamplerV2` is a copied corner-biased
-sampler kept isolated until the richer geometry model is ready to replace it.
 
 ### Generator functions
 
