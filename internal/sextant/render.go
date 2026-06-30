@@ -52,7 +52,22 @@ func init() {
 		sextantMasks = append(sextantMasks, mask)
 		next++
 	}
+	// The two pure-column splits (left column 1·3·5, right column 2·4·6) have no
+	// dedicated sextant glyph in U+1FB00.. — they coincide with the pre-existing
+	// half-block characters ▌ (U+258C) and ▐ (U+2590), so Unicode omits them from
+	// the sextant set. Without these entries displayMask returns 0 for masks
+	// 0b101010 / 0b010101 and the renderer emits rune(0) (a zero-width NUL),
+	// which shifts the rest of the row and leaves the right edge unfilled.
+	sextantRuneByMask[leftColumnMask] = '▌'
+	sextantRuneByMask[rightColumnMask] = '▐'
 }
+
+// leftColumnMask / rightColumnMask are the two full-column patterns that map to
+// half-block glyphs rather than dedicated sextant runes (see init).
+const (
+	leftColumnMask  uint8 = 0b101010 // pixels 1,3,5 → ▌
+	rightColumnMask uint8 = 0b010101 // pixels 2,4,6 → ▐
+)
 
 func sextantNames() []string {
 	return []string{

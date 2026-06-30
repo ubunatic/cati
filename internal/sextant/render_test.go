@@ -50,8 +50,9 @@ func TestSextantCandidateCount(t *testing.T) {
 	if got := len(sextantMasks); got != 60 {
 		t.Fatalf("len(sextantMasks) = %d, want 60", got)
 	}
-	if got := len(sextantRuneByMask); got != 60 {
-		t.Fatalf("len(sextantRuneByMask) = %d, want 60", got)
+	// 60 native sextant glyphs + the two half-block column patterns (▌ ▐).
+	if got := len(sextantRuneByMask); got != 62 {
+		t.Fatalf("len(sextantRuneByMask) = %d, want 62", got)
 	}
 }
 
@@ -77,6 +78,29 @@ func TestSextantModeUsesDirectMask(t *testing.T) {
 				t.Fatalf("chooseCell(2x3) mask = %06b, want %06b", cell.mask, tc.mask)
 			}
 		})
+	}
+}
+
+// TestSextantNoNulGlyph guards the regression where the two pure-column masks
+// (left 1·3·5, right 2·4·6) had no glyph and were emitted as rune(0) — a
+// zero-width NUL that shifted the row and left the right edge unfilled. Every
+// mask must resolve to either a printable rune or the explicit space cell.
+func TestSextantNoNulGlyph(t *testing.T) {
+	for m := 0; m < 64; m++ {
+		cell, _ := scoreMask([6]color.RGBA{
+			{255, 255, 255, 255}, {255, 255, 255, 255},
+			{255, 255, 255, 255}, {255, 255, 255, 255},
+			{255, 255, 255, 255}, {255, 255, 255, 255},
+		}, uint8(m))
+		if cell.ch == 0 && !cell.transparent {
+			t.Fatalf("scoreMask(mask=%06b) produced rune(0) on an opaque cell", m)
+		}
+	}
+	if got := sextantRuneByMask[leftColumnMask]; got != '▌' {
+		t.Fatalf("leftColumnMask rune = %q, want ▌", got)
+	}
+	if got := sextantRuneByMask[rightColumnMask]; got != '▐' {
+		t.Fatalf("rightColumnMask rune = %q, want ▐", got)
 	}
 }
 
