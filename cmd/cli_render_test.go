@@ -29,7 +29,6 @@ func TestCLIRender(t *testing.T) {
 		{"halfblock", "halfblock"},
 		{"quad", "quad/splithalf"},
 		{"spark", "spark/quad"},
-		{"spark_geom", "spark/geom"},
 		{"spark_best", "spark/best"},
 		{"sextant", "sextant/2x3"},
 	}

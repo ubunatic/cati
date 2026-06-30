@@ -35,7 +35,6 @@ const (
 	modeHalfblock renderMode = iota
 	modeQuad
 	modeSpark
-	modeSparkGeom
 	modeSparkBest
 	modeSextant
 )
@@ -52,7 +51,7 @@ func (m renderMode) viewSpec() viewgeom.Spec {
 	switch m {
 	case modeQuad:
 		return viewgeom.NewCell(2, 2, 2)
-	case modeSpark, modeSparkGeom, modeSparkBest:
+	case modeSpark, modeSparkBest:
 		return viewgeom.NewCell(4, 8, 1)
 	case modeSextant:
 		return viewgeom.NewCell(2, 3, 1)
@@ -66,7 +65,7 @@ func (m renderMode) useQuad() bool {
 }
 
 func (m renderMode) useSpark() bool {
-	return m == modeSpark || m == modeSparkGeom || m == modeSparkBest
+	return m == modeSpark || m == modeSparkBest
 }
 
 func (m renderMode) useSextant() bool {
@@ -198,7 +197,7 @@ func (rc renderCfg) render(w io.Writer, img image.Image) error {
 			return sextant.RenderJ(w, img, rc.sextantMode, rc.jobs)
 		}
 		return sextant.Render(w, img, rc.sextantMode)
-	case modeSpark, modeSparkGeom, modeSparkBest:
+	case modeSpark, modeSparkBest:
 		b := img.Bounds()
 		outCols := max(1, b.Dx()/4)
 		outRows := max(1, b.Dy()/8)
@@ -261,7 +260,7 @@ func renderedCellSizeForPixels(w, h int, rc renderCfg) renderCells {
 	switch rc.mode {
 	case modeSextant:
 		return renderCells{Cols: ceilDiv(w, 2), Rows: ceilDiv(h, 3)}
-	case modeSpark, modeSparkGeom, modeSparkBest:
+	case modeSpark, modeSparkBest:
 		return renderCells{Cols: max(1, w/4), Rows: max(1, h/8)}
 	case modeQuad:
 		return renderCells{Cols: ceilDiv(w, 2), Rows: ceilDiv(h, 2)}
@@ -329,7 +328,7 @@ func renderValidated(w io.Writer, orig, vp image.Image, state viewState, termCol
 			return err
 		}
 	}
-	return rc.render(w, vp)
+	return renderChecked(w, vp, rc)
 }
 
 // renderModes is the cycle order for the R key. Each entry's cfg.id must be
@@ -353,7 +352,6 @@ var renderModes = []struct {
 	{"quad/edge-snap", renderCfg{id: 2, mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true}}},
 	// {"quad/edge-snap+ambig", renderCfg{id: 13, mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true, Blend: quadblock.BlendAmbiguous}}},
 	{"spark/quad", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}},
-	{"spark/geom", renderCfg{id: 4, mode: modeSparkGeom, sparkMode: sparkline.Geom}},
 	{"spark/best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}},
 	{"sextant/2x3", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}},
 }

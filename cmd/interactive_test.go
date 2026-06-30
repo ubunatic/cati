@@ -424,7 +424,6 @@ func TestZoomLevelReportsTerminalCellSourceWidthAcrossModes(t *testing.T) {
 		{"halfblock", renderCfg{id: 0}, "src px/cell=4"},
 		{"quad", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, "src px/cell=4"},
 		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}, "src px/cell=4"},
-		{"spark geom", renderCfg{id: 4, mode: modeSparkGeom, sparkMode: sparkline.Geom}, "src px/cell=4"},
 		{"spark best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}, "src px/cell=4"},
 		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, "src px/cell=5"},
 	}
@@ -455,7 +454,6 @@ func TestBuildRefUsesCommonQualityGridAcrossModes(t *testing.T) {
 		// viewW×viewH so that rendered and ref are compared at the same resolution
 		// without a 2× downscale that would alias the character fill pattern.
 		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
-		{"spark geom", renderCfg{id: 4, mode: modeSparkGeom, sparkMode: sparkline.Geom}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
 		{"spark best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
 		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, termCols * metrics.GridK, termRows * metrics.GridK},
 	}
@@ -484,7 +482,6 @@ func TestBuildViewportExpandsSparkSmallFitToDisplaySize(t *testing.T) {
 		{"halfblock", renderCfg{id: 0}, renderCells{Cols: 32, Rows: 16}},
 		{"quad", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, renderCells{Cols: 32, Rows: 16}},
 		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}, renderCells{Cols: 32, Rows: 16}},
-		{"spark geom", renderCfg{id: 4, mode: modeSparkGeom, sparkMode: sparkline.Geom}, renderCells{Cols: 32, Rows: 16}},
 		{"spark best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}, renderCells{Cols: 32, Rows: 16}},
 		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, renderCells{Cols: 32, Rows: 16}},
 	}

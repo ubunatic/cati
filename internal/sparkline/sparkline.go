@@ -15,7 +15,6 @@ const (
 	Vertical Mode = iota
 	Quad
 	Sextant
-	Geom
 	Best
 )
 
@@ -27,8 +26,6 @@ func ModeName(m Mode) string {
 		return "spark/quad"
 	case Sextant:
 		return "spark/sextant"
-	case Geom:
-		return "spark/geom"
 	case Best:
 		return "spark/best"
 	default:
@@ -37,7 +34,7 @@ func ModeName(m Mode) string {
 }
 
 func Modes() []Mode {
-	return []Mode{Vertical, Quad, Sextant, Geom, Best}
+	return []Mode{Vertical, Quad, Sextant, Best}
 }
 
 func Cycle(m Mode) Mode {

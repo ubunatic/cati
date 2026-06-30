@@ -437,50 +437,6 @@ func sextantRegion(x, y, w, h int) int {
 	return row*2 + col + 1
 }
 
-func diagonalBias(pixels [4]color.RGBA) int {
-	// Simple corner-luma contrast: larger values indicate a stronger diagonal.
-	ul := int(pixels[0].R) + int(pixels[0].G) + int(pixels[0].B)
-	ur := int(pixels[1].R) + int(pixels[1].G) + int(pixels[1].B)
-	ll := int(pixels[2].R) + int(pixels[2].G) + int(pixels[2].B)
-	lr := int(pixels[3].R) + int(pixels[3].G) + int(pixels[3].B)
-	return absInt((ul + lr) - (ur + ll))
-}
-
-func chooseGeomCandidates(pixels [4]color.RGBA) []candidate {
-	if diagonalBias(pixels) > 32 {
-		return sextantCandidates
-	}
-	unique := 0
-	seen := [4]color.RGBA{}
-	for _, p := range pixels {
-		if p.A == 0 {
-			continue
-		}
-		found := false
-		for i := 0; i < unique; i++ {
-			if seen[i] == p {
-				found = true
-				break
-			}
-		}
-		if !found {
-			seen[unique] = p
-			unique++
-		}
-	}
-	if unique >= 3 {
-		return sextantCandidates
-	}
-	return quadCandidates
-}
-
-func absInt(v int) int {
-	if v < 0 {
-		return -v
-	}
-	return v
-}
-
 func sparkLevel(ch rune) int {
 	switch ch {
 	case '▁':
@@ -530,13 +486,6 @@ func FindBestCell(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, m
 		candidates = quadCandidates
 	case Sextant:
 		candidates = sextantCandidates
-	case Geom:
-		var corners [4]color.RGBA
-		corners[0] = rgbaAt(img, x0, y0)
-		corners[1] = rgbaAt(img, x1, y0)
-		corners[2] = rgbaAt(img, x0, y1)
-		corners[3] = rgbaAt(img, x1, y1)
-		candidates = chooseGeomCandidates(corners)
 	case Best:
 		candidates = bestCandidates
 	}

@@ -97,7 +97,6 @@ var allVariants = []struct {
 
 	// ── sextant: 2x3 geometry strategies ────────────────────────────────────────
 	{"sextant/2x3", renderCfg{mode: modeSextant, sextantMode: sextant.ModeSextant}},
-	{"spark/geom", renderCfg{mode: modeSparkGeom, sparkMode: sparkline.Geom}},
 	{"spark/best", renderCfg{mode: modeSparkBest, sparkMode: sparkline.Best}},
 }
 

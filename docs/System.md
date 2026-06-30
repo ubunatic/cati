@@ -103,11 +103,10 @@ The stable zoom and viewport helpers now live in `internal/viewgeom`. The app la
 halfblock. CLI startup canonicalizes the flag-derived renderer into the active
 cycle entry so display names, geometry, metrics, and `r`/`R` cycling all agree.
 The main app cycle is currently `halfblock → quad/splithalf → quad/edge-snap →
-spark/quad → spark/geom → spark/best → sextant/2x3`; `--mode=h` starts at
+spark/quad → spark/best → sextant/2x3`; `--mode=h` starts at
 halfblock, `--mode=qs` starts at `quad/splithalf`, `--mode=qe` starts at
-`quad/edge-snap`, `--mode=sq` starts at `spark/quad`, `--mode=sg` starts at
-`spark/geom`, `--mode=sb` starts at `spark/best`, and `--mode=xs` starts at
-`sextant/2x3`.
+`quad/edge-snap`, `--mode=sq` starts at `spark/quad`, `--mode=sb` starts at
+`spark/best`, and `--mode=xs` starts at `sextant/2x3`.
 
 **Panning invariant.** Pan state is the upper-left origin of the visible viewport in the scaled image. Halfblock, quad, spark, and sextant all use the same state and clamp path. Mode-specific code may translate terminal-cell deltas to viewport pixels through `viewSpec()`, but it must not pan a renderer-local output frame independently of the source viewport.
 
@@ -136,6 +135,15 @@ aspect correction while the original zoom/pan view geometry remains shared with
 the rest of the app. The experimental sextant search aliases and diagonal
 geomshape family were removed; see `RenderExperimentLessons.md` for the short
 postmortem.
+
+The `2×3` glyph set covers 60 of the 64 possible bit masks. The empty (`0`) and
+full (`63`) cells render as a space (with background fill); the remaining two —
+the pure left column (`1·3·5`, mask `0b101010`) and right column (`2·4·6`, mask
+`0b010101`) — have no dedicated sextant rune because Unicode reuses the existing
+half-block characters `▌` (U+258C) and `▐` (U+2590). `sextantRuneByMask` maps
+those two masks to the half-block glyphs explicitly; without them `displayMask`
+returns `0` and the renderer emits `rune(0)` (a zero-width NUL) that shifts the
+row and leaves the right edge unfilled (see issue #020).
 
 **Decoupled step generation.** `zoomSteps(mz, srcW) []float64` returns a descending slice of zoom values. Handlers (`inc_zoom`, `dec_zoom`, scroll wheel) consume it via `stepIdx(zoom, steps) int` and never compute steps directly.
 

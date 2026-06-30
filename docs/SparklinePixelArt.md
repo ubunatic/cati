@@ -163,14 +163,16 @@ When the source or destination is already `*image.RGBA`, the renderer uses
 direct pixel access instead of generic `image.Color` sampling/writes, which
 keeps the benchmarked path allocation-free in cell selection and nearly flat in
 image reconstruction.
-Current sparkline-family modes are `spark/vert`, `spark/quad`, `spark/geom`,
-`spark/best`, and `spark/sextant`. The shipped sextant renderer is separate and
-kept intentionally narrow as `sextant/2x3` (`xs`). The geometry-focused
-sparkline modes are:
+Current sparkline-family modes are `spark/vert`, `spark/quad`, `spark/sextant`,
+and `spark/best`. The shipped sextant renderer is separate and kept
+intentionally narrow as `sextant/2x3` (`xs`). The candidate-scoring sparkline
+mode is:
 
-- `spark/geom` uses a cheap geometry heuristic to pick between quad and
-  sextant candidates.
 - `spark/best` exhaustively scores the combined quad + sextant candidate set.
+
+(`spark/geom`, a cheap heuristic that picked between quad and sextant
+candidates, was removed — `spark/best` covers the same candidate space at higher
+quality.)
 
 ### Generator functions
 

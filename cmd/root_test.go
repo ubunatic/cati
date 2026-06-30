@@ -198,11 +198,6 @@ func TestParseRenderMode(t *testing.T) {
 				t.Fatalf("spark alias should not set quad options, got %#v", opts)
 			}
 		}},
-		{"spark geom", "sg", "spark/geom", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
-				t.Fatalf("sg mode should not set quad options, got %#v", opts)
-			}
-		}},
 		{"spark best", "sb", "spark/best", func(t *testing.T, opts quadblock.Options) {
 			if opts != (quadblock.Options{}) {
 				t.Fatalf("sb mode should not set quad options, got %#v", opts)
@@ -231,7 +226,7 @@ func TestParseRenderMode(t *testing.T) {
 }
 
 func TestRemovedRenderModesAreRejected(t *testing.T) {
-	for _, mode := range []string{"xg", "xb", "geom", "best", "sextant/geom", "sextant/best", "sh", "shg", "shb", "geomshape", "geomshape/2x2", "geomshape/geom", "geomshape/best"} {
+	for _, mode := range []string{"sg", "spark/geom", "xg", "xb", "geom", "best", "sextant/geom", "sextant/best", "sh", "shg", "shb", "geomshape", "geomshape/2x2", "geomshape/geom", "geomshape/best"} {
 		t.Run(mode, func(t *testing.T) {
 			if _, err := parseRenderMode(mode); err == nil {
 				t.Fatalf("parseRenderMode(%q) succeeded, want error", mode)
@@ -501,7 +496,7 @@ func TestAllRenderModesWidthOneThroughTwentyKeepAspectAndNoGaps(t *testing.T) {
 		}{tc.name, src})
 	}
 
-	modes := []string{"h", "qs", "qe", "sq", "sg", "sb", "xs"}
+	modes := []string{"h", "qs", "qe", "sq", "sb", "xs"}
 
 	for _, source := range sources {
 		for _, mode := range modes {
@@ -680,7 +675,7 @@ func renderNativeImageForTest(vp image.Image, rc renderCfg) image.Image {
 	switch rc.mode {
 	case modeSextant:
 		return sextant.RenderToImage(vp, rc.sextantMode)
-	case modeSpark, modeSparkGeom, modeSparkBest:
+	case modeSpark, modeSparkBest:
 		outCols := max(1, b.Dx()/4)
 		outRows := max(1, b.Dy()/8)
 		return sparkline.RenderToImage(vp, outCols, outRows, rc.sparkMode)

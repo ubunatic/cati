@@ -123,7 +123,6 @@ func TestGoldenRenders(t *testing.T) {
 		{"halfblock", "halfblock"},
 		{"quad", "quad/splithalf"},
 		{"spark", "spark/quad"},
-		{"spark_geom", "spark/geom"},
 		{"spark_best", "spark/best"},
 		{"sextant", "sextant/2x3"},
 	} {
@@ -205,7 +204,7 @@ func goldenRenderToImage(scaled image.Image, rc renderCfg, refW, refH int) image
 	switch rc.mode {
 	case modeSextant:
 		rendered = sextant.RenderToImage(scaled, rc.sextantMode)
-	case modeSpark, modeSparkGeom, modeSparkBest:
+	case modeSpark, modeSparkBest:
 		outCols := max(1, b.Dx()/4)
 		outRows := max(1, b.Dy()/8)
 		rendered = sparkline.RenderToImage(scaled, outCols, outRows, rc.sparkMode)

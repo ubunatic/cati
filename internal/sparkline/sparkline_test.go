@@ -15,7 +15,6 @@ func TestModeName(t *testing.T) {
 		{Vertical, "spark/vert"},
 		{Quad, "spark/quad"},
 		{Sextant, "spark/sextant"},
-		{Geom, "spark/geom"},
 		{Best, "spark/best"},
 		{Mode(99), "spark/vert"},
 	}
@@ -28,10 +27,10 @@ func TestModeName(t *testing.T) {
 
 func TestModes(t *testing.T) {
 	ms := Modes()
-	if len(ms) != 5 {
-		t.Fatalf("Modes() returned %d entries, want 5", len(ms))
+	if len(ms) != 4 {
+		t.Fatalf("Modes() returned %d entries, want 4", len(ms))
 	}
-	if ms[0] != Vertical || ms[1] != Quad || ms[2] != Sextant || ms[3] != Geom || ms[4] != Best {
+	if ms[0] != Vertical || ms[1] != Quad || ms[2] != Sextant || ms[3] != Best {
 		t.Errorf("Modes() order incorrect: got %v", ms)
 	}
 }
