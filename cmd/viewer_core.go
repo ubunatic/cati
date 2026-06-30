@@ -43,6 +43,7 @@ type viewerCore struct {
 	activeAction string
 	status       string
 	infoVisible  bool
+	skipQuality  bool        // when true the rerender callback skips quality computation (video playback)
 	lastKey      string
 	lastVP       image.Image // last derived viewport pixel image
 

@@ -131,3 +131,29 @@ Video advances → stopAudio(current), openAudio(next)
 ```
 
 Audio is not yet wired into `interactiveVideo` (`cati -i video.mp4`).
+
+---
+
+## 7. Render-Pipeline Optimizations for Playback
+
+### Throttled invariant checks (`renderCheckGate`)
+
+`renderChecked` validates every rendered frame by walking the full ANSI output string to count cell widths — an O(output-length) operation that is unnecessary after the first frame passes with stable dimensions.
+
+`renderCheckGate` (in `cmd/render_output.go`) tracks the last check time and the last frame dimensions. `renderCheckedGated` calls the ANSI walk and `validateRenderSize` only when:
+- The gate has never fired (first frame always checked), or
+- The rendered cell dimensions changed (resize or mode switch), or
+- More than `gate.interval` (1 s) has elapsed since the last check.
+
+Both `playImages` and `playVideos` create a gate with `interval = time.Second`.
+`interactiveVideo` uses `renderValidatedGated` (which also gates `validateRenderSize`) via the same mechanism.
+
+### Skipping quality metrics while playing (`skipQuality`)
+
+`viewerCore.skipQuality` disables the expensive per-frame quality pipeline in `interactiveVideo`:
+- `buildRef` (pyramid downscale of the source region)
+- `computeQuality` (render-to-image + SSIM + Sobel + blockiness)
+
+`vc.skipQuality` is `true` while the video is playing. On pause, `setPaused(true)` immediately runs a single quality computation so the hint bar shows accurate SSIM/blockiness values. While playing the hint bar displays the last computed value (frozen), which is acceptable because quality metrics are not meaningful at video frame rates.
+
+`vc.skipQuality` is reset to `false` when the video ends or when the user toggles pause.

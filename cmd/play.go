@@ -126,6 +126,11 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 	ticker := time.NewTicker(time.Duration(float64(time.Second) / float64(fps)))
 	defer ticker.Stop()
 
+	// checkGate throttles the ANSI invariant check to once per second.
+	// For image sequences all frames share the same dimensions so the check
+	// is redundant after the first frame passes.
+	checkGate := &renderCheckGate{interval: time.Second}
+
 	i := 0
 	for {
 		select {
@@ -135,7 +140,7 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 			return nil
 		case <-ticker.C:
 			halfblock.CursorHome(os.Stdout)
-			if err := renderChecked(os.Stdout, frames[i], rc); err != nil {
+			if err := renderCheckedGated(os.Stdout, frames[i], rc, checkGate); err != nil {
 				return err
 			}
 			halfblock.EraseDown(os.Stdout)
@@ -190,6 +195,11 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// checkGate throttles the ANSI and aspect invariant checks to once per
+	// second while frame dimensions are stable. This eliminates O(output-len)
+	// validation work from the hot ticker path.
+	checkGate := &renderCheckGate{interval: time.Second}
 
 	// index into paths; restartStream opens a fresh stream for paths[videoIdx].
 	videoIdx := 0
@@ -256,7 +266,7 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 				continue
 			}
 			halfblock.CursorHome(os.Stdout)
-			if err := renderChecked(os.Stdout, lastFrame, rc); err != nil {
+			if err := renderCheckedGated(os.Stdout, lastFrame, rc, checkGate); err != nil {
 				return err
 			}
 			halfblock.EraseDown(os.Stdout)

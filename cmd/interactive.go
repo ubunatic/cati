@@ -331,6 +331,19 @@ func renderValidated(w io.Writer, orig, vp image.Image, state viewState, termCol
 	return renderChecked(w, vp, rc)
 }
 
+// renderValidatedGated is like renderValidated but uses a time-gated ANSI
+// check. The size/aspect validation on orig is also skipped when the gate is
+// not yet due, so the hot video path only pays for the actual render work.
+func renderValidatedGated(w io.Writer, orig, vp image.Image, state viewState, termCols, termRows int, rc renderCfg, gate *renderCheckGate) error {
+	size := renderedCellSize(vp, rc)
+	if orig != nil && gate.due(size) {
+		if err := validateRenderSize(orig, vp, state, termCols, termRows, rc); err != nil {
+			return err
+		}
+	}
+	return renderCheckedGated(w, vp, rc, gate)
+}
+
 // renderModes is the cycle order for the R key. Each entry's cfg.id must be
 // stable and unique so that cycleRenderCfg and rcModeName can find entries by id.
 var renderModes = []struct {
@@ -1068,21 +1081,38 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 	videoEnded := false
 	var statusClearAt time.Time
 	var lastRawFrame image.Image
+	vc.skipQuality = true // video starts playing; quality is computed on first pause
 
 	vc.rerender = func() {
 		if lastRawFrame == nil {
 			return
 		}
 		vp := buildViewport(lastRawFrame, &vc.state, vc.termCols, vc.viewRows(), vc.rc)
+		vc.lastVP = vp
+		if vc.skipQuality {
+			// Skip expensive quality computation while playing; curQ keeps its
+			// last value. It is refreshed when playback pauses (see setPaused).
+			return
+		}
 		ref := buildRef(lastRawFrame, vc.state, vc.termCols, vc.viewRows(), vc.rc, metrics.GridK, vc.fullComp)
 		vc.curQ = computeQuality(ref, vp, vc.rc)
-		vc.lastVP = vp
 	}
+
+	// checkGate throttles the expensive per-frame ANSI invariant check to at
+	// most once per second while dimensions are stable. The first frame and any
+	// dimension change always trigger a full check.
+	checkGate := &renderCheckGate{interval: time.Second}
 
 	setPaused := func(p bool) {
 		paused = p
+		vc.skipQuality = !p // compute quality when paused, skip while playing
 		if p {
 			audioPlayer.Pause()
+			// Refresh quality now that we have time for it.
+			if lastRawFrame != nil {
+				ref := buildRef(lastRawFrame, vc.state, vc.termCols, vc.viewRows(), vc.rc, metrics.GridK, vc.fullComp)
+				vc.curQ = computeQuality(ref, vc.lastVP, vc.rc)
+			}
 		} else {
 			audioPlayer.Resume()
 		}
@@ -1093,7 +1123,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 			return nil
 		}
 		halfblock.CursorHome(os.Stdout)
-		if err := renderValidated(os.Stdout, lastRawFrame, vc.lastVP, vc.state, vc.termCols, vc.viewRows(), vc.rc); err != nil {
+		if err := renderValidatedGated(os.Stdout, lastRawFrame, vc.lastVP, vc.state, vc.termCols, vc.viewRows(), vc.rc, checkGate); err != nil {
 			return err
 		}
 		halfblock.EraseDown(os.Stdout)
