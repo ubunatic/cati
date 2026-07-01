@@ -2,6 +2,8 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 # Issue: Migrate module path to vanity domain ubunatic.com/cati
 
+Status: Done
+
 ## Summary
 
 The Go module is currently declared as `codeberg.org/ubunatic/cati` in `go.mod`.
