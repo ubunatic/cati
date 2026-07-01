@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/v1/halfblock"
 )
 
 // MediaMeta holds display-ready metadata strings for a single media file.

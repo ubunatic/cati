@@ -7,6 +7,7 @@
     - [Render Pipelines](RenderPipelines.md)
     - [Video & Audio Pipeline](Video.md)
     - [Interactive Grid Browser](Browser.md)
+- [Go Library API](GoLibrary.md)
 - [Terminal Input System](Input.md)
 - [Spec System Reference](Spec.md)
 - [Spec System & Browser Design](Design.md)

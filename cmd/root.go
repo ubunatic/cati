@@ -9,9 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/v1/halfblock"
 	"github.com/spf13/cobra"
-)
+
+	catiterm "codeberg.org/ubunatic/cati/v1/term")
 
 // imageExts is the set of still-image file extensions cati recognises.
 var imageExts = map[string]bool{
@@ -184,8 +185,8 @@ func run(o opts, rc renderCfg, args []string) error {
 	multi := len(paths) > 1
 	termCols, termRows := o.width, o.height
 	if termCols == 0 && termRows == 0 {
-		termCols = halfblock.TermWidth()
-		termRows = halfblock.TermHeight()
+		termCols = catiterm.TermWidth()
+		termRows = catiterm.TermHeight()
 	}
 
 	// Parse --range: for video files in static mode we seek to tr.Start so

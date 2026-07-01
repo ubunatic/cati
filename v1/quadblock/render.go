@@ -20,7 +20,8 @@ import (
 	"strings"
 	"sync"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/v1/core"
+	"codeberg.org/ubunatic/cati/v1/halfblock"
 )
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
@@ -149,6 +150,11 @@ type Options struct {
 	// diagonal silhouettes) where other algorithms produce an averaged mis-aligned
 	// colour. For nearly uniform cells it falls back to the diameter split.
 	EdgeSnap bool
+	// Rows constraints the number of terminal rows for scaling.
+	Rows int
+
+	// Jobs specifies the number of concurrent goroutines for rendering.
+	Jobs int
 }
 
 // ── Quadrant character lookup ─────────────────────────────────────────────────
@@ -744,80 +750,90 @@ func samplePixel(img image.Image, x, y int, b image.Rectangle, opts Options) col
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
-// Render writes img to w as ANSI quadrant-block art with default options.
-func Render(w io.Writer, img image.Image) error {
-	return RenderOpts(w, img, Options{})
-}
+// RenderToGrid scales and converts the image into a grid of terminal cells.
+func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
+	var scaled image.Image
+	if cols > 0 || opts.Rows > 0 {
+		scaled = ScaleToFit(img, cols, opts.Rows)
+	} else {
+		scaled = img
+	}
 
-// RenderOpts writes img to w as ANSI quadrant-block art using the given options.
-func RenderOpts(w io.Writer, img image.Image, opts Options) error {
-	b := img.Bounds()
+	b := scaled.Bounds()
 	pixW := b.Dx()
 	pixH := b.Dy()
 
 	tcCols := (pixW + 1) / 2
 	trRows := (pixH + 1) / 2
 
-	cells := make([]quadCell, tcCols*trRows)
-	cellAt := func(tr, tc int) *quadCell {
-		if tr < 0 || tc < 0 || tr >= trRows || tc >= tcCols {
-			return nil
-		}
-		return &cells[tr*tcCols+tc]
+	jobs := opts.Jobs
+	if jobs <= 0 {
+		jobs = 1
 	}
 
-	for tr := range trRows {
-		var sb strings.Builder
-		sb.WriteString(ansiLinePrefix)
+	qCells, err := computeQuadCellsJ(scaled, b, opts, tcCols, trRows, jobs)
+	if err != nil {
+		return nil, err
+	}
 
-		for tc := range tcCols {
-			py0 := b.Min.Y + tr*2
-			py1 := py0 + 1
-			px0 := b.Min.X + tc*2
-			px1 := px0 + 1
-
-			var pixels [4]color.RGBA
-			pixels[0] = samplePixel(img, px0, py0, b, opts) // UL
-			pixels[1] = samplePixel(img, px1, py0, b, opts) // UR
-			pixels[2] = samplePixel(img, px0, py1, b, opts) // LL
-			pixels[3] = samplePixel(img, px1, py1, b, opts) // LR
-
-			// For ambiguous-blend modes: if first sampling gives 3+ colours,
-			// re-sample with neighbourhood blending to reduce the colour count
-			// before quantisation.
-			if opts.Blend == BlendAmbiguous || opts.Blend == BlendAmbiguousWide {
-				if len(collectUnique(pixels)) >= 3 {
-					radius := 1
-					if opts.Blend == BlendAmbiguousWide {
-						radius = 2
-					}
-					pixels[0] = blendedPixelR(img, px0, py0, b, radius)
-					pixels[1] = blendedPixelR(img, px1, py0, b, radius)
-					pixels[2] = blendedPixelR(img, px0, py1, b, radius)
-					pixels[3] = blendedPixelR(img, px1, py1, b, radius)
-				}
-			}
-
-			c := compileCell(pixels, cellAt(tr, tc-1), cellAt(tr-1, tc), opts)
-			cells[tr*tcCols+tc] = c
-
-			if c.transparent {
-				sb.WriteRune(' ')
-			} else {
-				if c.hasBG {
-					sb.WriteString(bgRGB(c.bg))
-				}
-				sb.WriteString(fgRGB(c.fg))
-				sb.WriteRune(c.ch)
-				sb.WriteString(ansiReset)
+	cells := make([][]core.Cell, trRows)
+	for tr := 0; tr < trRows; tr++ {
+		cells[tr] = make([]core.Cell, tcCols)
+		for tc := 0; tc < tcCols; tc++ {
+			qc := qCells[tr*tcCols+tc]
+			cells[tr][tc] = core.Cell{
+				Ch:          qc.ch,
+				Fg:          qc.fg,
+				Bg:          qc.bg,
+				HasFg:       qc.hasFG,
+				HasBg:       qc.hasBG,
+				Transparent: qc.transparent,
 			}
 		}
+	}
 
+	return &core.Grid{
+		Width:  tcCols,
+		Height: trRows,
+		Cells:  cells,
+	}, nil
+}
+
+// Render writes img to w as ANSI quadrant-block art.
+func Render(w io.Writer, img image.Image, cols int, opts Options) error {
+	grid, err := RenderToGrid(img, cols, opts)
+	if err != nil {
+		return err
+	}
+
+	for y := 0; y < grid.Height; y++ {
+		var sb strings.Builder
+		sb.WriteString(ansiLinePrefix)
+		for x := 0; x < grid.Width; x++ {
+			c := grid.Cells[y][x]
+			if c.Transparent {
+				sb.WriteRune(' ')
+				continue
+			}
+			if c.HasBg {
+				sb.WriteString(bgRGB(c.Bg))
+			}
+			sb.WriteString(fgRGB(c.Fg))
+			sb.WriteRune(c.Ch)
+			sb.WriteString(ansiReset)
+		}
 		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
 			return fmt.Errorf("quadblock render: %w", err)
 		}
 	}
 	return nil
+}
+
+// RenderOpts is a compatibility wrapper for Render.
+func RenderOpts(w io.Writer, img image.Image, opts Options) error {
+	b := img.Bounds()
+	cols := (b.Dx() + 1) / 2
+	return Render(w, img, cols, opts)
 }
 
 // charToMask reverses quadChar: given the Unicode character chosen by
@@ -948,43 +964,12 @@ func RenderToImage(img image.Image, opts Options) *image.RGBA {
 	return dst
 }
 
-// RenderJ is a worker-aware copy of Render.
-// FIXME: copied from Render; consolidate once the worker path stabilizes.
+// RenderJ is a compatibility wrapper.
 func RenderJ(w io.Writer, img image.Image, opts Options, jobs int) error {
-	if jobs <= 1 {
-		return RenderOpts(w, img, opts)
-	}
+	opts.Jobs = jobs
 	b := img.Bounds()
-	pixW := b.Dx()
-	pixH := b.Dy()
-	tcCols := (pixW + 1) / 2
-	trRows := (pixH + 1) / 2
-	cells, err := computeQuadCellsJ(img, b, opts, tcCols, trRows, jobs)
-	if err != nil {
-		return err
-	}
-
-	for tr := 0; tr < trRows; tr++ {
-		var sb strings.Builder
-		sb.WriteString(ansiLinePrefix)
-		for tc := 0; tc < tcCols; tc++ {
-			c := cells[tr*tcCols+tc]
-			if c.transparent {
-				sb.WriteRune(' ')
-				continue
-			}
-			if c.hasBG {
-				sb.WriteString(bgRGB(c.bg))
-			}
-			sb.WriteString(fgRGB(c.fg))
-			sb.WriteRune(c.ch)
-			sb.WriteString(ansiReset)
-		}
-		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
-			return fmt.Errorf("quadblock render: %w", err)
-		}
-	}
-	return nil
+	cols := (b.Dx() + 1) / 2
+	return Render(w, img, cols, opts)
 }
 
 // RenderToImageJ is a worker-aware copy of RenderToImage.

@@ -12,9 +12,9 @@ import (
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/input"
 	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/internal/quadblock"
-	"codeberg.org/ubunatic/cati/internal/sextant"
-	"codeberg.org/ubunatic/cati/internal/sparkline"
+	"codeberg.org/ubunatic/cati/v1/quadblock"
+	"codeberg.org/ubunatic/cati/v1/sextant"
+	"codeberg.org/ubunatic/cati/v1/sparkline"
 	"codeberg.org/ubunatic/cati/internal/viewgeom"
 	spec "codeberg.org/ubunatic/cati/spec"
 )
@@ -674,7 +674,7 @@ func TestMaxZoomQuadConvergence(t *testing.T) {
 		}
 		vp := buildViewport(src, &state, termCols, termRows, m.cfg)
 		var buf bytes.Buffer
-		if err := quadblock.RenderOpts(&buf, vp, m.cfg.quadOpts); err != nil {
+		if err := quadblock.Render(&buf, vp, 0, m.cfg.quadOpts); err != nil {
 			t.Fatalf("RenderOpts(%s): %v", m.name, err)
 		}
 		results = append(results, modeResult{m.name, buf.String()})

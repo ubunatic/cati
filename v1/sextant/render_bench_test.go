@@ -29,7 +29,7 @@ func benchmarkRender(b *testing.B, mode Mode) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := Render(io.Discard, img, mode); err != nil {
+		if err := Render(io.Discard, img, 0, Options{Mode: mode}); err != nil {
 			b.Fatal(err)
 		}
 	}

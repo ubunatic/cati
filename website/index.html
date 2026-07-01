@@ -650,6 +650,75 @@
   </div>
 </section>
 
+<!-- ── Go Library ────────────────────────────────────────────────── -->
+<section class="go-lib" id="go-lib" style="padding: 5rem 0;">
+  <div class="container">
+    <div class="section-header">
+      <span class="tag">developer API</span>
+      <h2>Use as a Go Library</h2>
+      <p>Integrate high-performance terminal rendering directly into your Go TUIs</p>
+    </div>
+    <div class="install-box" style="max-width: 800px;">
+      <!-- GO_EXAMPLE_START -->
+<pre class="code"><code>package main
+
+import (
+	&quot;fmt&quot;
+	&quot;image&quot;
+	&quot;image/color&quot;
+	&quot;os&quot;
+
+	&quot;codeberg.org/ubunatic/cati/v1/halfblock&quot;
+	&quot;codeberg.org/ubunatic/cati/v1/quadblock&quot;
+)
+
+func main() {
+	// Create a simple test image (a diagonal red line on blue background)
+	img := image.NewRGBA(image.Rect(0, 0, 40, 40))
+	for y := 0; y &lt; 40; y++ {
+		for x := 0; x &lt; 40; x++ {
+			if x == y {
+				img.Set(x, y, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+			} else {
+				img.Set(x, y, color.RGBA{R: 0, G: 0, B: 255, A: 255})
+			}
+		}
+	}
+
+	fmt.Println(&quot;--- Example 1: Rendering ANSI directly to Stdout ---&quot;)
+	// Render using the halfblock algorithm at 20 terminal columns width.
+	// Width is mandatory (20). Height is unconstrained (Opts.Rows = 0).
+	err := halfblock.Render(os.Stdout, img, 20, halfblock.Options{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, &quot;Error rendering: %v\n&quot;, err)
+		os.Exit(1)
+	}
+
+	fmt.Println(&quot;\n--- Example 2: Rendering to a core.Grid (for TUIs) ---&quot;)
+	// Render using the quadblock algorithm with edge-snap enabled.
+	opts := quadblock.Options{
+		EdgeSnap: true,
+	}
+	grid, err := quadblock.RenderToGrid(img, 20, opts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, &quot;Error rendering to grid: %v\n&quot;, err)
+		os.Exit(1)
+	}
+
+	// Print out the grid cell runes (ignoring colors for simplicity in stdout)
+	for y, row := range grid.Cells {
+		fmt.Printf(&quot;Row %02d: &quot;, y)
+		for _, cell := range row {
+			fmt.Printf(&quot;%c&quot;, cell.Ch)
+		}
+		fmt.Println()
+	}
+}</code></pre>
+<!-- GO_EXAMPLE_END -->
+    </div>
+  </div>
+</section>
+
 <!-- ── Footer ────────────────────────────────────────────────────── -->
 <footer>
   <div class="container">

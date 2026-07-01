@@ -22,7 +22,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/v1/halfblock"
 	"codeberg.org/ubunatic/cati/internal/input"
 	spec "codeberg.org/ubunatic/cati/spec"
 	"golang.org/x/term"

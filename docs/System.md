@@ -12,7 +12,7 @@ This document captures the architecture, core design decisions, lessons learned,
 
 ## 1. Architecture & Rendering Pipeline
 
-Cati is a lightweight terminal image and animation viewer written in Go. Its core logic is divided into CLI commands (`cmd/`) and the core rendering package (`internal/halfblock/`).
+Cati is a lightweight terminal image and animation viewer written in Go. Its core logic is divided into CLI commands (`cmd/`) and the public rendering libraries under `v1/` (`v1/halfblock/`, `v1/quadblock/`, `v1/sextant/`, and `v1/sparkline/`), utilizing core types defined in `v1/core/` and terminal size detection utility in `v1/term/`.
 
 ```mermaid
 graph TD
@@ -21,7 +21,7 @@ graph TD
     Files -->|Animation play mode| Play[cmd/play.go]
     Play -->|Pre-load all frames| Frames[Memory Buffer]
     Play -->|Raw TTY Mode| Keyboard[Keyboard Ticker: q/ESC/Ctrl+C]
-    Play -->|Ticker Loop| RenderFrame[halfblock.Render]
+    Play -->|Ticker Loop| RenderFrame[v1/halfblock.Render]
     RenderFrame -->|Cursor Restore & Clear| Term[Terminal Output]
 ```
 
@@ -81,6 +81,15 @@ The quality metrics, image-geometry helpers, and pixel-art pre-scalers were extr
 *   **Remove dead code during extraction.** `BlockMeanReconstruct` (block-colour quantisation model) was carried over from `cmd/ssim.go` but had zero callers. Extracting is a natural moment to prune.
 *   **Functions used only within the package stay unexported.** `metrics.Luma` was exported initially, but no caller outside `internal/metrics` referenced it. Unexporting avoids committing to a public API that may change.
 *   **Avoid package-name redundancy in exported names.** `metrics.QualityGridK` reads as "metrics quality grid K" — the `Quality` prefix is noise. `metrics.GridK` is shorter and unambiguous.
+
+### Public Library Reorganization (July 2026)
+
+To expose Cati's rendering algorithms as a public library, the core rendering modules were reorganized under `v1/`:
+*   **`v1/core`** — Defines standard types `core.Cell` and `core.Grid` shared by all renderers.
+*   **`v1/term`** — Implements cross-platform terminal size detection utilities (`term.TermWidth()` and `term.TermHeight()`).
+*   **`v1/halfblock`, `v1/quadblock`, `v1/sextant`, `v1/sparkline`** — Implement the public Go APIs:
+    - `Render(w io.Writer, img image.Image, cols int, opts Options) error`
+    - `RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error)`
 
 ### Viewport Geometry Extraction (June 2026)
 

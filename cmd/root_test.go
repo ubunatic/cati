@@ -9,11 +9,11 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
-	"codeberg.org/ubunatic/cati/internal/quadblock"
-	"codeberg.org/ubunatic/cati/internal/sextant"
-	"codeberg.org/ubunatic/cati/internal/sparkline"
-	"codeberg.org/ubunatic/cati/internal/sparkline/testhelper"
+	"codeberg.org/ubunatic/cati/v1/halfblock"
+	"codeberg.org/ubunatic/cati/v1/quadblock"
+	"codeberg.org/ubunatic/cati/v1/sextant"
+	"codeberg.org/ubunatic/cati/v1/sparkline"
+	"codeberg.org/ubunatic/cati/v1/sparkline/testhelper"
 )
 
 // ── isImageFile ───────────────────────────────────────────────────────────────

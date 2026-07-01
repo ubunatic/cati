@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"sync"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/v1/halfblock"
 )
 
 type thumbKey struct {

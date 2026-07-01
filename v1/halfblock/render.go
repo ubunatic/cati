@@ -18,6 +18,8 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"codeberg.org/ubunatic/cati/v1/core"
 )
 
 // ── ANSI helpers ─────────────────────────────────────────────────────────────
@@ -195,101 +197,168 @@ func pairToCell(top, bot color.RGBA) cell {
 	}
 }
 
-// cellEscape returns the ANSI escape prefix for this cell.
-func cellEscape(c cell) string {
-	var b strings.Builder
-	if c.hasBG {
-		b.WriteString(bgRGB(c.bg))
-	}
-	if c.hasFG {
-		b.WriteString(fgRGB(c.fg))
-	}
-	return b.String()
+// Options configures the half-block renderer options.
+type Options struct {
+	Rows int
+	Jobs int
 }
 
-// Render writes the image to w as ANSI half-block art followed by a newline.
-// The image should already be scaled to the desired terminal width via Scale.
-// A trailing ansiReset is emitted at the end of every non-transparent row.
-func Render(w io.Writer, img image.Image) error {
-	b := img.Bounds()
+// RenderToGrid scales and converts the image into a grid of terminal cells.
+func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
+	var scaled image.Image
+	if cols > 0 || opts.Rows > 0 {
+		scaled = ScaleToFit(img, cols, opts.Rows)
+	} else {
+		scaled = img
+	}
+
+	b := scaled.Bounds()
 	width := b.Dx()
 	height := b.Dy()
 
 	// Process rows in pairs (top, bottom).
-	for y := b.Min.Y; y < b.Min.Y+height; y += 2 {
-		topY := y
-		botY := y + 1
+	rowCount := (height + 1) / 2
+	if rowCount <= 0 {
+		return &core.Grid{Cells: [][]core.Cell{}}, nil
+	}
 
-		var sb strings.Builder
+	cells := make([][]core.Cell, rowCount)
+	for i := range cells {
+		cells[i] = make([]core.Cell, width)
+	}
 
-		// Erase the line and return to column 0 before writing pixels.
-		// The explicit \r is required in raw terminal mode (used by --play for
-		// the 'q' keypress), where \n is LF-only and does not reset the column.
-		sb.WriteString(ansiLinePrefix)
-
-		for x := b.Min.X; x < b.Min.X+width; x++ {
-			top := toRGBA(img.At(x, topY))
+	renderRowFunc := func(row int) {
+		topY := b.Min.Y + row*2
+		botY := topY + 1
+		for x := 0; x < width; x++ {
+			srcX := b.Min.X + x
+			top := toRGBA(scaled.At(srcX, topY))
 			var bot color.RGBA
 			if botY < b.Min.Y+height {
-				bot = toRGBA(img.At(x, botY))
+				bot = toRGBA(scaled.At(srcX, botY))
 			}
-			// If botY is out of range, treat as transparent.
-
 			c := pairToCell(top, bot)
-			if c.transparent {
+			cells[row][x] = core.Cell{
+				Ch:          c.ch,
+				Fg:          c.fg,
+				Bg:          c.bg,
+				HasFg:       c.hasFG,
+				HasBg:       c.hasBG,
+				Transparent: c.transparent,
+			}
+		}
+	}
+
+	jobs := opts.Jobs
+	if jobs <= 1 {
+		for row := 0; row < rowCount; row++ {
+			renderRowFunc(row)
+		}
+	} else {
+		var wg sync.WaitGroup
+		jobsCh := make(chan int)
+		workerN := jobs
+		if workerN > rowCount {
+			workerN = rowCount
+		}
+		if workerN > runtime.NumCPU() {
+			workerN = runtime.NumCPU()
+		}
+		for range workerN {
+			go func() {
+				for row := range jobsCh {
+					renderRowFunc(row)
+					wg.Done()
+				}
+			}()
+		}
+		for row := 0; row < rowCount; row++ {
+			wg.Add(1)
+			jobsCh <- row
+		}
+		close(jobsCh)
+		wg.Wait()
+	}
+
+	return &core.Grid{
+		Width:  width,
+		Height: rowCount,
+		Cells:  cells,
+	}, nil
+}
+
+// Render writes the image to w as ANSI half-block art followed by a newline.
+func Render(w io.Writer, img image.Image, cols int, opts Options) error {
+	grid, err := RenderToGrid(img, cols, opts)
+	if err != nil {
+		return err
+	}
+
+	for y := 0; y < grid.Height; y++ {
+		var sb strings.Builder
+		sb.WriteString(ansiLinePrefix)
+		for x := 0; x < grid.Width; x++ {
+			c := grid.Cells[y][x]
+			if c.Transparent {
 				sb.WriteRune(' ')
 			} else {
 				sb.WriteString(cellEscape(c))
-				sb.WriteRune(c.ch)
+				sb.WriteRune(c.Ch)
 				sb.WriteString(ansiReset)
 			}
 		}
-
-		_, err := fmt.Fprintln(w, sb.String())
-		if err != nil {
+		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
 			return fmt.Errorf("halfblock render: %w", err)
 		}
 	}
 	return nil
 }
 
+// cellEscape returns the ANSI escape prefix for this cell.
+func cellEscape(c core.Cell) string {
+	var b strings.Builder
+	if c.HasBg {
+		b.WriteString(bgRGB(c.Bg))
+	}
+	if c.HasFg {
+		b.WriteString(fgRGB(c.Fg))
+	}
+	return b.String()
+}
+
 // RenderToImage renders the image using the halfblock algorithm and returns a new image.
 func RenderToImage(img image.Image) *image.RGBA {
+	return RenderToImageJ(img, 1)
+}
+
+// RenderToImageJ is a worker-aware copy of RenderToImage.
+func RenderToImageJ(img image.Image, jobs int) *image.RGBA {
 	b := img.Bounds()
-	width := b.Dx()
-	height := b.Dy()
+	grid, _ := RenderToGrid(img, b.Dx(), Options{Jobs: jobs})
 	dst := image.NewRGBA(b)
 
-	for y := b.Min.Y; y < b.Min.Y+height; y += 2 {
-		topY := y
-		botY := y + 1
-
-		for x := b.Min.X; x < b.Min.X+width; x++ {
-			top := toRGBA(img.At(x, topY))
-			var bot color.RGBA
-			if botY < b.Min.Y+height {
-				bot = toRGBA(img.At(x, botY))
-			}
-
-			c := pairToCell(top, bot)
-
+	for y := 0; y < grid.Height; y++ {
+		topY := b.Min.Y + y*2
+		botY := topY + 1
+		for x := 0; x < grid.Width; x++ {
+			c := grid.Cells[y][x]
 			var topColor color.RGBA
 			var botColor color.RGBA
 
-			if c.transparent {
+			if c.Transparent {
 				topColor = color.RGBA{}
 				botColor = color.RGBA{}
 			} else {
-				bg := c.bg
-				if !c.hasBG {
-					bg = color.RGBA{} // transparent = terminal default bg
+				bg := c.Bg
+				if !c.HasBg {
+					bg = color.RGBA{}
 				}
-				fg := c.fg
-				if !c.hasFG {
+				fg := c.Fg
+				if !c.HasFg {
 					fg = bg
 				}
 
-				switch c.ch {
+				switch c.Ch {
 				case '▀':
 					topColor = fg
 					botColor = bg
@@ -305,163 +374,17 @@ func RenderToImage(img image.Image) *image.RGBA {
 				}
 			}
 
-			dst.SetRGBA(x, topY, topColor)
-			if botY < b.Min.Y+height {
-				dst.SetRGBA(x, botY, botColor)
+			dst.SetRGBA(b.Min.X+x, topY, topColor)
+			if botY < b.Max.Y {
+				dst.SetRGBA(b.Min.X+x, botY, botColor)
 			}
 		}
 	}
 	return dst
 }
 
-// RenderJ is a worker-aware copy of Render.
-// FIXME: copied from Render; consolidate the row emission path after worker
-// support stabilizes.
+// RenderJ is kept for testing compatibility.
 func RenderJ(w io.Writer, img image.Image, jobs int) error {
-	if jobs <= 1 {
-		return Render(w, img)
-	}
 	b := img.Bounds()
-	width := b.Dx()
-	height := b.Dy()
-	rowCount := (height + 1) / 2
-	if rowCount <= 0 {
-		return nil
-	}
-
-	rows := make([]string, rowCount)
-	jobsCh := make(chan int)
-	var wg sync.WaitGroup
-	workerN := jobs
-	if workerN > rowCount {
-		workerN = rowCount
-	}
-	if workerN > runtime.NumCPU() {
-		workerN = runtime.NumCPU()
-	}
-	for range workerN {
-		go func() {
-			for row := range jobsCh {
-				topY := b.Min.Y + row*2
-				botY := topY + 1
-				var sb strings.Builder
-				sb.WriteString(ansiLinePrefix)
-				for x := b.Min.X; x < b.Min.X+width; x++ {
-					top := toRGBA(img.At(x, topY))
-					var bot color.RGBA
-					if botY < b.Min.Y+height {
-						bot = toRGBA(img.At(x, botY))
-					}
-					c := pairToCell(top, bot)
-					if c.transparent {
-						sb.WriteRune(' ')
-					} else {
-						sb.WriteString(cellEscape(c))
-						sb.WriteRune(c.ch)
-						sb.WriteString(ansiReset)
-					}
-				}
-				rows[row] = sb.String()
-				wg.Done()
-			}
-		}()
-	}
-	for row := 0; row < rowCount; row++ {
-		wg.Add(1)
-		jobsCh <- row
-	}
-	close(jobsCh)
-	wg.Wait()
-
-	for _, row := range rows {
-		if _, err := fmt.Fprintln(w, row); err != nil {
-			return fmt.Errorf("halfblock render: %w", err)
-		}
-	}
-	return nil
-}
-
-// RenderToImageJ is a worker-aware copy of RenderToImage.
-// FIXME: copied from RenderToImage; consolidate once worker support settles.
-func RenderToImageJ(img image.Image, jobs int) *image.RGBA {
-	if jobs <= 1 {
-		return RenderToImage(img)
-	}
-	b := img.Bounds()
-	width := b.Dx()
-	height := b.Dy()
-	dst := image.NewRGBA(b)
-	rowCount := (height + 1) / 2
-	if rowCount <= 0 {
-		return dst
-	}
-
-	jobsCh := make(chan int)
-	var wg sync.WaitGroup
-	workerN := jobs
-	if workerN > rowCount {
-		workerN = rowCount
-	}
-	if workerN > runtime.NumCPU() {
-		workerN = runtime.NumCPU()
-	}
-	for range workerN {
-		go func() {
-			for row := range jobsCh {
-				topY := b.Min.Y + row*2
-				botY := topY + 1
-				for x := b.Min.X; x < b.Min.X+width; x++ {
-					top := toRGBA(img.At(x, topY))
-					var bot color.RGBA
-					if botY < b.Min.Y+height {
-						bot = toRGBA(img.At(x, botY))
-					}
-					c := pairToCell(top, bot)
-
-					var topColor color.RGBA
-					var botColor color.RGBA
-					if c.transparent {
-						topColor = color.RGBA{}
-						botColor = color.RGBA{}
-					} else {
-						bg := c.bg
-						if !c.hasBG {
-							bg = color.RGBA{}
-						}
-						fg := c.fg
-						if !c.hasFG {
-							fg = bg
-						}
-						switch c.ch {
-						case '▀':
-							topColor = fg
-							botColor = bg
-						case '▄':
-							topColor = bg
-							botColor = fg
-						case '█':
-							topColor = fg
-							botColor = fg
-						default:
-							topColor = bg
-							botColor = bg
-						}
-					}
-
-					dst.SetRGBA(x, topY, topColor)
-					if botY < b.Min.Y+height {
-						dst.SetRGBA(x, botY, botColor)
-					}
-				}
-				wg.Done()
-			}
-		}()
-	}
-	for row := 0; row < rowCount; row++ {
-		wg.Add(1)
-		jobsCh <- row
-	}
-	close(jobsCh)
-	wg.Wait()
-	return dst
+	return Render(w, img, b.Dx(), Options{Jobs: jobs})
 }

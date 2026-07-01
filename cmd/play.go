@@ -9,9 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/v1/halfblock"
 	"golang.org/x/term"
-)
+
+	catiterm "codeberg.org/ubunatic/cati/v1/term")
 
 // play is the entry point for --play mode.
 // It dispatches to playImages (pre-load loop) or playVideos (streaming)
@@ -80,7 +81,7 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 
 	cols, rows := width, height
 	if cols == 0 && rows == 0 {
-		cols, rows = halfblock.TermWidth(), halfblock.TermHeight()
+		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
 	}
 
 	// Apply time range: convert seconds → frame indices.
@@ -177,7 +178,7 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 
 	cols, rows := width, height
 	if cols == 0 && rows == 0 {
-		cols, rows = halfblock.TermWidth(), halfblock.TermHeight()
+		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
 	}
 
 	restore, sigs, quit := playTerminal()

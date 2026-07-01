@@ -18,7 +18,7 @@ dev: ⚙️ install test  ## build, test, run demo
 	cati -i assets
 
 build: ⚙️  ## build the binary
-	go build -o $(BINARY) .
+	go build -o $(BINARY) ./cmd/cati
 
 run: ⚙️ build ## build and run (requires an image arg: make run IMG=foo.png)
 	./$(BINARY) $(IMG)
@@ -33,7 +33,7 @@ logo: ⚙️ build ## animate the cati logo (q or Ctrl+C to stop)
 	./$(BINARY) --play --fps 4 assets/
 
 install: ⚙️ build  ## install to ~/go/bin (user)
-	go install .
+	go install ./cmd/cati
 
 test: ⚙️  ## run linter and tests
 	go vet ./...

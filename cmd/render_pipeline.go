@@ -6,11 +6,11 @@ import (
 	"math"
 	"strings"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/internal/quadblock"
-)
+	"codeberg.org/ubunatic/cati/v1/quadblock"
+
+	catiterm "codeberg.org/ubunatic/cati/v1/term")
 
 type prescaleMode int
 
@@ -66,8 +66,8 @@ func prepareRenderedImageChecked(orig image.Image, state *viewState, termCols, t
 	if state == nil {
 		if initialZoom == "" {
 			if termCols == 0 && termRows == 0 {
-				termCols = halfblock.TermWidth()
-				termRows = halfblock.TermHeight()
+				termCols = catiterm.TermWidth()
+				termRows = catiterm.TermHeight()
 			}
 			return fitRenderedImageChecked(orig, termCols, termRows, rc)
 		}

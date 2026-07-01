@@ -22,6 +22,8 @@ type DocPage struct {
 }
 
 func main() {
+	syncExample()
+
 	docsDir := filepath.Join(".", "docs")
 	summaryPath := filepath.Join(docsDir, "SUMMARY.md")
 
@@ -211,4 +213,76 @@ func writeTOCEntry(sb *strings.Builder, p DocPage, childrenMap map[string][]DocP
 			writeTOCEntry(sb, child, childrenMap, depth+1)
 		}
 	}
+}
+
+func syncExample() {
+	examplePath := filepath.Join("examples", "library_example.go")
+	exampleBytes, err := os.ReadFile(examplePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading example file %s: %v\n", examplePath, err)
+		os.Exit(1)
+	}
+	exampleStr := string(exampleBytes)
+	
+	// Strip build tag if present
+	buildTag := "//go:build ignore"
+	if strings.HasPrefix(exampleStr, buildTag) {
+		exampleStr = strings.TrimPrefix(exampleStr, buildTag)
+		exampleStr = strings.TrimSpace(exampleStr)
+	}
+
+	// Code block wrapper for markdown
+	mdCodeBlock := "```go\n" + exampleStr + "\n```"
+
+	// HTML code block wrapper for website
+	htmlCodeBlock := "<pre class=\"code\"><code>" + escapeHTML(exampleStr) + "</code></pre>"
+
+	// Sync docs/GoLibrary.md
+	goLibPath := filepath.Join("docs", "GoLibrary.md")
+	if err := replaceBetweenMarkers(goLibPath, "<!-- GO_EXAMPLE_START -->", "<!-- GO_EXAMPLE_END -->", mdCodeBlock); err != nil {
+		fmt.Fprintf(os.Stderr, "Error updating %s: %v\n", goLibPath, err)
+		os.Exit(1)
+	}
+
+	// Sync website/index.html
+	webPath := filepath.Join("website", "index.html")
+	if err := replaceBetweenMarkers(webPath, "<!-- GO_EXAMPLE_START -->", "<!-- GO_EXAMPLE_END -->", htmlCodeBlock); err != nil {
+		fmt.Fprintf(os.Stderr, "Error updating %s: %v\n", webPath, err)
+		os.Exit(1)
+	}
+	fmt.Println("Synced Go library example to docs/GoLibrary.md and website/index.html.")
+}
+
+func escapeHTML(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "\"", "&quot;")
+	s = strings.ReplaceAll(s, "'", "&#39;")
+	return s
+}
+
+func replaceBetweenMarkers(filePath, startMarker, endMarker, content string) error {
+	fileBytes, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+	startBytes := []byte(startMarker)
+	endBytes := []byte(endMarker)
+
+	startIndex := bytes.Index(fileBytes, startBytes)
+	endIndex := bytes.Index(fileBytes, endBytes)
+
+	if startIndex == -1 || endIndex == -1 || startIndex >= endIndex {
+		return fmt.Errorf("markers %q and %q not found in %s", startMarker, endMarker, filePath)
+	}
+
+	var newContent bytes.Buffer
+	newContent.Write(fileBytes[:startIndex+len(startBytes)])
+	newContent.WriteString("\n")
+	newContent.WriteString(content)
+	newContent.WriteString("\n")
+	newContent.Write(fileBytes[endIndex:])
+
+	return os.WriteFile(filePath, newContent.Bytes(), 0644)
 }

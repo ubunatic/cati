@@ -15,16 +15,17 @@ import (
 	"time"
 
 	"codeberg.org/ubunatic/cati/internal/audio"
-	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/v1/halfblock"
 	"codeberg.org/ubunatic/cati/internal/input"
 	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/internal/quadblock"
-	"codeberg.org/ubunatic/cati/internal/sextant"
-	"codeberg.org/ubunatic/cati/internal/sparkline"
+	"codeberg.org/ubunatic/cati/v1/quadblock"
+	"codeberg.org/ubunatic/cati/v1/sextant"
+	"codeberg.org/ubunatic/cati/v1/sparkline"
 	"codeberg.org/ubunatic/cati/internal/viewgeom"
 	spec "codeberg.org/ubunatic/cati/spec"
 	"golang.org/x/term"
-)
+
+	catiterm "codeberg.org/ubunatic/cati/v1/term")
 
 // ── renderMode ────────────────────────────────────────────────────────────────
 
@@ -193,28 +194,18 @@ func viewerHintVars(meta MediaMeta, termCols int, hintTpl string, extra map[stri
 func (rc renderCfg) render(w io.Writer, img image.Image) error {
 	switch rc.mode {
 	case modeSextant:
-		if rc.jobs > 1 {
-			return sextant.RenderJ(w, img, rc.sextantMode, rc.jobs)
-		}
-		return sextant.Render(w, img, rc.sextantMode)
+		return sextant.Render(w, img, 0, sextant.Options{Mode: rc.sextantMode, Jobs: rc.jobs})
 	case modeSpark, modeSparkBest:
 		b := img.Bounds()
 		outCols := max(1, b.Dx()/4)
 		outRows := max(1, b.Dy()/8)
-		if rc.jobs > 1 {
-			return sparkline.RenderJ(w, img, outCols, outRows, rc.sparkMode, rc.jobs)
-		}
-		return sparkline.RenderOpts(w, img, outCols, outRows, rc.sparkMode)
+		return sparkline.Render(w, img, outCols, sparkline.Options{Mode: rc.sparkMode, Rows: outRows, Jobs: rc.jobs})
 	case modeQuad:
-		if rc.jobs > 1 {
-			return quadblock.RenderJ(w, img, rc.quadOpts, rc.jobs)
-		}
-		return quadblock.RenderOpts(w, img, rc.quadOpts)
+		opts := rc.quadOpts
+		opts.Jobs = rc.jobs
+		return quadblock.Render(w, img, 0, opts)
 	default:
-		if rc.jobs > 1 {
-			return halfblock.RenderJ(w, img, rc.jobs)
-		}
-		return halfblock.Render(w, img)
+		return halfblock.Render(w, img, 0, halfblock.Options{Jobs: rc.jobs})
 	}
 }
 
@@ -849,7 +840,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 // resolveTermSize returns the effective terminal dimensions, auto-detecting any
 // dimension that is ≤ 0, with a safe fallback when the terminal is not available.
 func resolveTermSize(width, height int) (cols, rows int) {
-	autoCols, autoRows := halfblock.TermWidth(), halfblock.TermHeight()
+	autoCols, autoRows := catiterm.TermWidth(), catiterm.TermHeight()
 	cols, rows = width, height
 	if cols <= 0 {
 		cols = autoCols

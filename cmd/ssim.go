@@ -5,9 +5,9 @@ import (
 
 	"codeberg.org/ubunatic/cati/internal/imgutil"
 	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/internal/quadblock"
-	"codeberg.org/ubunatic/cati/internal/sextant"
-	"codeberg.org/ubunatic/cati/internal/sparkline"
+	"codeberg.org/ubunatic/cati/v1/quadblock"
+	"codeberg.org/ubunatic/cati/v1/sextant"
+	"codeberg.org/ubunatic/cati/v1/sparkline"
 )
 
 // buildRef returns a pyramid-downscale reference at the quality-grid resolution

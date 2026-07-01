@@ -16,7 +16,7 @@ func TestRenderJMatchesSerial(t *testing.T) {
 	}
 
 	var serial, parallel strings.Builder
-	if err := Render(&serial, img); err != nil {
+	if err := Render(&serial, img, img.Bounds().Dx(), Options{}); err != nil {
 		t.Fatalf("Render serial: %v", err)
 	}
 	if err := RenderJ(&parallel, img, 4); err != nil {

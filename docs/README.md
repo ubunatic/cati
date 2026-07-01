@@ -13,6 +13,7 @@ Welcome to the Cati developer documentation. The following resources cover our p
 *   [Sparkline Pixel Art](SparklinePixelArt.md) — Sparkline layout math, horizontal and vertical orientation, optimal-split character and color selection, and the test helper suite.
 *   [Render Experiment Lessons](RenderExperimentLessons.md) — Short notes from the removed sextant search and geomshape render experiments.
 *   [Rendering Bug & Golden-Change Playbook](RenderingBugPlaybook.md) — How to diagnose visual/geometry bugs (prove the root cause with numbers first) and change golden images safely. **Read before fixing any rendering bug or touching `testdata/` goldens.**
+*   [Go Library API](GoLibrary.md) — Import and use Cati's high-performance renderers in your own Go applications and TUIs.
 *   [Go Conventions](Go.md) — Development guidelines for writing Go code, state management, error handling, CLI verbs, and testing.
 *   [Make Conventions](Make.md) — Standardized Makefile structures, target phony declarations using the sentinel `⚙️` trick, and self-documenting rules.
 

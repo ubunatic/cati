@@ -9,7 +9,16 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+
+	"codeberg.org/ubunatic/cati/internal/imgutil"
+	"codeberg.org/ubunatic/cati/v1/core"
 )
+
+type Options struct {
+	Mode Mode
+	Rows int
+	Jobs int
+}
 
 const (
 	ansiReset          = "\x1b[0m"
@@ -50,32 +59,40 @@ func ScaleToFit(img image.Image, cols, rows int) image.Image {
 	return dst
 }
 
-// Render writes img to w as ANSI block-element art (vertical orientation).
-// img should be at the resolution computed by pixCols(=termCols*4) × pixRows(=termRows*8).
-func Render(w io.Writer, img image.Image) error {
-	b := img.Bounds()
-	return RenderOpts(w, img, max(1, b.Dx()/4), max(1, b.Dy()/8), Vertical)
-}
+// RenderToGrid scales and converts the image into a grid of terminal cells.
+func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
+	var scaled image.Image
+	var outCols, outRows int
+	
+	if cols > 0 || opts.Rows > 0 {
+		b := img.Bounds()
+		targetW, targetH, extH := imgutil.FitDims(b.Dx(), b.Dy(), 4, 8, 1, cols, opts.Rows)
+		scaled = imgutil.ScaleNN(img, targetW, targetH)
+		if extH > 0 {
+			scaled = imgutil.AppendTransparentRows(scaled, extH)
+		}
+		outCols = cols
+		outRows = (targetH + extH) / 8
+	} else {
+		scaled = img
+		b := img.Bounds()
+		outCols = max(1, b.Dx()/4)
+		outRows = max(1, b.Dy()/8)
+	}
 
-// RenderOpts writes img to w as ANSI block-element art.  The image should
-// be at the resolution computed by pixCols(=termCols*4) × pixRows(=termRows*8)
-// so that each cell covers a 4×8 pixel block.
-// outCols and outRows are the number of terminal columns and rows to emit.
-//
-// For each cell the algorithm evaluates the active mode's glyph masks and picks
-// the one that minimises total squared colour error.
-func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) error {
-	b := img.Bounds()
+	b := scaled.Bounds()
 	pixW := b.Dx()
 	pixH := b.Dy()
 
 	cellW := max(1, pixW/outCols)
 	cellH := max(1, pixH/outRows)
 
+	cells := make([][]core.Cell, outRows)
 	for tr := 0; tr < outRows; tr++ {
-		var sb strings.Builder
-		sb.WriteString(ansiLinePrefix)
+		cells[tr] = make([]core.Cell, outCols)
+	}
 
+	renderRow := func(tr int) {
 		for tc := 0; tc < outCols; tc++ {
 			x0 := b.Min.X + min(tc*cellW, pixW)
 			x1 := b.Min.X + min(tc*cellW+cellW, pixW) - 1
@@ -85,23 +102,91 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 				continue
 			}
 
-			cell := FindBestCell(img, b, x0, x1, y0, y1, mode)
-
-			if cell.BG.A != 0 {
-				sb.WriteString(bgRGB(cell.BG))
+			cell := FindBestCell(scaled, b, x0, x1, y0, y1, opts.Mode)
+			cells[tr][tc] = core.Cell{
+				Ch:          cell.Ch,
+				Fg:          cell.FG,
+				Bg:          cell.BG,
+				HasFg:       cell.FG.A != 0,
+				HasBg:       cell.BG.A != 0,
+				Transparent: cell.FG.A == 0 && cell.BG.A == 0,
 			}
-			if cell.FG.A != 0 {
-				sb.WriteString(fgRGB(cell.FG))
+		}
+	}
+
+	jobs := opts.Jobs
+	if jobs <= 1 {
+		for tr := 0; tr < outRows; tr++ {
+			renderRow(tr)
+		}
+	} else {
+		var wg sync.WaitGroup
+		jobsCh := make(chan int)
+		workerN := jobs
+		if workerN > outRows {
+			workerN = outRows
+		}
+		if workerN > runtime.NumCPU() {
+			workerN = runtime.NumCPU()
+		}
+		for range workerN {
+			go func() {
+				for tr := range jobsCh {
+					renderRow(tr)
+					wg.Done()
+				}
+			}()
+		}
+		for tr := 0; tr < outRows; tr++ {
+			wg.Add(1)
+			jobsCh <- tr
+		}
+		close(jobsCh)
+		wg.Wait()
+	}
+
+	return &core.Grid{
+		Width:  outCols,
+		Height: outRows,
+		Cells:  cells,
+	}, nil
+}
+
+// Render writes img to w as ANSI block-element art.
+func Render(w io.Writer, img image.Image, cols int, opts Options) error {
+	grid, err := RenderToGrid(img, cols, opts)
+	if err != nil {
+		return err
+	}
+
+	for y := 0; y < grid.Height; y++ {
+		var sb strings.Builder
+		sb.WriteString(ansiLinePrefix)
+		for x := 0; x < grid.Width; x++ {
+			cell := grid.Cells[y][x]
+			if cell.Transparent {
+				sb.WriteRune(' ')
+				continue
+			}
+			if cell.HasBg {
+				sb.WriteString(bgRGB(cell.Bg))
+			}
+			if cell.HasFg {
+				sb.WriteString(fgRGB(cell.Fg))
 			}
 			sb.WriteRune(cell.Ch)
 			sb.WriteString(ansiReset)
 		}
-
 		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
 			return fmt.Errorf("sparkline render: %w", err)
 		}
 	}
 	return nil
+}
+
+// RenderOpts is a compatibility wrapper.
+func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) error {
+	return Render(w, img, outCols, Options{Mode: mode, Rows: outRows})
 }
 
 // RenderToImage runs the same cell selection as RenderOpts but writes the
@@ -149,69 +234,9 @@ func RenderToImage(img image.Image, outCols, outRows int, mode Mode) image.Image
 	return dst
 }
 
-// RenderJ is a worker-aware copy of RenderOpts.
-// FIXME: copied from RenderOpts; consolidate once the worker path settles.
+// RenderJ is a compatibility wrapper.
 func RenderJ(w io.Writer, img image.Image, outCols, outRows int, mode Mode, jobs int) error {
-	if jobs <= 1 {
-		return RenderOpts(w, img, outCols, outRows, mode)
-	}
-	b := img.Bounds()
-	pixW := b.Dx()
-	pixH := b.Dy()
-	cellW := max(1, pixW/outCols)
-	cellH := max(1, pixH/outRows)
-
-	rows := make([]string, outRows)
-	jobsCh := make(chan int)
-	var wg sync.WaitGroup
-	workerN := jobs
-	if workerN > outRows {
-		workerN = outRows
-	}
-	if workerN > runtime.NumCPU() {
-		workerN = runtime.NumCPU()
-	}
-	for range workerN {
-		go func() {
-			for tr := range jobsCh {
-				var sb strings.Builder
-				sb.WriteString(ansiLinePrefix)
-				for tc := 0; tc < outCols; tc++ {
-					x0 := b.Min.X + min(tc*cellW, pixW)
-					x1 := b.Min.X + min(tc*cellW+cellW, pixW) - 1
-					y0 := b.Min.Y + min(tr*cellH, pixH)
-					y1 := b.Min.Y + min(tr*cellH+cellH, pixH) - 1
-					if x1 < x0 || y1 < y0 {
-						continue
-					}
-					cell := FindBestCell(img, b, x0, x1, y0, y1, mode)
-					if cell.BG.A != 0 {
-						sb.WriteString(bgRGB(cell.BG))
-					}
-					if cell.FG.A != 0 {
-						sb.WriteString(fgRGB(cell.FG))
-					}
-					sb.WriteRune(cell.Ch)
-					sb.WriteString(ansiReset)
-				}
-				rows[tr] = sb.String()
-				wg.Done()
-			}
-		}()
-	}
-	for tr := 0; tr < outRows; tr++ {
-		wg.Add(1)
-		jobsCh <- tr
-	}
-	close(jobsCh)
-	wg.Wait()
-
-	for _, row := range rows {
-		if _, err := fmt.Fprintln(w, row); err != nil {
-			return fmt.Errorf("sparkline render: %w", err)
-		}
-	}
-	return nil
+	return Render(w, img, outCols, Options{Mode: mode, Rows: outRows, Jobs: jobs})
 }
 
 // RenderToImageJ is a worker-aware copy of RenderToImage.

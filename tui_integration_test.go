@@ -395,7 +395,7 @@ func buildCatiForTest(t *testing.T) string {
 	t.Helper()
 
 	bin := filepath.Join(t.TempDir(), "cati")
-	build := exec.Command("go", "build", "-o", bin, ".")
+	build := exec.Command("go", "build", "-o", bin, "./cmd/cati")
 	build.Env = os.Environ()
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, out)

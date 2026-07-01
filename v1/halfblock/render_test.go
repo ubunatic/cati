@@ -149,7 +149,7 @@ func TestRender_SolidColor(t *testing.T) {
 	img := solidImage(4, 4, red)
 
 	var sb strings.Builder
-	if err := Render(&sb, img); err != nil {
+	if err := Render(&sb, img, img.Bounds().Dx(), Options{}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	out := sb.String()
@@ -172,7 +172,7 @@ func TestRender_TransparentImage(t *testing.T) {
 	img := solidImage(4, 2, transp)
 
 	var sb strings.Builder
-	if err := Render(&sb, img); err != nil {
+	if err := Render(&sb, img, img.Bounds().Dx(), Options{}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	out := sb.String()
@@ -189,7 +189,7 @@ func TestRender_OddHeight(t *testing.T) {
 	img := solidImage(4, 3, red)
 
 	var sb strings.Builder
-	if err := Render(&sb, img); err != nil {
+	if err := Render(&sb, img, img.Bounds().Dx(), Options{}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	out := sb.String()
@@ -212,7 +212,7 @@ func TestRender_TwoColors(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	if err := Render(&sb, img); err != nil {
+	if err := Render(&sb, img, img.Bounds().Dx(), Options{}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	out := sb.String()
@@ -249,7 +249,7 @@ func TestRender_PNGFixtures(t *testing.T) {
 				t.Fatalf("loadPNG: %v", err)
 			}
 			var sb strings.Builder
-			if err := Render(&sb, img); err != nil {
+			if err := Render(&sb, img, img.Bounds().Dx(), Options{}); err != nil {
 				t.Fatalf("Render: %v", err)
 			}
 			lines := strings.Split(strings.TrimRight(sb.String(), "\n"), "\n")

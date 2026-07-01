@@ -4,9 +4,9 @@ import (
 	"image"
 
 	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/internal/quadblock"
-	"codeberg.org/ubunatic/cati/internal/sextant"
-	"codeberg.org/ubunatic/cati/internal/sparkline"
+	"codeberg.org/ubunatic/cati/v1/quadblock"
+	"codeberg.org/ubunatic/cati/v1/sextant"
+	"codeberg.org/ubunatic/cati/v1/sparkline"
 )
 
 // computeQuality returns all perceptual quality metrics for a rendered frame.

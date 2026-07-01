@@ -9,6 +9,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"codeberg.org/ubunatic/cati/internal/imgutil"
+	"codeberg.org/ubunatic/cati/internal/viewgeom"
+	"codeberg.org/ubunatic/cati/v1/core"
 )
 
 const (
@@ -29,6 +33,28 @@ func min(a, b int) int {
 }
 
 // Mode selects the sextant candidate search strategy.
+
+type Options struct {
+	Mode Mode
+	Rows int
+	Jobs int
+}
+
+// ScaleToFit scales img for sextant rendering within the given terminal dimensions.
+func ScaleToFit(img image.Image, cols, rows int) image.Image {
+	b := img.Bounds()
+	if cols <= 0 && rows <= 0 {
+		return img
+	}
+	spec := viewgeom.NewV2CellRatio(2, 3, 4, 3)
+	plan := spec.Fit(b.Dx(), b.Dy(), cols, rows, false)
+	result := imgutil.ScaleNN(img, plan.RenderW, plan.RenderH)
+	if plan.ExtH > 0 {
+		result = imgutil.AppendTransparentRows(result, plan.ExtH)
+	}
+	return result
+}
+
 type Mode int
 
 const (
@@ -578,15 +604,104 @@ func renderRow(w io.Writer, img image.Image, b image.Rectangle, row int, mode Mo
 	return err
 }
 
-// Render writes img to w as ANSI sextant art.
-func Render(w io.Writer, img image.Image, mode Mode) error {
-	b := img.Bounds()
+// RenderToGrid scales and converts the image into a grid of terminal cells.
+func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
+	scaled := ScaleToFit(img, cols, opts.Rows)
+	b := scaled.Bounds()
 	rowCount := (b.Dy() + blockRows - 1) / blockRows
 	if rowCount <= 0 {
-		return nil
+		return &core.Grid{Cells: [][]core.Cell{}}, nil
 	}
-	for row := 0; row < rowCount; row++ {
-		if err := renderRow(w, img, b, row, mode); err != nil {
+
+	colCount := (b.Dx() + blockCols - 1) / blockCols
+	cells := make([][]core.Cell, rowCount)
+	for r := range cells {
+		cells[r] = make([]core.Cell, colCount)
+	}
+
+	renderRow := func(row int) {
+		y0 := b.Min.Y + row*blockRows
+		y1 := min(y0+blockRows, b.Max.Y)
+		for col := 0; col < colCount; col++ {
+			x0 := b.Min.X + col*blockCols
+			x1 := min(x0+blockCols, b.Max.X)
+			pixels := sampleBlock(scaled, x0, x1, y0, y1)
+			c := chooseCell(pixels, opts.Mode)
+			cells[row][col] = core.Cell{
+				Ch:          c.ch,
+				Fg:          c.fg,
+				Bg:          c.bg,
+				HasFg:       c.hasFG,
+				HasBg:       c.hasBG,
+				Transparent: c.transparent,
+			}
+		}
+	}
+
+	jobs := opts.Jobs
+	if jobs <= 1 {
+		for row := 0; row < rowCount; row++ {
+			renderRow(row)
+		}
+	} else {
+		var wg sync.WaitGroup
+		jobsCh := make(chan int)
+		workerN := jobs
+		if workerN > rowCount {
+			workerN = rowCount
+		}
+		if workerN > runtime.NumCPU() {
+			workerN = runtime.NumCPU()
+		}
+		for range workerN {
+			go func() {
+				for row := range jobsCh {
+					renderRow(row)
+					wg.Done()
+				}
+			}()
+		}
+		for row := 0; row < rowCount; row++ {
+			wg.Add(1)
+			jobsCh <- row
+		}
+		close(jobsCh)
+		wg.Wait()
+	}
+
+	return &core.Grid{
+		Width:  colCount,
+		Height: rowCount,
+		Cells:  cells,
+	}, nil
+}
+
+// Render writes img to w as ANSI sextant art.
+func Render(w io.Writer, img image.Image, cols int, opts Options) error {
+	grid, err := RenderToGrid(img, cols, opts)
+	if err != nil {
+		return err
+	}
+
+	for y := 0; y < grid.Height; y++ {
+		var sb strings.Builder
+		sb.WriteString(ansiLinePrefix)
+		for x := 0; x < grid.Width; x++ {
+			cell := grid.Cells[y][x]
+			if cell.Transparent {
+				sb.WriteRune(' ')
+				continue
+			}
+			if cell.HasBg {
+				sb.WriteString(bgRGB(cell.Bg))
+			}
+			if cell.HasFg {
+				sb.WriteString(fgRGB(cell.Fg))
+			}
+			sb.WriteRune(cell.Ch)
+			sb.WriteString(ansiReset)
+		}
+		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
 			return fmt.Errorf("sextant render: %w", err)
 		}
 	}
@@ -595,109 +710,16 @@ func Render(w io.Writer, img image.Image, mode Mode) error {
 
 // RenderToImage reconstructs the rendered pixel output of img.
 func RenderToImage(img image.Image, mode Mode) *image.RGBA {
-	b := img.Bounds()
-	dst := image.NewRGBA(b)
-	rowCount := (b.Dy() + blockRows - 1) / blockRows
-	if rowCount <= 0 {
-		return dst
-	}
-
-	for row := 0; row < rowCount; row++ {
-		y0 := b.Min.Y + row*blockRows
-		y1 := min(y0+blockRows, b.Max.Y)
-		for col := 0; b.Min.X+col*blockCols < b.Max.X; col++ {
-			x0 := b.Min.X + col*blockCols
-			x1 := min(x0+blockCols, b.Max.X)
-			pixels := sampleBlock(img, x0, x1, y0, y1)
-			cell := chooseCell(pixels, mode)
-			for idx := 0; idx < len(pixels); idx++ {
-				px := pixels[idx]
-				if isTransparent(px) {
-					continue
-				}
-				target := cell.bg
-				if maskContains(cell.mask, idx) {
-					target = cell.fg
-				}
-				yy := y0 + idx/blockCols
-				xx := x0 + idx%blockCols
-				if xx < b.Max.X && yy < b.Max.Y {
-					dst.SetRGBA(xx, yy, target)
-				}
-			}
-		}
-	}
-	return dst
+	return RenderToImageJ(img, mode, 1)
 }
 
-// RenderJ is a worker-aware copy of Render.
-// FIXME: keep this isolated until the mode strategies stop evolving.
+// RenderJ is kept for compatibility.
 func RenderJ(w io.Writer, img image.Image, mode Mode, jobs int) error {
-	if jobs <= 1 {
-		return Render(w, img, mode)
-	}
-	b := img.Bounds()
-	rowCount := (b.Dy() + blockRows - 1) / blockRows
-	if rowCount <= 0 {
-		return nil
-	}
-
-	rows := make([]string, rowCount)
-	jobsCh := make(chan int)
-	var wg sync.WaitGroup
-	workerN := jobs
-	if workerN > rowCount {
-		workerN = rowCount
-	}
-	if workerN > runtime.NumCPU() {
-		workerN = runtime.NumCPU()
-	}
-	for range workerN {
-		go func() {
-			for row := range jobsCh {
-				y0 := b.Min.Y + row*blockRows
-				y1 := min(y0+blockRows, b.Max.Y)
-				var sb strings.Builder
-				sb.WriteString(ansiLinePrefix)
-				for col := 0; b.Min.X+col*blockCols < b.Max.X; col++ {
-					x0 := b.Min.X + col*blockCols
-					x1 := min(x0+blockCols, b.Max.X)
-					pixels := sampleBlock(img, x0, x1, y0, y1)
-					cell := chooseCell(pixels, mode)
-					if cell.transparent {
-						sb.WriteRune(' ')
-						continue
-					}
-					sb.WriteString(cellEscape(cell))
-					sb.WriteRune(cell.ch)
-					sb.WriteString(ansiReset)
-				}
-				rows[row] = sb.String()
-				wg.Done()
-			}
-		}()
-	}
-	for row := 0; row < rowCount; row++ {
-		wg.Add(1)
-		jobsCh <- row
-	}
-	close(jobsCh)
-	wg.Wait()
-
-	for _, row := range rows {
-		if _, err := fmt.Fprintln(w, row); err != nil {
-			return fmt.Errorf("sextant render: %w", err)
-		}
-	}
-	return nil
+	return Render(w, img, 0, Options{Mode: mode, Jobs: jobs})
 }
 
-// RenderToImageJ is a worker-aware copy of RenderToImage.
-// FIXME: keep this isolated until the mode strategies stop evolving.
+// RenderToImageJ reconstructs the rendered pixel output of img.
 func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
-	if jobs <= 1 {
-		return RenderToImage(img, mode)
-	}
 	b := img.Bounds()
 	dst := image.NewRGBA(b)
 	rowCount := (b.Dy() + blockRows - 1) / blockRows

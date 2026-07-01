@@ -1,4 +1,4 @@
-package halfblock
+package term
 
 import (
 	"os"
@@ -6,8 +6,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// termSize returns the current terminal dimensions via a single ioctl call.
-// Returns (0, 0) when stdout is not a terminal or the call fails.
 func termSize() (cols, rows int) {
 	ws, err := unix.IoctlGetWinsize(int(os.Stdout.Fd()), unix.TIOCGWINSZ)
 	if err != nil {

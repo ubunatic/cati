@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/v1/halfblock"
 )
 
 // ── side-by-side rendering helpers ───────────────────────────────────────────
@@ -157,12 +157,12 @@ func TestShowImages(t *testing.T) {
 				var lines []string
 				if v.useHalf {
 					lines = renderLines(t, src, func(w io.Writer, img image.Image) error {
-						return halfblock.Render(w, img)
+						return halfblock.Render(w, img, img.Bounds().Dx(), halfblock.Options{})
 					})
 				} else {
 					o := v.opts
 					lines = renderLines(t, src, func(w io.Writer, img image.Image) error {
-						return RenderOpts(w, img, o)
+						return Render(w, img, img.Bounds().Dx(), o)
 					})
 				}
 				cols := maxVisLen(lines)

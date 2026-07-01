@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/internal/halfblock"
+	"codeberg.org/ubunatic/cati/v1/halfblock"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -310,7 +310,7 @@ func TestCompileCell_NeighborContinuity(t *testing.T) {
 func TestRender_SolidColor(t *testing.T) {
 	img := solidImage(4, 4, red)
 	var sb strings.Builder
-	if err := Render(&sb, img); err != nil {
+	if err := Render(&sb, img, 0, Options{}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	out := sb.String()
@@ -329,7 +329,7 @@ func TestRender_SolidColor(t *testing.T) {
 func TestRender_AllTransparent(t *testing.T) {
 	img := solidImage(4, 4, transp)
 	var sb strings.Builder
-	if err := Render(&sb, img); err != nil {
+	if err := Render(&sb, img, 0, Options{}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	out := sb.String()
@@ -346,7 +346,7 @@ func TestRender_TwoColorHalves(t *testing.T) {
 		blue, blue, blue, blue,
 	})
 	var sb strings.Builder
-	if err := Render(&sb, img); err != nil {
+	if err := Render(&sb, img, 0, Options{}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	out := sb.String()
@@ -367,7 +367,7 @@ func TestRender_LeftRightSplit(t *testing.T) {
 		red, blue,
 	})
 	var sb strings.Builder
-	if err := Render(&sb, img); err != nil {
+	if err := Render(&sb, img, 0, Options{}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	out := sb.String()
@@ -386,7 +386,7 @@ func TestRender_OddDimensions(t *testing.T) {
 	// 3×3 image → 2×2 terminal cells (odd dims padded with transparent)
 	img := solidImage(3, 3, green)
 	var sb strings.Builder
-	if err := Render(&sb, img); err != nil {
+	if err := Render(&sb, img, 0, Options{}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	lines := strings.Split(strings.TrimRight(sb.String(), "\n"), "\n")
@@ -398,7 +398,7 @@ func TestRender_OddDimensions(t *testing.T) {
 func TestRender_SinglePixel(t *testing.T) {
 	img := solidImage(1, 1, red)
 	var sb strings.Builder
-	if err := Render(&sb, img); err != nil {
+	if err := Render(&sb, img, 0, Options{}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	out := sb.String()
@@ -489,7 +489,7 @@ func TestRender_PNGFixtures(t *testing.T) {
 				t.Fatalf("LoadImage: %v", err)
 			}
 			var sb strings.Builder
-			if err := Render(&sb, img); err != nil {
+			if err := Render(&sb, img, 0, Options{}); err != nil {
 				t.Fatalf("Render: %v", err)
 			}
 			lines := strings.Split(strings.TrimRight(sb.String(), "\n"), "\n")
@@ -514,7 +514,7 @@ func TestRender_SampleImages(t *testing.T) {
 			}
 			img = ScaleToFit(img, 40, 20)
 			var sb strings.Builder
-			if err := Render(&sb, img); err != nil {
+			if err := Render(&sb, img, 0, Options{}); err != nil {
 				t.Fatalf("Render: %v", err)
 			}
 			if sb.Len() == 0 {
