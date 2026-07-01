@@ -13,8 +13,8 @@ import (
 func main() {
 	// Paths
 	root := "."
-	pngPath := filepath.Join(root, "docs", "cati_0001.png")
-	htmlPath := filepath.Join(root, "docs", "index.html")
+	pngPath := filepath.Join(root, "website", "cati_0001.png")
+	htmlPath := filepath.Join(root, "website", "index.html")
 
 	// Allow overrides via CLI args
 	if len(os.Args) > 1 {

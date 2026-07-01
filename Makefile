@@ -64,7 +64,7 @@ preflight: ⚙️ build  ## pre-commit checks: vet + verify demo-widths renders 
 	@echo "Checking demo-widths for render errors..."
 	@go run scripts/demo_widths.go -bin ./$(BINARY) 2>&1 | grep -i "err\|panic\|fail" && echo "FAIL: render errors found" && exit 1 || echo "OK: no render errors"
 
-generate: ⚙️  ## generate static assets/code (e.g., inlined docs/index.html pixel colors)
+generate: ⚙️  ## generate static assets/code (e.g., inlined website/index.html pixel colors)
 	go run scripts/generate_pixels.go
 
 tidy: ⚙️  ## tidy go modules
@@ -75,7 +75,7 @@ clean: ⚙️  ## remove build artifacts
 
 
 browse: ⚙️  ## open website
-	open docs/index.html
+	open website/index.html
 
 edit-baby: ⚙️  ## open baby vid in Kdenlive
 	open assets/baby.kdenlive
