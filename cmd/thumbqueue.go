@@ -126,7 +126,7 @@ func thumbWorker(ctx context.Context, q *thumbQueue, previewVideos bool, nVideoF
 				frames = loadVideoThumbs(job.key.path, nVideoFrames, job.key.w, job.key.h, rc)
 			}
 		} else {
-			img, err := halfblock.LoadImage(job.key.path)
+			img, err := loadImageForThumb(job.key.path, job.key.w, job.key.h, rc)
 			if err == nil && img != nil {
 				frames = []image.Image{rc.scaleToFit(img, job.key.w, job.key.h)}
 			}
@@ -139,6 +139,19 @@ func thumbWorker(ctx context.Context, q *thumbQueue, previewVideos bool, nVideoF
 			}
 		}
 	}
+}
+
+func loadImageForThumb(path string, cols, rows int, rc renderCfg) (image.Image, error) {
+	if !halfblock.IsSVG(path) {
+		return halfblock.LoadImage(path)
+	}
+	srcW, srcH, err := halfblock.ProbeSVGDimensions(path)
+	if err != nil {
+		spec := rc.mode.viewSpec()
+		return halfblock.LoadImageWithTarget(path, cols*spec.CellW, rows*spec.CellH)
+	}
+	targetW, targetH := renderTargetForSource(srcW, srcH, cols, rows, rc, "")
+	return halfblock.LoadImageWithTarget(path, targetW, targetH)
 }
 
 func loadVideoThumbs(path string, n, w, h int, rc renderCfg) []image.Image {

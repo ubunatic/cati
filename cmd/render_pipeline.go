@@ -10,7 +10,8 @@ import (
 	"ubunatic.com/cati/internal/metrics"
 	"ubunatic.com/cati/v1/quadblock"
 
-	catiterm "ubunatic.com/cati/v1/term")
+	catiterm "ubunatic.com/cati/v1/term"
+)
 
 type prescaleMode int
 
@@ -97,6 +98,25 @@ func prepareRenderedImageChecked(orig image.Image, state *viewState, termCols, t
 		}
 	}
 	return vp, nil
+}
+
+func renderTargetForSource(srcW, srcH, termCols, termRows int, rc renderCfg, initialZoom string) (int, int) {
+	if srcW <= 0 || srcH <= 0 {
+		return 0, 0
+	}
+	if initialZoom == "" {
+		if spec, ok := rc.mode.v2FitSpec(); ok {
+			plan := spec.Fit(srcW, srcH, termCols, termRows, false)
+			return plan.RenderW, plan.RenderH
+		}
+		spec := rc.mode.viewSpec()
+		targetW, targetH, _ := imgutil.FitDims(srcW, srcH, spec.CellW, spec.CellH, spec.AspectX, termCols, termRows)
+		return targetW, targetH
+	}
+	spec := rc.mode.viewSpec()
+	zoom := spec.InitialZoomRatio(initialZoom, srcW, srcH, termCols, termRows)
+	dims := spec.Dims(srcW, srcH, termCols, termRows, zoom)
+	return imgutil.AlignCellSize(dims.ScaledW, dims.ScaledH, spec.CellW, spec.CellH)
 }
 
 func fitRenderedImage(img image.Image, cols, rows int, rc renderCfg) image.Image {

@@ -75,3 +75,11 @@ func main() {
 }
 ```
 <!-- GO_EXAMPLE_END -->
+
+## Loading SVGs
+
+`halfblock.LoadImage(path)` supports PNG, JPEG, SVG, and first-frame video
+loading. SVGs are rasterized through `rsvg-convert`; callers that already know
+their render pixel budget should prefer `halfblock.LoadImageWithTarget(path,
+maxWidth, maxHeight)` so vector inputs are rasterized directly to the target
+box instead of through the default 2048px long-edge fallback.

@@ -12,11 +12,18 @@ import (
 // rsvg-convert, or, for video files, extracts and returns the first frame
 // using ffmpeg.
 func LoadImage(path string) (image.Image, error) {
+	return LoadImageWithTarget(path, 0, 0)
+}
+
+// LoadImageWithTarget is like LoadImage, but SVG inputs are rasterized to fit
+// within maxWidth×maxHeight pixels. Raster image and video inputs keep their
+// native decoded dimensions; callers should scale them after loading.
+func LoadImageWithTarget(path string, maxWidth, maxHeight int) (image.Image, error) {
 	if IsVideo(path) {
 		return LoadVideoFrame(path)
 	}
 	if IsSVG(path) {
-		return RasterizeSVG(path)
+		return RasterizeSVGWithTarget(path, maxWidth, maxHeight)
 	}
 	f, err := os.Open(path)
 	if err != nil {

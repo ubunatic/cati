@@ -422,7 +422,7 @@ func run(o opts, rc renderCfg, args []string) error {
 		if halfblock.IsVideo(path) && tr.Start > 0 {
 			img, err = halfblock.LoadVideoFrameAt(path, tr.Start)
 		} else {
-			img, err = halfblock.LoadImage(path)
+			img, err = loadImageForRender(path, termCols, termRows, rc, o.initialZoom)
 		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)
@@ -440,6 +440,22 @@ func run(o opts, rc renderCfg, args []string) error {
 		}
 	}
 	return nil
+}
+
+func loadImageForRender(path string, termCols, termRows int, rc renderCfg, initialZoom string) (image.Image, error) {
+	if !halfblock.IsSVG(path) {
+		return halfblock.LoadImage(path)
+	}
+	if termCols == 0 && termRows == 0 {
+		termCols = catiterm.TermWidth()
+		termRows = catiterm.TermHeight()
+	}
+	srcW, srcH, err := halfblock.ProbeSVGDimensions(path)
+	if err != nil {
+		return halfblock.LoadImageWithTarget(path, 0, 0)
+	}
+	targetW, targetH := renderTargetForSource(srcW, srcH, termCols, termRows, rc, initialZoom)
+	return halfblock.LoadImageWithTarget(path, targetW, targetH)
 }
 
 // parseRenderMode converts a --mode flag value into a canonical renderCfg.
