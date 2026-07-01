@@ -75,13 +75,14 @@ clean: ⚙️  ## remove build artifacts
 	rm -f $(BINARY)
 	rm -r website/book
 
-BOOK_SERVE=false
 book: ⚙️  ## build the mdbook documentation
 	go run scripts/generate_summary.go
-	@case "$(BOOK_SERVE)" in \
-		(true|1|yes|y) mdbook serve;; \
-	  (*)            mdbook build; echo "Book built. To serve run: make book BOOK_SERVE=true";; \
-	esac
+	mdbook build
+	@echo "✅ Book built (run: 'make serve' to start server)"
+
+serve: ⚙️  # start book webserver (not for website)
+	@killall -q mdbook || true
+	mdbook serve
 
 browse: ⚙️ book ## open website
 	open website/index.html 2>/dev/null
