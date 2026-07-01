@@ -35,9 +35,11 @@ cd cati
 make install      # installs to ~/go/bin
 ```
 
-Requires Go 1.21+.
+Or install with Go 1.21+.
 
-> **Planned:** `go install ubunatic.com/cati@latest` once the module path migration is complete (see `issues/vanity-module-path.md`).
+```bash
+go install ubunatic.com/cati/cmd/cati@latest
+```
 
 ---
 
