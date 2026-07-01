@@ -1,3 +1,5 @@
+//go:build integration
+
 package main
 
 import (
@@ -394,13 +396,20 @@ func TestInteractiveVideoFramesDoNotWrapAcrossRenderModes(t *testing.T) {
 func buildCatiForTest(t *testing.T) string {
 	t.Helper()
 
-	bin := filepath.Join(t.TempDir(), "cati")
-	build := exec.Command("go", "build", "-o", bin, "./cmd/cati")
-	build.Env = os.Environ()
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("go build: %v\n%s", err, out)
+	dir := t.TempDir()
+	bins := map[string]string{
+		"cati":       "./cmd/cati",
+		"catiplay":   "./cmd/catiplay",
+		"catibrowse": "./cmd/catibrowse",
 	}
-	return bin
+	for name, pkg := range bins {
+		build := exec.Command("go", "build", "-o", filepath.Join(dir, name), pkg)
+		build.Env = os.Environ()
+		if out, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("go build %s: %v\n%s", name, err, out)
+		}
+	}
+	return filepath.Join(dir, "cati")
 }
 
 func assertNoSparkSizeMismatchOutput(t *testing.T, out string) {

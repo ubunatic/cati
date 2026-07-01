@@ -1,5 +1,6 @@
 .PHONY: ⚙️  # make all commands phony
 BINARY  := cati
+BINARIES := cati catiplay catibrowse
 PREFIX  ?= /usr/local
 DEMO_DIR = ../emojig/spec/art/frames
 DEMO     = $(DEMO_DIR)/emojig_fall_*.png
@@ -15,29 +16,42 @@ help: ⚙️  ## show this help
 	awk 'BEGIN {FS = ":.*## "}; {printf "  %-10s %s\n", $$1, $$2}'
 
 dev: ⚙️ install test  ## build, test, run demo
-	cati -i assets
+	cati browse assets
 
 build: ⚙️  ## build the binary
-	go build -o $(BINARY) ./cmd/cati
+	go build -o cati ./cmd/cati
+	go build -o catiplay ./cmd/catiplay
+	go build -o catibrowse ./cmd/catibrowse
 
 run: ⚙️ build ## build and run (requires an image arg: make run IMG=foo.png)
 	./$(BINARY) $(IMG)
 
 demo: ⚙️ build ## play the emojig falling animation (q or Ctrl+C to stop)
 	@if test -d $(DEMO_DIR); \
-	 then ./$(BINARY) --play --fps 12 $(DEMO); \
+	 then ./$(BINARY) play --fps 12 $(DEMO); \
 	 else echo "No demo found in DEMO_DIR=$(DEMO_DIR)"; \
 	 fi
 
 logo: ⚙️ build ## animate the cati logo (q or Ctrl+C to stop)
-	./$(BINARY) --play --fps 4 assets/
+	./$(BINARY) play --fps 4 assets/
 
 install: ⚙️ build  ## install to ~/go/bin (user)
-	go install ./cmd/cati
+	go install ./cmd/cati ./cmd/catiplay ./cmd/catibrowse
 
 test: ⚙️  ## run linter and tests
 	go vet ./...
 	go test ./...
+
+test-player: ⚙️  ## run catiplay-specific tests
+	go test -tags=catiplay ./cmd
+
+test-browser: ⚙️  ## run catibrowse-specific tests
+	go test -tags=catibrowse ./cmd
+
+test-integration: ⚙️ build  ## run terminal integration tests
+	go test -tags=integration .
+
+test-all: ⚙️ test test-player test-browser test-integration  ## run default and optional tests
 
 reuse: ⚙️  ## verify license compliance linting
 	reuse lint
@@ -72,7 +86,7 @@ tidy: ⚙️  ## tidy go modules
 	go mod tidy
 
 clean: ⚙️  ## remove build artifacts
-	rm -f $(BINARY)
+	rm -f $(BINARIES)
 	rm -r website/book
 
 book: ⚙️  ## build the mdbook documentation

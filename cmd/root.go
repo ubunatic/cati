@@ -2,11 +2,14 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -53,8 +56,7 @@ resolution of (terminal width) × (2 × terminal height) pixels.
 Directories are expanded to all supported images (*.png, *.jpg, *.jpeg)
 in sorted order. Use -r to recurse into subdirectories.
 
-Use --play to animate a sequence of frames at --fps frames per second.
-Press Ctrl+C to stop playback.`,
+Use "cati play" for media playback and "cati browse" for the preview browser.`,
 		Args:         cobra.ArbitraryArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -73,12 +75,20 @@ Press Ctrl+C to stop playback.`,
 				return err
 			}
 			rc.jobs = jobs
+			if playMode {
+				return forwardCommand("catiplay", os.Args[1:])
+			}
+			if interactMode {
+				target := "catiplay"
+				if len(args) > 1 || singleArgIsDir(args) {
+					target = "catibrowse"
+				}
+				return forwardCommand(target, os.Args[1:])
+			}
 			return run(opts{
 				ansi:        ansiMode,
 				recursive:   recursive,
 				noHeader:    noHeader,
-				playMode:    playMode,
-				interactive: interactMode,
 				fps:         fps,
 				jobs:        jobs,
 				width:       width,
@@ -95,10 +105,10 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().BoolVar(&noHeader, "no-header", false, "suppress filename headers between images")
 	root.Flags().BoolVarP(&playMode, "play", "p", false, "animate frames in a loop (Ctrl+C to stop)")
 	root.Flags().BoolVarP(&interactMode, "interactive", "i", false, "interactive viewer: +/- zoom, arrow keys pan, q quit")
-	root.Flags().IntVar(&fps, "fps", 0, "frames per second (0 = auto: native fps for video, 15 for images)")
+	root.Flags().IntVar(&fps, "fps", 0, "legacy playback frames per second")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
-	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto; clamped to terminal in -i)")
-	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto; clamped to terminal in -i)")
+	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
+	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half|halfblock, qs|quad, qe, sq|spark/quad, sb|spark/best, xs|sextant/2x3")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -107,8 +117,213 @@ Press Ctrl+C to stop playback.`,
 	root.Flags().BoolVar(&inputTest, "input-test", false, "")
 	// Hide the debug flag from help output.
 	_ = root.Flags().MarkHidden("input-test")
+	_ = root.Flags().MarkHidden("play")
+	_ = root.Flags().MarkHidden("interactive")
+	_ = root.Flags().MarkHidden("fps")
+
+	root.AddCommand(forwardSubcommand("play", "catiplay", "play media with catiplay"))
+	root.AddCommand(forwardSubcommand("browse", "catibrowse", "browse files with catibrowse"))
 
 	return root
+}
+
+// NewPlay returns the root command for the catiplay binary.
+func NewPlay() *cobra.Command {
+	var ansiMode bool
+	var recursive bool
+	var legacyPlay bool
+	var legacyInteractive bool
+	var fps int
+	var jobs int
+	var width int
+	var height int
+	var renderMode string
+	var prescaler string
+	var fullComp bool
+	var initialZoom string
+	var timeRange string
+
+	root := &cobra.Command{
+		Use:          "catiplay [flags] <image|video|dir> [image|video|dir ...]",
+		Short:        "catiplay — terminal media player for images and videos",
+		Args:         cobra.ArbitraryArgs,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("requires at least 1 arg(s), only received 0")
+			}
+			if !ansiMode {
+				return fmt.Errorf("only --ansi mode is supported in this version")
+			}
+			if jobs < 0 {
+				return fmt.Errorf("--jobs must be 0 or greater")
+			}
+			rc, err := parseRenderMode(renderMode)
+			if err != nil {
+				return err
+			}
+			rc.prescaler, err = parsePrescaleMode(prescaler)
+			if err != nil {
+				return err
+			}
+			rc.jobs = jobs
+			rc = canonicalRenderCfg(rc)
+			paths, err := expandArgs(args, recursive)
+			if err != nil {
+				return err
+			}
+			if len(paths) == 0 {
+				return fmt.Errorf("no supported images found")
+			}
+			if legacyPlay || len(paths) > 1 || singleArgIsDir(args) {
+				tr, err := parseTimeRange(timeRange)
+				if err != nil {
+					return err
+				}
+				return play(paths, fps, width, height, rc, tr)
+			}
+			if halfblock.IsVideo(paths[0]) {
+				return interactiveVideo(paths[0], width, height, rc, nil, nil, nil, nil, nil, nil, fullComp, initialZoom)
+			}
+			_ = legacyInteractive
+			return interactive(paths[0], width, height, rc, fullComp, initialZoom)
+		},
+	}
+
+	root.Flags().BoolVar(&ansiMode, "ansi", true, "render with 24-bit ANSI true-color (default)")
+	root.Flags().BoolVarP(&recursive, "recursive", "r", false, "recurse into subdirectories")
+	root.Flags().BoolVarP(&legacyPlay, "play", "p", false, "legacy compatibility: play inputs as a frame sequence")
+	root.Flags().BoolVarP(&legacyInteractive, "interactive", "i", false, "legacy compatibility: interactive mode is the default")
+	root.Flags().IntVar(&fps, "fps", 0, "frames per second (0 = auto: native fps for video, 15 for images)")
+	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for async render work (0 = auto)")
+	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
+	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half|halfblock, qs|quad, qe, sq|spark/quad, sb|spark/best, xs|sextant/2x3")
+	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
+	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
+	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
+	root.Flags().StringVar(&timeRange, "range", "", `playback window: "5s" plays first 5 s; "5s:7s" plays 5 s-7 s (supports s/m/h suffixes, bare seconds, mm:ss)`)
+
+	return root
+}
+
+// NewBrowse returns the root command for the catibrowse binary.
+func NewBrowse() *cobra.Command {
+	var ansiMode bool
+	var legacyInteractive bool
+	var jobs int
+	var width int
+	var height int
+	var renderMode string
+	var prescaler string
+	var fullComp bool
+	var initialZoom string
+
+	root := &cobra.Command{
+		Use:          "catibrowse [flags] <image|video|dir> [image|video|dir ...]",
+		Short:        "catibrowse — terminal file browser with media previews",
+		Args:         cobra.ArbitraryArgs,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("requires at least 1 arg(s), only received 0")
+			}
+			if !ansiMode {
+				return fmt.Errorf("only --ansi mode is supported in this version")
+			}
+			if jobs < 0 {
+				return fmt.Errorf("--jobs must be 0 or greater")
+			}
+			rc, err := parseRenderMode(renderMode)
+			if err != nil {
+				return err
+			}
+			rc.prescaler, err = parsePrescaleMode(prescaler)
+			if err != nil {
+				return err
+			}
+			rc.jobs = jobs
+			_ = legacyInteractive
+			return browser(args, width, height, canonicalRenderCfg(rc), fullComp, initialZoom, jobs)
+		},
+	}
+
+	root.Flags().BoolVar(&ansiMode, "ansi", true, "render with 24-bit ANSI true-color (default)")
+	root.Flags().BoolVarP(&legacyInteractive, "interactive", "i", false, "legacy compatibility: browser mode is the default")
+	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
+	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
+	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half|halfblock, qs|quad, qe, sq|spark/quad, sb|spark/best, xs|sextant/2x3")
+	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
+	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
+	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
+
+	return root
+}
+
+func forwardSubcommand(name, executable, short string) *cobra.Command {
+	return &cobra.Command{
+		Use:                name + " [args...]",
+		Short:              short,
+		Args:               cobra.ArbitraryArgs,
+		DisableFlagParsing: true,
+		SilenceUsage:       true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return forwardCommand(executable, args)
+		},
+	}
+}
+
+func forwardCommand(executable string, args []string) error {
+	c := exec.Command(executable, args...)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	err := c.Run()
+	if err == nil || !errors.Is(err, exec.ErrNotFound) {
+		return err
+	}
+	self, selfErr := os.Executable()
+	if selfErr != nil {
+		return err
+	}
+	c = exec.Command(filepath.Join(filepath.Dir(self), executable), args...)
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return c.Run()
+}
+
+func singleArgIsDir(args []string) bool {
+	if len(args) != 1 {
+		return false
+	}
+	info, err := os.Stat(args[0])
+	return err == nil && info.IsDir()
+}
+
+func forwardToPlayer(path string, width, height int, rc renderCfg, fullComp bool, initialZoom string, jobs int) error {
+	args := []string{}
+	if width > 0 {
+		args = append(args, "--width", strconv.Itoa(width))
+	}
+	if height > 0 {
+		args = append(args, "--height", strconv.Itoa(height))
+	}
+	if name := rcModeName(rc); name != "" && name != "?" && name != "halfblock" {
+		args = append(args, "--mode", name)
+	}
+	if initialZoom != "" {
+		args = append(args, "--zoom", initialZoom)
+	}
+	if jobs > 0 {
+		args = append(args, "--jobs", strconv.Itoa(jobs))
+	}
+	if fullComp {
+		args = append(args, "--full-comp")
+	}
+	args = append(args, path)
+	return forwardCommand("catiplay", args)
 }
 
 // ── options ───────────────────────────────────────────────────────────────────

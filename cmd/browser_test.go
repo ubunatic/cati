@@ -1,3 +1,5 @@
+//go:build catibrowse
+
 package cmd
 
 import (

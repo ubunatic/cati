@@ -4,7 +4,8 @@
 
 ```
 ./cati photo.png
-./cati --play --fps 15 frames/
+./cati play --fps 15 frames/
+./cati browse ~/Pictures/
 ```
 
 ![demo](docs/demo.gif)
@@ -32,13 +33,15 @@ Combined with 24-bit ANSI true-color (`\x1b[38;2;R;G;Bm`) this gives effective r
 # From source
 git clone https://codeberg.org/ubunatic/cati
 cd cati
-make install      # installs to ~/go/bin
+make install      # installs cati, catiplay, and catibrowse to ~/go/bin
 ```
 
 Or install with Go 1.21+.
 
 ```bash
 go install ubunatic.com/cati/cmd/cati@latest
+go install ubunatic.com/cati/cmd/catiplay@latest
+go install ubunatic.com/cati/cmd/catibrowse@latest
 ```
 
 ---
@@ -63,12 +66,24 @@ cati --no-header dir/      # suppress ==> file <== headers
 ### Animate frames
 
 ```bash
-cati --play frames/            # loop at 15 fps (default)
-cati --play --fps 24 frames/   # custom frame rate
-cati -p --fps 8 frame_*.png    # glob pattern, shell-expanded
+cati play frames/            # loop at 15 fps (default)
+cati play --fps 24 frames/   # custom frame rate
+cati play --fps 8 frame_*.png # glob pattern, shell-expanded
 ```
 
 Press **`q`**, **`ESC`**, or **`Ctrl+C`** to stop playback.
+
+### Interactive media and browser
+
+```bash
+catiplay image.png           # interactive single-image viewer
+catiplay video.mp4           # interactive video viewer
+catibrowse ~/Pictures/       # file browser with previews
+cati browse ~/Pictures/      # forwards to catibrowse
+```
+
+Legacy `cati --play`/`cati -p` and `cati -i` still work as forwarding
+compatibility aliases when the companion binaries are installed.
 
 ---
 
@@ -77,8 +92,6 @@ Press **`q`**, **`ESC`**, or **`Ctrl+C`** to stop playback.
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--ansi` | | `true` | 24-bit ANSI true-color output |
-| `--play` | `-p` | off | animate frames in a loop |
-| `--fps` | | `15` | frames per second for `--play` |
 | `--recursive` | `-r` | off | recurse into subdirectories |
 | `--no-header` | | off | suppress filename headers |
 
@@ -87,12 +100,13 @@ Press **`q`**, **`ESC`**, or **`Ctrl+C`** to stop playback.
 ## Development
 
 ```bash
-make build    # compile ./cati
-make test     # go vet + go test
+make build    # compile ./cati, ./catiplay, ./catibrowse
+make test     # go vet + default tests
+make test-all # default + player/browser/integration tests
 make demo     # play the bundled emojig animation
 make install  # go install to ~/go/bin
 make tidy     # go mod tidy
-make clean    # remove ./cati binary
+make clean    # remove built binaries
 ```
 
 ---

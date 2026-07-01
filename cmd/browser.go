@@ -22,10 +22,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"ubunatic.com/cati/v1/halfblock"
+	"golang.org/x/term"
 	"ubunatic.com/cati/internal/input"
 	spec "ubunatic.com/cati/spec"
-	"golang.org/x/term"
+	"ubunatic.com/cati/v1/halfblock"
 )
 
 type menuButton struct {
@@ -1865,11 +1865,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 										fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l")
 										halfblock.ShowCursor(os.Stdout)
 
-										if halfblock.IsVideo(targetItem.path) {
-											_ = interactiveVideo(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp, initialZoom)
-										} else {
-											_ = interactiveWithChan(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp, initialZoom)
-										}
+										_ = forwardToPlayer(targetItem.path, initWidth, initHeight, rc, fullComp, initialZoom, jobs)
 
 										// Propagate any quit signal that arrived while the viewer ran.
 										select {
@@ -1980,11 +1976,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 							fmt.Fprint(os.Stdout, "\x1b[?1003l\x1b[?1006l")
 							halfblock.ShowCursor(os.Stdout)
 
-							if halfblock.IsVideo(targetItem.path) {
-								_ = interactiveVideo(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp, initialZoom)
-							} else {
-								_ = interactiveWithChan(targetItem.path, initWidth, initHeight, rc, inputs, style, labels, viewBtnRows, viewKeyMaps, inputSpec, fullComp, initialZoom)
-							}
+							_ = forwardToPlayer(targetItem.path, initWidth, initHeight, rc, fullComp, initialZoom, jobs)
 
 							// Propagate any quit signal that arrived while the viewer ran.
 							select {

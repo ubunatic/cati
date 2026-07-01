@@ -12,13 +12,31 @@ This document captures the architecture, core design decisions, lessons learned,
 
 ## 1. Architecture & Rendering Pipeline
 
-Cati is a lightweight terminal image and animation viewer written in Go. Its core logic is divided into CLI commands (`cmd/`) and the public rendering libraries under `v1/` (`v1/halfblock/`, `v1/quadblock/`, `v1/sextant/`, and `v1/sparkline/`), utilizing core types defined in `v1/core/` and terminal size detection utility in `v1/term/`.
+Cati is a lightweight terminal image renderer and media viewer written in Go. It installs three entry points:
+
+- `cati` — the primary static renderer CLI for files and directories.
+- `catiplay` — the interactive image/video player and sequence playback command.
+- `catibrowse` — the file browser with media previews.
+
+`cati play` forwards to `catiplay`, and `cati browse` forwards to
+`catibrowse`. Legacy `cati --play`/`cati -p` and `cati -i` remain forwarding
+compatibility aliases. `catibrowse` opens selected assets by restoring cooked
+terminal mode and spawning `catiplay`, so browser/player runtime failures stay
+outside the primary `cati` process.
+
+Core rendering logic lives in the public libraries under `v1/`
+(`v1/halfblock/`, `v1/quadblock/`, `v1/sextant/`, and `v1/sparkline/`),
+utilizing core types defined in `v1/core/` and terminal size detection utility
+in `v1/term/`.
 
 ```mermaid
 graph TD
-    CLI[CLI entry: cmd/root.go] -->|Dir expansion & sorting| Files[List of file paths]
+    CLI[cati entry: cmd/cati] -->|Dir expansion & sorting| Files[List of file paths]
+    CLI -->|play subcommand| Catiplay[catiplay subprocess]
+    CLI -->|browse subcommand| Catibrowse[catibrowse subprocess]
+    Catibrowse -->|open selected asset| Catiplay
     Files -->|Single frame| Render[halfblock.RenderFile]
-    Files -->|Animation play mode| Play[cmd/play.go]
+    Files -->|Sequence playback| Play[cmd/play.go via catiplay]
     Play -->|Pre-load all frames| Frames[Memory Buffer]
     Play -->|Raw TTY Mode| Keyboard[Keyboard Ticker: q/ESC/Ctrl+C]
     Play -->|Ticker Loop| RenderFrame[v1/halfblock.Render]

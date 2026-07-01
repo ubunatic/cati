@@ -1,3 +1,5 @@
+//go:build catiplay
+
 package cmd
 
 import (

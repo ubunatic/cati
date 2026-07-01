@@ -91,7 +91,9 @@ If the terminal is resized, new thumbnail dimensions are calculated, and the cac
 
 ## 3. Double-Buffered Raw Mode
 
-The browser supports opening selected items directly in the full-screen interactive view. Each viewer owns its own terminal mode — the browser restores cooked mode before handing off, and re-enters raw mode after:
+The browser supports opening selected items directly in the full-screen
+interactive view by spawning `catiplay`. The browser restores cooked mode before
+the subprocess handoff, and re-enters raw mode after `catiplay` exits:
 
 ```
   +------------------+
@@ -101,9 +103,9 @@ The browser supports opening selected items directly in the full-screen interact
            ▼ (Item Clicked / Enter Pressed)
   1. term.Restore → cooked mode
   2. Disable mouse tracking & show cursor
-  3. Invoke interactiveWithChan() or interactiveVideo()
-     └─ Both call term.MakeRaw internally (raw mode during viewing)
-     └─ Both restore terminal state via defer on exit
+  3. Spawn catiplay for the selected file
+     └─ catiplay owns raw mode during viewing
+     └─ catiplay restores terminal state on exit
            │
            ▼ (Viewer exits — q/ESC/^C/video-end)
   4. Drain browser's sigs channel (propagate any SIGINT received during viewing)
@@ -117,22 +119,20 @@ The browser supports opening selected items directly in the full-screen interact
   +------------------+
 ```
 
-### Critical invariant: every viewer must call term.MakeRaw itself
+### Critical invariant: the player owns its own terminal mode
 
-The browser calls `term.Restore` (cooked mode) before invoking any viewer, so the shared stdin
-goroutine is in cooked-mode blocking (waits for a full line before `Read` returns). If a viewer
-does **not** call `term.MakeRaw`, single-key presses like `q` and `ESC` appear non-functional
-because they are buffered by the line-discipline and never forwarded to the goroutine.
-
-Both `interactiveWithChan` and `interactiveVideo` call `term.MakeRaw` at their top and restore
-via `defer term.Restore` — this must be maintained for any future viewer added.
+The browser calls `term.Restore` (cooked mode) before spawning `catiplay`, so
+the browser's stdin goroutine is in cooked-mode blocking while the player owns
+the terminal. `catiplay` must enter raw mode itself; otherwise single-key
+presses like `q` and `ESC` are buffered by the line discipline and appear
+non-functional.
 
 ### SIGINT propagation
 
-Go's `signal.Notify` delivers a signal to *all* registered channels. Both `browser()` and each
-viewer register for SIGINT. When the user presses `^C` inside a viewer, the viewer's channel
-fires and it returns — but the browser's `sigs` channel also buffered the signal. To ensure
-`^C` always exits the app, the Enter handler explicitly drains `sigs` after the viewer returns:
+Go's `signal.Notify` delivers a signal to all registered channels. The browser
+keeps draining its signal channel after `catiplay` exits so a `^C` received
+while the browser is waiting for the player still exits the browser instead of
+redrawing the grid:
 
 ```go
 select {

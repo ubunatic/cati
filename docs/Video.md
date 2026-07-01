@@ -95,9 +95,15 @@ The non-blocking inner select gives the ticker exclusive control over frame adva
 
 ## 4. Play-Once vs Loop
 
-`cati -p video.mp4` plays each video in the argument list exactly once, then exits. There is no implicit looping. With multiple files, they play sequentially; `videoIdx` advances without wrap-around.
+`catiplay --play video.mp4` and legacy `cati -p video.mp4` play each video in
+the argument list exactly once, then exit. There is no implicit looping. With
+multiple files, they play sequentially; `videoIdx` advances without wrap-around.
 
-`cati -i video.mp4` (interactive mode) loops by default — when the frame channel closes (`!ok`), `restartStream()` reopens the stream. But if the video ends while paused, the stream is set to `nil` (disabling that select case), the last frame is held, and `videoEnded = true` is set. The next play action (space or play button) calls `restartStream()`.
+`catiplay video.mp4` and legacy `cati -i video.mp4` interactive mode loop by
+default — when the frame channel closes (`!ok`), `restartStream()` reopens the
+stream. But if the video ends while paused, the stream is set to `nil`
+(disabling that select case), the last frame is held, and `videoEnded = true`
+is set. The next play action (space or play button) calls `restartStream()`.
 
 ---
 
@@ -137,7 +143,8 @@ stopAudio(p)     →  p.Stop()               →  Kill + wait
 Video advances → stopAudio(current), openAudio(next)
 ```
 
-Audio is not yet wired into `interactiveVideo` (`cati -i video.mp4`).
+Audio is not yet wired into `interactiveVideo` (`catiplay video.mp4` /
+legacy `cati -i video.mp4`).
 
 ---
 
