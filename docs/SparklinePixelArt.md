@@ -1,4 +1,10 @@
+---
+title: Sparkline Pixel Art
+weight: 60
+---
+
 # Sparkline Pixel Art — Rendering Algorithms & Verification
+
 
 This document captures the architecture, design decisions, optimal-split algorithm, scanning traversal, and testing harness for the **Cati** sparkline rendering mode.
 

@@ -1,4 +1,10 @@
+---
+title: System Documentation
+weight: 10
+---
+
 # Project Cati — System Documentation
+
 
 This document captures the architecture, core design decisions, lessons learned, and utility systems of the **Cati** terminal image rendering utility.
 

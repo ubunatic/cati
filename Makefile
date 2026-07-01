@@ -66,16 +66,25 @@ preflight: ⚙️ build  ## pre-commit checks: vet + verify demo-widths renders 
 
 generate: ⚙️  ## generate static assets/code (e.g., inlined website/index.html pixel colors)
 	go run scripts/generate_pixels.go
+	go run scripts/generate_summary.go
 
 tidy: ⚙️  ## tidy go modules
 	go mod tidy
 
 clean: ⚙️  ## remove build artifacts
 	rm -f $(BINARY)
+	rm -r website/book
 
+BOOK_SERVE=false
+book: ⚙️  ## build the mdbook documentation
+	go run scripts/generate_summary.go
+	@case "$(BOOK_SERVE)" in \
+		(true|1|yes|y) mdbook serve;; \
+	  (*)            mdbook build; echo "Book built. To serve run: make book BOOK_SERVE=true";; \
+	esac
 
-browse: ⚙️  ## open website
-	open website/index.html
+browse: ⚙️ book ## open website
+	open website/index.html 2>/dev/null
 
 edit-baby: ⚙️  ## open baby vid in Kdenlive
 	open assets/baby.kdenlive

@@ -1,4 +1,10 @@
+---
+title: Quad-Block Pixel Art
+weight: 50
+---
+
 # Quad-Block Pixel Art in the Terminal
+
 
 This document captures the design, aspect-ratio math, and implementation decisions
 for the `internal/quadblock` package, which renders images using Unicode quadrant

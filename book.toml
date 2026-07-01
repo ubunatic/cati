@@ -1,0 +1,13 @@
+[book]
+authors = ["Uwe Jugel"]
+language = "en"
+src = "docs"
+title = "Cati - cat for images"
+
+[build]
+build-dir = "website/book"
+
+[output.html]
+# additional-css = ["mermaid.css"]
+additional-js = ["assets/book/mermaid.min.js", "assets/book/mermaid-init.js", "assets/book/back-to-website.js"]
+

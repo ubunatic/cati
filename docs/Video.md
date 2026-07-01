@@ -1,4 +1,11 @@
+---
+title: Video & Audio Pipeline
+parent: System.md
+weight: 2
+---
+
 # Video & Audio Pipeline
+
 
 This document describes the video probing, decoding, streaming, and audio playback pipeline in Cati.
 

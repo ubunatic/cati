@@ -1,4 +1,11 @@
+---
+title: Interactive Grid Browser
+parent: System.md
+weight: 3
+---
+
 # Interactive Image & Video Browser
+
 
 This document describes the design and implementation of the multi-image interactive grid browser in Cati.
 

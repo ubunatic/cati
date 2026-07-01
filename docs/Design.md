@@ -1,4 +1,10 @@
+---
+title: Spec System & Browser Design
+weight: 40
+---
+
 # Cati Browser — Spec System & Browser Design
+
 
 Architecture and design decisions for the spec-driven style/layout system and the interactive grid browser.
 

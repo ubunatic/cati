@@ -1,5 +1,11 @@
+---
+title: Go Conventions
+weight: 90
+---
+
 <!-- claudeconfig:bundled -->
 # Go Conventions
+
 
 ## Language & Deps
 - Modern Go — use current language features (`any`, generics where they reduce noise)

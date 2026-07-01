@@ -1,4 +1,11 @@
+---
+title: Render Pipelines
+parent: System.md
+weight: 1
+---
+
 # Render Pipelines
+
 
 This document details the terminal rendering pipelines in **Cati**. It covers the layout geometry, pixel-to-cell mapping, aspect-ratio corrections, and character selection logic for each rendering mode.
 

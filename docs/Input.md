@@ -1,4 +1,10 @@
+---
+title: Terminal Input System
+weight: 20
+---
+
 # Cati — Spec-Driven Terminal Input System
+
 
 Architecture, design decisions, and pitfalls for the `internal/input` package and `spec/input.yaml`.
 

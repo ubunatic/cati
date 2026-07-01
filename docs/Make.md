@@ -1,5 +1,11 @@
+---
+title: Make Conventions
+weight: 100
+---
+
 <!-- claudeconfig:bundled -->
 # Make conventions
+
 
 Default language assumed: Go.
 Apply to other languages accordingly.

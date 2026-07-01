@@ -1,4 +1,10 @@
+---
+title: Rendering Bug & Golden Playbook
+weight: 80
+---
+
 # Rendering Bug & Golden-Change Playbook
+
 
 How we diagnose visual/geometry rendering bugs and change golden images **safely**.
 

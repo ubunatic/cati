@@ -1,4 +1,10 @@
+---
+title: Render Experiment Lessons
+weight: 70
+---
+
 # Render Experiment Lessons
+
 
 June 2026 cleanup: `xs` / `sextant/2x3` is the only new shipped render
 algorithm. The experimental sextant search aliases (`xg`, `xb`) and geomshape

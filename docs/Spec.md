@@ -1,4 +1,10 @@
+---
+title: Spec System Reference
+weight: 30
+---
+
 # Cati Spec System — Authoritative Reference
+
 
 The `spec/` directory is **application code**, not configuration. Treat it with the same rigour as Go source: every change must be intentional, every object must be used, and the spec must always be readable by the running app.
 

@@ -8,3 +8,16 @@ path = ["**"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Uwe Jugel"
 SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = ["assets/book/mermaid.min.js"]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Mermaid Contributors"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = ["assets/book/mermaid-init.js"]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 mdBook Contributors"
+SPDX-License-Identifier = "MPL-2.0"
+
