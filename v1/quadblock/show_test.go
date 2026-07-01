@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/v1/halfblock"
+	"ubunatic.com/cati/v1/halfblock"
 )
 
 // ── side-by-side rendering helpers ───────────────────────────────────────────

@@ -12,11 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/v1/halfblock"
-	"codeberg.org/ubunatic/cati/v1/quadblock"
-	"codeberg.org/ubunatic/cati/v1/sextant"
-	"codeberg.org/ubunatic/cati/v1/sparkline"
-	"codeberg.org/ubunatic/cati/v1/sparkline/testhelper"
+	"ubunatic.com/cati/v1/halfblock"
+	"ubunatic.com/cati/v1/quadblock"
+	"ubunatic.com/cati/v1/sextant"
+	"ubunatic.com/cati/v1/sparkline"
+	"ubunatic.com/cati/v1/sparkline/testhelper"
 )
 
 var updateGolden = flag.Bool("update", false, "overwrite golden render images in testdata")

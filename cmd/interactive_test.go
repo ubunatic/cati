@@ -9,14 +9,14 @@ import (
 	"math"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/internal/imgutil"
-	"codeberg.org/ubunatic/cati/internal/input"
-	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/v1/quadblock"
-	"codeberg.org/ubunatic/cati/v1/sextant"
-	"codeberg.org/ubunatic/cati/v1/sparkline"
-	"codeberg.org/ubunatic/cati/internal/viewgeom"
-	spec "codeberg.org/ubunatic/cati/spec"
+	"ubunatic.com/cati/internal/imgutil"
+	"ubunatic.com/cati/internal/input"
+	"ubunatic.com/cati/internal/metrics"
+	"ubunatic.com/cati/v1/quadblock"
+	"ubunatic.com/cati/v1/sextant"
+	"ubunatic.com/cati/v1/sparkline"
+	"ubunatic.com/cati/internal/viewgeom"
+	spec "ubunatic.com/cati/spec"
 )
 
 // ── interactive (error paths) ─────────────────────────────────────────────────

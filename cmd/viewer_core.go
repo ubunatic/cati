@@ -6,9 +6,9 @@ import (
 	"io"
 	"math"
 
-	"codeberg.org/ubunatic/cati/internal/input"
-	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/internal/viewgeom"
+	"ubunatic.com/cati/internal/input"
+	"ubunatic.com/cati/internal/metrics"
+	"ubunatic.com/cati/internal/viewgeom"
 )
 
 // viewerCore holds the shared state and logic for image and video viewers.

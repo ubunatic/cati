@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"codeberg.org/ubunatic/cati/v1/halfblock"
+	"ubunatic.com/cati/v1/halfblock"
 	"golang.org/x/term"
 
-	catiterm "codeberg.org/ubunatic/cati/v1/term")
+	catiterm "ubunatic.com/cati/v1/term")
 
 // play is the entry point for --play mode.
 // It dispatches to playImages (pre-load loop) or playVideos (streaming)

@@ -7,9 +7,9 @@ import (
 	"sort"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/v1/halfblock"
-	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/v1/quadblock"
+	"ubunatic.com/cati/v1/halfblock"
+	"ubunatic.com/cati/internal/metrics"
+	"ubunatic.com/cati/v1/quadblock"
 )
 
 // TestRenderQuality loads the sample images, computes SSIM for every render

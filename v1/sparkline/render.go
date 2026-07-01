@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"codeberg.org/ubunatic/cati/internal/imgutil"
-	"codeberg.org/ubunatic/cati/v1/core"
+	"ubunatic.com/cati/internal/imgutil"
+	"ubunatic.com/cati/v1/core"
 )
 
 type Options struct {

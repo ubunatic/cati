@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"codeberg.org/ubunatic/cati/v1/halfblock"
+	"ubunatic.com/cati/v1/halfblock"
 	"github.com/spf13/cobra"
 
-	catiterm "codeberg.org/ubunatic/cati/v1/term")
+	catiterm "ubunatic.com/cati/v1/term")
 
 // imageExts is the set of still-image file extensions cati recognises.
 var imageExts = map[string]bool{

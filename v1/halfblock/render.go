@@ -19,7 +19,7 @@ import (
 	"strings"
 	"sync"
 
-	"codeberg.org/ubunatic/cati/v1/core"
+	"ubunatic.com/cati/v1/core"
 )
 
 // ── ANSI helpers ─────────────────────────────────────────────────────────────

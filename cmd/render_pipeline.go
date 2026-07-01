@@ -6,11 +6,11 @@ import (
 	"math"
 	"strings"
 
-	"codeberg.org/ubunatic/cati/internal/imgutil"
-	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/v1/quadblock"
+	"ubunatic.com/cati/internal/imgutil"
+	"ubunatic.com/cati/internal/metrics"
+	"ubunatic.com/cati/v1/quadblock"
 
-	catiterm "codeberg.org/ubunatic/cati/v1/term")
+	catiterm "ubunatic.com/cati/v1/term")
 
 type prescaleMode int
 

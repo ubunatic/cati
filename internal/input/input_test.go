@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/internal/input"
+	"ubunatic.com/cati/internal/input"
 )
 
 func TestDefaultSpec(t *testing.T) {

@@ -10,9 +10,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"codeberg.org/ubunatic/cati/v1/halfblock"
-	"codeberg.org/ubunatic/cati/internal/input"
-	spec "codeberg.org/ubunatic/cati/spec"
+	"ubunatic.com/cati/v1/halfblock"
+	"ubunatic.com/cati/internal/input"
+	spec "ubunatic.com/cati/spec"
 	"golang.org/x/term"
 )
 

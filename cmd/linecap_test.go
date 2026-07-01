@@ -9,7 +9,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"codeberg.org/ubunatic/cati/v1/halfblock"
+	"ubunatic.com/cati/v1/halfblock"
 )
 
 // lineCapWriter wraps an io.Writer and records the maximum visible column

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/internal/input"
-	spec "codeberg.org/ubunatic/cati/spec"
+	"ubunatic.com/cati/internal/input"
+	spec "ubunatic.com/cati/spec"
 )
 
 // TestMain chdirs to the project root so testdata/ is reachable.

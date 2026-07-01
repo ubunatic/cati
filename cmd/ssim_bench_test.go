@@ -7,12 +7,12 @@ import (
 	"sort"
 	"testing"
 
-	"codeberg.org/ubunatic/cati/v1/halfblock"
-	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/internal/pixelart"
-	"codeberg.org/ubunatic/cati/v1/quadblock"
-	"codeberg.org/ubunatic/cati/v1/sextant"
-	"codeberg.org/ubunatic/cati/v1/sparkline"
+	"ubunatic.com/cati/v1/halfblock"
+	"ubunatic.com/cati/internal/metrics"
+	"ubunatic.com/cati/internal/pixelart"
+	"ubunatic.com/cati/v1/quadblock"
+	"ubunatic.com/cati/v1/sextant"
+	"ubunatic.com/cati/v1/sparkline"
 )
 
 // findModRoot walks up from the current working directory until it finds go.mod.

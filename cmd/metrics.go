@@ -3,10 +3,10 @@ package cmd
 import (
 	"image"
 
-	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/v1/quadblock"
-	"codeberg.org/ubunatic/cati/v1/sextant"
-	"codeberg.org/ubunatic/cati/v1/sparkline"
+	"ubunatic.com/cati/internal/metrics"
+	"ubunatic.com/cati/v1/quadblock"
+	"ubunatic.com/cati/v1/sextant"
+	"ubunatic.com/cati/v1/sparkline"
 )
 
 // computeQuality returns all perceptual quality metrics for a rendered frame.

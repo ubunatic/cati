@@ -27,8 +27,8 @@ import (
 	"image/color"
 	"os"
 
-	"codeberg.org/ubunatic/cati/v1/halfblock"
-	"codeberg.org/ubunatic/cati/v1/quadblock"
+	"ubunatic.com/cati/v1/halfblock"
+	"ubunatic.com/cati/v1/quadblock"
 )
 
 func main() {

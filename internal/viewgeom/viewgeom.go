@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"codeberg.org/ubunatic/cati/internal/imgutil"
+	"ubunatic.com/cati/internal/imgutil"
 )
 
 // Spec describes the viewport pixel footprint for one terminal cell.

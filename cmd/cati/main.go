@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"codeberg.org/ubunatic/cati/cmd"
+	"ubunatic.com/cati/cmd"
 )
 
 func main() {

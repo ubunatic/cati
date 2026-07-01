@@ -14,18 +14,18 @@ import (
 	"syscall"
 	"time"
 
-	"codeberg.org/ubunatic/cati/internal/audio"
-	"codeberg.org/ubunatic/cati/v1/halfblock"
-	"codeberg.org/ubunatic/cati/internal/input"
-	"codeberg.org/ubunatic/cati/internal/metrics"
-	"codeberg.org/ubunatic/cati/v1/quadblock"
-	"codeberg.org/ubunatic/cati/v1/sextant"
-	"codeberg.org/ubunatic/cati/v1/sparkline"
-	"codeberg.org/ubunatic/cati/internal/viewgeom"
-	spec "codeberg.org/ubunatic/cati/spec"
+	"ubunatic.com/cati/internal/audio"
+	"ubunatic.com/cati/v1/halfblock"
+	"ubunatic.com/cati/internal/input"
+	"ubunatic.com/cati/internal/metrics"
+	"ubunatic.com/cati/v1/quadblock"
+	"ubunatic.com/cati/v1/sextant"
+	"ubunatic.com/cati/v1/sparkline"
+	"ubunatic.com/cati/internal/viewgeom"
+	spec "ubunatic.com/cati/spec"
 	"golang.org/x/term"
 
-	catiterm "codeberg.org/ubunatic/cati/v1/term")
+	catiterm "ubunatic.com/cati/v1/term")
 
 // ── renderMode ────────────────────────────────────────────────────────────────
 
