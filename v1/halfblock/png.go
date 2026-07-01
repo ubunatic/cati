@@ -8,11 +8,15 @@ import (
 	"os"
 )
 
-// LoadImage opens a still image (PNG/JPEG) or, for video files, extracts
-// and returns the first frame using ffmpeg.
+// LoadImage opens a still image (PNG/JPEG), rasterizes an SVG using
+// rsvg-convert, or, for video files, extracts and returns the first frame
+// using ffmpeg.
 func LoadImage(path string) (image.Image, error) {
 	if IsVideo(path) {
 		return LoadVideoFrame(path)
+	}
+	if IsSVG(path) {
+		return RasterizeSVG(path)
 	}
 	f, err := os.Open(path)
 	if err != nil {

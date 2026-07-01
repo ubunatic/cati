@@ -9,16 +9,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ubunatic.com/cati/v1/halfblock"
 	"github.com/spf13/cobra"
+	"ubunatic.com/cati/v1/halfblock"
 
-	catiterm "ubunatic.com/cati/v1/term")
+	catiterm "ubunatic.com/cati/v1/term"
+)
 
 // imageExts is the set of still-image file extensions cati recognises.
 var imageExts = map[string]bool{
 	".png":  true,
 	".jpg":  true,
 	".jpeg": true,
+	".svg":  true,
 }
 
 // New returns the root Cobra command for cati.

@@ -117,8 +117,13 @@ func loadMediaMeta(path string, isVideo bool) MediaMeta {
 	m.Modified = info.ModTime().Format("2006-01-02")
 
 	if !isVideo {
-		// Fast header-only decode to get source dimensions.
-		if f, err := os.Open(path); err == nil {
+		if halfblock.IsSVG(path) {
+			if w, h, err := halfblock.ProbeSVGDimensions(path); err == nil {
+				m.SrcW = fmt.Sprintf("%d", w)
+				m.SrcH = fmt.Sprintf("%d", h)
+			}
+		} else if f, err := os.Open(path); err == nil {
+			// Fast header-only decode to get source dimensions.
 			if cfg, _, err := image.DecodeConfig(f); err == nil {
 				m.SrcW = fmt.Sprintf("%d", cfg.Width)
 				m.SrcH = fmt.Sprintf("%d", cfg.Height)

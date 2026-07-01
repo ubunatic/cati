@@ -103,8 +103,11 @@ make clean    # remove ./cati binary
 |--------|-----------|
 | PNG    | `.png`    |
 | JPEG   | `.jpg`, `.jpeg` |
+| SVG    | `.svg`    |
 
-Support for more formats (GIF, WebP, …) can be added by importing the relevant `image/*` decoder package.
+Support for more raster formats (GIF, WebP, …) can be added by importing the
+relevant `image/*` decoder package. SVG is rasterized via `rsvg-convert`
+(librsvg), which must be installed and on `$PATH`.
 
 ---
 
