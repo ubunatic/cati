@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>cati — cat for images</title>
-  <meta name="description" content="cati renders PNG and JPEG images in your terminal using Unicode half-block characters and 24-bit ANSI true-color. Like cat, but for images." />
+  <meta name="description" content="cati renders PNG, JPEG, GIF, WebP, and SVG images in your terminal using Unicode block characters and 24-bit ANSI true-color. Like cat, but for images." />
   <link rel="icon" type="image/png" href="cati_0001.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -108,36 +108,54 @@
     .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
     .btn-ghost:hover { border-color: var(--muted); }
 
-    /* ── Terminal window ───────────────────────────────────────── */
-    .terminal-wrap {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); overflow: hidden;
+    /* ── Demo reel ─────────────────────────────────────────────── */
+    .reel-wrap {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
       box-shadow: 0 24px 64px rgba(0,0,0,.55);
     }
-    .terminal-bar {
-      display: flex; align-items: center; gap: .5rem;
-      padding: .6rem 1rem; background: var(--bg3);
+    .reel-bar {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .55rem .85rem;
+      background: var(--bg3);
       border-bottom: 1px solid var(--border);
     }
-    .dot { width: 12px; height: 12px; border-radius: 50%; }
-    .dot-r { background: #ff5f57; } .dot-y { background: #ffbd2e; } .dot-g { background: #28c840; }
-    .term-title { flex: 1; text-align: center; font-family: var(--font-mono); font-size: .75rem; color: var(--muted); }
-    .terminal-body {
-      padding: 1rem 1.25rem;
-      font-family: var(--font-mono); font-size: .85rem; line-height: 1.5;
+    .reel-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
     }
-    .cmd-line { color: var(--muted); margin-bottom: .6rem; }
+    .reel-dot-r { background: #ff5f57; }
+    .reel-dot-y { background: #ffbd2e; }
+    .reel-dot-g { background: #28c840; }
+    .reel-title {
+      flex: 1;
+      text-align: center;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: .74rem;
+    }
+    .reel-caption {
+      padding: .7rem 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: .8rem;
+      background: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0));
+    }
+    .cmd-line { color: var(--muted); }
     .cmd-line .prompt { color: var(--accent3); }
     .cmd-line .cmd   { color: var(--text); }
     .cmd-line .flag  { color: var(--accent2); }
     .cmd-line .val   { color: var(--accent); }
 
-    /* ── Terminal video ─────────────────────────────────────────── */
-    .term-video {
-      display: block; width: 50%; height: auto;
-      image-rendering: pixelated;
-      /* crisp pixels, no smoothing */
-      image-rendering: crisp-edges;
+    .reel-video {
+      display: block;
+      width: 100%;
+      height: auto;
     }
 
     /* ── Features ──────────────────────────────────────────────── */
@@ -312,6 +330,19 @@
       font-size: .83rem;
       max-width: 22rem;
     }
+    .spark-notes {
+      display: grid;
+      gap: .28rem;
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.45;
+      max-width: 24rem;
+    }
+    .spark-notes strong {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: .76rem;
+    }
     .spark-meta {
       flex: none;
       text-align: right;
@@ -359,6 +390,39 @@
     pre.code .f { color: var(--accent2); }
     pre.code .v { color: var(--accent); }
     pre.code .p { color: var(--accent3); }
+    pre.code .kw { color: var(--accent2); font-weight: 600; }
+    pre.code .fn { color: var(--accent); }
+    pre.code .ty { color: var(--accent3); }
+    pre.code .st { color: #f6c177; }
+    pre.code .num { color: #a3e635; }
+
+    /* ── Status ─────────────────────────────────────────────────── */
+    .status { padding: 5rem 0; }
+    .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem; margin-top: 2rem; }
+    .status-card {
+      background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.01));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.35rem;
+    }
+    .status-card h3 {
+      display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+      font-size: 1rem; font-weight: 700; margin-bottom: .65rem;
+      font-family: var(--font-mono);
+    }
+    .status-card h3 code { color: var(--accent); font-size: .95rem; }
+    .status-pill {
+      flex: none;
+      color: var(--accent3);
+      border: 1px solid rgba(16,185,129,.28);
+      background: rgba(16,185,129,.08);
+      border-radius: 99px;
+      padding: .15rem .55rem;
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .status-card p { color: var(--muted); font-size: .88rem; }
 
     /* ── Install ────────────────────────────────────────────────── */
     .install { padding: 5rem 0; }
@@ -386,6 +450,7 @@
     </a>
     <ul class="nav-links">
       <li><a href="#features">Features</a></li>
+      <li><a href="#status">Status</a></li>
       <li><a href="#how">How it works</a></li>
       <li><a href="#usage">Usage</a></li>
       <li><a href="#install">Install</a></li>
@@ -401,9 +466,9 @@
     <div class="hero-eyebrow"><span class="tag">terminal image viewer</span></div>
     <h1><em>cat</em> for<br>images.</h1>
     <p class="hero-desc">
-      cati renders PNG and JPEG files in your terminal using Unicode
-      half-block characters and 24-bit ANSI true-color — no external
-      dependencies, no image protocol required.
+      cati is the focused CLI for rendering image files and directories in your
+      terminal. The media player and browser now live in separate binaries, so
+      the core renderer and public Go library can stay small and reliable.
     </p>
     <div class="btn-row">
       <a class="btn btn-primary" href="#install">Get started</a>
@@ -412,25 +477,20 @@
   </div>
 
   <div>
-    <div class="terminal-wrap">
-      <div class="terminal-bar">
-        <div class="dot dot-r"></div>
-        <div class="dot dot-y"></div>
-        <div class="dot dot-g"></div>
-        <div class="term-title">cati — bash</div>
+    <div class="reel-wrap">
+      <div class="reel-bar" aria-hidden="true">
+        <span class="reel-dot reel-dot-r"></span>
+        <span class="reel-dot reel-dot-y"></span>
+        <span class="reel-dot reel-dot-g"></span>
+        <span class="reel-title">cati demo</span>
       </div>
-      <div class="terminal-body">
-        <div class="cmd-line">
-          <span class="prompt">$</span>
-          <span class="cmd"> cati </span><span class="flag">--play</span>
-          <span class="flag"> --fps</span> <span class="val">2</span>
-          <span class="cmd"> assets/</span>
-        </div>
-        <!-- Real terminal recording of cati --play assets/ -->
-        <video id="term-video" class="term-video" autoplay loop muted playsinline
-               aria-label="Terminal recording of cati animating the logo">
-          <source src="cati.webm" type="video/webm" />
-        </video>
+      <!-- Recorded from assets/reels/cati-demo.reel -->
+      <video id="hero-reel" class="reel-video" autoplay loop muted playsinline
+             aria-label="Recorded cati demo reel in a terminal">
+        <source src="../assets/reels/webm/cati-demo.webm" type="video/webm" />
+      </video>
+      <div class="reel-caption">
+        Recorded demo: static SVG rendering, spark/best mode, image sequences, and the player forwarder.
       </div>
     </div>
   </div>
@@ -443,7 +503,7 @@
     <div class="section-header">
       <span class="tag">capabilities</span>
       <h2>Everything you need to view images in the terminal</h2>
-      <p>No framebuffer, no image protocol, no root access.</p>
+      <p>Core rendering first. Optional media and browser tools when you need them.</p>
     </div>
     <div class="feature-grid">
       <div class="feature-card">
@@ -453,18 +513,18 @@
       </div>
       <div class="feature-card">
         <div class="feature-icon">📹</div>
-        <h3>Video support</h3>
-        <p>Stream videos (mp4, webm, mkv, mov, avi) inside the terminal. Native frame rate detection automatically matches the video's FPS.</p>
+        <h3>Separate media player</h3>
+        <p><code>catiplay</code> handles videos and image sequences. <code>cati play</code> remains as a compatibility forwarder.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">🔍</div>
-        <h3>Interactive viewer</h3>
-        <p>Interactive single-image mode (<code>-i</code>) with mouse-wheel zoom, click & drag panning, arrow-key navigation, and copy to clipboard.</p>
+        <h3>SVG and raster inputs</h3>
+        <p>Render PNG, JPEG, GIF, WebP, and SVG. SVGs are rasterized at the target display size with browser-like absolute CSS units.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">🖼️</div>
-        <h3>Image browser</h3>
-        <p>Run <code>-i</code> on directories or multiple paths to launch a grid preview, page navigation, bottom menu, and full-screen detail views.</p>
+        <h3>Separate file browser</h3>
+        <p><code>catibrowse</code> previews directories and opens selected assets through <code>catiplay</code>. <code>cati browse</code> forwards to it.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon">⟷</div>
@@ -473,9 +533,34 @@
       </div>
       <div class="feature-card">
         <div class="feature-icon">⌨</div>
-        <h3>Standard keys</h3>
-        <p>Support for PgUp/PgDn, mouse clicks, arrow navigation, and a quick <kbd>q</kbd> or <kbd>ESC</kbd> to quit and clean up the terminal.</p>
+        <h3>Public Go library</h3>
+        <p>Use the renderer directly from Go through the versioned <code>v1</code> packages for terminal UIs and tooling.</p>
       </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Current status ───────────────────────────────────────────── -->
+<section class="status" id="status">
+  <div class="container">
+    <div class="section-header">
+      <span class="tag">current status</span>
+      <h2>One library, three focused commands</h2>
+      <p>The split keeps core rendering work from being slowed down by optional TUI features.</p>
+    </div>
+    <div class="status-grid">
+      <article class="status-card">
+        <h3><code>cati</code><span class="status-pill">primary</span></h3>
+        <p>Simple CLI for rendering single files, multiple files, and directories. This is the main target for algorithm tuning, resilience, integration tests, and preflight checks.</p>
+      </article>
+      <article class="status-card">
+        <h3><code>catiplay</code><span class="status-pill">optional</span></h3>
+        <p>Terminal media player for videos and image sequences. It is built and installed, but its heavier tests are guarded behind an explicit Go build tag.</p>
+      </article>
+      <article class="status-card">
+        <h3><code>catibrowse</code><span class="status-pill">demo</span></h3>
+        <p>Directory browser with previews. It demonstrates what can be built on top of the public library and launches <code>catiplay</code> for selected assets.</p>
+      </article>
     </div>
   </div>
 </section>
@@ -549,10 +634,14 @@
         </div>
         <div class="spark-footer">
           <div>
-            <h3>Example 001</h3>
-            <p>Source image and three renderer outputs stacked from least to most cell-efficient.</p>
+            <h3>Dense PCB detail</h3>
+            <div class="spark-notes">
+              <span><strong>half</strong> preserves the white silkscreen speckles.</span>
+              <span><strong>quad</strong> sharpens pad edges, but can look striped.</span>
+              <span><strong>spark</strong> groups tiny parts into cleaner board shapes.</span>
+            </div>
           </div>
-          <div class="spark-meta">80ch demo set<br>all from the same input</div>
+          <div class="spark-meta">80ch crop<br>high detail</div>
         </div>
       </article>
 
@@ -566,10 +655,14 @@
         </div>
         <div class="spark-footer">
           <div>
-            <h3>Example 002</h3>
-            <p>The spark layer keeps the composition legible while spending fewer cells on the same crop.</p>
+            <h3>Soft portrait edges</h3>
+            <div class="spark-notes">
+              <span><strong>half</strong> keeps face and hand tones more granular.</span>
+              <span><strong>quad</strong> improves thin trunks and cap outline.</span>
+              <span><strong>spark</strong> smooths sky and skin into broad readable areas.</span>
+            </div>
           </div>
-          <div class="spark-meta">50ch demo set<br>same source, different glyphs</div>
+          <div class="spark-meta">50ch crop<br>soft gradients</div>
         </div>
       </article>
 
@@ -583,10 +676,14 @@
         </div>
         <div class="spark-footer">
           <div>
-            <h3>Example 003</h3>
-            <p>The same source makes a clean side-by-side for how the renderer trades detail for density.</p>
+            <h3>Gloss and silhouettes</h3>
+            <div class="spark-notes">
+              <span><strong>half</strong> keeps noisy fabric and mask highlights.</span>
+              <span><strong>quad</strong> gives sabers and helmet edges firmer diagonals.</span>
+              <span><strong>spark</strong> favors bold black helmet and pink jacket masses.</span>
+            </div>
           </div>
-          <div class="spark-meta">50ch demo set<br>overlay view</div>
+          <div class="spark-meta">50ch crop<br>hard contrast</div>
         </div>
       </article>
     </div>
@@ -602,29 +699,29 @@
     </div>
     <div class="usage-grid">
       <div class="usage-card">
-        <div class="usage-card-head">Show an image or video</div>
+        <div class="usage-card-head">Show files or directories</div>
         <pre class="code"><span class="p">$</span> cati photo.png
-<span class="p">$</span> cati video.mp4</pre>
+<span class="p">$</span> cati logo.svg
+<span class="p">$</span> cati screenshots/</pre>
       </div>
       <div class="usage-card">
-        <div class="usage-card-head">Interactive mode & browser</div>
-        <pre class="code"><span class="p">$</span> cati <span class="f">-i</span> photo.png
-<span class="p">$</span> cati <span class="f">-i</span> folder/
-<span class="p">$</span> cati <span class="f">-i</span> file1.png file2.jpg</pre>
+        <div class="usage-card-head">Browse directories</div>
+        <pre class="code"><span class="p">$</span> catibrowse folder/
+<span class="p">$</span> cati browse folder/
+<span class="p">$</span> cati browse file1.png file2.jpg</pre>
       </div>
       <div class="usage-card">
-        <div class="usage-card-head">Animate / Play sequence</div>
-        <pre class="code"><span class="p">$</span> cati <span class="f">--play</span> frames/
-<span class="p">$</span> cati <span class="f">-p --fps</span> <span class="v">30</span> video.webm
-<span class="p">$</span> cati <span class="f">-p</span> frames_*.png</pre>
+        <div class="usage-card-head">Play media</div>
+        <pre class="code"><span class="p">$</span> catiplay frames/
+<span class="p">$</span> catiplay <span class="f">--fps</span> <span class="v">30</span> video.webm
+<span class="p">$</span> cati play <span class="f">--fps</span> <span class="v">4</span> assets/</pre>
       </div>
       <div class="usage-card">
-        <div class="usage-card-head">All flags</div>
-        <pre class="code"><span class="f">--ansi</span>            24-bit true-color <span class="c">(default)</span>
-<span class="f">--play</span>        <span class="f">-p</span>  animate in a loop
-<span class="f">--interactive</span> <span class="f">-i</span>  interactive viewer/browser
-<span class="f">--fps</span>         <span class="v">N</span>   frames/sec <span class="c">(0=auto for video)</span>
-<span class="f">-r</span>, <span class="f">--recursive</span>   recurse subdirectories</pre>
+        <div class="usage-card-head">Compatibility forwards</div>
+        <pre class="code"><span class="p">$</span> cati play video.webm
+<span class="p">$</span> cati browse folder/
+<span class="p">$</span> cati <span class="f">--play</span> assets/   <span class="c"># legacy</span>
+<span class="p">$</span> cati <span class="f">-i</span> folder/      <span class="c"># legacy</span></pre>
       </div>
     </div>
   </div>
@@ -636,16 +733,17 @@
     <div class="section-header">
       <span class="tag">install</span>
       <h2>Get started in seconds</h2>
-      <p>Requires Go 1.21+</p>
+      <p>Requires Go 1.25+</p>
     </div>
     <div class="install-box">
-      <pre class="code"><span class="c"># clone and install</span>
-<span class="p">$</span> git clone https://codeberg.org/ubunatic/cati
-<span class="p">$</span> cd cati && make install
+      <pre class="code"><span class="c"># install the commands</span>
+<span class="p">$</span> go install ubunatic.com/cati/cmd/cati@latest
+<span class="p">$</span> go install ubunatic.com/cati/cmd/catiplay@latest
+<span class="p">$</span> go install ubunatic.com/cati/cmd/catibrowse@latest
 
-<span class="c"># or build locally and try the logo demo</span>
-<span class="p">$</span> make build
-<span class="p">$</span> ./cati <span class="f">--play --fps</span> <span class="v">4</span> assets/</pre>
+<span class="c"># try it</span>
+<span class="p">$</span> cati logo.svg
+<span class="p">$</span> catiplay <span class="f">--fps</span> <span class="v">4</span> assets/</pre>
     </div>
   </div>
 </section>
@@ -660,58 +758,58 @@
     </div>
     <div class="install-box" style="max-width: 800px;">
       <!-- GO_EXAMPLE_START -->
-<pre class="code"><code>package main
+<pre class="code"><code><span class="kw">package</span> main
 
-import (
-	&quot;fmt&quot;
-	&quot;image&quot;
-	&quot;image/color&quot;
-	&quot;os&quot;
+<span class="kw">import</span> (
+	<span class="st">&quot;fmt&quot;</span>
+	<span class="st">&quot;image&quot;</span>
+	<span class="st">&quot;image/color&quot;</span>
+	<span class="st">&quot;os&quot;</span>
 
-	&quot;codeberg.org/ubunatic/cati/v1/halfblock&quot;
-	&quot;codeberg.org/ubunatic/cati/v1/quadblock&quot;
+	<span class="st">&quot;ubunatic.com/cati/v1/halfblock&quot;</span>
+	<span class="st">&quot;ubunatic.com/cati/v1/quadblock&quot;</span>
 )
 
-func main() {
-	// Create a simple test image (a diagonal red line on blue background)
-	img := image.NewRGBA(image.Rect(0, 0, 40, 40))
-	for y := 0; y &lt; 40; y++ {
-		for x := 0; x &lt; 40; x++ {
-			if x == y {
-				img.Set(x, y, color.RGBA{R: 255, G: 0, B: 0, A: 255})
-			} else {
-				img.Set(x, y, color.RGBA{R: 0, G: 0, B: 255, A: 255})
+<span class="kw">func</span> <span class="fn">main</span>() {
+	<span class="c">// Create a simple test image (a diagonal red line on blue background)</span>
+	img := image.<span class="fn">NewRGBA</span>(image.<span class="fn">Rect</span>(<span class="num">0</span>, <span class="num">0</span>, <span class="num">40</span>, <span class="num">40</span>))
+	<span class="kw">for</span> y := <span class="num">0</span>; y &lt; <span class="num">40</span>; y++ {
+		<span class="kw">for</span> x := <span class="num">0</span>; x &lt; <span class="num">40</span>; x++ {
+			<span class="kw">if</span> x == y {
+				img.<span class="fn">Set</span>(x, y, color.<span class="ty">RGBA</span>{R: <span class="num">255</span>, G: <span class="num">0</span>, B: <span class="num">0</span>, A: <span class="num">255</span>})
+			} <span class="kw">else</span> {
+				img.<span class="fn">Set</span>(x, y, color.<span class="ty">RGBA</span>{R: <span class="num">0</span>, G: <span class="num">0</span>, B: <span class="num">255</span>, A: <span class="num">255</span>})
 			}
 		}
 	}
 
-	fmt.Println(&quot;--- Example 1: Rendering ANSI directly to Stdout ---&quot;)
-	// Render using the halfblock algorithm at 20 terminal columns width.
-	// Width is mandatory (20). Height is unconstrained (Opts.Rows = 0).
-	err := halfblock.Render(os.Stdout, img, 20, halfblock.Options{})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, &quot;Error rendering: %v\n&quot;, err)
-		os.Exit(1)
+	fmt.<span class="fn">Println</span>(<span class="st">&quot;--- Example 1: Rendering ANSI directly to Stdout ---&quot;</span>)
+	<span class="c">// Render using the halfblock algorithm at 20 terminal columns width.</span>
+	<span class="c">// Width is mandatory (20). Height is unconstrained (Opts.Rows = 0).</span>
+	err := halfblock.<span class="fn">Render</span>(os.Stdout, img, <span class="num">20</span>, halfblock.<span class="ty">Options</span>{})
+	<span class="kw">if</span> err != <span class="kw">nil</span> {
+		fmt.<span class="fn">Fprintf</span>(os.Stderr, <span class="st">&quot;Error rendering: %v\n&quot;</span>, err)
+		os.<span class="fn">Exit</span>(<span class="num">1</span>)
 	}
 
-	fmt.Println(&quot;\n--- Example 2: Rendering to a core.Grid (for TUIs) ---&quot;)
-	// Render using the quadblock algorithm with edge-snap enabled.
+	fmt.<span class="fn">Println</span>(<span class="st">&quot;\n--- Example 2: Rendering to a core.Grid (for TUIs) ---&quot;</span>)
+	<span class="c">// Render using the quadblock algorithm with edge-snap enabled.</span>
 	opts := quadblock.Options{
-		EdgeSnap: true,
+		EdgeSnap: <span class="kw">true</span>,
 	}
-	grid, err := quadblock.RenderToGrid(img, 20, opts)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, &quot;Error rendering to grid: %v\n&quot;, err)
-		os.Exit(1)
+	grid, err := quadblock.<span class="fn">RenderToGrid</span>(img, <span class="num">20</span>, opts)
+	<span class="kw">if</span> err != <span class="kw">nil</span> {
+		fmt.<span class="fn">Fprintf</span>(os.Stderr, <span class="st">&quot;Error rendering to grid: %v\n&quot;</span>, err)
+		os.<span class="fn">Exit</span>(<span class="num">1</span>)
 	}
 
-	// Print out the grid cell runes (ignoring colors for simplicity in stdout)
-	for y, row := range grid.Cells {
-		fmt.Printf(&quot;Row %02d: &quot;, y)
-		for _, cell := range row {
-			fmt.Printf(&quot;%c&quot;, cell.Ch)
+	<span class="c">// Print out the grid cell runes (ignoring colors for simplicity in stdout)</span>
+	<span class="kw">for</span> y, row := <span class="kw">range</span> grid.Cells {
+		fmt.<span class="fn">Printf</span>(<span class="st">&quot;Row %02d: &quot;</span>, y)
+		<span class="kw">for</span> _, cell := <span class="kw">range</span> row {
+			fmt.<span class="fn">Printf</span>(<span class="st">&quot;%c&quot;</span>, cell.Ch)
 		}
-		fmt.Println()
+		fmt.<span class="fn">Println</span>()
 	}
 }</code></pre>
 <!-- GO_EXAMPLE_END -->
@@ -734,14 +832,6 @@ func main() {
 <script>
 (function() {
   'use strict';
-
-  // ── Slow down the terminal video to match --fps 2 feel ─────────
-  const vid = document.getElementById('term-video');
-  if (vid) {
-    vid.playbackRate = 0.5;
-    // Re-apply after src loads (some browsers reset it)
-    vid.addEventListener('canplay', () => { vid.playbackRate = 0.5; });
-  }
 
   // ── Pixel grid: render cati_0001.png as raw pixels ─────────────
   const grid   = document.getElementById('pixel-grid');

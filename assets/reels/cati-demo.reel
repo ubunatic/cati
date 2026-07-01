@@ -1,0 +1,37 @@
+REEL main
+  mode = tui
+  output = assets/reels/webm/cati-demo.webm
+  fps = 15
+  scene_width = 792
+  scene_height = 598
+  no_border = true
+  # subtitles = none
+  pause = 0.5s
+  show_control_keys = true
+
+  T "cati assets/example.svg"
+  P 1s
+  K <cr>
+  P 5s
+
+  K <C-l>
+  K <up>
+  T " --mode=spark/best"
+  P 2s
+  K <cr>
+  P 10s
+
+  K <C-l>
+  T "cati assets/cati_000*.png --zoom=1"
+  P 2s
+  K <cr>
+  P 5s
+
+  K <C-l>
+  T "cati play assets/cati_000*.png -w=48"
+  P 2s
+  K <cr>
+  P 5s
+  K <q>
+
+  X
