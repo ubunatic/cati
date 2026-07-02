@@ -169,6 +169,19 @@ producing output. Playback and static CLI paths call the checked pipeline
 directly; test-only convenience callers panic on the same invariant so
 regressions cannot pass unnoticed.
 
+**Final terminal-cell cropping.** The static renderer and playback paths accept
+`--crop` / `-c` after the image has been fit, zoomed, and renderer-aligned but
+before ANSI is emitted. Crop dimensions and offsets are expressed in terminal
+cells, then converted through the active render mode's cell footprint
+(halfblock `1×2`, quad `2×2`, spark `4×8`, sextant `2×3`). `--crop W:H`
+keeps a centered `W×H` cell window, `--crop W:H:X:Y` keeps an explicit
+cell-offset window, and `--crop auto[,left|center|right][,top|middle|bottom]`
+uses the current terminal size as the crop box. Auto crop also accepts
+`a`/`1`/`true`, plus alignment-only shorthands such as `l,t`, `c,m`, and
+`r,b`. Because cropping happens on the image viewport rather than ANSI text, the
+existing rendered line-width invariant continues to validate the final output
+size.
+
 The sextant family keeps exactly one shipped algorithm: `xs` /
 `sextant/2x3`. It uses a fixed `2×3` sample lattice and the rational sextant
 aspect correction while the original zoom/pan view geometry remains shared with

@@ -9,23 +9,61 @@ REEL main
   pause = 0.5s
   show_control_keys = true
 
-  T "cati assets/example.svg"
+  T "cati assets/example.svg" desc="default mode"
   P 1s
   K <cr>
-  P 5s
+  T "glyphs used: TOP HALF BLOCK ▀, BOTTOM HALF BLOCK ▄"
+  K <C-c>
+  T "and also:    FULL BLOCK █, SPACE ⎵"
+  K <C-c>
+  P 1s
 
   K <C-l>
   K <up>
-  T " --mode=spark/best"
-  P 2s
+  T " --mode=quad" desc="quads mode"
+  P 1s
   K <cr>
+  T "glyphs used: ▗ ▖▝ ▟ ▞ ▟ ▘ ▚ ▙ ▙ ▜ ▛  'quads'"
+  K <C-c>
+  T "and also:    ▄ ▀ ▌▐ █ ⎵ 'halfs' + 'full'"
+  K <C-c>
+  P 1s
+
+  K <C-l>
+  K <up><up>
+  T " --mode=sextant/2x3" desc="sextant mode"
+  P 1s
+  K <cr>
+  T "glyphs used: 🬀	🬁	🬂	🬃	🬄	🬅	🬆	🬇	🬈	🬉	🬊	🬋	🬌	🬍	🬎	🬏" speed=4
+  K <C-c>
+  T "             🬐	🬑	🬒	🬓	🬔	🬕	🬖	🬗	🬘	🬙	🬚	🬛	🬜	🬝	🬞	🬟" speed=4
+  K <C-c>
+  T "            	🬠	🬡	🬢	🬣	🬤	🬥	🬦	🬧	🬨	🬩	🬪	🬫	🬬	🬭	🬮	🬯" speed=4
+  K <C-c>
+  T "            	🬰	🬱	🬲	🬳	🬴	🬵	🬶	🬷	🬸	🬹	🬺	🬻  'sextants'" speed=4
+  K <C-c>
+  T "available since unicode v13 2020"
+  K <C-c>
+
+  K <C-l>
+  K <up><up><up>
+  T " --mode=spark/best"
+  P 1s
+  K <cr>
+  T "glyphs used: quads, halfs, full, sextants"
+  K <C-c>
+  T "and also: ▁▂▃▄▅▆▇█ 'sparkline glyphs'"
+  K <C-c>
+  T "and also:    ▏▎▍▌▋▊▉█ '1/8, 1/4, 1/2 blocks'"
+  K <C-c>
+  P 1s
+
   P 10s
 
   K <C-l>
   T "cati assets/cati_000*.png --zoom=1"
   P 2s
   K <cr>
-  P 5s
 
   K <C-l>
   T "cati play assets/cati_000*.png -w=48"

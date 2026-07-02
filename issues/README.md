@@ -24,6 +24,9 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [020](020-sextant-column-mask-nul-glyph.md) | Sextant pure-column masks emit NUL glyph (garbled right edge) | ✅ Closed |
 | [021](021-golden-storage-resolution-all-algos.md) | Golden storage resolution that exactly covers all current & future algos | 🔴 Open |
 | [022](022-svg-fixed-rasterization-size.md) | SVG: fixed 2048px rasterization ceiling, no target-size scaling | ✅ Closed |
+| [023](023-sextant-golden-non-transp.md) | Sextant golden non-transparent coverage | 🔴 Open |
+| [024](024-split-cli-player-browser-binaries.md) | Split CLI/player/browser binaries | 🔄 In Progress |
+| [025](025-spec-driven-render-modes.md) | Spec-driven render modes, glyph families, geometry, and colorers | 🔴 Open |
 
 ## Archived
 

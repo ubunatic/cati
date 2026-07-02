@@ -7,21 +7,21 @@ import (
 )
 
 func TestPlay_NoFrames(t *testing.T) {
-	err := play([]string{}, 0, 0, 0, renderCfg{}, TimeRange{})
+	err := play([]string{}, 0, 0, 0, renderCfg{}, TimeRange{}, cropSpec{})
 	if err == nil {
 		t.Error("expected error for empty frame list, got nil")
 	}
 }
 
 func TestPlay_MissingFile(t *testing.T) {
-	err := play([]string{"nonexistent.png"}, 0, 0, 0, renderCfg{}, TimeRange{})
+	err := play([]string{"nonexistent.png"}, 0, 0, 0, renderCfg{}, TimeRange{}, cropSpec{})
 	if err == nil {
 		t.Error("expected error for missing file, got nil")
 	}
 }
 
 func TestPlay_MissingVideoFile(t *testing.T) {
-	err := play([]string{"nonexistent.mp4"}, 0, 0, 0, renderCfg{}, TimeRange{})
+	err := play([]string{"nonexistent.mp4"}, 0, 0, 0, renderCfg{}, TimeRange{}, cropSpec{})
 	if err == nil {
 		t.Error("expected error for missing video file, got nil")
 	}

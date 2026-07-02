@@ -311,6 +311,95 @@ func TestJobsFlagShorthand(t *testing.T) {
 	}
 }
 
+func TestCropFlagShorthand(t *testing.T) {
+	cmd := New()
+	if err := cmd.ParseFlags([]string{"-c", "auto,left,top"}); err != nil {
+		t.Fatalf("failed to parse -c: %v", err)
+	}
+	got, err := cmd.Flags().GetString("crop")
+	if err != nil {
+		t.Fatalf("failed to get crop flag: %v", err)
+	}
+	if got != "auto,left,top" {
+		t.Fatalf("crop flag = %q, want %q", got, "auto,left,top")
+	}
+}
+
+func TestParseCropSpec(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want cropSpec
+	}{
+		{"empty", "", cropSpec{}},
+		{"fixed centered", "80:24", cropSpec{mode: cropFixed, cols: 80, rows: 24, hAlign: cropAlignCenter, vAlign: cropAlignMiddle}},
+		{"fixed exact offset", "80:24:10:3", cropSpec{mode: cropFixed, cols: 80, rows: 24, x: 10, y: 3, hAlign: cropAlignLeft, vAlign: cropAlignTop}},
+		{"auto right bottom", "auto,right,bottom", cropSpec{mode: cropAuto, hAlign: cropAlignRight, vAlign: cropAlignBottom}},
+		{"auto short", "a", cropSpec{mode: cropAuto, hAlign: cropAlignCenter, vAlign: cropAlignMiddle}},
+		{"auto numeric", "1", cropSpec{mode: cropAuto, hAlign: cropAlignCenter, vAlign: cropAlignMiddle}},
+		{"auto boolean", "true", cropSpec{mode: cropAuto, hAlign: cropAlignCenter, vAlign: cropAlignMiddle}},
+		{"short left top", "l,t", cropSpec{mode: cropAuto, hAlign: cropAlignLeft, vAlign: cropAlignTop}},
+		{"short center middle", "c,m", cropSpec{mode: cropAuto, hAlign: cropAlignCenter, vAlign: cropAlignMiddle}},
+		{"short right bottom", "r,b", cropSpec{mode: cropAuto, hAlign: cropAlignRight, vAlign: cropAlignBottom}},
+		{"auto short with alignment", "a,r,t", cropSpec{mode: cropAuto, hAlign: cropAlignRight, vAlign: cropAlignTop}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseCropSpec(tc.raw)
+			if err != nil {
+				t.Fatalf("parseCropSpec(%q): %v", tc.raw, err)
+			}
+			if got != tc.want {
+				t.Fatalf("parseCropSpec(%q) = %#v, want %#v", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseCropSpecRejectsInvalid(t *testing.T) {
+	for _, raw := range []string{"0:2", "2:0", "2:2:-1:0", "auto,far"} {
+		t.Run(raw, func(t *testing.T) {
+			if _, err := parseCropSpec(raw); err == nil {
+				t.Fatalf("parseCropSpec(%q) succeeded, want error", raw)
+			}
+		})
+	}
+}
+
+func TestApplyCellCropUsesTerminalCells(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 6, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 6; x++ {
+			src.SetRGBA(x, y, color.RGBA{R: uint8(x), G: uint8(y), A: 255})
+		}
+	}
+
+	got := applyCellCrop(src, renderCfg{}, cropSpec{mode: cropFixed, cols: 3, rows: 1, hAlign: cropAlignCenter, vAlign: cropAlignMiddle}, 0, 0)
+	if cells := renderedCellSize(got, renderCfg{}); cells != (renderCells{Cols: 3, Rows: 1}) {
+		t.Fatalf("cropped cell size = %#v, want 3x1", cells)
+	}
+	if c := color.RGBAModel.Convert(got.At(got.Bounds().Min.X, got.Bounds().Min.Y)).(color.RGBA); c.R != 1 || c.G != 0 {
+		t.Fatalf("cropped top-left pixel = %#v, want source x=1 y=0", c)
+	}
+}
+
+func TestApplyCellCropAutoPreventsWideRender(t *testing.T) {
+	src := opaqueGradientForTest(20, 20)
+	rc := renderCfg{}
+	vp := prepareRenderedImage(src, nil, 20, 0, rc, "")
+	cropped := applyCellCrop(vp, rc, cropSpec{mode: cropAuto, hAlign: cropAlignCenter, vAlign: cropAlignMiddle}, 7, 99)
+
+	var out strings.Builder
+	if err := renderChecked(&out, cropped, rc); err != nil {
+		t.Fatalf("renderChecked: %v", err)
+	}
+	for row, width := range visibleLineWidths(out.String()) {
+		if width > 7 {
+			t.Fatalf("row %d width = %d, want <= 7", row, width)
+		}
+	}
+}
+
 func TestResolveWorkerCount(t *testing.T) {
 	if got := resolveWorkerCount(9, 4); got != 9 {
 		t.Fatalf("resolveWorkerCount(9, 4) = %d, want 9", got)

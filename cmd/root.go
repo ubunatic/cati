@@ -43,6 +43,7 @@ func New() *cobra.Command {
 	var fullComp bool
 	var initialZoom string
 	var timeRange string
+	var crop string
 
 	root := &cobra.Command{
 		Use:   "cati [flags] <image|dir> [image|dir ...]",
@@ -96,6 +97,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 				fullComp:    fullComp,
 				initialZoom: initialZoom,
 				timeRange:   timeRange,
+				crop:        crop,
 			}, rc, args)
 		},
 	}
@@ -113,6 +115,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
+	root.Flags().StringVarP(&crop, "crop", "c", "", "crop final output in terminal cells: W:H, W:H:X:Y, auto|a|1|true, or [l|c|r],[t|m|b]")
 	root.Flags().StringVar(&timeRange, "range", "", `playback window: "5s" plays first 5 s; "5s:7s" plays 5 s–7 s (supports s/m/h suffixes, bare seconds, mm:ss)`)
 	root.Flags().BoolVar(&inputTest, "input-test", false, "")
 	// Hide the debug flag from help output.
@@ -142,6 +145,7 @@ func NewPlay() *cobra.Command {
 	var fullComp bool
 	var initialZoom string
 	var timeRange string
+	var crop string
 
 	root := &cobra.Command{
 		Use:          "catiplay [flags] <image|video|dir> [image|video|dir ...]",
@@ -180,7 +184,11 @@ func NewPlay() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return play(paths, fps, width, height, rc, tr)
+				cropSpec, err := parseCropSpec(crop)
+				if err != nil {
+					return err
+				}
+				return play(paths, fps, width, height, rc, tr, cropSpec)
 			}
 			if halfblock.IsVideo(paths[0]) {
 				return interactiveVideo(paths[0], width, height, rc, nil, nil, nil, nil, nil, nil, fullComp, initialZoom)
@@ -202,6 +210,7 @@ func NewPlay() *cobra.Command {
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
+	root.Flags().StringVarP(&crop, "crop", "c", "", "crop final playback output in terminal cells: W:H, W:H:X:Y, auto|a|1|true, or [l|c|r],[t|m|b]")
 	root.Flags().StringVar(&timeRange, "range", "", `playback window: "5s" plays first 5 s; "5s:7s" plays 5 s-7 s (supports s/m/h suffixes, bare seconds, mm:ss)`)
 
 	return root
@@ -341,6 +350,7 @@ type opts struct {
 	fullComp    bool   // compare render quality against original source pixels
 	initialZoom string // zoom level: 0 → fit to viewport; 1, 1.0, 100%, 1:1 → pixel-perfect (k=1)
 	timeRange   string // raw --range value; parsed in run()
+	crop        string // final terminal-cell crop spec
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────
@@ -360,6 +370,10 @@ func run(o opts, rc renderCfg, args []string) error {
 	}
 
 	rc = canonicalRenderCfg(rc)
+	cropSpec, err := parseCropSpec(o.crop)
+	if err != nil {
+		return err
+	}
 
 	if o.playMode {
 		if len(paths) == 0 {
@@ -369,7 +383,7 @@ func run(o opts, rc renderCfg, args []string) error {
 		if err != nil {
 			return err
 		}
-		return play(paths, o.fps, o.width, o.height, rc, tr)
+		return play(paths, o.fps, o.width, o.height, rc, tr, cropSpec)
 	}
 
 	if o.interactive {
@@ -412,6 +426,7 @@ func run(o opts, rc renderCfg, args []string) error {
 	if err != nil {
 		return err
 	}
+	autoCropCols, autoCropRows := catiterm.TermWidth(), catiterm.TermHeight()
 
 	for _, path := range paths {
 		if multi && !o.noHeader {
@@ -435,6 +450,7 @@ func run(o opts, rc renderCfg, args []string) error {
 		if img.Bounds().Dx() <= 0 || img.Bounds().Dy() <= 0 {
 			continue
 		}
+		img = applyCellCrop(img, rc, cropSpec, autoCropCols, autoCropRows)
 		if err := renderChecked(os.Stdout, img, rc); err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}

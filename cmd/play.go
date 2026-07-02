@@ -9,26 +9,27 @@ import (
 	"syscall"
 	"time"
 
-	"ubunatic.com/cati/v1/halfblock"
 	"golang.org/x/term"
+	"ubunatic.com/cati/v1/halfblock"
 
-	catiterm "ubunatic.com/cati/v1/term")
+	catiterm "ubunatic.com/cati/v1/term"
+)
 
 // play is the entry point for --play mode.
 // It dispatches to playImages (pre-load loop) or playVideos (streaming)
 // depending on whether any path is a video file.
 // width and height are in terminal characters (0 = auto-detect from terminal).
-func play(paths []string, fps, width, height int, rc renderCfg, tr TimeRange) error {
+func play(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("no images to play")
 	}
 
 	for _, p := range paths {
 		if halfblock.IsVideo(p) {
-			return playVideos(paths, fps, width, height, rc, tr)
+			return playVideos(paths, fps, width, height, rc, tr, crop)
 		}
 	}
-	return playImages(paths, fps, width, height, rc, tr)
+	return playImages(paths, fps, width, height, rc, tr, crop)
 }
 
 // ── shared terminal setup ─────────────────────────────────────────────────────
@@ -74,7 +75,7 @@ func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}) {
 // ── image sequence mode ───────────────────────────────────────────────────────
 
 // playImages pre-loads all frames and loops them at fps.
-func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRange) error {
+func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec) error {
 	if fps <= 0 {
 		fps = 15
 	}
@@ -83,6 +84,7 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 	if cols == 0 && rows == 0 {
 		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
 	}
+	autoCropCols, autoCropRows := catiterm.TermWidth(), catiterm.TermHeight()
 
 	// Apply time range: convert seconds → frame indices.
 	// For image sequences the frame rate defines the mapping.
@@ -112,6 +114,7 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
+		img = applyCellCrop(img, rc, crop, autoCropCols, autoCropRows)
 		frames = append(frames, img)
 	}
 
@@ -154,7 +157,7 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 
 // playVideos streams one or more video files sequentially, playing each once.
 // All paths must be video files.
-func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRange) error {
+func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec) error {
 	// Validate: all paths must be video files.
 	for _, p := range paths {
 		if !halfblock.IsVideo(p) {
@@ -180,6 +183,7 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 	if cols == 0 && rows == 0 {
 		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
 	}
+	autoCropCols, autoCropRows := catiterm.TermWidth(), catiterm.TermHeight()
 
 	restore, sigs, quit := playTerminal()
 	defer restore()
@@ -258,6 +262,7 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 				if err != nil {
 					return err
 				}
+				img = applyCellCrop(img, rc, crop, autoCropCols, autoCropRows)
 				lastFrame = img
 			default:
 				// No frame ready — keep showing the current frame.
