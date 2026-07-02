@@ -65,9 +65,9 @@ repro and the control, and prints the geometry/decision for each.
   `rem ∈ {5,6,7}` and the good cases were `rem ∈ {0,4}` and `rem<4` — the probe
   showed that mapping precisely.
 - Look for an **invariant** that should hold but doesn't. #015's was
-  `CellW/(AspectX·CellH) = 1/2` for every mode ⇒ identical continuous height ⇒
-  the modes *must* agree; the probe proved they didn't and pinpointed the
-  floor-before-snap as the only divergence.
+  `CellW·AspectDen/(AspectNum·CellH) = 1/2` for every mode ⇒ identical
+  continuous height ⇒ the modes *must* agree; the probe proved they didn't and
+  pinpointed the floor-before-snap as the only divergence.
 
 **Gate:** a formula predicts the bug for every repro and every near-miss, and you
 can state the wrong value in one sentence.

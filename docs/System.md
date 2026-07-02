@@ -125,17 +125,18 @@ The viewport geometry math (`term cells → renderer pixels → fit → zoom →
 *   **`Dims.SrcCrop`** — maps viewport pixel coords back to source image coords. Used by `buildRef` for SSIM reference generation and by the hint-bar for `meta.src_res` (now shows the visible crop region when zoomed/panning instead of always showing full source resolution).
 *   **`PanAnchor` / `Spec.PanFromAnchor` / `Spec.PanByCells`** — shared drag and keyboard-pan primitives. Individual render modes provide only their cell footprint via `viewSpec()`.
 
-### Cell-Quantum Zoom Model (June 2026, revised June 2026)
+### Terminal-Cell Zoom Model (June 2026, revised July 2026)
 
-The stable zoom and viewport helpers now live in `internal/viewgeom`. The app layer keeps thin wrappers, while the core model uses a **cell quantum** where each renderer declares how many source-pixel units one cell represents.
+The stable zoom and viewport helpers now live in `internal/viewgeom`. The app layer keeps thin wrappers, while the core model uses a terminal-cell `k` value first and treats renderer-specific pixel cells as a later expansion step.
 
-*   The stable user-facing unit is `src px/cell`, not `k`. `k` is an internal ladder parameter; the hint bar should report the actual source pixels represented by one terminal cell.
-*   The common geometry is `n : 2n` source pixels per cell footprint. `n` is renderer-specific and must stay configurable so future glyph families can plug into the same math.
+*   The stable user-facing unit is `src px/cell`, not renderer pixels. `k` is the number of source columns represented by one terminal cell; terminal rows represent `2k` source rows. At `k=1`, a 4×4 source renders as 4×2 terminal cells in every render mode.
+*   Renderer cell footprints are implementation details. The app first derives the mode-independent terminal footprint (`cols = ceil(cropW/k)`, `rows = ceil(cropH/(2k))`) and only then expands it to renderer pixels (`cols·CellW`, `rows·CellH`).
+*   Render modes must satisfy `CellW·AspectDen / (AspectNum·CellH) = 1/2` so fitting and explicit zoom keep the same terminal-cell aspect across halfblock, quad, spark, sextant, and combined modes.
 *   Zoom should step through distinct rendered footprints, not through linear arithmetic in `k`. Any candidate state that collapses to the same visible output after rounding is dead weight and should be dropped from the ladder.
 *   Mode changes must preserve source-space center and aspect. Switching between halfblock, quad, and future modes should recenter from the source rectangle, not reuse the old viewport coordinates verbatim.
 *   Subcell phase shifts are a separate axis from zoom. They belong in dedicated controls later; they should not be conflated with the zoom ladder itself.
 
-**Ladder, not linear steps.** Zoom changes should move through distinct rendered footprints, not through arbitrary arithmetic increments in `k`. The step generator should derive candidate cell footprints from the image dimensions and render quantum, convert them to `src px / cell`, and drop states that do not change the actual output after rounding. This keeps small images from accumulating useless tail states and gives every mode one geometry path.
+**Ladder, not linear steps.** Zoom changes should move through distinct rendered footprints, not through arbitrary arithmetic increments in `k`. The step generator should derive candidate terminal-cell footprints from the image dimensions, convert them to `src px / cell`, and drop states that do not change the actual output after rounding. This keeps small images from accumulating useless tail states and gives every mode one geometry path.
 
 **Mode separation.** Zoom changes size only. Sampling phase / subcell offsets are a separate axis for later testing-only controls such as quadshift. SSIM and other quality metrics should compare through a common analysis grid so new glyph families can still be evaluated against the same baseline.
 
@@ -209,17 +210,17 @@ row and leaves the right edge unfilled (see issue #020).
 
 The loader (`loadZoomLevels`) now delegates to the typed spec loader in `spec/load.go` (`spec.LoadZoomLevels()`), which uses `gopkg.in/yaml.v3` and still returns defaults on read/parse error through `sync.Once` lazy init. The app layer keeps the zoom ladder normalization thin and mode-agnostic. See `docs/Spec.md` for spec system conventions.
 
-**Minimum rendered width: 1 cell.** Both the levels list and the extension loop are capped at `k ≤ srcW`. This guarantees the rendered image is never smaller than 1 terminal cell wide, regardless of what the spec contains. The `adaptive` extension widens its k jumps as the image gets larger so zooming out of small images does not feel linear and slow at high `k`.
+**Minimum rendered width: 1 cell.** Both the levels list and the extension loop are capped at `k ≤ srcW`. This guarantees the rendered image is never smaller than 1 terminal cell wide, regardless of what the spec contains. Positive explicit zoom also snaps the renderer-pixel viewport to at least one complete render cell so high-density modes never receive sub-cell images. The `adaptive` extension widens its k jumps as the image gets larger so zooming out of small images does not feel linear and slow at high `k`.
 
-**`maxZoom`** (`mz`) is computed dynamically:
+**`maxZoom`** (`mz`) is computed dynamically from the mode's render geometry:
 
 ```
-zCol = cellCols × srcW / scaledW    (cellCols = 1 halfblock, 2 quad)
-zRow = srcH / scaledH
+zCol = AspectNum × srcW / scaledW
+zRow = AspectDen × srcH / scaledH
 maxZoom = max(min(zCol, zRow), 1.0)
 ```
 
-This caps zoom at the 1-source-pixel-per-cell-column limit regardless of terminal resize or render-mode switch.
+This caps zoom at the 1-source-pixel-per-terminal-cell-column limit regardless of terminal resize or render-mode switch.
 
 **Convergence at k=1.** When each cell shows 1×2 source pixels, all halfblock modes produce identical output. Quad modes also converge provided each 2×2 block has ≤ 2 colours (verified by `TestMaxZoomQuadConvergence`).
 
