@@ -54,6 +54,41 @@ func TestV2DerivesWidthFromHeight(t *testing.T) {
 	}
 }
 
+func TestV2FitNoConstraintsPreservesAspect(t *testing.T) {
+	specs := []struct {
+		name string
+		spec V2Spec
+	}{
+		{"six", NewV2CellRatio(2, 3, 4, 3)},
+		{"six+half", NewV2CellRatio(2, 6, 2, 3)},
+		{"spark+six", NewV2CellRatio(4, 24, 1, 3)},
+	}
+
+	for _, tc := range specs {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := tc.spec.Fit(640, 480, 0, 0, false)
+			if plan.RenderW <= 0 || plan.RenderH <= 0 {
+				t.Fatalf("render size = %dx%d, want positive", plan.RenderW, plan.RenderH)
+			}
+			gotNum := plan.RenderW * tc.spec.AspectDen
+			gotDen := plan.RenderH * tc.spec.AspectNum
+			wantNum, wantDen := 640, 480
+			left := gotNum * wantDen
+			right := wantNum * gotDen
+			tolerance := (tc.spec.CellW*gotDen + tc.spec.CellH*gotNum) * wantDen
+			diff := left - right
+			if diff < 0 {
+				diff = -diff
+			}
+			if diff > tolerance {
+				t.Fatalf("aspect mismatch: render=%dx%d correction=%d:%d gives %d/%d, want %d/%d",
+					plan.RenderW, plan.RenderH, tc.spec.AspectNum, tc.spec.AspectDen,
+					gotNum, gotDen, wantNum, wantDen)
+			}
+		})
+	}
+}
+
 func TestV2FrameAndHalfRows(t *testing.T) {
 	spec := NewV2CellRatio(2, 3, 4, 3)
 

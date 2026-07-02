@@ -171,6 +171,14 @@ producing output. Playback and static CLI paths call the checked pipeline
 directly; test-only convenience callers panic on the same invariant so
 regressions cannot pass unnoticed.
 
+When stdout is not a terminal and no `--width` / `--height` is supplied, static
+rendering has no external fit box. In that unconstrained case, legacy integer
+aspect modes keep the source render height (`h/q` on a 640×480 image emit 240
+terminal rows; `s` emits 60 because its cell is 8px tall), and rational v2 modes
+derive width with `srcW·AspectNum/AspectDen` before snapping to their render
+cell lattice. This keeps modes such as `six` from tripping the source-aspect
+validator while still preserving their native cell height.
+
 **Final terminal-cell cropping.** The static renderer and playback paths accept
 `--crop` / `-c` after the image has been fit, zoomed, and renderer-aligned but
 before ANSI is emitted. Crop dimensions and offsets are expressed in terminal

@@ -117,7 +117,7 @@ func fitDimsRatio(srcW, srcH, cellW, cellH, aspectNum, aspectDen, cols, rows int
 	heightDerived := true
 	switch {
 	case cols <= 0 && rows <= 0:
-		rawW, hNum, hDen = srcW*aspectNum, acSrcH, aspectNum
+		rawW, hNum, hDen = max(1, acSrcW/aspectDen), srcH, 1
 	case rows <= 0:
 		rawW, hNum, hDen = maxW, acSrcH*maxW, acSrcW
 	case cols <= 0:
