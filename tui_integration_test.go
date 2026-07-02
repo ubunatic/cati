@@ -207,6 +207,38 @@ func TestInteractiveAndStaticHalfblockRenderMatch(t *testing.T) {
 	}
 }
 
+func TestStaticExplicitZoomCellSizeAcrossRenderModes(t *testing.T) {
+	bin := buildCatiForTest(t)
+	modes := []string{"h", "hs", "q", "s", "x", "sq", "sx", "xh"}
+	zooms := []struct {
+		value string
+		want  frameBlockSize
+	}{
+		{"0.5", frameBlockSize{Cols: 8, Rows: 4}},
+		{"1", frameBlockSize{Cols: 4, Rows: 2}},
+		{"2", frameBlockSize{Cols: 2, Rows: 1}},
+	}
+
+	for _, zoom := range zooms {
+		for _, mode := range modes {
+			t.Run("z"+zoom.value+"/"+mode, func(t *testing.T) {
+				cmd := exec.Command(bin, "testdata/checkerboard_4x4.png", "-m="+mode, "-z="+zoom.value, "--no-header")
+				cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					t.Fatalf("cati exited with error: %v\noutput:\n%s", err, stripANSIForTest(string(out)))
+				}
+
+				got := staticRenderBlockSizeForTest(string(out))
+				if got != zoom.want {
+					t.Fatalf("rendered size = %dx%d, want %dx%d\noutput:\n%s",
+						got.Cols, got.Rows, zoom.want.Cols, zoom.want.Rows, stripANSIForTest(string(out)))
+				}
+			})
+		}
+	}
+}
+
 func TestInteractiveGradientHeightFitZoomOutHintSequence(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping PTY integration test in short mode")
@@ -531,6 +563,23 @@ func renderedFrameBlocksForTest(out string) []frameBlockSize {
 		start = i + j + len("\x1b[J")
 	}
 	return blocks
+}
+
+func staticRenderBlockSizeForTest(out string) frameBlockSize {
+	plain := strings.ReplaceAll(stripANSIForTest(out), "\r", "")
+	plain = strings.TrimSuffix(plain, "\n")
+	if plain == "" {
+		return frameBlockSize{}
+	}
+
+	lines := strings.Split(plain, "\n")
+	cols := 0
+	for _, line := range lines {
+		if w := utf8.RuneCountInString(line); w > cols {
+			cols = w
+		}
+	}
+	return frameBlockSize{Cols: cols, Rows: len(lines)}
 }
 
 func runCatiPTY(t *testing.T, binary string, args []string, keys string) (string, error) {

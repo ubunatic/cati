@@ -8,6 +8,7 @@ import (
 
 	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/internal/metrics"
+	"ubunatic.com/cati/internal/viewgeom"
 	"ubunatic.com/cati/v1/quadblock"
 
 	catiterm "ubunatic.com/cati/v1/term"
@@ -72,10 +73,10 @@ func prepareRenderedImageChecked(orig image.Image, state *viewState, termCols, t
 			}
 			return fitRenderedImageChecked(orig, termCols, termRows, rc)
 		}
-		spec := rc.mode.viewSpec()
-		zoom := spec.InitialZoomRatio(initialZoom, srcW, srcH, termCols, termRows)
-		dims := spec.Dims(srcW, srcH, termCols, termRows, zoom)
-		scaledW, scaledH := imgutil.AlignCellSize(dims.ScaledW, dims.ScaledH, spec.CellW, spec.CellH)
+		scaledW, scaledH, ok := explicitZoomRenderTarget(srcW, srcH, termCols, termRows, rc, initialZoom)
+		if !ok {
+			return fitRenderedImageChecked(orig, termCols, termRows, rc)
+		}
 		if err := validateSourceAspect(rc, image.Rect(0, 0, srcW, srcH), scaledW, scaledH); err != nil {
 			return nil, err
 		}
@@ -113,10 +114,35 @@ func renderTargetForSource(srcW, srcH, termCols, termRows int, rc renderCfg, ini
 		targetW, targetH, _ := imgutil.FitDims(srcW, srcH, spec.CellW, spec.CellH, spec.AspectX, termCols, termRows)
 		return targetW, targetH
 	}
+	targetW, targetH, ok := explicitZoomRenderTarget(srcW, srcH, termCols, termRows, rc, initialZoom)
+	if ok {
+		return targetW, targetH
+	}
+	if spec, ok := rc.mode.v2FitSpec(); ok {
+		plan := spec.Fit(srcW, srcH, termCols, termRows, false)
+		return plan.RenderW, plan.RenderH
+	}
 	spec := rc.mode.viewSpec()
-	zoom := spec.InitialZoomRatio(initialZoom, srcW, srcH, termCols, termRows)
-	dims := spec.Dims(srcW, srcH, termCols, termRows, zoom)
-	return imgutil.AlignCellSize(dims.ScaledW, dims.ScaledH, spec.CellW, spec.CellH)
+	fitW, fitH, _ := imgutil.FitDims(srcW, srcH, spec.CellW, spec.CellH, spec.AspectX, termCols, termRows)
+	return fitW, fitH
+}
+
+func explicitZoomRenderTarget(srcW, srcH, termCols, termRows int, rc renderCfg, initialZoom string) (int, int, bool) {
+	spec := rc.mode.viewSpec()
+	if initialZoom == "w" || initialZoom == "h" {
+		zoom := spec.InitialZoomRatio(initialZoom, srcW, srcH, termCols, termRows)
+		dims := spec.Dims(srcW, srcH, termCols, termRows, zoom)
+		targetW, targetH := imgutil.AlignCellSize(dims.ScaledW, dims.ScaledH, spec.CellW, spec.CellH)
+		return targetW, targetH, true
+	}
+
+	k := viewgeom.ParseZoomK(initialZoom)
+	if k <= 0 {
+		return 0, 0, false
+	}
+	targetCols := max(1, int(math.Ceil(float64(srcW)/k)))
+	targetRows := max(1, int(math.Ceil(float64(srcH)/(2*k))))
+	return targetCols * spec.CellW, targetRows * spec.CellH, true
 }
 
 func fitRenderedImage(img image.Image, cols, rows int, rc renderCfg) image.Image {
@@ -181,11 +207,17 @@ func validateSourceAspectWith(rc renderCfg, src image.Rectangle, renderW, render
 }
 
 func (m renderMode) renderAspectCorrection() (num, den int) {
+	if spec, ok := m.v2FitSpec(); ok {
+		return spec.AspectNum, spec.AspectDen
+	}
 	spec := m.viewSpec()
 	return spec.AspectX, 1
 }
 
 func (m renderMode) renderCellSize() (cellW, cellH int) {
+	if spec, ok := m.v2FitSpec(); ok {
+		return spec.CellW, spec.CellH
+	}
 	spec := m.viewSpec()
 	return spec.CellW, spec.CellH
 }

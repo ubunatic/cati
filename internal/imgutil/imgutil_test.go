@@ -100,6 +100,18 @@ func TestAlignCellSizeRoundsDownHeight(t *testing.T) {
 	}
 }
 
+func TestAlignCellSizePromotesSubCellDimensions(t *testing.T) {
+	gotW, gotH := AlignCellSize(4, 4, 4, 8)
+	if gotW != 4 || gotH != 8 {
+		t.Fatalf("AlignCellSize = %dx%d, want 4x8", gotW, gotH)
+	}
+
+	gotW, gotH = AlignCellSize(4, 4, 4, 24)
+	if gotW != 4 || gotH != 24 {
+		t.Fatalf("AlignCellSize = %dx%d, want 4x24", gotW, gotH)
+	}
+}
+
 // ── FitPixelDims ───────────────────────────────────────────────────────────────
 
 func TestFitPixelDims(t *testing.T) {

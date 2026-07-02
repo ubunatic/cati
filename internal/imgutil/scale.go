@@ -31,16 +31,23 @@ func centeredSourceIndex(dst, srcN, dstN int) int {
 }
 
 // AlignCellSize rounds w and h down to the nearest multiple of cellW and cellH
-// respectively. Returns at least 1×1.
+// respectively. Positive dimensions are kept at least one full cell so renderers
+// never receive a sub-cell viewport.
 func AlignCellSize(w, h, cellW, cellH int) (int, int) {
-	if cellW > 1 && w > cellW {
+	if cellW > 1 {
 		if rem := w % cellW; rem != 0 {
 			w -= rem
 		}
+		if w < cellW {
+			w = cellW
+		}
 	}
-	if cellH > 1 && h > cellH {
+	if cellH > 1 {
 		if rem := h % cellH; rem != 0 {
 			h -= rem
+		}
+		if h < cellH {
+			h = cellH
 		}
 	}
 	if w < 1 {

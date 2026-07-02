@@ -121,6 +121,14 @@ continuous unit makes all modes land on the same rows and the same bottom-row
 fill. See `TestFitDimsUnifiedGeometry` and
 `TestAllRenderModesSquareWidthEightEmitFourRows`.
 
+Explicit static zoom (`--zoom=1`, `100%`, `1:1`, or another positive `k`) uses
+terminal-cell geometry directly instead of going through terminal-fit geometry:
+`cols = ceil(srcW/k)` and `rows = ceil(srcH/(2k))`. The render target is then
+expanded to the active mode's internal pixel grid (`cols·CellW`, `rows·CellH`).
+This keeps zoom semantics independent of the glyph algorithm: at `--zoom=1`,
+a 4×4 source renders as 4×2 terminal cells in halfblock, quad, spark, sextant,
+and combined modes. See `TestAllRenderModesZoomOneSmallSquareUseCompleteCells`.
+
 ---
 
 ## 3. Pixel Scanning Traversal & Pitfalls

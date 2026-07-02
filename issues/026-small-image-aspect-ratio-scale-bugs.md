@@ -1,6 +1,6 @@
 # 026 — Small image aspect ratio and scale bugs for spark/sextant modes
 
-**Status:** 🔴 Open  
+**Status:** ✅ Closed  
 **Refs:** `internal/imgutil/scale.go` (`AlignCellSize`), `cmd/interactive.go` (`render`), `cmd/render_pipeline.go` (`prepareRenderedImageChecked`)
 
 ---
@@ -123,3 +123,18 @@ func AlignCellSize(w, h, cellW, cellH int) (int, int) {
 	return w, h
 }
 ```
+
+## Resolution
+
+Fixed by:
+
+- Making `AlignCellSize` promote positive sub-cell dimensions to at least one
+  complete render cell while still rounding larger dimensions down to cell
+  boundaries.
+- Making static explicit zoom (`--zoom=1`, `100%`, `1:1`, positive `k`) derive
+  terminal-cell dimensions from source dimensions (`cols = ceil(srcW/k)`,
+  `rows = ceil(srcH/(2k))`) before expanding to the active render mode's
+  internal pixel grid. This preserves the documented `k=1` semantics across
+  all glyph algorithms even when no `--width`/`--height` is supplied.
+- Adding `TestAlignCellSizePromotesSubCellDimensions` and
+  `TestAllRenderModesZoomOneSmallSquareUseCompleteCells`.

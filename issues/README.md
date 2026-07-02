@@ -27,7 +27,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [023](023-sextant-golden-non-transp.md) | Sextant golden non-transparent coverage | 🔴 Open |
 | [024](024-split-cli-player-browser-binaries.md) | Split CLI/player/browser binaries | 🔄 In Progress |
 | [025](025-spec-driven-render-modes.md) | Spec-driven render modes, glyph families, geometry, and colorers | 🔄 In Progress |
-| [026](026-small-image-aspect-ratio-scale-bugs.md) | Small image aspect ratio and scale bugs for spark/sextant modes | 🔴 Open |
+| [026](026-small-image-aspect-ratio-scale-bugs.md) | Small image aspect ratio and scale bugs for spark/sextant modes | ✅ Closed |
 | [027](027-demo-widths-obsolete-modes.md) | demo_widths.go uses obsolete render mode names | ✅ Closed |
 
 ## Archived

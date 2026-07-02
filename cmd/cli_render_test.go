@@ -26,11 +26,11 @@ func TestCLIRender(t *testing.T) {
 	}
 
 	modes := []struct{ name, mode string }{
-		{"halfblock", "halfblock"},
-		{"quad", "quad/splithalf"},
-		{"spark", "spark/quad"},
-		{"spark_best", "spark/best"},
-		{"sextant", "sextant/2x3"},
+		{"halfblock", "half"},
+		{"quad", "quad"},
+		{"spark", "spark+quad"},
+		{"spark_best", "spark+six"},
+		{"sextant", "six"},
 	}
 
 	for _, ic := range imageCases {

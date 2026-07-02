@@ -449,7 +449,7 @@ func TestAlignScaledSize(t *testing.T) {
 		{"quad trims both axes", renderCfg{mode: modeQuad}, 11, 13, 10, 12},
 		{"spark trims to cell quantum", renderCfg{mode: modeSpark}, 11, 13, 8, 8},
 		{"sextant keeps odd height", renderCfg{mode: modeSextant, sextantMode: 0}, 11, 13, 10, 13},
-		{"small quad image stays visible", renderCfg{mode: modeQuad}, 1, 1, 1, 1},
+		{"small quad image snaps to one cell", renderCfg{mode: modeQuad}, 1, 1, 2, 2},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -660,6 +660,51 @@ func TestAllRenderModesSquareWidthEightEmitFourRows(t *testing.T) {
 			}
 			if widths := visibleLineWidths(out.String()); len(widths) != want.Rows {
 				t.Fatalf("ANSI rows = %d, want %d (widths=%v)", len(widths), want.Rows, widths)
+			}
+		})
+	}
+}
+
+func TestAllRenderModesZoomOneSmallSquareUseCompleteCells(t *testing.T) {
+	src := opaqueGradientForTest(4, 4)
+	modes := []struct {
+		name string
+		want renderCells
+	}{
+		{"h", renderCells{Cols: 4, Rows: 2}},
+		{"hs", renderCells{Cols: 4, Rows: 2}},
+		{"q", renderCells{Cols: 4, Rows: 2}},
+		{"s", renderCells{Cols: 4, Rows: 2}},
+		{"sq", renderCells{Cols: 4, Rows: 2}},
+		{"x", renderCells{Cols: 4, Rows: 2}},
+		{"xh", renderCells{Cols: 4, Rows: 2}},
+		{"sx", renderCells{Cols: 4, Rows: 2}},
+	}
+
+	for _, mode := range modes {
+		t.Run(mode.name, func(t *testing.T) {
+			rc, err := parseRenderMode(mode.name)
+			if err != nil {
+				t.Fatalf("parseRenderMode(%q): %v", mode.name, err)
+			}
+			spec := rc.mode.viewSpec()
+
+			vp, err := prepareRenderedImageChecked(src, nil, 0, 0, rc, "1")
+			if err != nil {
+				t.Fatalf("prepareRenderedImageChecked: %v", err)
+			}
+			b := vp.Bounds()
+			if b.Dx()%spec.CellW != 0 || b.Dy()%spec.CellH != 0 {
+				t.Fatalf("viewport=%dx%d is not aligned to complete %dx%d cells",
+					b.Dx(), b.Dy(), spec.CellW, spec.CellH)
+			}
+			if b.Dx() < spec.CellW || b.Dy() < spec.CellH {
+				t.Fatalf("viewport=%dx%d smaller than one %dx%d cell",
+					b.Dx(), b.Dy(), spec.CellW, spec.CellH)
+			}
+			if got := renderedCellSize(vp, rc); got != mode.want {
+				t.Fatalf("renderedCellSize = %dx%d, want %dx%d; viewport=%dx%d",
+					got.Cols, got.Rows, mode.want.Cols, mode.want.Rows, b.Dx(), b.Dy())
 			}
 		})
 	}
