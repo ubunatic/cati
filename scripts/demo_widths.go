@@ -2,10 +2,12 @@
 
 // demo_widths renders demo assets across all three render modes and prints the
 // results as a side-by-side table, one column per image. Run via:
-//   go run scripts/demo_widths.go
+//
+//	go run scripts/demo_widths.go
 //
 // Video mode: compare frames from one or more video files at specific timestamps.
-//   go run scripts/demo_widths.go -video assets/baby-360p.mp4 -at 1s,5s,10s -w 20
+//
+//	go run scripts/demo_widths.go -video assets/baby-360p.mp4 -at 1s,5s,10s -w 20
 package main
 
 import (
@@ -339,9 +341,9 @@ func fmtSec(sec float64) string {
 // columns = render modes and rows = width steps, matching the single-image layout.
 func runVideoMode(bin string, videos []image, timestamps []float64, widths []int) {
 	modes := []mode{
-		{"halfblock", "halfblock"},
-		{"quad/splithalf", "quad/splithalf"},
-		{"spark/quad", "spark/quad"},
+		{"half", "half"},
+		{"quad", "quad"},
+		{"spark+quad", "spark+quad"},
 	}
 
 	// Build columns: one per (video × timestamp) combination.
@@ -432,9 +434,9 @@ func main() {
 	}
 
 	modes := []mode{
-		{"halfblock", "halfblock"},
-		{"quad/splithalf", "quad/splithalf"},
-		{"spark/quad", "spark/quad"},
+		{"half", "half"},
+		{"quad", "quad"},
+		{"spark+quad", "spark+quad"},
 	}
 
 	if len(images) == 1 {
