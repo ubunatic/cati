@@ -171,6 +171,15 @@ producing output. Playback and static CLI paths call the checked pipeline
 directly; test-only convenience callers panic on the same invariant so
 regressions cannot pass unnoticed.
 
+When stdout is a terminal and no `--width`, `--height`, or `--zoom` is supplied,
+static rendering should treat the terminal columns and rows as a fit box for
+every render mode. Legacy modes (`h`, `q`, `s`) already use `FitDims` this way.
+The v2 rational modes (`x`, `xh`, `sx`) currently still route through the
+width-primary `V2Spec.Fit` path, which can make `six` consume the full terminal
+width where the terminal height should constrain the image. Track that as issue
+#029; the intended fix is a v2 fit-inside path for default static rendering,
+leaving width-primary behavior only for callers that explicitly need it.
+
 When stdout is not a terminal and no `--width` / `--height` is supplied, static
 rendering has no external fit box. In that unconstrained case, legacy integer
 aspect modes keep the source render height (`h/q` on a 640×480 image emit 240
