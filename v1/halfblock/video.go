@@ -112,9 +112,22 @@ func ProbeVideoDuration(path string) (float64, error) {
 
 // ── single-frame load ─────────────────────────────────────────────────────────
 
-// LoadVideoFrame extracts the first frame of path as an image using ffmpeg.
+// LoadVideoFrame extracts a frame of path as an image using ffmpeg.
+// It seeks to a non-zero time (1.0s or 10% of duration if under 1s) to avoid
+// the initial black frame/fade-in, falling back to the 0.0s frame if seeking fails.
 // It requires ffmpeg to be on $PATH.
 func LoadVideoFrame(path string) (image.Image, error) {
+	dur, err := ProbeVideoDuration(path)
+	if err == nil && dur > 0 {
+		offset := 1.0
+		if dur <= 1.0 {
+			offset = dur * 0.1
+		}
+		if img, err := LoadVideoFrameAt(path, offset); err == nil {
+			return img, nil
+		}
+	}
+
 	cmd := exec.Command("ffmpeg",
 		"-v", "quiet",
 		"-i", path,
