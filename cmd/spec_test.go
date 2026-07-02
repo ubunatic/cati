@@ -19,6 +19,89 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestSpecRenderModesLoad(t *testing.T) {
+	rm, err := spec.LoadRenderModes()
+	if err != nil {
+		t.Fatalf("LoadRenderModes: %v", err)
+	}
+	if len(rm.Modes) == 0 {
+		t.Fatal("render_modes.yaml defines no modes")
+	}
+	if len(rm.Cycle) == 0 {
+		t.Fatal("render_modes.yaml defines no cycle")
+	}
+}
+
+func TestSpecRenderModesIntegrity(t *testing.T) {
+	rm, err := spec.LoadRenderModes()
+	if err != nil {
+		t.Fatalf("LoadRenderModes: %v", err)
+	}
+	knownRenderers := map[string]bool{
+		"halfblock_exact":      true,
+		"quad_split_half":      true,
+		"sextant_2x3":          true,
+		"sparkline_half_split": true,
+		"sparkline_spark":      true,
+		"sparkline_spark_quad": true,
+		"sparkline_six_half":   true,
+		"sparkline_spark_six":  true,
+	}
+	knownColorers := map[string]bool{
+		"top_bottom": true,
+		"fg_bg_sse":  true,
+	}
+
+	names := map[string]bool{}
+	aliases := map[string]string{"": "<default>"}
+	for _, mode := range rm.Modes {
+		if mode.Name == "" {
+			t.Fatal("render mode with empty name")
+		}
+		if names[mode.Name] {
+			t.Fatalf("duplicate render mode name %q", mode.Name)
+		}
+		names[mode.Name] = true
+		if aliases[mode.Name] != "" {
+			t.Fatalf("render mode name %q collides with alias for %s", mode.Name, aliases[mode.Name])
+		}
+		if mode.Cell.W <= 0 || mode.Cell.H <= 0 {
+			t.Fatalf("render mode %q has invalid cell geometry %dx%d", mode.Name, mode.Cell.W, mode.Cell.H)
+		}
+		if mode.Analysis != nil && (mode.Analysis.W <= 0 || mode.Analysis.H <= 0) {
+			t.Fatalf("render mode %q has invalid analysis geometry %dx%d", mode.Name, mode.Analysis.W, mode.Analysis.H)
+		}
+		if !knownRenderers[mode.Renderer] {
+			t.Fatalf("render mode %q references unknown renderer %q", mode.Name, mode.Renderer)
+		}
+		if !knownColorers[mode.Colorer] {
+			t.Fatalf("render mode %q references unknown colorer %q", mode.Name, mode.Colorer)
+		}
+		for _, set := range mode.GlyphSets {
+			if _, ok := rm.GlyphSets[set]; !ok {
+				t.Fatalf("render mode %q references unknown glyph_set %q", mode.Name, set)
+			}
+		}
+		for _, alias := range mode.Aliases {
+			if alias == "" {
+				t.Fatalf("render mode %q has empty alias", mode.Name)
+			}
+			if owner := aliases[alias]; owner != "" {
+				t.Fatalf("render alias %q used by both %s and %s", alias, owner, mode.Name)
+			}
+			if names[alias] {
+				t.Fatalf("render alias %q for %s collides with a mode name", alias, mode.Name)
+			}
+			aliases[alias] = mode.Name
+		}
+	}
+	for _, name := range rm.Cycle {
+		if !names[name] {
+			t.Fatalf("render cycle references undefined mode %q", name)
+		}
+	}
+}
+
 // TestSpecButtonsLoad verifies the button key-def loader returns a populated map
 // with every entry having a non-empty action.
 func TestSpecButtonsLoad(t *testing.T) {

@@ -1,9 +1,13 @@
 // Package sparkline renders scalar values as Unicode block-element sparklines.
 //
-// Two modes are provided:
+// Multiple candidate families are provided:
 //
 //   - Vertical:  ▁▂▃▄▅▆▇█  (bars grow upward from cell bottom)
-//   - Quad:      sparkline fractional blocks plus quad/half/full block masks
+//   - HalfSplit: half, side, full, and empty block masks
+//   - Spark:     vertical and horizontal fractional block fills
+//   - SparkQuad: Spark plus quadrant masks
+//   - SixHalf:   sextants plus half-block splits
+//   - SparkSix:  Spark plus sextants
 //
 // Each cell encodes one value in [0,1].  The caller is responsible for
 // setting fg (bar/filled colour) and bg (empty colour) per cell.
@@ -13,8 +17,11 @@ type Mode int
 
 const (
 	Vertical Mode = iota
+	HalfSplit
+	Spark
 	Quad
 	Sextant
+	SixHalf
 	Best
 )
 
@@ -22,19 +29,25 @@ func ModeName(m Mode) string {
 	switch m {
 	case Vertical:
 		return "spark/vert"
+	case HalfSplit:
+		return "half/split"
+	case Spark:
+		return "spark"
 	case Quad:
-		return "spark/quad"
+		return "spark+quad"
 	case Sextant:
 		return "spark/sextant"
+	case SixHalf:
+		return "six+half"
 	case Best:
-		return "spark/best"
+		return "spark+six"
 	default:
 		return "spark/vert"
 	}
 }
 
 func Modes() []Mode {
-	return []Mode{Vertical, Quad, Sextant, Best}
+	return []Mode{Vertical, HalfSplit, Spark, Quad, Sextant, SixHalf, Best}
 }
 
 func Cycle(m Mode) Mode {

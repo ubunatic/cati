@@ -137,7 +137,7 @@ func FitDims(srcW, srcH, cellW, cellH, aspectX, cols, rows int) (targetW, target
 	heightDerived := true
 	switch {
 	case cols <= 0 && rows <= 0:
-		rawW, hNum, hDen = srcW, srcH, 1
+		rawW, hNum, hDen = acSrcW, srcH, 1
 	case rows <= 0: // width-only constraint
 		rawW, hNum, hDen = maxW, srcH*maxW, acSrcW
 	case cols <= 0: // height-only constraint — height is fixed (exact cells)

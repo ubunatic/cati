@@ -1,0 +1,88 @@
+cycle:
+  - half
+  - half/split
+  - quad
+  - spark
+  - spark+quad
+  - six
+  - six+half
+  - spark+six
+
+modes:
+  - name: half
+    aliases: [h]
+    renderer: halfblock_exact
+    cell: { w: 1, h: 2 }
+    glyph_sets: [half]
+    colorer: top_bottom
+
+  - name: half/split
+    aliases: [hs]
+    renderer: sparkline_half_split
+    cell: { w: 2, h: 2 }
+    glyph_sets: [half, side]
+    colorer: fg_bg_sse
+
+  - name: quad
+    aliases: [q]
+    renderer: quad_split_half
+    cell: { w: 2, h: 2 }
+    glyph_sets: [half, side, quad]
+    colorer: top_bottom
+
+  - name: spark
+    aliases: [s]
+    renderer: sparkline_spark
+    cell: { w: 4, h: 8 }
+    glyph_sets: [half, side, spark_vertical, spark_horizontal]
+    colorer: fg_bg_sse
+
+  - name: spark+quad
+    aliases: [sq]
+    renderer: sparkline_spark_quad
+    cell: { w: 4, h: 8 }
+    glyph_sets: [half, side, quad, spark_vertical, spark_horizontal]
+    colorer: fg_bg_sse
+
+  - name: six
+    aliases: [x]
+    renderer: sextant_2x3
+    cell: { w: 2, h: 3 }
+    glyph_sets: [six]
+    colorer: fg_bg_sse
+
+  - name: six+half
+    aliases: [xh]
+    renderer: sparkline_six_half
+    cell: { w: 2, h: 6 }
+    glyph_sets: [six, half]
+    colorer: fg_bg_sse
+
+  - name: spark+six
+    aliases: [sx]
+    renderer: sparkline_spark_six
+    cell: { w: 4, h: 24 }
+    glyph_sets: [half, side, six, spark_vertical, spark_horizontal]
+    colorer: fg_bg_sse
+
+glyph_sets:
+  half: [" ", "▀", "▄", "█"]
+  side: ["▌", "▐"]
+  quad: ["▘", "▝", "▖", "▗", "▚", "▞", "▛", "▜", "▙", "▟"]
+  spark_vertical: ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+  spark_horizontal: ["▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
+  six: ["generated:sextant_2x3_with_columns"]
+
+colorers:
+  top_bottom: half-block top/bottom foreground/background averages
+  fg_bg_sse: two-color candidate search minimizing squared error
+
+renderers:
+  halfblock_exact: v1/halfblock
+  quad_split_half: v1/quadblock SplitHalf
+  sextant_2x3: v1/sextant
+  sparkline_half_split: v1/sparkline HalfSplit
+  sparkline_spark: v1/sparkline Spark
+  sparkline_spark_quad: v1/sparkline SparkQuad
+  sparkline_six_half: v1/sparkline SixHalf
+  sparkline_spark_six: v1/sparkline SparkSix

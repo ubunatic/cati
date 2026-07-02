@@ -170,42 +170,42 @@ func TestParseRenderMode(t *testing.T) {
 		want  string
 		check func(t *testing.T, opts quadblock.Options)
 	}{
-		{"default empty is halfblock", "", "halfblock", nil},
-		{"halfblock short", "h", "halfblock", nil},
-		{"halfblock alias", "half", "halfblock", nil},
-		{"quad split-half", "qs", "quad/splithalf", func(t *testing.T, opts quadblock.Options) {
-			if !opts.SplitHalf {
-				t.Fatal("qs mode should enable SplitHalf")
+		{"default empty is half", "", "half", nil},
+		{"half short", "h", "half", nil},
+		{"half alias", "half", "half", nil},
+		{"half split", "hs", "half/split", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("hs mode should not set quad options, got %#v", opts)
 			}
 		}},
-		{"quad alias", "quad", "quad/splithalf", func(t *testing.T, opts quadblock.Options) {
+		{"quad alias", "quad", "quad", func(t *testing.T, opts quadblock.Options) {
 			if !opts.SplitHalf {
 				t.Fatal("quad alias should enable SplitHalf")
 			}
 		}},
-		{"quad edge snap", "qe", "quad/edge-snap", func(t *testing.T, opts quadblock.Options) {
-			if !opts.EdgeSnap {
-				t.Fatal("qe mode should enable EdgeSnap")
+		{"spark", "s", "spark", func(t *testing.T, opts quadblock.Options) {
+			if opts != (quadblock.Options{}) {
+				t.Fatalf("s mode should not set quad options, got %#v", opts)
 			}
 		}},
-		{"spark quad", "sq", "spark/quad", func(t *testing.T, opts quadblock.Options) {
+		{"spark quad", "sq", "spark+quad", func(t *testing.T, opts quadblock.Options) {
 			if opts != (quadblock.Options{}) {
 				t.Fatalf("sq mode should not set quad options, got %#v", opts)
 			}
 		}},
-		{"spark alias", "spark", "spark/quad", func(t *testing.T, opts quadblock.Options) {
+		{"spark six", "sx", "spark+six", func(t *testing.T, opts quadblock.Options) {
 			if opts != (quadblock.Options{}) {
-				t.Fatalf("spark alias should not set quad options, got %#v", opts)
+				t.Fatalf("sx mode should not set quad options, got %#v", opts)
 			}
 		}},
-		{"spark best", "sb", "spark/best", func(t *testing.T, opts quadblock.Options) {
+		{"six", "x", "six", func(t *testing.T, opts quadblock.Options) {
 			if opts != (quadblock.Options{}) {
-				t.Fatalf("sb mode should not set quad options, got %#v", opts)
+				t.Fatalf("x mode should not set quad options, got %#v", opts)
 			}
 		}},
-		{"sextant 2x3", "xs", "sextant/2x3", func(t *testing.T, opts quadblock.Options) {
+		{"six half", "xh", "six+half", func(t *testing.T, opts quadblock.Options) {
 			if opts != (quadblock.Options{}) {
-				t.Fatalf("xs mode should not set quad options, got %#v", opts)
+				t.Fatalf("xh mode should not set quad options, got %#v", opts)
 			}
 		}},
 	}
@@ -226,7 +226,7 @@ func TestParseRenderMode(t *testing.T) {
 }
 
 func TestRemovedRenderModesAreRejected(t *testing.T) {
-	for _, mode := range []string{"sg", "spark/geom", "xg", "xb", "geom", "best", "sextant/geom", "sextant/best", "sh", "shg", "shb", "geomshape", "geomshape/2x2", "geomshape/geom", "geomshape/best"} {
+	for _, mode := range []string{"halfblock", "qs", "quad/splithalf", "splithalf", "qe", "quad/edge-snap", "edge-snap", "spark/quad", "sb", "spark/best", "xs", "sextant", "sextant/2x3", "sh", "sg", "spark/geom", "xg", "xb", "geom", "best", "sextant/geom", "sextant/best", "shg", "shb", "geomshape", "geomshape/2x2", "geomshape/geom", "geomshape/best"} {
 		t.Run(mode, func(t *testing.T) {
 			if _, err := parseRenderMode(mode); err == nil {
 				t.Fatalf("parseRenderMode(%q) succeeded, want error", mode)
@@ -237,15 +237,15 @@ func TestRemovedRenderModesAreRejected(t *testing.T) {
 
 func TestModeFlagShorthand(t *testing.T) {
 	cmd := New()
-	if err := cmd.ParseFlags([]string{"-m", "qe"}); err != nil {
+	if err := cmd.ParseFlags([]string{"-m", "sx"}); err != nil {
 		t.Fatalf("failed to parse -m: %v", err)
 	}
 	got, err := cmd.Flags().GetString("mode")
 	if err != nil {
 		t.Fatalf("failed to get mode flag: %v", err)
 	}
-	if got != "qe" {
-		t.Fatalf("expected mode flag to be 'qe', got %q", got)
+	if got != "sx" {
+		t.Fatalf("expected mode flag to be 'sx', got %q", got)
 	}
 
 	cmd = New()
@@ -518,7 +518,7 @@ func TestSampleDarthDaughterNoDuplicateRenderedPixelRows(t *testing.T) {
 		t.Fatalf("load sample: %v", err)
 	}
 
-	modes := []string{"h", "qs", "qe", "sq"}
+	modes := []string{"h", "q", "sq", "sx"}
 	widths := []int{20, 30, 40, 50}
 	for _, mode := range modes {
 		rc, err := parseRenderMode(mode)
@@ -585,7 +585,7 @@ func TestAllRenderModesWidthOneThroughTwentyKeepAspectAndNoGaps(t *testing.T) {
 		}{tc.name, src})
 	}
 
-	modes := []string{"h", "qs", "qe", "sq", "sb", "xs"}
+	modes := []string{"h", "hs", "q", "s", "sq", "x", "xh", "sx"}
 
 	for _, source := range sources {
 		for _, mode := range modes {
@@ -630,6 +630,38 @@ func TestAllRenderModesWidthOneThroughTwentyKeepAspectAndNoGaps(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func TestAllRenderModesSquareWidthEightEmitFourRows(t *testing.T) {
+	src := opaqueGradientForTest(32, 32)
+	modes := []string{"h", "hs", "q", "s", "sq", "x", "xh", "sx"}
+	want := renderCells{Cols: 8, Rows: 4}
+
+	for _, mode := range modes {
+		t.Run(mode, func(t *testing.T) {
+			rc, err := parseRenderMode(mode)
+			if err != nil {
+				t.Fatalf("parseRenderMode(%q): %v", mode, err)
+			}
+
+			vp, err := prepareRenderedImageChecked(src, nil, want.Cols, 0, rc, "")
+			if err != nil {
+				t.Fatalf("prepareRenderedImageChecked: %v", err)
+			}
+			if got := renderedCellSize(vp, rc); got != want {
+				t.Fatalf("renderedCellSize = %dx%d, want %dx%d; viewport=%dx%d",
+					got.Cols, got.Rows, want.Cols, want.Rows, vp.Bounds().Dx(), vp.Bounds().Dy())
+			}
+
+			var out strings.Builder
+			if err := renderChecked(&out, vp, rc); err != nil {
+				t.Fatalf("renderChecked: %v", err)
+			}
+			if widths := visibleLineWidths(out.String()); len(widths) != want.Rows {
+				t.Fatalf("ANSI rows = %d, want %d (widths=%v)", len(widths), want.Rows, widths)
+			}
+		})
 	}
 }
 
@@ -764,9 +796,10 @@ func renderNativeImageForTest(vp image.Image, rc renderCfg) image.Image {
 	switch rc.mode {
 	case modeSextant:
 		return sextant.RenderToImage(vp, rc.sextantMode)
-	case modeSpark, modeSparkBest:
-		outCols := max(1, b.Dx()/4)
-		outRows := max(1, b.Dy()/8)
+	case modeHalfSplit, modeSpark, modeSparkQuad, modeSixHalf, modeSparkSix:
+		spec := rc.mode.viewSpec()
+		outCols := max(1, b.Dx()/spec.CellW)
+		outRows := max(1, b.Dy()/spec.CellH)
 		return sparkline.RenderToImage(vp, outCols, outRows, rc.sparkMode)
 	case modeQuad:
 		return quadblock.RenderToImage(vp, rc.quadOpts)

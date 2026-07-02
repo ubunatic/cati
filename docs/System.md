@@ -139,14 +139,15 @@ The stable zoom and viewport helpers now live in `internal/viewgeom`. The app la
 
 **Mode separation.** Zoom changes size only. Sampling phase / subcell offsets are a separate axis for later testing-only controls such as quadshift. SSIM and other quality metrics should compare through a common analysis grid so new glyph families can still be evaluated against the same baseline.
 
-**Render-mode identity.** `renderCfg{}` is halfblock and id `0` must stay
-halfblock. CLI startup canonicalizes the flag-derived renderer into the active
-cycle entry so display names, geometry, metrics, and `r`/`R` cycling all agree.
-The main app cycle is currently `halfblock → quad/splithalf → quad/edge-snap →
-spark/quad → spark/best → sextant/2x3`; `--mode=h` starts at
-halfblock, `--mode=qs` starts at `quad/splithalf`, `--mode=qe` starts at
-`quad/edge-snap`, `--mode=sq` starts at `spark/quad`, `--mode=sb` starts at
-`spark/best`, and `--mode=xs` starts at `sextant/2x3`.
+**Render-mode identity.** `renderCfg{}` is halfblock-compatible `half` and id
+`0` must stay that zero-value mode. CLI startup canonicalizes the flag-derived
+renderer into the active cycle entry so display names, geometry, metrics, and
+`r`/`R` cycling all agree. The user-facing mode contract is loaded from
+`spec/render_modes.yaml`: names, aliases, cycle order, cell geometry, glyph
+families, and colorer names live in spec, while Go owns the executable renderer
+implementations. The main app cycle is currently `half → half/split → quad →
+spark → spark+quad → six → six+half → spark+six`. The accepted short aliases are
+the consistent spec names: `h`, `hs`, `q`, `s`, `sq`, `x`, `xh`, and `sx`.
 
 **Panning invariant.** Pan state is the upper-left origin of the visible viewport in the scaled image. Halfblock, quad, spark, and sextant all use the same state and clamp path. Mode-specific code may translate terminal-cell deltas to viewport pixels through `viewSpec()`, but it must not pan a renderer-local output frame independently of the source viewport.
 
@@ -173,7 +174,8 @@ regressions cannot pass unnoticed.
 `--crop` / `-c` after the image has been fit, zoomed, and renderer-aligned but
 before ANSI is emitted. Crop dimensions and offsets are expressed in terminal
 cells, then converted through the active render mode's cell footprint
-(halfblock `1×2`, quad `2×2`, spark `4×8`, sextant `2×3`). `--crop W:H`
+(`half` `1×2`, `half/split` and `quad` `2×2`, `spark` and `spark+quad` `4×8`,
+`six` `2×3`, `six+half` `2×6`, `spark+six` `4×24`). `--crop W:H`
 keeps a centered `W×H` cell window, `--crop W:H:X:Y` keeps an explicit
 cell-offset window, and `--crop auto[,left|center|right][,top|middle|bottom]`
 uses the current terminal size as the crop box. Auto crop also accepts
@@ -182,8 +184,9 @@ uses the current terminal size as the crop box. Auto crop also accepts
 existing rendered line-width invariant continues to validate the final output
 size.
 
-The sextant family keeps exactly one shipped algorithm: `xs` /
-`sextant/2x3`. It uses a fixed `2×3` sample lattice and the rational sextant
+The sextant family keeps the dedicated `six` / `x` algorithm for the native
+`2×3` sample lattice and exposes `six+half` / `xh` through the sparkline
+candidate scorer on a `2×6` lattice. The dedicated sextant renderer uses a fixed `2×3` sample lattice and the rational sextant
 aspect correction while the original zoom/pan view geometry remains shared with
 the rest of the app. The experimental sextant search aliases and diagonal
 geomshape family were removed; see `RenderExperimentLessons.md` for the short

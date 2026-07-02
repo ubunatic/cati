@@ -12,20 +12,21 @@ This document captures the architecture, design decisions, optimal-split algorit
 
 ## 1. Overview & Modes
 
-Sparkline mode displays scalar gradients and pixel grids in the terminal by
-mapping each terminal cell's `4×8` source block to the Unicode glyph and two
-colours that minimise reconstruction error.
-
-Cati provides two sparkline-family modes:
+Sparkline-family modes display scalar gradients and pixel grids in the terminal
+by mapping each terminal cell's source block to the Unicode glyph and two
+colours that minimise reconstruction error. The canonical mode surface is
+declared in `spec/render_modes.yaml`; Go keeps the scoring and rendering code.
 
 | Mode | Visual Representation | Growth Direction | Character Set |
 | :--- | :--- | :--- | :--- |
 | `Vertical` (`spark/vert`) | ` ▂▃▄▅▆▇█` | Bottom-to-Top (Upward) | `U+2581` – `U+2588` |
-| `Quad` (`spark/quad`) | vertical spark blocks plus `▘▝▖▗▀▄▌▐▚▞▛▜▙▟█` | Best 2D mask | fractional block + quad block candidates |
+| `HalfSplit` (`half/split`) | half and side block splits | Best 2D mask | ` ▀▄▌▐█` |
+| `Spark` (`spark`) | vertical and horizontal fractional fills plus half/side/full/space | Best 2D mask | `▁▂▃▄▅▆▇█` and `▏▎▍▌▋▊▉█` plus half/side |
+| `Quad` (`spark+quad`) | `spark` plus quadrant masks | Best 2D mask | spark + `▘▝▖▗▚▞▛▜▙▟` |
+| `SixHalf` (`six+half`) | sextants plus half-block splits | Best 2D mask | U+1FB00 sextants, `▌▐`, and half blocks |
+| `Best` (`spark+six`) | `spark` plus sextant masks | Best 2D mask | spark + U+1FB00 sextants + `▌▐` |
 
-`spark/quad` is the only spark mode currently exposed in the main interactive
-render-mode cycle. `spark/vert` remains in the library and test suite as a
-useful scalar baseline.
+`spark/vert` remains in the library and test suite as a useful scalar baseline.
 
 ### Removed Modes
 Earlier versions included `spark/upper`, `spark/right`, and `spark/left`.
@@ -47,20 +48,20 @@ For each possible split level `ci` (0 to 7):
    $$\text{SSE} = \sum_{p \in \text{bar}} (p - fgAvg)^2 + \sum_{p \in \text{empty}} (p - bgAvg)^2$$
 4. **Minimization**: The level `ci` yielding the lowest SSE is chosen as `bestK`.
 
-### `spark/quad` Candidate Masks
+### Candidate Masks
 
-`spark/quad` generalizes the same SSE idea from one-dimensional split levels to
-two-dimensional candidate masks. For each terminal cell it:
+The candidate scorer generalizes the same SSE idea from one-dimensional split
+levels to two-dimensional candidate masks. For each terminal cell it:
 
-1. Evaluates the vertical sparkline masks.
-2. Evaluates quad, half, full, and space masks on the same `4×8` block.
+1. Selects the candidate family for the active mode.
+2. Evaluates each glyph mask on that mode's cell block.
 3. Averages source pixels inside the mask to get foreground colour.
 4. Averages source pixels outside the mask to get background colour.
 5. Reconstructs the block and selects the rune with the lowest SSE.
 
-Quad candidates are upsampled to `4×8`: each quadrant covers a `2×4` rectangle.
-This keeps `spark/quad` in the sparkline geometry family and avoids changing the
-pure `quadblock` renderer.
+`half/split` uses a `2×2` block. `spark` and `spark+quad` use `4×8`.
+`six+half` uses `2×6`, and `spark+six` uses `4×24`. Quad candidates in
+`spark+quad` are upsampled to `4×8`: each quadrant covers a `2×4` rectangle.
 
 ### Tiebreaker: prefer non-splitting characters
 
@@ -107,16 +108,18 @@ transparent area — a garbled bottom row in `RenderOpts`. The snap guarantees
 `extH ∈ {0, CellH/2}`, upholding the half-char transparency invariant.
 
 **Resolution-independent — the snap is shared by all render modes.** Every mode
-is built so that `CellW / (AspectX · CellH) = 1/2` (halfblock `1/(1·2)`, quad
-`2/(2·2)`, spark `4/(1·8)`), so the *continuous* display height in char rows,
-`srcH · cols / (2 · srcW)`, is identical regardless of mode. `FitDims` makes the
-half-cell decision from that continuous ratio (carried as exact integer
-`hNum/hDen`), **not** from a height already floored to integer pixels. Flooring
-first would discard up to ~½ a char at 2 px/char (halfblock, quad) but almost
-nothing at 8 px/char (spark), so the modes would disagree on the bottom-row
-geometry for the same source and width (halfblock/quad rendering "too short").
-Deciding in the shared continuous unit makes all modes land on the same rows and
-the same bottom-row fill. See `TestFitDimsUnifiedGeometry`.
+is built so that `CellW·AspectDen / (AspectNum·CellH) = 1/2` (halfblock `1:1`,
+quad `2:1`, spark `1:1`, sextant `4:3`, `six+half` `2:3`, `spark+six` `1:3`),
+so the *continuous* display height in char rows, `srcH · cols / (2 · srcW)`, is
+identical regardless of mode. `FitDims`/`V2Spec.Fit` make the half-cell decision
+from that continuous ratio (carried as exact integer `hNum/hDen`), **not** from
+a height already floored to integer pixels. Flooring first would discard up to
+~½ a char at 2 px/char (halfblock, quad) but almost nothing at 8 px/char
+(spark), so the modes would disagree on the bottom-row geometry for the same
+source and width (halfblock/quad rendering "too short"). Deciding in the shared
+continuous unit makes all modes land on the same rows and the same bottom-row
+fill. See `TestFitDimsUnifiedGeometry` and
+`TestAllRenderModesSquareWidthEightEmitFourRows`.
 
 ---
 

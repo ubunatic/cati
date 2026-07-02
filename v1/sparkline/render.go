@@ -15,9 +15,39 @@ import (
 )
 
 type Options struct {
-	Mode Mode
-	Rows int
-	Jobs int
+	Mode    Mode
+	Rows    int
+	Jobs    int
+	CellW   int
+	CellH   int
+	AspectX int
+}
+
+func (o Options) cellGeometry() (cellW, cellH, aspectX int) {
+	cellW, cellH, aspectX = defaultCellGeometry(o.Mode)
+	if o.CellW > 0 {
+		cellW = o.CellW
+	}
+	if o.CellH > 0 {
+		cellH = o.CellH
+	}
+	if o.AspectX > 0 {
+		aspectX = o.AspectX
+	}
+	return cellW, cellH, aspectX
+}
+
+func defaultCellGeometry(mode Mode) (cellW, cellH, aspectX int) {
+	switch mode {
+	case HalfSplit:
+		return 2, 2, 2
+	case SixHalf:
+		return 2, 6, 1
+	case Best:
+		return 4, 24, 1
+	default:
+		return 4, 8, 1
+	}
 }
 
 const (
@@ -63,29 +93,36 @@ func ScaleToFit(img image.Image, cols, rows int) image.Image {
 func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	var scaled image.Image
 	var outCols, outRows int
-	
+	cellW, cellH, aspectX := opts.cellGeometry()
+
 	if cols > 0 || opts.Rows > 0 {
 		b := img.Bounds()
-		targetW, targetH, extH := imgutil.FitDims(b.Dx(), b.Dy(), 4, 8, 1, cols, opts.Rows)
-		scaled = imgutil.ScaleNN(img, targetW, targetH)
-		if extH > 0 {
-			scaled = imgutil.AppendTransparentRows(scaled, extH)
+		if cols > 0 && opts.Rows > 0 && b.Dx() == cols*cellW && b.Dy() == opts.Rows*cellH {
+			scaled = img
+			outCols = cols
+			outRows = opts.Rows
+		} else {
+			targetW, targetH, extH := imgutil.FitDims(b.Dx(), b.Dy(), cellW, cellH, aspectX, cols, opts.Rows)
+			scaled = imgutil.ScaleNN(img, targetW, targetH)
+			if extH > 0 {
+				scaled = imgutil.AppendTransparentRows(scaled, extH)
+			}
+			outCols = cols
+			outRows = (targetH + extH) / cellH
 		}
-		outCols = cols
-		outRows = (targetH + extH) / 8
 	} else {
 		scaled = img
 		b := img.Bounds()
-		outCols = max(1, b.Dx()/4)
-		outRows = max(1, b.Dy()/8)
+		outCols = max(1, b.Dx()/cellW)
+		outRows = max(1, b.Dy()/cellH)
 	}
 
 	b := scaled.Bounds()
 	pixW := b.Dx()
 	pixH := b.Dy()
 
-	cellW := max(1, pixW/outCols)
-	cellH := max(1, pixH/outRows)
+	blockW := max(1, pixW/outCols)
+	blockH := max(1, pixH/outRows)
 
 	cells := make([][]core.Cell, outRows)
 	for tr := 0; tr < outRows; tr++ {
@@ -94,10 +131,10 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 
 	renderRow := func(tr int) {
 		for tc := 0; tc < outCols; tc++ {
-			x0 := b.Min.X + min(tc*cellW, pixW)
-			x1 := b.Min.X + min(tc*cellW+cellW, pixW) - 1
-			y0 := b.Min.Y + min(tr*cellH, pixH)
-			y1 := b.Min.Y + min(tr*cellH+cellH, pixH) - 1
+			x0 := b.Min.X + min(tc*blockW, pixW)
+			x1 := b.Min.X + min(tc*blockW+blockW, pixW) - 1
+			y0 := b.Min.Y + min(tr*blockH, pixH)
+			y1 := b.Min.Y + min(tr*blockH+blockH, pixH) - 1
 			if x1 < x0 || y1 < y0 {
 				continue
 			}
@@ -324,6 +361,9 @@ func maskContains(ch rune, x, y, w, h int) bool {
 	case '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█':
 		level := sparkLevel(ch)
 		return (h-y)*8 <= level*h
+	case '▏', '▎', '▍', '▋', '▊', '▉':
+		level := horizontalLevel(ch)
+		return (x+1)*8 <= level*w
 	case '▘':
 		return x*2 < w && y*2 < h
 	case '▝':
@@ -359,10 +399,26 @@ func maskContains(ch rune, x, y, w, h int) bool {
 }
 
 var sextantMaskByRune = map[rune]uint8{}
+var halfSplitCandidates = buildHalfSplitCandidates()
 var verticalCandidates = buildVerticalCandidates()
+var horizontalCandidates = buildHorizontalCandidates()
+var sparkCandidates = buildSparkCandidates()
 var quadCandidates = buildQuadCandidates()
+var sparkQuadCandidates = buildSparkQuadCandidates()
 var sextantCandidates = buildSextantCandidates()
+var sixHalfCandidates = buildSixHalfCandidates()
 var bestCandidates = buildBestCandidates()
+
+func buildHalfSplitCandidates() []candidate {
+	return []candidate{
+		{ch: ' ', mask: func(_, _, _, _ int) bool { return false }},
+		{ch: '▀', mask: func(_ int, y int, _ int, h int) bool { return y*2 < h }},
+		{ch: '▄', mask: func(_ int, y int, _ int, h int) bool { return y*2 >= h }},
+		{ch: '▌', mask: func(x int, _ int, w int, _ int) bool { return x*2 < w }},
+		{ch: '▐', mask: func(x int, _ int, w int, _ int) bool { return x*2 >= w }},
+		{ch: '█', mask: func(_, _, _, _ int) bool { return true }},
+	}
+}
 
 func buildVerticalCandidates() []candidate {
 	out := make([]candidate, 0, len(lowerBlocks))
@@ -378,28 +434,42 @@ func buildVerticalCandidates() []candidate {
 	return out
 }
 
+func buildHorizontalCandidates() []candidate {
+	blocks := [...]rune{'▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'}
+	out := make([]candidate, 0, len(blocks))
+	for i, ch := range blocks {
+		k := i + 1
+		out = append(out, candidate{
+			ch: ch,
+			mask: func(x int, _ int, w int, _ int) bool {
+				return (x+1)*8 <= k*w
+			},
+		})
+	}
+	return out
+}
+
+func buildSparkCandidates() []candidate {
+	return mergeCandidates(halfSplitCandidates, verticalCandidates, horizontalCandidates)
+}
+
 func buildQuadCandidates() []candidate {
-	out := make([]candidate, 0, len(lowerBlocks)+8)
-	out = append(out, verticalCandidates...)
-	out = append(out,
-		candidate{ch: ' ', mask: func(_, _, _, _ int) bool { return false }},
+	return append([]candidate{
 		candidate{ch: '▘', mask: quadMask(true, false, false, false)},
 		candidate{ch: '▝', mask: quadMask(false, true, false, false)},
 		candidate{ch: '▖', mask: quadMask(false, false, true, false)},
 		candidate{ch: '▗', mask: quadMask(false, false, false, true)},
-		candidate{ch: '▀', mask: quadMask(true, true, false, false)},
-		candidate{ch: '▄', mask: quadMask(false, false, true, true)},
-		candidate{ch: '▌', mask: quadMask(true, false, true, false)},
-		candidate{ch: '▐', mask: quadMask(false, true, false, true)},
 		candidate{ch: '▚', mask: quadMask(true, false, false, true)},
 		candidate{ch: '▞', mask: quadMask(false, true, true, false)},
 		candidate{ch: '▛', mask: quadMask(true, true, true, false)},
 		candidate{ch: '▜', mask: quadMask(true, true, false, true)},
 		candidate{ch: '▙', mask: quadMask(true, false, true, true)},
 		candidate{ch: '▟', mask: quadMask(false, true, true, true)},
-		candidate{ch: '█', mask: func(_, _, _, _ int) bool { return true }},
-	)
-	return out
+	}, halfSplitCandidates...)
+}
+
+func buildSparkQuadCandidates() []candidate {
+	return mergeCandidates(sparkCandidates, quadCandidates)
 }
 
 func buildSextantCandidates() []candidate {
@@ -420,13 +490,33 @@ func buildSextantCandidates() []candidate {
 		sextantMaskByRune[ch] = bits
 		out = append(out, candidate{ch: ch, mask: sextantMask(bits)})
 	}
+	out = append(out,
+		candidate{ch: '▌', mask: sextantMask(0b010101)},
+		candidate{ch: '▐', mask: sextantMask(0b101010)},
+	)
 	return out
 }
 
+func buildSixHalfCandidates() []candidate {
+	return mergeCandidates(sextantCandidates, halfSplitCandidates)
+}
+
 func buildBestCandidates() []candidate {
-	out := make([]candidate, 0, len(quadCandidates)+len(sextantCandidates))
-	out = append(out, quadCandidates...)
-	out = append(out, sextantCandidates...)
+	return mergeCandidates(sparkCandidates, sextantCandidates)
+}
+
+func mergeCandidates(sets ...[]candidate) []candidate {
+	seen := map[rune]bool{}
+	var out []candidate
+	for _, set := range sets {
+		for _, cand := range set {
+			if seen[cand.ch] {
+				continue
+			}
+			seen[cand.ch] = true
+			out = append(out, cand)
+		}
+	}
 	return out
 }
 
@@ -485,6 +575,29 @@ func sparkLevel(ch rune) int {
 	}
 }
 
+func horizontalLevel(ch rune) int {
+	switch ch {
+	case '▏':
+		return 1
+	case '▎':
+		return 2
+	case '▍':
+		return 3
+	case '▌':
+		return 4
+	case '▋':
+		return 5
+	case '▊':
+		return 6
+	case '▉':
+		return 7
+	case '█':
+		return 8
+	default:
+		return 0
+	}
+}
+
 func quadMask(ul, ur, ll, lr bool) func(x, y, w, h int) bool {
 	return func(x, y, w, h int) bool {
 		left := x*2 < w
@@ -507,10 +620,16 @@ func quadMask(ul, ur, ll, lr bool) func(x, y, w, h int) bool {
 func FindBestCell(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, mode Mode) cellResult {
 	candidates := verticalCandidates
 	switch mode {
+	case HalfSplit:
+		candidates = halfSplitCandidates
+	case Spark:
+		candidates = sparkCandidates
 	case Quad:
-		candidates = quadCandidates
+		candidates = sparkQuadCandidates
 	case Sextant:
 		candidates = sextantCandidates
+	case SixHalf:
+		candidates = sixHalfCandidates
 	case Best:
 		candidates = bestCandidates
 	}

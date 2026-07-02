@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cati render modes spec",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cycle", "modes", "glyph_sets", "colorers", "renderers"],
+  "properties": {
+    "cycle": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "modes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "aliases", "renderer", "cell", "glyph_sets", "colorer"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "aliases": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "renderer": { "type": "string", "minLength": 1 },
+          "cell": { "$ref": "#/$defs/geometry" },
+          "analysis": { "$ref": "#/$defs/geometry" },
+          "glyph_sets": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "colorer": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "glyph_sets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "colorers": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "renderers": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["w", "h"],
+      "properties": {
+        "w": { "type": "integer", "minimum": 1 },
+        "h": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

@@ -34,9 +34,9 @@ func TestRenderCheckedVideoSizedSextantJobsWidth80(t *testing.T) {
 			})
 		}
 	}
-	rc, err := parseRenderMode("xs")
+	rc, err := parseRenderMode("x")
 	if err != nil {
-		t.Fatalf("parseRenderMode(xs): %v", err)
+		t.Fatalf("parseRenderMode(x): %v", err)
 	}
 	rc.jobs = 10
 	vp, err := prepareRenderedImageChecked(src, nil, 80, 0, rc, "")
@@ -47,7 +47,32 @@ func TestRenderCheckedVideoSizedSextantJobsWidth80(t *testing.T) {
 	if err := renderChecked(&out, vp, rc); err != nil {
 		t.Fatalf("renderChecked: %v", err)
 	}
-	if err := validateRenderedANSI(out.String(), renderCells{Cols: 80, Rows: renderedCellSize(vp, rc).Rows}, "sextant/2x3"); err != nil {
+	if err := validateRenderedANSI(out.String(), renderCells{Cols: 80, Rows: renderedCellSize(vp, rc).Rows}, "six"); err != nil {
+		t.Fatalf("validateRenderedANSI: %v", err)
+	}
+}
+
+func TestRenderCheckedHalfSplitUsesTwoByTwoRows(t *testing.T) {
+	rc, err := parseRenderMode("hs")
+	if err != nil {
+		t.Fatalf("parseRenderMode(hs): %v", err)
+	}
+	src := image.NewRGBA(image.Rect(0, 0, 60, 60))
+	for y := 0; y < 60; y++ {
+		for x := 0; x < 60; x++ {
+			src.SetRGBA(x, y, color.RGBA{
+				R: uint8(x * 255 / 59),
+				G: uint8(y * 255 / 59),
+				B: uint8((x + y) % 256),
+				A: 255,
+			})
+		}
+	}
+	var out bytes.Buffer
+	if err := renderChecked(&out, src, rc); err != nil {
+		t.Fatalf("renderChecked half/split: %v", err)
+	}
+	if err := validateRenderedANSI(out.String(), renderedCellSize(src, rc), "half/split"); err != nil {
 		t.Fatalf("validateRenderedANSI: %v", err)
 	}
 }

@@ -111,7 +111,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
 	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
-	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half|halfblock, qs|quad, qe, sq|spark/quad, sb|spark/best, xs|sextant/2x3")
+	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
@@ -206,7 +206,7 @@ func NewPlay() *cobra.Command {
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for async render work (0 = auto)")
 	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
-	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half|halfblock, qs|quad, qe, sq|spark/quad, sb|spark/best, xs|sextant/2x3")
+	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
@@ -262,7 +262,7 @@ func NewBrowse() *cobra.Command {
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
 	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
-	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half|halfblock, qs|quad, qe, sq|spark/quad, sb|spark/best, xs|sextant/2x3")
+	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
@@ -319,7 +319,7 @@ func forwardToPlayer(path string, width, height int, rc renderCfg, fullComp bool
 	if height > 0 {
 		args = append(args, "--height", strconv.Itoa(height))
 	}
-	if name := rcModeName(rc); name != "" && name != "?" && name != "halfblock" {
+	if name := rcModeName(rc); name != "" && name != "?" && name != "half" {
 		args = append(args, "--mode", name)
 	}
 	if initialZoom != "" {
@@ -477,25 +477,17 @@ func loadImageForRender(path string, termCols, termRows int, rc renderCfg, initi
 // parseRenderMode converts a --mode flag value into a canonical renderCfg.
 // The empty value defaults to halfblock.
 func parseRenderMode(mode string) (renderCfg, error) {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "", "h", "half", "halfblock":
-		return findRenderModeByName("halfblock")
-	case "qs", "quad", "quad/splithalf", "splithalf":
-		return findRenderModeByName("quad/splithalf")
-	case "qe", "quad/edge-snap", "edge-snap":
-		return findRenderModeByName("quad/edge-snap")
-	case "sq", "spark", "spark/quad":
-		return findRenderModeByName("spark/quad")
-	case "sb", "spark/best":
-		return findRenderModeByName("spark/best")
-	case "xs", "sextant", "sextant/2x3":
-		return findRenderModeByName("sextant/2x3")
-	default:
-		return renderCfg{}, fmt.Errorf("unknown --mode %q; valid: h, qs, qe, sq, sb, xs", mode)
+	key := strings.ToLower(strings.TrimSpace(mode))
+	if name, ok := renderModeAliases[key]; ok {
+		return findRenderModeByName(name)
 	}
+	return renderCfg{}, fmt.Errorf("unknown --mode %q; valid: h, hs, q, s, sq, x, xh, sx", mode)
 }
 
 func findRenderModeByName(name string) (renderCfg, error) {
+	if canonical, ok := renderModeAliases[strings.ToLower(strings.TrimSpace(name))]; ok {
+		name = canonical
+	}
 	for _, m := range renderModes {
 		if m.name == name {
 			return m.cfg, nil

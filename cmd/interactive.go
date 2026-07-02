@@ -14,18 +14,19 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/term"
 	"ubunatic.com/cati/internal/audio"
-	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/internal/input"
 	"ubunatic.com/cati/internal/metrics"
+	"ubunatic.com/cati/internal/viewgeom"
+	spec "ubunatic.com/cati/spec"
+	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
 	"ubunatic.com/cati/v1/sextant"
 	"ubunatic.com/cati/v1/sparkline"
-	"ubunatic.com/cati/internal/viewgeom"
-	spec "ubunatic.com/cati/spec"
-	"golang.org/x/term"
 
-	catiterm "ubunatic.com/cati/v1/term")
+	catiterm "ubunatic.com/cati/v1/term"
+)
 
 // ── renderMode ────────────────────────────────────────────────────────────────
 
@@ -34,10 +35,16 @@ type renderMode int
 
 const (
 	modeHalfblock renderMode = iota
+	modeHalfSplit
 	modeQuad
 	modeSpark
-	modeSparkBest
+	modeSparkQuad
 	modeSextant
+	modeSixHalf
+	modeSparkSix
+
+	// Backwards-compatible test/benchmark alias for the old spark/best name.
+	modeSparkBest = modeSparkSix
 )
 
 func (m renderMode) pixCols(termCols int) int {
@@ -50,10 +57,16 @@ func (m renderMode) pixRows(termRows int) int {
 
 func (m renderMode) viewSpec() viewgeom.Spec {
 	switch m {
+	case modeHalfSplit:
+		return viewgeom.NewCell(2, 2, 2)
 	case modeQuad:
 		return viewgeom.NewCell(2, 2, 2)
-	case modeSpark, modeSparkBest:
+	case modeSpark, modeSparkQuad:
 		return viewgeom.NewCell(4, 8, 1)
+	case modeSixHalf:
+		return viewgeom.NewCell(2, 6, 1)
+	case modeSparkSix:
+		return viewgeom.NewCell(4, 24, 1)
 	case modeSextant:
 		return viewgeom.NewCell(2, 3, 1)
 	default:
@@ -66,7 +79,7 @@ func (m renderMode) useQuad() bool {
 }
 
 func (m renderMode) useSpark() bool {
-	return m == modeSpark || m == modeSparkBest
+	return m == modeHalfSplit || m == modeSpark || m == modeSparkQuad || m == modeSixHalf || m == modeSparkSix
 }
 
 func (m renderMode) useSextant() bool {
@@ -74,10 +87,16 @@ func (m renderMode) useSextant() bool {
 }
 
 func (m renderMode) v2FitSpec() (viewgeom.V2Spec, bool) {
-	if !m.useSextant() {
+	switch m {
+	case modeSextant:
+		return viewgeom.NewV2CellRatio(2, 3, 4, 3), true
+	case modeSixHalf:
+		return viewgeom.NewV2CellRatio(2, 6, 2, 3), true
+	case modeSparkSix:
+		return viewgeom.NewV2CellRatio(4, 24, 1, 3), true
+	default:
 		return viewgeom.V2Spec{}, false
 	}
-	return viewgeom.NewV2CellRatio(2, 3, 4, 3), true
 }
 
 // ── renderCfg ─────────────────────────────────────────────────────────────────
@@ -195,11 +214,12 @@ func (rc renderCfg) render(w io.Writer, img image.Image) error {
 	switch rc.mode {
 	case modeSextant:
 		return sextant.Render(w, img, 0, sextant.Options{Mode: rc.sextantMode, Jobs: rc.jobs})
-	case modeSpark, modeSparkBest:
+	case modeHalfSplit, modeSpark, modeSparkQuad, modeSixHalf, modeSparkSix:
 		b := img.Bounds()
-		outCols := max(1, b.Dx()/4)
-		outRows := max(1, b.Dy()/8)
-		return sparkline.Render(w, img, outCols, sparkline.Options{Mode: rc.sparkMode, Rows: outRows, Jobs: rc.jobs})
+		spec := rc.mode.viewSpec()
+		outCols := max(1, b.Dx()/spec.CellW)
+		outRows := max(1, b.Dy()/spec.CellH)
+		return sparkline.Render(w, img, outCols, sparkline.Options{Mode: rc.sparkMode, Rows: outRows, Jobs: rc.jobs, CellW: spec.CellW, CellH: spec.CellH, AspectX: spec.AspectX})
 	case modeQuad:
 		opts := rc.quadOpts
 		opts.Jobs = rc.jobs
@@ -251,8 +271,9 @@ func renderedCellSizeForPixels(w, h int, rc renderCfg) renderCells {
 	switch rc.mode {
 	case modeSextant:
 		return renderCells{Cols: ceilDiv(w, 2), Rows: ceilDiv(h, 3)}
-	case modeSpark, modeSparkBest:
-		return renderCells{Cols: max(1, w/4), Rows: max(1, h/8)}
+	case modeHalfSplit, modeSpark, modeSparkQuad, modeSixHalf, modeSparkSix:
+		spec := rc.mode.viewSpec()
+		return renderCells{Cols: max(1, w/spec.CellW), Rows: max(1, h/spec.CellH)}
 	case modeQuad:
 		return renderCells{Cols: ceilDiv(w, 2), Rows: ceilDiv(h, 2)}
 	default:
@@ -335,29 +356,65 @@ func renderValidatedGated(w io.Writer, orig, vp image.Image, state viewState, te
 	return renderCheckedGated(w, vp, rc, gate)
 }
 
-// renderModes is the cycle order for the R key. Each entry's cfg.id must be
-// stable and unique so that cycleRenderCfg and rcModeName can find entries by id.
-var renderModes = []struct {
-	name string
-	cfg  renderCfg
-}{
-	{"halfblock", renderCfg{id: 0}},
-	// {"halfblock+sharp", renderCfg{id: 10, preScale: pixelart.Sharpen05}},
-	// {"halfblock+epx2x", renderCfg{id: 8, preScale: pixelart.Scale2x}},
-	// {"quad/pca2", renderCfg{id: 6, mode: modeQuad, quadOpts: quadblock.Options{PCA2: true}}},
-	// {"quad/default", renderCfg{id: 7, mode: modeQuad}},
-	// {"quad/lum+ambig", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{LumSplit: true, Blend: quadblock.BlendAmbiguous}}},
-	// {"quad/pca2+ambig", renderCfg{id: 2, mode: modeQuad, quadOpts: quadblock.Options{PCA2: true, Blend: quadblock.BlendAmbiguous}}},
-	// {"quad/splithalf+ambig", renderCfg{id: 3, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true, Blend: quadblock.BlendAmbiguous}}},
-	// {"quad/lum-split", renderCfg{id: 5, mode: modeQuad, quadOpts: quadblock.Options{LumSplit: true}}},
-	{"quad/splithalf", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}},
-	//{"quad/splithalf+sharp", renderCfg{id: 11, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Sharpen05}},
-	//{"quad/splithalf+epx2x", renderCfg{id: 9, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}, preScale: pixelart.Scale2x}},
-	{"quad/edge-snap", renderCfg{id: 2, mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true}}},
-	// {"quad/edge-snap+ambig", renderCfg{id: 13, mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true, Blend: quadblock.BlendAmbiguous}}},
-	{"spark/quad", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}},
-	{"spark/best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}},
-	{"sextant/2x3", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}},
+type renderModeEntry struct {
+	name    string
+	aliases []string
+	cfg     renderCfg
+}
+
+// renderModes is loaded from spec/render_modes.yaml. Each entry's cfg.id must
+// be stable and unique so that cycleRenderCfg and rcModeName can find entries by id.
+var renderModes = loadRenderModeEntries()
+
+var renderModeAliases = buildRenderModeAliases(renderModes)
+
+func loadRenderModeEntries() []renderModeEntry {
+	renderers := map[string]renderCfg{
+		"halfblock_exact":      {id: 0},
+		"sparkline_half_split": {id: 8, mode: modeHalfSplit, sparkMode: sparkline.HalfSplit},
+		"quad_split_half":      {id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}},
+		"sparkline_spark":      {id: 9, mode: modeSpark, sparkMode: sparkline.Spark},
+		"sparkline_spark_quad": {id: 3, mode: modeSparkQuad, sparkMode: sparkline.Quad},
+		"sextant_2x3":          {id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant},
+		"sparkline_six_half":   {id: 10, mode: modeSixHalf, sparkMode: sparkline.SixHalf},
+		"sparkline_spark_six":  {id: 5, mode: modeSparkSix, sparkMode: sparkline.Best},
+	}
+
+	modeSpec, err := spec.LoadRenderModes()
+	if err != nil {
+		return []renderModeEntry{{name: "half", aliases: []string{"h"}, cfg: renderCfg{id: 0}}}
+	}
+	defs := map[string]spec.RenderModeDef{}
+	for _, def := range modeSpec.Modes {
+		defs[def.Name] = def
+	}
+	entries := make([]renderModeEntry, 0, len(modeSpec.Cycle))
+	for _, name := range modeSpec.Cycle {
+		def, ok := defs[name]
+		if !ok {
+			continue
+		}
+		cfg, ok := renderers[def.Renderer]
+		if !ok {
+			continue
+		}
+		entries = append(entries, renderModeEntry{name: def.Name, aliases: def.Aliases, cfg: cfg})
+	}
+	if len(entries) == 0 {
+		return []renderModeEntry{{name: "half", aliases: []string{"h"}, cfg: renderCfg{id: 0}}}
+	}
+	return entries
+}
+
+func buildRenderModeAliases(entries []renderModeEntry) map[string]string {
+	aliases := map[string]string{"": entries[0].name}
+	for _, entry := range entries {
+		aliases[entry.name] = entry.name
+		for _, alias := range entry.aliases {
+			aliases[alias] = entry.name
+		}
+	}
+	return aliases
 }
 
 func canonicalRenderCfg(rc renderCfg) renderCfg {

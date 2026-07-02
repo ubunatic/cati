@@ -12,11 +12,11 @@ import (
 	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/internal/input"
 	"ubunatic.com/cati/internal/metrics"
+	"ubunatic.com/cati/internal/viewgeom"
+	spec "ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/quadblock"
 	"ubunatic.com/cati/v1/sextant"
 	"ubunatic.com/cati/v1/sparkline"
-	"ubunatic.com/cati/internal/viewgeom"
-	spec "ubunatic.com/cati/spec"
 )
 
 // ── interactive (error paths) ─────────────────────────────────────────────────
@@ -363,7 +363,7 @@ func TestViewerHintVarsFitsWidth(t *testing.T) {
 	hint := "{ meta.name_short | dim }  { render_mode | dim }  { zoom_level | dim }  S:{ ssim | dim }  { meta.src_res | dim }  { meta.disp_res | dim }  { last_key | dim }"
 	vars := viewerHintVars(meta, 80, hint, map[string]string{
 		"last_key":    "q",
-		"render_mode": "halfblock",
+		"render_mode": "half",
 		"zoom_level":  "1:1",
 		"ssim":        "0.999",
 	})
@@ -380,15 +380,15 @@ func TestViewerHintVarsFitsWidth(t *testing.T) {
 
 func TestRenderModeZeroValueIsHalfblockAndCyclesToQuad(t *testing.T) {
 	rc := renderCfg{}
-	if got := rcModeName(rc); got != "halfblock" {
-		t.Fatalf("rcModeName(zero) = %q, want halfblock", got)
+	if got := rcModeName(rc); got != "half" {
+		t.Fatalf("rcModeName(zero) = %q, want half", got)
 	}
 	next, name := cycleRenderCfg(rc)
-	if name != "quad/splithalf" {
-		t.Fatalf("cycleRenderCfg(zero) name = %q, want quad/splithalf", name)
+	if name != "half/split" {
+		t.Fatalf("cycleRenderCfg(zero) name = %q, want half/split", name)
 	}
-	if next.mode != modeQuad || !next.quadOpts.SplitHalf {
-		t.Fatalf("cycleRenderCfg(zero) = %#v, want splithalf quad", next)
+	if next.mode != modeHalfSplit || next.sparkMode != sparkline.HalfSplit {
+		t.Fatalf("cycleRenderCfg(zero) = %#v, want half/split", next)
 	}
 }
 
@@ -398,9 +398,8 @@ func TestCanonicalRenderCfgMapsStartupConfigsToCycleIDs(t *testing.T) {
 		in   renderCfg
 		want string
 	}{
-		{"zero halfblock", renderCfg{}, "halfblock"},
-		{"splithalf quad", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, "quad/splithalf"},
-		{"edge snap quad", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{EdgeSnap: true}}, "quad/edge-snap"},
+		{"zero half", renderCfg{}, "half"},
+		{"splithalf quad", renderCfg{mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, "quad"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -423,8 +422,8 @@ func TestZoomLevelReportsTerminalCellSourceWidthAcrossModes(t *testing.T) {
 	}{
 		{"halfblock", renderCfg{id: 0}, "src px/cell=4"},
 		{"quad", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, "src px/cell=4"},
-		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}, "src px/cell=4"},
-		{"spark best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}, "src px/cell=4"},
+		{"spark+quad", renderCfg{id: 3, mode: modeSparkQuad, sparkMode: sparkline.Quad}, "src px/cell=4"},
+		{"spark+six", renderCfg{id: 5, mode: modeSparkSix, sparkMode: sparkline.Best}, "src px/cell=4"},
 		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, "src px/cell=5"},
 	}
 	for _, tc := range modes {
@@ -453,8 +452,8 @@ func TestBuildRefUsesCommonQualityGridAcrossModes(t *testing.T) {
 		// at viewH/2 — smaller than RenderToImage output.  buildRef falls through to
 		// viewW×viewH so that rendered and ref are compared at the same resolution
 		// without a 2× downscale that would alias the character fill pattern.
-		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
-		{"spark best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
+		{"spark+quad", renderCfg{id: 3, mode: modeSparkQuad, sparkMode: sparkline.Quad}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
+		{"spark+six", renderCfg{id: 5, mode: modeSparkSix, sparkMode: sparkline.Best}, termCols * metrics.GridK, termRows * metrics.GridK * 4},
 		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, termCols * metrics.GridK, termRows * metrics.GridK},
 	}
 	for _, tc := range modes {
@@ -481,8 +480,8 @@ func TestBuildViewportExpandsSparkSmallFitToDisplaySize(t *testing.T) {
 	}{
 		{"halfblock", renderCfg{id: 0}, renderCells{Cols: 32, Rows: 16}},
 		{"quad", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, renderCells{Cols: 32, Rows: 16}},
-		{"spark", renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}, renderCells{Cols: 32, Rows: 16}},
-		{"spark best", renderCfg{id: 5, mode: modeSparkBest, sparkMode: sparkline.Best}, renderCells{Cols: 32, Rows: 16}},
+		{"spark+quad", renderCfg{id: 3, mode: modeSparkQuad, sparkMode: sparkline.Quad}, renderCells{Cols: 32, Rows: 16}},
+		{"spark+six", renderCfg{id: 5, mode: modeSparkSix, sparkMode: sparkline.Best}, renderCells{Cols: 32, Rows: 16}},
 		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, renderCells{Cols: 32, Rows: 16}},
 	}
 	for _, tc := range modes {
@@ -570,10 +569,10 @@ func TestHorizontalGradientSparkQuadQualityAtZoomKThree(t *testing.T) {
 		recenterForMode(&state, src, termCols, termRows, oldRC, rc)
 	}
 
-	spark := scores["spark/quad"]
-	for _, mode := range []string{"quad/splithalf", "quad/edge-snap"} {
+	spark := scores["spark+quad"]
+	for _, mode := range []string{"quad", "half/split"} {
 		if spark+1e-9 < scores[mode] {
-			t.Fatalf("spark/quad SSIM %.6f below %s %.6f (scores: %#v)", spark, mode, scores[mode], scores)
+			t.Fatalf("spark+quad SSIM %.6f below %s %.6f (scores: %#v)", spark, mode, scores[mode], scores)
 		}
 	}
 }

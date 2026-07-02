@@ -200,6 +200,41 @@ func LoadZoomLevels() (ZoomLevelsSpec, error) {
 	return spec, nil
 }
 
+// ── Render Modes Spec ────────────────────────────────────────────────────────
+
+type RenderModeGeometry struct {
+	W int `yaml:"w"`
+	H int `yaml:"h"`
+}
+
+type RenderModeDef struct {
+	Name      string              `yaml:"name"`
+	Aliases   []string            `yaml:"aliases"`
+	Renderer  string              `yaml:"renderer"`
+	Cell      RenderModeGeometry  `yaml:"cell"`
+	Analysis  *RenderModeGeometry `yaml:"analysis"`
+	GlyphSets []string            `yaml:"glyph_sets"`
+	Colorer   string              `yaml:"colorer"`
+}
+
+type RenderModesSpec struct {
+	Cycle     []string            `yaml:"cycle"`
+	Modes     []RenderModeDef     `yaml:"modes"`
+	GlyphSets map[string][]string `yaml:"glyph_sets"`
+	Colorers  map[string]string   `yaml:"colorers"`
+	Renderers map[string]string   `yaml:"renderers"`
+}
+
+func LoadRenderModes() (RenderModesSpec, error) {
+	var spec RenderModesSpec
+	data, err := fs.ReadFile(FS, "render_modes.yaml")
+	if err != nil {
+		return spec, err
+	}
+	err = yaml.Unmarshal(data, &spec)
+	return spec, err
+}
+
 // ── Controls Spec ────────────────────────────────────────────────────────────
 
 type ControlDef struct {

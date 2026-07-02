@@ -121,11 +121,11 @@ func TestGoldenRenders(t *testing.T) {
 	}
 	var algos []algoSpec
 	for _, pair := range []struct{ name, mode string }{
-		{"halfblock", "halfblock"},
-		{"quad", "quad/splithalf"},
-		{"spark", "spark/quad"},
-		{"spark_best", "spark/best"},
-		{"sextant", "sextant/2x3"},
+		{"halfblock", "half"},
+		{"quad", "quad"},
+		{"spark", "spark+quad"},
+		{"spark_best", "spark+six"},
+		{"sextant", "six"},
 	} {
 		rc, err := findRenderModeByName(pair.mode)
 		if err != nil {
@@ -144,9 +144,9 @@ func TestGoldenRenders(t *testing.T) {
 		if orig == nil {
 			continue
 		}
-		baseRC, err := findRenderModeByName("halfblock")
+		baseRC, err := findRenderModeByName("half")
 		if err != nil {
-			t.Fatalf("findRenderModeByName(%q): %v", "halfblock", err)
+			t.Fatalf("findRenderModeByName(%q): %v", "half", err)
 		}
 		baseScaled := prepareRenderedImage(orig, nil, c.n, c.n, baseRC, "")
 		baseRender := goldenRenderToImage(baseScaled, baseRC, 0, 0)
@@ -251,9 +251,10 @@ func goldenRenderToImage(scaled image.Image, rc renderCfg, refW, refH int) image
 	switch rc.mode {
 	case modeSextant:
 		rendered = sextant.RenderToImage(scaled, rc.sextantMode)
-	case modeSpark, modeSparkBest:
-		outCols := max(1, b.Dx()/4)
-		outRows := max(1, b.Dy()/8)
+	case modeHalfSplit, modeSpark, modeSparkQuad, modeSixHalf, modeSparkSix:
+		spec := rc.mode.viewSpec()
+		outCols := max(1, b.Dx()/spec.CellW)
+		outRows := max(1, b.Dy()/spec.CellH)
 		rendered = sparkline.RenderToImage(scaled, outCols, outRows, rc.sparkMode)
 	case modeQuad:
 		rendered = quadblock.RenderToImage(scaled, rc.quadOpts)
@@ -398,8 +399,9 @@ func TestUnrepeatLossless(t *testing.T) {
 			switch tc.rc.mode {
 			case modeSextant:
 				native = sextant.RenderToImage(src, tc.rc.sextantMode)
-			case modeSpark, modeSparkBest:
-				native = sparkline.RenderToImage(src, max(1, b.Dx()/4), max(1, b.Dy()/8), tc.rc.sparkMode)
+			case modeHalfSplit, modeSpark, modeSparkQuad, modeSixHalf, modeSparkSix:
+				spec := tc.rc.mode.viewSpec()
+				native = sparkline.RenderToImage(src, max(1, b.Dx()/spec.CellW), max(1, b.Dy()/spec.CellH), tc.rc.sparkMode)
 			case modeQuad:
 				native = quadblock.RenderToImage(src, tc.rc.quadOpts)
 			default:

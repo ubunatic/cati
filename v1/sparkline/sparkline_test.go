@@ -13,9 +13,12 @@ func TestModeName(t *testing.T) {
 		want string
 	}{
 		{Vertical, "spark/vert"},
-		{Quad, "spark/quad"},
+		{HalfSplit, "half/split"},
+		{Spark, "spark"},
+		{Quad, "spark+quad"},
 		{Sextant, "spark/sextant"},
-		{Best, "spark/best"},
+		{SixHalf, "six+half"},
+		{Best, "spark+six"},
 		{Mode(99), "spark/vert"},
 	}
 	for _, tc := range tests {
@@ -27,38 +30,72 @@ func TestModeName(t *testing.T) {
 
 func TestModes(t *testing.T) {
 	ms := Modes()
-	if len(ms) != 4 {
-		t.Fatalf("Modes() returned %d entries, want 4", len(ms))
+	if len(ms) != 7 {
+		t.Fatalf("Modes() returned %d entries, want 7", len(ms))
 	}
-	if ms[0] != Vertical || ms[1] != Quad || ms[2] != Sextant || ms[3] != Best {
-		t.Errorf("Modes() order incorrect: got %v", ms)
+	want := []Mode{Vertical, HalfSplit, Spark, Quad, Sextant, SixHalf, Best}
+	for i, m := range want {
+		if ms[i] != m {
+			t.Errorf("Modes()[%d] = %v, want %v (all: %v)", i, ms[i], m, ms)
+		}
+	}
+}
+
+func hasCandidate(candidates []candidate, ch rune) bool {
+	for _, cand := range candidates {
+		if cand.ch == ch {
+			return true
+		}
+	}
+	return false
+}
+
+func TestCandidateTables(t *testing.T) {
+	if got := len(halfSplitCandidates); got != 6 {
+		t.Fatalf("halfSplitCandidates = %d entries, want 6", got)
+	}
+	for _, ch := range []rune{'▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'} {
+		if !hasCandidate(sparkCandidates, ch) {
+			t.Fatalf("sparkCandidates missing horizontal fill %q", ch)
+		}
+	}
+	for _, ch := range []rune{'▘', '▝', '▖', '▗', '▚', '▞', '▛', '▜', '▙', '▟'} {
+		if !hasCandidate(sparkQuadCandidates, ch) {
+			t.Fatalf("sparkQuadCandidates missing quad glyph %q", ch)
+		}
+	}
+	if !hasCandidate(sixHalfCandidates, '▀') || !hasCandidate(sixHalfCandidates, '▄') {
+		t.Fatalf("sixHalfCandidates missing half-block split glyphs")
+	}
+	if len(bestCandidates) <= len(sparkCandidates) || len(bestCandidates) <= len(sextantCandidates) {
+		t.Fatalf("bestCandidates = %d, want union larger than spark=%d and sextant=%d", len(bestCandidates), len(sparkCandidates), len(sextantCandidates))
 	}
 }
 
 func TestSextantCandidateTable(t *testing.T) {
-	if got := len(sextantCandidates); got != 60 {
-		t.Fatalf("sextantCandidates = %d entries, want 60", got)
+	if got := len(sextantCandidates); got != 62 {
+		t.Fatalf("sextantCandidates = %d entries, want 62", got)
 	}
-	if got := len(bestCandidates); got != len(quadCandidates)+len(sextantCandidates) {
-		t.Fatalf("bestCandidates = %d entries, want quad+sextant=%d", got, len(quadCandidates)+len(sextantCandidates))
+	if !hasCandidate(sextantCandidates, '▌') || !hasCandidate(sextantCandidates, '▐') {
+		t.Fatalf("sextantCandidates missing column fallback glyphs")
 	}
 }
 
 func TestCycle(t *testing.T) {
+	if got := Cycle(Vertical); got != HalfSplit {
+		t.Errorf("Cycle(Vertical) = %d, want HalfSplit", got)
+	}
 	if got := Cycle(Quad); got != Sextant {
 		t.Errorf("Cycle(Quad) = %d, want Sextant", got)
 	}
 	if got := Cycle(Best); got != Vertical {
 		t.Errorf("Cycle(Best) = %d, want Vertical", got)
 	}
-	if got := Cycle(Vertical); got != Quad {
-		t.Errorf("Cycle(Vertical) = %d, want Quad", got)
-	}
 	if got := CyclePrev(Vertical); got != Best {
 		t.Errorf("CyclePrev(Vertical) = %d, want Best", got)
 	}
-	if got := CyclePrev(Quad); got != Vertical {
-		t.Errorf("CyclePrev(Quad) = %d, want Vertical", got)
+	if got := CyclePrev(Quad); got != Spark {
+		t.Errorf("CyclePrev(Quad) = %d, want Spark", got)
 	}
 	if got := Cycle(Mode(99)); got != Vertical {
 		t.Errorf("Cycle(99) = %d, want Vertical", got)

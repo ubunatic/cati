@@ -1,6 +1,6 @@
 # 025 — Spec-driven render modes, glyph families, geometry, and colorers
 
-**Status:** 🔴 Open  
+**Status:** 🔄 In Progress  
 **Refs:** [009](009-explore-more-sparkline-rendering-modes.md), [014](014-more-boxdrawing-chars-unicode-v13.md), [021](021-golden-storage-resolution-all-algos.md), [docs/Spec.md](../docs/Spec.md), [docs/System.md](../docs/System.md)
 
 ## Summary
@@ -62,7 +62,7 @@ The intended user-facing mode set is:
 | `quad` | `q` | `2x2` | omitted = `2x2` | half + side + all quadrant glyphs |
 | `spark` | `s` | `4x8` | omitted = `4x8` | half + side + full/space + vertical and horizontal fractional fills |
 | `six` | `x` | `2x3` | omitted = `2x3` | native sextant/quasi-2x3 set, including `▌` and `▐` |
-| `six+half` | `sh` | `2x6` | omitted = `2x6` | `six` plus half-block split candidates |
+| `six+half` | `xh` | `2x6` | omitted = `2x6` | `six` plus half-block split candidates |
 | `spark+quad` | `sq` | `4x8` | omitted = `4x8` | `spark` plus quad glyphs |
 | `spark+six` | `sx` | `4x24` | omitted = `4x24` | `spark` plus `six` glyphs on a common analysis grid |
 
@@ -97,7 +97,7 @@ modes:
     colorer: fg_bg_sse
 
   - name: six+half
-    aliases: [sh]
+    aliases: [xh]
     renderer: mask_scorer
     cell: { w: 2, h: 6 }
     glyph_sets: [six, half]
@@ -129,9 +129,9 @@ transparent-pixel penalties, neighbor blending, and fallback decisions.
 
 ## Implementation Tasks
 
-- [ ] Add `spec/render_modes.yaml`.
-- [ ] Add typed loader support in `spec/` using `gopkg.in/yaml.v3`, following the current spec-loader conventions.
-- [ ] Add spec integrity tests:
+- [x] Add `spec/render_modes.yaml`.
+- [x] Add typed loader support in `spec/` using `gopkg.in/yaml.v3`, following the current spec-loader conventions.
+- [x] Add spec integrity tests:
   - every mode has a unique name
   - every alias is unique and resolves
   - every mode has positive `cell.w` and `cell.h`
@@ -139,17 +139,17 @@ transparent-pixel penalties, neighbor blending, and fallback decisions.
   - explicit `analysis` has positive dimensions
   - every referenced `glyph_set`, `renderer`, and `colorer` is known to Go
   - cycle order contains only defined modes
-- [ ] Replace hardcoded CLI alias parsing with spec-backed mode lookup.
-- [ ] Replace hardcoded render cycle names with spec-backed cycle order.
-- [ ] Keep `renderCfg{}` as the default half/halfblock-compatible mode identity, or migrate carefully with tests that preserve zero-value behavior.
-- [ ] Implement `half/split` as a `2x2` mode using only half + side glyphs.
-- [ ] Rename/display `halfblock` as `half` while preserving compatibility aliases.
-- [ ] Rename/display `quad/splithalf` or the intended default quad implementation as `quad` / `q`.
-- [ ] Rename/display `spark/quad` as `spark+quad` / `sq`.
-- [ ] Rename/display `sextant/2x3` as `six` / `x`.
-- [ ] Rename/rework `spark/best` as `spark+six` / `sx`.
-- [ ] Add `six+half` / `sh`.
-- [ ] Add/verify horizontal fractional block glyph masks for `spark`.
+- [x] Replace hardcoded CLI alias parsing with spec-backed mode lookup.
+- [x] Replace hardcoded render cycle names with spec-backed cycle order.
+- [x] Keep `renderCfg{}` as the default `half`-compatible mode identity, or migrate carefully with tests that preserve zero-value behavior.
+- [x] Implement `half/split` as a `2x2` mode using only half + side glyphs.
+- [x] Rename/display `halfblock` as `half` and remove old mode aliases from the accepted CLI surface.
+- [x] Rename/display `quad/splithalf` or the intended default quad implementation as `quad` / `q`.
+- [x] Rename/display `spark/quad` as `spark+quad` / `sq`.
+- [x] Rename/display `sextant/2x3` as `six` / `x`.
+- [x] Rename/rework `spark/best` as `spark+six` / `sx`.
+- [x] Add `six+half` / `xh`.
+- [x] Add/verify horizontal fractional block glyph masks for `spark`.
 - [ ] Update docs:
   - `docs/System.md`
   - `docs/SparklinePixelArt.md`
@@ -160,15 +160,17 @@ transparent-pixel penalties, neighbor blending, and fallback decisions.
 
 ## Risks / Open Questions
 
-- `spark+six` and `six+half` need a clear scorer model that maps each glyph
-  family onto the common analysis grid without changing terminal layout width.
-- The current sparkline `Best` mode combines quad and sextant candidates but
-  does not yet represent the final desired `spark+six` geometry contract.
+- `six+half` and `spark+six` now use the requested `2x6` and `4x24` cell
+  geometry with rational fit specs (`2:3` and `1:3`) so square sources keep the
+  same terminal row count as the other modes. The older integer `viewgeom.Spec`
+  surface still exists for interactive zoom/pan math and should be consolidated
+  with `V2Spec` when the geometry split is removed.
 - Renaming modes will touch tests, golden metadata, docs, demo scripts, and user
-  muscle memory. Compatibility aliases should remain for old names where cheap.
-- `spark_horizontal` needs exact glyph list and mask semantics. Use reproducible
-  glyph/mask tooling rather than one-off inspection.
+  muscle memory. The accepted CLI mode surface intentionally keeps only the
+  consistent canonical aliases from `spec/render_modes.yaml`.
+- Golden and ANSI fixtures still need deliberate update/review for the changed
+  spark-family contracts. Current non-golden mode/spec/aspect tests pass.
 
 ## Status
 
-🔴 Open
+🔄 In Progress
