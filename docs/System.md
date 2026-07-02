@@ -174,11 +174,7 @@ regressions cannot pass unnoticed.
 When stdout is a terminal and no `--width`, `--height`, or `--zoom` is supplied,
 static rendering should treat the terminal columns and rows as a fit box for
 every render mode. Legacy modes (`h`, `q`, `s`) already use `FitDims` this way.
-The v2 rational modes (`x`, `xh`, `sx`) currently still route through the
-width-primary `V2Spec.Fit` path, which can make `six` consume the full terminal
-width where the terminal height should constrain the image. Track that as issue
-#029; the intended fix is a v2 fit-inside path for default static rendering,
-leaving width-primary behavior only for callers that explicitly need it.
+The v2 rational modes (`x`, `xh`, `sx`) use the fit-inside `V2Spec.Fit` path, which treats both terminal width and terminal height as a fit box, matching the behavior of legacy modes (`h`, `q`, `s`). Width-primary behavior remains available via `V2Spec.FitWidthPrimary` for callers that explicitly need it.
 
 When stdout is not a terminal and no `--width` / `--height` is supplied, static
 rendering has no external fit box. In that unconstrained case, legacy integer
@@ -229,12 +225,12 @@ The loader (`loadZoomLevels`) now delegates to the typed spec loader in `spec/lo
 
 **Minimum rendered width: 1 cell.** Both the levels list and the extension loop are capped at `k ≤ srcW`. This guarantees the rendered image is never smaller than 1 terminal cell wide, regardless of what the spec contains. Positive explicit zoom also snaps the renderer-pixel viewport to at least one complete render cell so high-density modes never receive sub-cell images. The `adaptive` extension widens its k jumps as the image gets larger so zooming out of small images does not feel linear and slow at high `k`.
 
-**`maxZoom`** (`mz`) is computed dynamically from the mode's render geometry:
+**`maxZoom`** (`mz`) is computed dynamically from the mode's render geometry in cell columns:
 
 ```
-zCol = AspectNum × srcW / scaledW
-zRow = AspectDen × srcH / scaledH
-maxZoom = max(min(zCol, zRow), 1.0)
+zCol = (AspectNum × srcW × CellW) / (AspectDen × scaledW)
+zRow = (srcH × CellH) / (2 × scaledH)
+maxZoom = min(zCol, zRow)
 ```
 
 This caps zoom at the 1-source-pixel-per-terminal-cell-column limit regardless of terminal resize or render-mode switch.

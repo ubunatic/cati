@@ -226,7 +226,7 @@ func TestParseRenderMode(t *testing.T) {
 }
 
 func TestRemovedRenderModesAreRejected(t *testing.T) {
-	for _, mode := range []string{"halfblock", "qs", "quad/splithalf", "splithalf", "qe", "quad/edge-snap", "edge-snap", "spark/quad", "sb", "spark/best", "xs", "sextant", "sextant/2x3", "sh", "sg", "spark/geom", "xg", "xb", "geom", "best", "sextant/geom", "sextant/best", "shg", "shb", "geomshape", "geomshape/2x2", "geomshape/geom", "geomshape/best"} {
+	for _, mode := range []string{"halfblock", "quad/splithalf", "splithalf", "qe", "quad/edge-snap", "edge-snap", "spark/quad", "sb", "spark/best", "sextant", "sextant/2x3", "sh", "sg", "spark/geom", "xg", "xb", "geom", "best", "sextant/geom", "sextant/best", "shg", "shb", "geomshape", "geomshape/2x2", "geomshape/geom", "geomshape/best"} {
 		t.Run(mode, func(t *testing.T) {
 			if _, err := parseRenderMode(mode); err == nil {
 				t.Fatalf("parseRenderMode(%q) succeeded, want error", mode)
@@ -709,6 +709,33 @@ func TestAllRenderModesZoomOneSmallSquareUseCompleteCells(t *testing.T) {
 		})
 	}
 }
+
+func TestAllRenderModesStaticFitInsideTerminalBox(t *testing.T) {
+	// A 640x480 source image.
+	src := opaqueGradientForTest(640, 480)
+	modes := []string{"h", "hs", "q", "s", "sq", "x", "xh", "sx"}
+	// In a terminal box of 80x24 cells, a 4:3 image fit-inside should use exactly 64x24 cells.
+	want := renderCells{Cols: 64, Rows: 24}
+
+	for _, mode := range modes {
+		t.Run(mode, func(t *testing.T) {
+			rc, err := parseRenderMode(mode)
+			if err != nil {
+				t.Fatalf("parseRenderMode(%q): %v", mode, err)
+			}
+
+			vp, err := prepareRenderedImageChecked(src, nil, 80, 24, rc, "")
+			if err != nil {
+				t.Fatalf("prepareRenderedImageChecked: %v", err)
+			}
+			if got := renderedCellSize(vp, rc); got != want {
+				t.Fatalf("renderedCellSize = %dx%d, want %dx%d; viewport=%dx%d",
+					got.Cols, got.Rows, want.Cols, want.Rows, vp.Bounds().Dx(), vp.Bounds().Dy())
+			}
+		})
+	}
+}
+
 
 type ansiGap struct {
 	found bool

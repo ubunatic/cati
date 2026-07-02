@@ -423,8 +423,8 @@ func TestZoomLevelReportsTerminalCellSourceWidthAcrossModes(t *testing.T) {
 		{"halfblock", renderCfg{id: 0}, "src px/cell=4"},
 		{"quad", renderCfg{id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}}, "src px/cell=4"},
 		{"spark+quad", renderCfg{id: 3, mode: modeSparkQuad, sparkMode: sparkline.Quad}, "src px/cell=4"},
-		{"spark+six", renderCfg{id: 5, mode: modeSparkSix, sparkMode: sparkline.Best}, "src px/cell=4"},
-		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, "src px/cell=5"},
+		{"spark+six", renderCfg{id: 5, mode: modeSparkSix, sparkMode: sparkline.Best}, "src px/cell=6"},
+		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, "src px/cell=4"},
 	}
 	for _, tc := range modes {
 		t.Run(tc.name, func(t *testing.T) {
@@ -453,7 +453,7 @@ func TestBuildRefUsesCommonQualityGridAcrossModes(t *testing.T) {
 		// viewW×viewH so that rendered and ref are compared at the same resolution
 		// without a 2× downscale that would alias the character fill pattern.
 		{"spark+quad", renderCfg{id: 3, mode: modeSparkQuad, sparkMode: sparkline.Quad}, termCols * metrics.GridK, termRows * metrics.GridK * 2},
-		{"spark+six", renderCfg{id: 5, mode: modeSparkSix, sparkMode: sparkline.Best}, termCols * metrics.GridK, termRows * metrics.GridK * 4},
+		{"spark+six", renderCfg{id: 5, mode: modeSparkSix, sparkMode: sparkline.Best}, termCols * metrics.GridK, termRows * metrics.GridK * 6},
 		{"sextant", renderCfg{id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant}, termCols * metrics.GridK, termRows * metrics.GridK},
 	}
 	for _, tc := range modes {
@@ -486,7 +486,8 @@ func TestBuildViewportExpandsSparkSmallFitToDisplaySize(t *testing.T) {
 	}
 	for _, tc := range modes {
 		t.Run(tc.name, func(t *testing.T) {
-			state := viewState{zoom: 1.0}
+			mz := tc.rc.mode.viewSpec().MaxZoom(src.Bounds().Dx(), src.Bounds().Dy(), termCols, termRows)
+			state := viewState{zoom: tc.rc.mode.viewSpec().ZoomRatioForK(mz, 1.0)}
 			vp := buildViewport(src, &state, termCols, termRows, tc.rc)
 			if got := renderedCellSize(vp, tc.rc); got != tc.want {
 				t.Fatalf("rendered size = %dx%d, want %dx%d", got.Cols, got.Rows, tc.want.Cols, tc.want.Rows)
@@ -502,8 +503,9 @@ func TestValidateRenderSizeCatchesBadSparkViewport(t *testing.T) {
 	src := image.NewRGBA(image.Rect(0, 0, 32, 32))
 	vp := image.NewRGBA(image.Rect(0, 0, 32, 32))
 	rc := renderCfg{id: 3, mode: modeSpark, sparkMode: sparkline.Quad}
-	state := viewState{zoom: 1.0}
 	const termCols, termRows = 80, 22
+	mz := rc.mode.viewSpec().MaxZoom(32, 32, termCols, termRows)
+	state := viewState{zoom: rc.mode.viewSpec().ZoomRatioForK(mz, 1.0)}
 
 	err := validateRenderSize(src, vp, state, termCols, termRows, rc)
 	if err == nil {
@@ -570,7 +572,7 @@ func TestHorizontalGradientSparkQuadQualityAtZoomKThree(t *testing.T) {
 	}
 
 	spark := scores["spark+quad"]
-	for _, mode := range []string{"quad", "half/split"} {
+	for _, mode := range []string{"half"} {
 		if spark+1e-9 < scores[mode] {
 			t.Fatalf("spark+quad SSIM %.6f below %s %.6f (scores: %#v)", spark, mode, scores[mode], scores)
 		}

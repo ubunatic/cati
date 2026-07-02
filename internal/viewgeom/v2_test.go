@@ -25,7 +25,7 @@ func TestV2FitBalancesHeight(t *testing.T) {
 		for _, cols := range []int{1, 2, 3, 5, 6, 10, 17, 24} {
 			for _, rows := range []int{2, 4, 8, 12, 16} {
 				for _, tc := range specs {
-					plan := tc.spec.Fit(s.srcW, s.srcH, cols, rows, false)
+					plan := tc.spec.FitWidthPrimary(s.srcW, s.srcH, cols, rows, false)
 					if plan.RenderW != plan.InnerCols*tc.spec.CellW {
 						t.Fatalf("%s %s -w%d -h%d: render width %d != inner cols %d * cellW %d",
 							s.name, tc.name, cols, rows, plan.RenderW, plan.InnerCols, tc.spec.CellW)
@@ -33,6 +33,53 @@ func TestV2FitBalancesHeight(t *testing.T) {
 					if got := plan.DisplayH + plan.FillH - plan.CutH; got != rows*tc.spec.CellH {
 						t.Fatalf("%s %s -w%d -h%d: display balance %d != %d",
 							s.name, tc.name, cols, rows, got, rows*tc.spec.CellH)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestV2FitInside(t *testing.T) {
+	specs := []struct {
+		name string
+		spec V2Spec
+	}{
+		{"halfblock", NewV2CellRatio(1, 2, 1, 1)},
+		{"quad", NewV2CellRatio(2, 2, 2, 1)},
+		{"spark", NewV2CellRatio(4, 8, 1, 1)},
+		{"sextant", NewV2CellRatio(2, 3, 4, 3)},
+	}
+	sources := []struct {
+		name       string
+		srcW, srcH int
+	}{
+		{"vacation", 1042, 1383},
+		{"darth", 687, 1168},
+		{"soldering", 640, 480},
+		{"cross", 20, 20},
+	}
+	for _, s := range sources {
+		for _, cols := range []int{1, 2, 3, 5, 6, 10, 17, 24} {
+			for _, rows := range []int{2, 4, 8, 12, 16} {
+				for _, tc := range specs {
+					plan := tc.spec.Fit(s.srcW, s.srcH, cols, rows, false)
+					if plan.RenderW > plan.InnerCols*tc.spec.CellW {
+						t.Fatalf("%s %s -w%d -h%d: render width %d > inner cols %d * cellW %d",
+							s.name, tc.name, cols, rows, plan.RenderW, plan.InnerCols, tc.spec.CellW)
+					}
+					maxH := rows * tc.spec.CellH
+					if plan.DisplayH > maxH {
+						t.Fatalf("%s %s -w%d -h%d: display height %d > max height %d",
+							s.name, tc.name, cols, rows, plan.DisplayH, maxH)
+					}
+					if plan.CutH != 0 {
+						t.Fatalf("%s %s -w%d -h%d: CutH is %d, want 0 when fit-inside",
+							s.name, tc.name, cols, rows, plan.CutH)
+					}
+					if got := plan.DisplayH + plan.FillH; got != maxH {
+						t.Fatalf("%s %s -w%d -h%d: display balance %d != %d",
+							s.name, tc.name, cols, rows, got, maxH)
 					}
 				}
 			}

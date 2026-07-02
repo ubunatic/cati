@@ -165,17 +165,21 @@ func LoadViews() (ViewsSpec, error) {
 // ── Zoom Levels Spec ─────────────────────────────────────────────────────────
 
 type ZoomLevelsDef struct {
-	Levels string `yaml:"levels"`
-	Extend string `yaml:"extend"`
+	Levels             string `yaml:"levels"`
+	Extend             string `yaml:"extend"`
+	UpscaleSmallImages bool   `yaml:"upscale_small_images"`
 }
 
 type ZoomLevelsSpec struct {
-	Levels []float64
-	Extend string
+	Levels             []float64
+	Extend             string
+	UpscaleSmallImages bool
 }
 
 func LoadZoomLevels() (ZoomLevelsSpec, error) {
-	var def ZoomLevelsDef
+	def := ZoomLevelsDef{
+		UpscaleSmallImages: true,
+	}
 	var spec ZoomLevelsSpec
 	data, err := fs.ReadFile(FS, "zoom_levels.yaml")
 	if err != nil {
@@ -185,6 +189,7 @@ func LoadZoomLevels() (ZoomLevelsSpec, error) {
 		return spec, err
 	}
 	spec.Extend = def.Extend
+	spec.UpscaleSmallImages = def.UpscaleSmallImages
 
 	parts := strings.Split(def.Levels, ",")
 	for _, p := range parts {

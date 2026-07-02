@@ -112,7 +112,7 @@ func TestPlayAudio(t *testing.T) {
 			fmt.Printf("   playing %.0fs snippet …\n", snippetDuration.Seconds())
 
 			ctx, cancel := context.WithTimeout(context.Background(), snippetDuration)
-			player, err := Open(ctx, path)
+			player, err := Open(ctx, path, 0, 0)
 			if err != nil {
 				cancel()
 				t.Errorf("%s: open: %v", path, err)

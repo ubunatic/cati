@@ -80,7 +80,7 @@ type Player struct {
 // Open starts audio playback for path in the background using ffplay.
 // Cancelling ctx stops playback.  Returns an error immediately if ffplay
 // fails to start.
-func Open(ctx context.Context, path string) (*Player, error) {
+func Open(ctx context.Context, path string, startSec, endSec float64) (*Player, error) {
 	if err := checkDeps(); err != nil {
 		return nil, err
 	}
@@ -88,12 +88,20 @@ func Open(ctx context.Context, path string) (*Player, error) {
 	// ffplay plays audio directly; -nodisp suppresses the video window,
 	// -vn drops video decoding entirely, -autoexit quits when the stream ends.
 	var stderr strings.Builder
-	cmd := exec.CommandContext(ctx, "ffplay",
+	args := []string{
 		"-v", "quiet",
 		"-nodisp",
 		"-vn",
 		"-autoexit",
-		path)
+	}
+	if startSec > 0 {
+		args = append(args, "-ss", fmt.Sprintf("%f", startSec))
+	}
+	if endSec > 0 {
+		args = append(args, "-t", fmt.Sprintf("%f", endSec-startSec))
+	}
+	args = append(args, path)
+	cmd := exec.CommandContext(ctx, "ffplay", args...)
 	cmd.Stderr = &stderr
 
 	if err := cmd.Start(); err != nil {

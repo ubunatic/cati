@@ -17,7 +17,7 @@ modes:
     colorer: top_bottom
 
   - name: half/split
-    aliases: [hs]
+    aliases: [hs, split]
     renderer: sparkline_half_split
     cell: { w: 2, h: 2 }
     glyph_sets: [half, side]
@@ -38,7 +38,7 @@ modes:
     colorer: fg_bg_sse
 
   - name: spark+quad
-    aliases: [sq]
+    aliases: [sq, qs]
     renderer: sparkline_spark_quad
     cell: { w: 4, h: 8 }
     glyph_sets: [half, side, quad, spark_vertical, spark_horizontal]
@@ -52,14 +52,14 @@ modes:
     colorer: fg_bg_sse
 
   - name: six+half
-    aliases: [xh]
+    aliases: [xh, hx]
     renderer: sparkline_six_half
     cell: { w: 2, h: 6 }
     glyph_sets: [six, half]
     colorer: fg_bg_sse
 
   - name: spark+six
-    aliases: [sx]
+    aliases: [sx, xs]
     renderer: sparkline_spark_six
     cell: { w: 4, h: 24 }
     glyph_sets: [half, side, six, spark_vertical, spark_horizontal]

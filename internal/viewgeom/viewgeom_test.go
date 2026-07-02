@@ -221,16 +221,31 @@ func TestInitialZoomRatio(t *testing.T) {
 	// baseFitW, baseFitH = imgutil.FitPixelDims(100, 50, 80, 20) = 40, 20.
 	// For "w": zoom = 80 / 40 = 2.0.
 	// For "h": zoom = 20 / 20 = 1.0.
-	gotW := s.InitialZoomRatio("w", 100, 50, 80, 10)
+	gotW := s.InitialZoomRatio("w", 100, 50, 80, 10, true)
 	if gotW != 2.0 {
 		t.Errorf("InitialZoomRatio(\"w\") = %v, want 2.0", gotW)
 	}
-	gotH := s.InitialZoomRatio("h", 100, 50, 80, 10)
+	gotH := s.InitialZoomRatio("h", 100, 50, 80, 10, true)
 	if gotH != 1.0 {
 		t.Errorf("InitialZoomRatio(\"h\") = %v, want 1.0", gotH)
 	}
-	got0 := s.InitialZoomRatio("0", 100, 50, 80, 10)
+	got0 := s.InitialZoomRatio("0", 100, 50, 80, 10, true)
 	if got0 != 1.0 {
 		t.Errorf("InitialZoomRatio(\"0\") = %v, want 1.0", got0)
+	}
+
+	// Upscaling case: small image (10x5) on large terminal (80x10).
+	// baseFitW, baseFitH = 10, 5 (capped at 1:1).
+	// fitW, fitH = 40, 20 (fits terminal height 20 pixels/10 cells).
+	// Expected ratio: 40 / 10 = 4.0 (when upscaleSmallImages is true)
+	gotUpscale := s.InitialZoomRatio("0", 10, 5, 80, 10, true)
+	if gotUpscale != 4.0 {
+		t.Errorf("InitialZoomRatio(\"0\", upscale=true) for small image = %v, want 4.0", gotUpscale)
+	}
+
+	// No upscaling case: upscaleSmallImages = false.
+	gotNoUpscale := s.InitialZoomRatio("0", 10, 5, 80, 10, false)
+	if gotNoUpscale != 1.0 {
+		t.Errorf("InitialZoomRatio(\"0\", upscale=false) for small image = %v, want 1.0", gotNoUpscale)
 	}
 }

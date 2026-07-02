@@ -179,11 +179,11 @@ func NewPlay() *cobra.Command {
 			if len(paths) == 0 {
 				return fmt.Errorf("no supported images found")
 			}
+			tr, err := parseTimeRange(timeRange)
+			if err != nil {
+				return err
+			}
 			if legacyPlay || len(paths) > 1 || singleArgIsDir(args) {
-				tr, err := parseTimeRange(timeRange)
-				if err != nil {
-					return err
-				}
 				cropSpec, err := parseCropSpec(crop)
 				if err != nil {
 					return err
@@ -191,7 +191,7 @@ func NewPlay() *cobra.Command {
 				return play(paths, fps, width, height, rc, tr, cropSpec)
 			}
 			if halfblock.IsVideo(paths[0]) {
-				return interactiveVideo(paths[0], width, height, rc, nil, nil, nil, nil, nil, nil, fullComp, initialZoom)
+				return interactiveVideo(paths[0], width, height, rc, tr, nil, nil, nil, nil, nil, nil, fullComp, initialZoom)
 			}
 			_ = legacyInteractive
 			return interactive(paths[0], width, height, rc, fullComp, initialZoom)
@@ -401,7 +401,7 @@ func run(o opts, rc renderCfg, args []string) error {
 			return fmt.Errorf("no supported images found")
 		}
 		if halfblock.IsVideo(paths[0]) {
-			return interactiveVideo(paths[0], o.width, o.height, rc, nil, nil, nil, nil, nil, nil, o.fullComp, o.initialZoom)
+			return interactiveVideo(paths[0], o.width, o.height, rc, TimeRange{}, nil, nil, nil, nil, nil, nil, o.fullComp, o.initialZoom)
 		}
 		return interactive(paths[0], o.width, o.height, rc, o.fullComp, o.initialZoom)
 	}

@@ -214,7 +214,7 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 	}
 	defer cleanup()
 
-	audioPlayer := openAudio(ctx, paths[videoIdx])
+	audioPlayer := openAudio(ctx, paths[videoIdx], tr.Start, tr.End)
 	defer stopAudio(audioPlayer)
 
 	var lastFrame image.Image
@@ -254,7 +254,7 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 					if err != nil {
 						return fmt.Errorf("open video stream: %w", err)
 					}
-					audioPlayer = openAudio(ctx, paths[videoIdx])
+					audioPlayer = openAudio(ctx, paths[videoIdx], 0, 0)
 					continue
 				}
 				currentVideoHadFrames = true

@@ -30,7 +30,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [026](026-small-image-aspect-ratio-scale-bugs.md) | Small image aspect ratio and scale bugs for spark/sextant modes | ✅ Closed |
 | [027](027-demo-widths-obsolete-modes.md) | demo_widths.go uses obsolete render mode names | ✅ Closed |
 | [028](028-v2-unconstrained-static-fit-aspect.md) | V2 unconstrained static fit aspect mismatch | ✅ Closed |
-| [029](029-v2-default-static-fit-full-terminal-width.md) | V2 default static fit uses full terminal width | 🔴 Open |
+| [029](029-v2-default-static-fit-full-terminal-width.md) | V2 default static fit uses full terminal width | ✅ Closed |
 
 ## Archived
 

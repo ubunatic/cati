@@ -64,11 +64,11 @@ func (m renderMode) viewSpec() viewgeom.Spec {
 	case modeSpark, modeSparkQuad:
 		return viewgeom.NewCell(4, 8, 1)
 	case modeSixHalf:
-		return viewgeom.NewCell(2, 6, 1)
+		return viewgeom.NewCellRatio(2, 6, 2, 3)
 	case modeSparkSix:
-		return viewgeom.NewCell(4, 24, 1)
+		return viewgeom.NewCellRatio(4, 24, 1, 3)
 	case modeSextant:
-		return viewgeom.NewCell(2, 3, 1)
+		return viewgeom.NewCellRatio(2, 3, 4, 3)
 	default:
 		return viewgeom.NewCell(1, 2, 1)
 	}
@@ -508,8 +508,9 @@ func maxZoom(srcW, srcH, termCols, termRows int, mode renderMode) float64 {
 // ── Zoom-levels spec (from spec/zoom_levels.yaml) ──────────────────────────────
 
 type zoomLevelsSpec struct {
-	Levels []float64
-	Extend string
+	Levels             []float64
+	Extend             string
+	UpscaleSmallImages bool
 }
 
 var (
@@ -520,8 +521,9 @@ var (
 func loadZoomLevels() zoomLevelsSpec {
 	zoomLevelsOnce.Do(func() {
 		zoomLevelsCached = zoomLevelsSpec{
-			Levels: []float64{0.125, 0.25, 0.5, 0.75, 1.25},
-			Extend: "adaptive",
+			Levels:             []float64{0.125, 0.25, 0.5, 0.75, 1.25},
+			Extend:             "adaptive",
+			UpscaleSmallImages: true,
 		}
 		specDef, err := spec.LoadZoomLevels()
 		if err != nil {
@@ -533,6 +535,7 @@ func loadZoomLevels() zoomLevelsSpec {
 		if specDef.Extend != "" {
 			zoomLevelsCached.Extend = specDef.Extend
 		}
+		zoomLevelsCached.UpscaleSmallImages = specDef.UpscaleSmallImages
 	})
 	return zoomLevelsCached
 }
@@ -553,9 +556,10 @@ func stepIdx(zoom float64, steps []float64) int {
 }
 
 // initialZoomRatio parses the --zoom flag value and returns the corresponding
-// zoom ratio (mz/k).  Empty string returns 1.0 (fit-to-viewport).
+// zoom ratio (mz/k).
 func initialZoomRatio(s string, srcW, srcH, termCols, termRows int, mode renderMode) float64 {
-	return mode.viewSpec().InitialZoomRatio(s, srcW, srcH, termCols, termRows)
+	spec := loadZoomLevels()
+	return mode.viewSpec().InitialZoomRatio(s, srcW, srcH, termCols, termRows, spec.UpscaleSmallImages)
 }
 
 func parseZoomK(s string) float64 {
@@ -976,12 +980,12 @@ func buildViewport(orig image.Image, state *viewState, termCols, termRows int, r
 // input channel so that keyboard events are routed through the browser's tokenizer.
 // openAudio starts audio playback for path if the file has an audio stream.
 // Returns nil silently on any failure so video continues without audio.
-func openAudio(ctx context.Context, path string) *audio.Player {
+func openAudio(ctx context.Context, path string, startSec, endSec float64) *audio.Player {
 	ok, err := audio.HasAudio(path)
 	if err != nil || !ok {
 		return nil
 	}
-	p, err := audio.Open(ctx, path)
+	p, err := audio.Open(ctx, path, startSec, endSec)
 	if err != nil {
 		return nil
 	}
@@ -995,7 +999,7 @@ func stopAudio(p *audio.Player) {
 	}
 }
 
-func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec, fullComp bool, initialZoom string) error {
+func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, tr TimeRange, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec, fullComp bool, initialZoom string) error {
 	fd := int(os.Stdin.Fd())
 	oldState, err := term.MakeRaw(fd)
 	if err != nil {
@@ -1107,7 +1111,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigs)
 
-	frames, cleanup, err := halfblock.OpenVideoStream(ctx, path, displayFPS, 0, 0)
+	frames, cleanup, err := halfblock.OpenVideoStream(ctx, path, displayFPS, tr.Start, tr.End)
 	if err != nil {
 		return fmt.Errorf("open video: %w", err)
 	}
@@ -1117,12 +1121,12 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 
 	restartStream := func() {
 		cleanup()
-		frames, cleanup, err = halfblock.OpenVideoStream(ctx, path, displayFPS, 0, 0)
+		frames, cleanup, err = halfblock.OpenVideoStream(ctx, path, displayFPS, tr.Start, tr.End)
 		if err != nil {
 			frames = nil
 		}
 		stopAudio(audioPlayer)
-		audioPlayer = openAudio(ctx, path)
+		audioPlayer = openAudio(ctx, path, tr.Start, tr.End)
 	}
 
 	paused := false
@@ -1232,7 +1236,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 		return false
 	}
 
-	audioPlayer = openAudio(ctx, path)
+	audioPlayer = openAudio(ctx, path, tr.Start, tr.End)
 	defer stopAudio(audioPlayer)
 
 	for {
@@ -1272,6 +1276,9 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, shar
 						vc.src = img
 						b := img.Bounds()
 						vc.lastSrcW, vc.lastSrcH = b.Dx(), b.Dy()
+						if vc.state.zoom == 1.0 {
+							vc.state.zoom = initialZoomRatio(initialZoom, vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc.mode)
+						}
 						vc.rerender()
 					}
 				default:

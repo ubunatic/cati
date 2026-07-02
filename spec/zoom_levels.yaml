@@ -9,3 +9,4 @@ levels: 0.06125, 0.125, 0.25, 0.5, 1.0, 1.25, 1.5, 1.75, 2.0
 # adaptive — 0.25 steps for k < 2, 0.5 for k < 5, 1.0 for k < 15,
 #            2.0 for k < 32, 4.0 for k < 64, then 8.0 steps
 extend: adaptive
+upscale_small_images: true

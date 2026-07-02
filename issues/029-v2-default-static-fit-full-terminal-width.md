@@ -1,6 +1,6 @@
 # 029 — V2 default static fit uses full terminal width
 
-**Status:** 🔴 Open  
+**Status:** ✅ Closed  
 **Refs:** `cmd/render_pipeline.go`, `internal/viewgeom/v2.go`
 
 ---
@@ -53,3 +53,10 @@ where height should have constrained the fit.
    - `make test`
    - `make preflight`
    - `make install`
+
+## Resolution
+
+- Modified `V2Spec.Fit` to pass `rows` to `fitDimsRatio`, changing it to a fit-inside-both path.
+- Added `V2Spec.FitWidthPrimary` to retain the original width-primary fitting logic.
+- Added `TestV2FitInside` to `internal/viewgeom/v2_test.go` and `TestAllRenderModesStaticFitInsideTerminalBox` to `cmd/root_test.go` to verify visual agreement and prevent regressions.
+- Updated `docs/System.md` with the new fit behavior.

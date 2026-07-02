@@ -130,7 +130,7 @@ func renderTargetForSource(srcW, srcH, termCols, termRows int, rc renderCfg, ini
 func explicitZoomRenderTarget(srcW, srcH, termCols, termRows int, rc renderCfg, initialZoom string) (int, int, bool) {
 	spec := rc.mode.viewSpec()
 	if initialZoom == "w" || initialZoom == "h" {
-		zoom := spec.InitialZoomRatio(initialZoom, srcW, srcH, termCols, termRows)
+		zoom := spec.InitialZoomRatio(initialZoom, srcW, srcH, termCols, termRows, true)
 		dims := spec.Dims(srcW, srcH, termCols, termRows, zoom)
 		targetW, targetH := imgutil.AlignCellSize(dims.ScaledW, dims.ScaledH, spec.CellW, spec.CellH)
 		return targetW, targetH, true

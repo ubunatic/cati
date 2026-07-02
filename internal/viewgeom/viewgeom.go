@@ -17,9 +17,11 @@ import (
 // cell after scaling. AspectX is the horizontal source stretch needed before
 // fitting to keep terminal output visually square.
 type Spec struct {
-	CellW   int
-	CellH   int
-	AspectX int
+	CellW     int
+	CellH     int
+	AspectX   int
+	AspectNum int
+	AspectDen int
 }
 
 // Dims contains all viewport-space dimensions derived from a source image,
@@ -68,7 +70,36 @@ func NewCell(cellW, cellH, aspectX int) Spec {
 	if aspectX < 1 {
 		aspectX = 1
 	}
-	return Spec{CellW: cellW, CellH: cellH, AspectX: aspectX}
+	return Spec{
+		CellW:     cellW,
+		CellH:     cellH,
+		AspectX:   aspectX,
+		AspectNum: aspectX,
+		AspectDen: 1,
+	}
+}
+
+// NewCellRatio returns a sanitized renderer geometry spec with rational aspect.
+func NewCellRatio(cellW, cellH, aspectNum, aspectDen int) Spec {
+	if cellW < 1 {
+		cellW = 1
+	}
+	if cellH < 1 {
+		cellH = 1
+	}
+	if aspectNum < 1 {
+		aspectNum = 1
+	}
+	if aspectDen < 1 {
+		aspectDen = 1
+	}
+	return Spec{
+		CellW:     cellW,
+		CellH:     cellH,
+		AspectX:   aspectNum,
+		AspectNum: aspectNum,
+		AspectDen: aspectDen,
+	}
 }
 
 // PixCols returns the viewport-pixel width for terminal columns.
@@ -91,8 +122,8 @@ func (s Spec) MaxZoom(srcW, srcH, termCols, termRows int) float64 {
 	if scaledW <= 0 || scaledH <= 0 {
 		return 1.0
 	}
-	zCol := float64(s.AspectX) * float64(srcW) / float64(scaledW)
-	zRow := float64(srcH) / float64(scaledH)
+	zCol := (float64(s.CellW) * float64(srcW)) / float64(scaledW)
+	zRow := (float64(s.CellH) * float64(srcH)) / (2.0 * float64(scaledH))
 	return math.Min(zCol, zRow)
 }
 
@@ -100,7 +131,15 @@ func (s Spec) MaxZoom(srcW, srcH, termCols, termRows int) float64 {
 func (s Spec) ViewportDims(srcW, srcH, termCols, termRows int, zoom float64) (pixCols, pixRows, scaledW, scaledH, viewW, viewH int) {
 	pixCols = s.PixCols(termCols)
 	pixRows = s.PixRows(termRows)
-	baseFitW, baseFitH := imgutil.FitPixelDims(srcW*s.AspectX, srcH, pixCols, pixRows)
+	aspectNum := s.AspectNum
+	aspectDen := s.AspectDen
+	if aspectNum <= 0 {
+		aspectNum = s.AspectX
+	}
+	if aspectDen <= 0 {
+		aspectDen = 1
+	}
+	baseFitW, baseFitH := imgutil.FitPixelDims(srcW*aspectNum/aspectDen, srcH, pixCols, pixRows)
 	scaledW = max(1, int(math.Round(float64(baseFitW)*zoom)))
 	scaledH = max(1, int(math.Round(float64(baseFitH)*zoom)))
 	viewW = min(pixCols, scaledW)
@@ -318,11 +357,19 @@ func StepIdx(zoom float64, steps []float64) int {
 }
 
 // InitialZoomRatio parses a zoom flag and returns the corresponding ratio.
-func (s Spec) InitialZoomRatio(flag string, srcW, srcH, termCols, termRows int) float64 {
+func (s Spec) InitialZoomRatio(flag string, srcW, srcH, termCols, termRows int, upscaleSmallImages bool) float64 {
+	aspectNum := s.AspectNum
+	aspectDen := s.AspectDen
+	if aspectNum <= 0 {
+		aspectNum = s.AspectX
+	}
+	if aspectDen <= 0 {
+		aspectDen = 1
+	}
 	if flag == "w" {
 		pixCols := s.PixCols(termCols)
 		pixRows := s.PixRows(termRows)
-		baseFitW, _ := imgutil.FitPixelDims(srcW*s.AspectX, srcH, pixCols, pixRows)
+		baseFitW, _ := imgutil.FitPixelDims(srcW*aspectNum/aspectDen, srcH, pixCols, pixRows)
 		if baseFitW > 0 {
 			return float64(pixCols) / float64(baseFitW)
 		}
@@ -331,7 +378,7 @@ func (s Spec) InitialZoomRatio(flag string, srcW, srcH, termCols, termRows int) 
 	if flag == "h" {
 		pixCols := s.PixCols(termCols)
 		pixRows := s.PixRows(termRows)
-		_, baseFitH := imgutil.FitPixelDims(srcW*s.AspectX, srcH, pixCols, pixRows)
+		_, baseFitH := imgutil.FitPixelDims(srcW*aspectNum/aspectDen, srcH, pixCols, pixRows)
 		if baseFitH > 0 {
 			return float64(pixRows) / float64(baseFitH)
 		}
@@ -340,7 +387,20 @@ func (s Spec) InitialZoomRatio(flag string, srcW, srcH, termCols, termRows int) 
 
 	k := ParseZoomK(flag)
 	if k <= 0 {
-		return 1.0
+		if !upscaleSmallImages {
+			return 1.0
+		}
+		baseFitW, _ := imgutil.FitPixelDims(srcW*aspectNum/aspectDen, srcH, s.PixCols(termCols), s.PixRows(termRows))
+		if baseFitW <= 0 {
+			return 1.0
+		}
+		var fitW int
+		if s.AspectDen > 0 {
+			fitW, _, _ = fitDimsRatio(srcW, srcH, s.CellW, s.CellH, aspectNum, aspectDen, termCols, termRows)
+		} else {
+			fitW, _, _ = imgutil.FitDims(srcW, srcH, s.CellW, s.CellH, s.AspectX, termCols, termRows)
+		}
+		return float64(fitW) / float64(baseFitW)
 	}
 	mz := s.MaxZoom(srcW, srcH, termCols, termRows)
 	if srcW > 0 {
