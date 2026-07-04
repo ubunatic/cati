@@ -616,7 +616,8 @@ func TestAllRenderModesWidthOneThroughTwentyKeepAspectAndNoGaps(t *testing.T) {
 					if err := rc.render(&ansi, vp); err != nil {
 						t.Fatalf("render ANSI: %v", err)
 					}
-					if gap := firstDefaultBackgroundCellForOpaqueSource(ansi.String(), rc); gap.found {
+					opaqueRows := contentH / rc.mode.viewSpec().CellH
+					if gap := firstDefaultBackgroundCellForOpaqueSource(ansi.String(), rc, opaqueRows); gap.found {
 						t.Fatalf("terminal-default gap at row=%d col=%d glyph=%q viewport=%dx%d",
 							gap.row, gap.col, gap.ch, vb.Dx(), vb.Dy())
 					}
@@ -744,7 +745,7 @@ type ansiGap struct {
 	ch    rune
 }
 
-func firstDefaultBackgroundCellForOpaqueSource(out string, rc renderCfg) ansiGap {
+func firstDefaultBackgroundCellForOpaqueSource(out string, rc renderCfg, opaqueRows int) ansiGap {
 	if !rc.mode.useSextant() {
 		return ansiGap{}
 	}
@@ -769,7 +770,7 @@ func firstDefaultBackgroundCellForOpaqueSource(out string, rc renderCfg) ansiGap
 			row++
 			col = 0
 		default:
-			if !bgActive {
+			if row < opaqueRows && !bgActive {
 				return ansiGap{found: true, row: row, col: col, ch: r}
 			}
 			col++

@@ -489,10 +489,6 @@ func scoreMask(pixels [6]color.RGBA, mask uint8) (cellResult, int) {
 	if cell.bg.A != 0 {
 		cell.hasBG = true
 	}
-	if opaque > 0 && !cell.hasBG {
-		cell.bg = avgRGBA(pixels[:]...)
-		cell.hasBG = true
-	}
 
 	score := 0
 	for i, p := range pixels {
