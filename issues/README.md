@@ -31,6 +31,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [027](027-demo-widths-obsolete-modes.md) | demo_widths.go uses obsolete render mode names | ✅ Closed |
 | [028](028-v2-unconstrained-static-fit-aspect.md) | V2 unconstrained static fit aspect mismatch | ✅ Closed |
 | [029](029-v2-default-static-fit-full-terminal-width.md) | V2 default static fit uses full terminal width | ✅ Closed |
+| [030](030-website-asset-references-and-lfs.md) | Website assets: out-of-dir reference broke hero video; LFS pitfalls | ✅ Closed |
 
 ## Archived
 

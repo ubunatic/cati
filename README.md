@@ -1,6 +1,8 @@
 # cati
 
-**`cat` for images** — renders PNG/JPEG files in the terminal using Unicode half-block characters and 24-bit ANSI true-color.
+**`cat` for images** — renders PNG/JPEG/SVG files and video frames in the terminal using Unicode block characters and 24-bit ANSI true-color.
+
+**Website:** <https://ubunatic.com/cati> · **Repo:** <https://codeberg.org/ubunatic/cati>
 
 ```
 ./cati photo.png
@@ -24,6 +26,8 @@ Each terminal cell encodes **two vertical pixel rows** using Unicode block chara
 | ` `  | —        | —           |
 
 Combined with 24-bit ANSI true-color (`\x1b[38;2;R;G;Bm`) this gives effective resolution of **terminal-width × (2 × terminal-height)** pixels.
+
+Beyond half-blocks, `--mode` selects higher-resolution renderers: **quad** (2×2 quadrant blocks), **six** (2×3 sextant blocks), and **spark** (shape-grouping sparkline mode) — plus combined modes like `spark+quad` and `six+half`.
 
 ---
 
@@ -92,6 +96,14 @@ compatibility aliases when the companion binaries are installed.
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--ansi` | | `true` | 24-bit ANSI true-color output |
+| `--mode` | `-m` | `half` | render mode: `h\|half`, `hs\|half/split`, `q\|quad`, `s\|spark`, `sq\|spark+quad`, `x\|six`, `xh\|six+half`, `sx\|spark+six` |
+| `--width` | `-w` | auto | target image width in terminal columns |
+| `--height` | | auto | target image height in terminal rows |
+| `--crop` | `-c` | off | crop output in terminal cells: `W:H`, `W:H:X:Y`, `auto`, or alignment like `c,m` |
+| `--zoom` | `-z` | fit | initial zoom: `0` = fit, `1`/`100%`/`1:1`, `w`/`h` = scale to width/height |
+| `--prescaler` | `-S` | | resize prescaler: `nn` (nearest-neighbor), `pyramid` |
+| `--range` | | full | playback window: `5s` or `5s:7s` (supports `s`/`m`/`h`, `mm:ss`) |
+| `--jobs` | `-j` | auto | parallel worker count for thumbnails and async rendering |
 | `--recursive` | `-r` | off | recurse into subdirectories |
 | `--no-header` | | off | suppress filename headers |
 
@@ -127,7 +139,10 @@ relevant `image/*` decoder package. SVG is rasterized via `rsvg-convert`
 
 ## Roadmap
 
-- [ ] Quad-block mode (`--mode=quad`) for 2× horizontal pixel resolution
+- [x] Quad-block mode (`--mode quad`) for 2× horizontal pixel resolution
+- [x] Sextant mode (`--mode six`) for 2×3 sub-cell pixel resolution
+- [x] Sparkline shape-grouping mode (`--mode spark`)
+- [x] Video playback via `catiplay` (`--range`, `--fps`)
 - [ ] Kitty graphics protocol (`--kitty`)
 - [ ] Sixel output (`--sixel`)
 - [ ] Per-frame delay from manifest (non-uniform animation)
