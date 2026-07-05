@@ -1,4 +1,7 @@
-.PHONY: ⚙️  # make all commands phony
+.PHONY: ⚙️ 🤖  # ⚙️ = manual/once, 🤖 = managed
+_prim := \033[36m
+_rst  := \033[0m
+
 BINARY  := cati
 BINARIES := cati catiplay catibrowse
 PREFIX  ?= /usr/local
@@ -11,9 +14,9 @@ VIDEO_AT   ?= 1s
 
 export GOCACHE ?= /tmp/cati-gocache
 
-help: ⚙️  ## show this help
-	@grep -E '^[a-zA-Z_-]+:.*⚙.*#+' $(MAKEFILE_LIST) | \
-	awk 'BEGIN {FS = ":.*#+ "}; {printf "  %-10s %s\n", $$1, $$2}'
+help: 🤖  # show this help
+	@grep -E '^[a-zA-Z_-]+:.*[⚙🤖].*#+' $(MAKEFILE_LIST) | \
+	awk 'BEGIN {FS = ":.*#+ "}; {printf "    $(_prim)%-15s$(_rst) %s\n", $$1, $$2}'
 
 dev: ⚙️ install test  ## build, test, run demo
 	cati browse assets
