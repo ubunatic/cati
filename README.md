@@ -10,7 +10,7 @@
 ./cati browse ~/Pictures/
 ```
 
-![demo](docs/demo.gif)
+▶ Watch the recorded demo reel on the website: <https://ubunatic.com/cati>
 
 ---
 
