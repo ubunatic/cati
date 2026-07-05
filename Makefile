@@ -12,8 +12,8 @@ VIDEO_AT   ?= 1s
 export GOCACHE ?= /tmp/cati-gocache
 
 help: ⚙️  ## show this help
-	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
-	awk 'BEGIN {FS = ":.*## "}; {printf "  %-10s %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z_-]+:.*⚙.*#+' $(MAKEFILE_LIST) | \
+	awk 'BEGIN {FS = ":.*#+ "}; {printf "  %-10s %s\n", $$1, $$2}'
 
 dev: ⚙️ install test  ## build, test, run demo
 	cati browse assets
