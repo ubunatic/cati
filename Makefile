@@ -56,6 +56,14 @@ test-integration: ⚙️ build  ## run terminal integration tests
 
 test-all: ⚙️ test test-player test-browser test-integration  ## run default and optional tests
 
+docker-test: ⚙️  ## run tests in the pinned Go toolchain (avoids golden drift across machines)
+	docker build -t cati-test .
+	docker run --rm cati-test
+
+docker-update-goldens: ⚙️  ## regenerate goldens using the pinned Go toolchain (review the diff before committing)
+	docker build -t cati-test .
+	docker run --rm -v $(CURDIR)/testdata:/src/testdata cati-test go test ./cmd/ -run TestGoldenRenders -update
+
 reuse: ⚙️  ## verify license compliance linting
 	reuse lint
 
