@@ -239,8 +239,13 @@ Adding a new render mode with a different cell geometry will automatically
 enlarge the block (computed by `goldenCharBlock()` from the live registry) so
 that all integer-replication invariants are preserved.
 
-`TestCLIRender` (in `cmd/cli_render_test.go`) does the same for ANSI terminal
-output, storing `.ansi` golden files.
+ANSI terminal output is intentionally **not** golden-tested: raw escape-byte
+diffs can't be verified visually, which let a stale `.ansi` corpus silently
+diverge from the (correct) renderer after a rendering fix landed — see
+`issues/031-remove-ansi-golden-goldens.md`. ANSI-format correctness (no gaps,
+no NUL glyphs, valid structure) is covered instead by
+`TestAllRenderModesWidthOneThroughTwentyKeepAspectAndNoGaps` (`cmd/root_test.go`)
+and `validateRenderedANSI` (`cmd/render_output.go`, run live on every render).
 
 Run with `-update` to regenerate all goldens:
 ```bash
