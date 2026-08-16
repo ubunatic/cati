@@ -1,16 +1,16 @@
 Adhere to the following conventions.
 
-<!-- claudeconfig:begin Project Summary -->
-<!-- claudeconfig:end Project Summary -->
+<!-- harnez:begin Project Summary -->
+<!-- harnez:end Project Summary -->
 
 ## Development Scripts
 
 Run from project root.
 
-<!-- claudeconfig:begin Language Conventions -->
+<!-- harnez:begin Language Conventions -->
 Adhere to the following conventions.
 
-Docs in `./docs/` are managed by claudeconfig. <!-- claudeconfig:bundled -->
+Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
 
 - Go/Golang @docs/Go.md,
   Modern Go, avoid deps but use Cobra, add tests
@@ -24,7 +24,7 @@ Docs in `./docs/` are managed by claudeconfig. <!-- claudeconfig:bundled -->
   probe external mechanisms before building features on them
 - Spec system @docs/Spec.md,
   YAML spec files as single source of truth; Go code must not duplicate spec values
-<!-- claudeconfig:end Language Conventions -->
+<!-- harnez:end Language Conventions -->
 
 ## Asset Generation & Licensing
 
