@@ -34,6 +34,8 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [030](030-website-asset-references-and-lfs.md) | Website assets: out-of-dir reference broke hero video; LFS pitfalls | ✅ Closed |
 | [031](031-remove-ansi-golden-goldens.md) | Remove `.ansi` golden tests (unverifiable byte diffs let a fix go stale) | ✅ Closed |
 | [032](032-jpeg-golden-toolchain-drift.md) | JPEG-sourced golden drift across Go toolchain patch versions | ✅ Closed |
+| [033](033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md) | Render() unconditionally emits erase-line+CR prefix, breaks composed layouts | 🔴 Open |
+| [034](034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md) | quadblock/sextant have no image loader, must import halfblock.LoadImage | 🔴 Open |
 
 ## Archived
 
