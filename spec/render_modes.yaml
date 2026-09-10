@@ -11,7 +11,7 @@ cycle:
 smart:
   metric: psnr
   max_reduction: 0.10
-  step: terminal-column
+  step: native
   tie_break: widest
 
 modes:
@@ -21,6 +21,8 @@ modes:
     cell: { w: 1, h: 2 }
     glyph_sets: [half]
     colorer: top_bottom
+    smart_step: terminal-column
+    native_step: 1
 
   - name: half/split
     aliases: [hs, split]
@@ -28,6 +30,8 @@ modes:
     cell: { w: 2, h: 2 }
     glyph_sets: [half, side]
     colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
 
   - name: quad
     aliases: [q]
@@ -35,6 +39,8 @@ modes:
     cell: { w: 2, h: 2 }
     glyph_sets: [half, side, quad]
     colorer: top_bottom
+    smart_step: native
+    native_step: 1
 
   - name: spark
     aliases: [s]
@@ -42,6 +48,8 @@ modes:
     cell: { w: 4, h: 8 }
     glyph_sets: [half, side, spark_vertical, spark_horizontal]
     colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
 
   - name: spark+quad
     aliases: [sq, qs]
@@ -49,6 +57,8 @@ modes:
     cell: { w: 4, h: 8 }
     glyph_sets: [half, side, quad, spark_vertical, spark_horizontal]
     colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
 
   - name: six
     aliases: [x]
@@ -56,6 +66,8 @@ modes:
     cell: { w: 2, h: 3 }
     glyph_sets: [six]
     colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
 
   - name: six+half
     aliases: [xh, hx]
@@ -63,6 +75,8 @@ modes:
     cell: { w: 2, h: 6 }
     glyph_sets: [six, half]
     colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
 
   - name: spark+six
     aliases: [sx, xs]
@@ -70,6 +84,8 @@ modes:
     cell: { w: 4, h: 24 }
     glyph_sets: [half, side, six, spark_vertical, spark_horizontal]
     colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
 
 glyph_sets:
   half: [" ", "▀", "▄", "█"]

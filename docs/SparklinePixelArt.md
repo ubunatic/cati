@@ -239,12 +239,14 @@ Adding a new render mode with a different cell geometry will automatically
 enlarge the block (computed by `goldenCharBlock()` from the live registry) so
 that all integer-replication invariants are preserved.
 
-The opt-in `--smart` static-render mode keeps the selected base algorithm but
-searches nearby full terminal-column widths, from the requested width down to
-the spec-defined 10% bound. It scores each reconstructed candidate with PSNR,
-chooses the widest candidate on ties, and centers the winner in the requested
-canvas. Sub-character algorithm steps remain a future extension; they must use
-the authoritative cell geometry when added.
+The opt-in `--smart` static-render mode keeps the selected base algorithm and
+searches a bounded width window from the requested width down to the
+spec-defined 10% bound. Native-capable modes search one render-pixel step at a
+time (a sub-cell step derived from their spec cell geometry), score each
+reconstruction with PSNR, then center the winner in the requested
+terminal-column canvas. Modes without native stepping retain whole-column
+search. Player and browser paths keep smart search disabled until candidate
+caching or a reduced performance policy is defined.
 
 ANSI terminal output is intentionally **not** golden-tested: raw escape-byte
 diffs can't be verified visually, which let a stale `.ansi` corpus silently

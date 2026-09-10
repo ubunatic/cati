@@ -13,8 +13,9 @@ import (
 )
 
 type smartCandidate struct {
-	width int
-	score float64
+	width      int
+	pixelWidth int
+	score      float64
 }
 
 func smartCandidateWidths(target int) []int {
@@ -45,10 +46,56 @@ func chooseSmartCandidate(candidates []smartCandidate) (smartCandidate, bool) {
 
 func loadSmartPolicy() (spec.SmartRenderPolicy, bool) {
 	policy, err := spec.LoadRenderModes()
-	if err != nil || policy.Smart.Metric != "psnr" || policy.Smart.Step != "terminal-column" || policy.Smart.TieBreak != "widest" || policy.Smart.MaxReduction <= 0 || policy.Smart.MaxReduction > 1 {
+	if err != nil || policy.Smart.Metric != "psnr" || (policy.Smart.Step != "terminal-column" && policy.Smart.Step != "native") || policy.Smart.TieBreak != "widest" || policy.Smart.MaxReduction <= 0 || policy.Smart.MaxReduction > 1 {
 		return spec.SmartRenderPolicy{}, false
 	}
 	return policy.Smart, true
+}
+
+func nativeSmartStep(rc renderCfg) bool {
+	_, ok := nativeSmartStepSize(rc)
+	return ok
+}
+
+func nativeSmartStepSize(rc renderCfg) (int, bool) {
+	rm, err := spec.LoadRenderModes()
+	if err != nil {
+		return 0, false
+	}
+	name := rcModeName(rc)
+	for _, mode := range rm.Modes {
+		if mode.Name == name {
+			return mode.NativeStep, mode.SmartStep == "native" && mode.NativeStep > 0
+		}
+	}
+	return 0, false
+}
+
+// NativeStep is measured in render pixels; cell width converts it to a
+// fractional terminal-column step (for example, 1/4 for a 4-pixel cell).
+func nativeSmartTerminalStep(rc renderCfg) (int, int, bool) {
+	pixelStep, ok := nativeSmartStepSize(rc)
+	if !ok {
+		return 0, 0, false
+	}
+	cellW, _ := rc.mode.renderCellSize()
+	return pixelStep, max(1, cellW), true
+}
+
+func smartCandidatePixelWidths(target, step int) []int {
+	policy, ok := loadSmartPolicy()
+	if !ok || target <= 0 || step <= 0 {
+		return nil
+	}
+	lower := max(1, int(math.Ceil(float64(target)*(1-policy.MaxReduction))))
+	widths := make([]int, 0, target-lower+1)
+	for width := target; width >= lower; width -= step {
+		widths = append(widths, width)
+	}
+	if widths[len(widths)-1] != lower {
+		widths = append(widths, lower)
+	}
+	return widths
 }
 
 func smartReference(src image.Image, targetW, targetH int, rc renderCfg) image.Image {
@@ -66,9 +113,26 @@ func smartScoreCandidates(reference image.Image, candidates map[int]image.Image)
 		if normalized.Bounds().Dx() != rb.Dx() || normalized.Bounds().Dy() != rb.Dy() {
 			normalized = resizeRenderedImage(normalized, rb.Dx(), rb.Dy(), renderCfg{prescaler: prescalePyramid})
 		}
-		scored = append(scored, smartCandidate{width: width, score: metrics.PSNR(reference, normalized)})
+		scored = append(scored, smartCandidate{width: width, pixelWidth: width, score: metrics.PSNR(reference, normalized)})
 	}
 	return chooseSmartCandidate(scored)
+}
+
+// fitNativeWidthChecked keeps the source aspect while allowing a candidate
+// between whole terminal-cell widths. Renderers still decide how that partial
+// cell is represented; final terminal-column padding happens after selection.
+func fitNativeWidthChecked(img image.Image, pixelWidth, termRows int, rc renderCfg) (image.Image, error) {
+	if pixelWidth < 1 {
+		return nil, nil
+	}
+	cellW, _ := rc.mode.renderCellSize()
+	cols := max(1, (pixelWidth+cellW-1)/cellW)
+	fit, err := fitRenderedImageChecked(img, cols, termRows, rc)
+	if err != nil {
+		return nil, err
+	}
+	height := fit.Bounds().Dy()
+	return resizeRenderedImage(img, pixelWidth, height, rc), nil
 }
 
 func renderReconstruction(img image.Image, rc renderCfg) image.Image {
@@ -129,18 +193,32 @@ func smartPrepare(orig image.Image, termCols, termRows int, rc renderCfg) (image
 	}
 	ref := smartReference(orig, base.Bounds().Dx(), base.Bounds().Dy(), rc)
 	candidates := make(map[int]image.Image)
-	for _, width := range smartCandidateWidths(termCols) {
-		candidate, err := fitRenderedImageChecked(orig, width, termRows, rc)
-		if err != nil {
-			continue
+	if nativeSmartStep(rc) {
+		step, _, _ := nativeSmartTerminalStep(rc)
+		for _, pixelWidth := range smartCandidatePixelWidths(base.Bounds().Dx(), step) {
+			candidate, err := fitNativeWidthChecked(orig, pixelWidth, termRows, rc)
+			if err != nil || candidate == nil {
+				continue
+			}
+			candidates[pixelWidth] = renderReconstruction(candidate, rc)
 		}
-		candidates[width] = renderReconstruction(candidate, rc)
+	} else {
+		for _, width := range smartCandidateWidths(termCols) {
+			candidate, err := fitRenderedImageChecked(orig, width, termRows, rc)
+			if err != nil {
+				continue
+			}
+			candidates[width] = renderReconstruction(candidate, rc)
+		}
 	}
 	winner, ok := smartScoreCandidates(ref, candidates)
 	if !ok {
 		return base, nil
 	}
 	selected, err := fitRenderedImageChecked(orig, winner.width, termRows, rc)
+	if nativeSmartStep(rc) {
+		selected, err = fitNativeWidthChecked(orig, winner.width, termRows, rc)
+	}
 	if err != nil {
 		return base, nil
 	}

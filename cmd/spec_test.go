@@ -30,7 +30,7 @@ func TestSpecRenderModesLoad(t *testing.T) {
 	if len(rm.Cycle) == 0 {
 		t.Fatal("render_modes.yaml defines no cycle")
 	}
-	if rm.Smart.Metric != "psnr" || rm.Smart.Step != "terminal-column" || rm.Smart.TieBreak != "widest" || rm.Smart.MaxReduction <= 0 || rm.Smart.MaxReduction > 1 {
+	if rm.Smart.Metric != "psnr" || (rm.Smart.Step != "terminal-column" && rm.Smart.Step != "native") || rm.Smart.TieBreak != "widest" || rm.Smart.MaxReduction <= 0 || rm.Smart.MaxReduction > 1 {
 		t.Fatalf("invalid smart render policy: %+v", rm.Smart)
 	}
 }
@@ -70,6 +70,12 @@ func TestSpecRenderModesIntegrity(t *testing.T) {
 		}
 		if mode.Cell.W <= 0 || mode.Cell.H <= 0 {
 			t.Fatalf("render mode %q has invalid cell geometry %dx%d", mode.Name, mode.Cell.W, mode.Cell.H)
+		}
+		if mode.SmartStep != "terminal-column" && mode.SmartStep != "native" {
+			t.Fatalf("render mode %q has invalid smart step %q", mode.Name, mode.SmartStep)
+		}
+		if mode.NativeStep <= 0 {
+			t.Fatalf("render mode %q has invalid native step %d", mode.Name, mode.NativeStep)
 		}
 		if mode.Analysis != nil && (mode.Analysis.W <= 0 || mode.Analysis.H <= 0) {
 			t.Fatalf("render mode %q has invalid analysis geometry %dx%d", mode.Name, mode.Analysis.W, mode.Analysis.H)

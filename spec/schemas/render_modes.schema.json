@@ -14,7 +14,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "aliases", "renderer", "cell", "glyph_sets", "colorer"],
+        "required": ["name", "aliases", "renderer", "cell", "glyph_sets", "colorer", "smart_step", "native_step"],
         "properties": {
           "name": { "type": "string", "minLength": 1 },
           "aliases": {
@@ -28,7 +28,9 @@
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
           },
-          "colorer": { "type": "string", "minLength": 1 }
+          "colorer": { "type": "string", "minLength": 1 },
+          "smart_step": { "enum": ["terminal-column", "native"] },
+          "native_step": { "type": "integer", "minimum": 1 }
         }
       }
     },
@@ -54,7 +56,7 @@
       "properties": {
         "metric": { "const": "psnr" },
         "max_reduction": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
-        "step": { "const": "terminal-column" },
+        "step": { "enum": ["terminal-column", "native"] },
         "tie_break": { "const": "widest" }
       }
     }

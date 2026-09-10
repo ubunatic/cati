@@ -213,13 +213,15 @@ type RenderModeGeometry struct {
 }
 
 type RenderModeDef struct {
-	Name      string              `yaml:"name"`
-	Aliases   []string            `yaml:"aliases"`
-	Renderer  string              `yaml:"renderer"`
-	Cell      RenderModeGeometry  `yaml:"cell"`
-	Analysis  *RenderModeGeometry `yaml:"analysis"`
-	GlyphSets []string            `yaml:"glyph_sets"`
-	Colorer   string              `yaml:"colorer"`
+	Name       string              `yaml:"name"`
+	Aliases    []string            `yaml:"aliases"`
+	Renderer   string              `yaml:"renderer"`
+	Cell       RenderModeGeometry  `yaml:"cell"`
+	Analysis   *RenderModeGeometry `yaml:"analysis"`
+	GlyphSets  []string            `yaml:"glyph_sets"`
+	Colorer    string              `yaml:"colorer"`
+	SmartStep  string              `yaml:"smart_step"`
+	NativeStep int                 `yaml:"native_step"`
 }
 
 type SmartRenderPolicy struct {

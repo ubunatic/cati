@@ -58,7 +58,9 @@ The opt-in static renderer search can be exercised with, for example:
 GOWORK=off GOTOOLCHAIN=go1.25.0 go run ./cmd/cati --width 40 --smart image.png
 ```
 
-`--smart` evaluates full terminal-column candidates from the requested width
-down through the spec-defined 10% bound, scores the reconstructed output with
-PSNR, and centers the winner in the requested canvas. It is intentionally not
-enabled for interactive/video frame loops yet.
+`--smart` evaluates candidates from the requested width down through the
+spec-defined 10% bound. Native-capable modes use their spec-declared
+render-pixel step, which can try sub-cell widths; terminal-column modes retain
+whole-column search. The winner is scored with PSNR and centered in the
+requested canvas. It is intentionally not enabled for interactive/video frame
+loops yet.
