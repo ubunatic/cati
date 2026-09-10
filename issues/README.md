@@ -44,7 +44,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 038 | [038-investigate-blocky-sextant-rendering-at-small-widths.md](038-investigate-blocky-sextant-rendering-at-small-widths.md) | Investigate blocky sextant rendering at small widths | Closed |
 | 039 | [039-improve-quad-quality-for-small-pixel-art-renders.md](039-improve-quad-quality-for-small-pixel-art-renders.md) | Improve quad quality for small pixel-art renders | Closed |
 | 040 | [040-assess-halfblock-rendering-quality-at-small-widths.md](040-assess-halfblock-rendering-quality-at-small-widths.md) | Assess halfblock rendering quality at small widths | Closed |
-| 041 | [041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md](041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md) | Assess sparkline and composite rendering quality at small widths | Open |
+| 041 | [041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md](041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md) | Assess sparkline and composite rendering quality at small widths | Closed |
 
 ## Archived
 

@@ -155,6 +155,12 @@ The legacy 1D split logic requires that the pixel array passed to the error mini
     cell selection and mask semantics as `RenderOpts`. The app uses it for SSIM
     and other quality metrics, so changing glyph masks requires updating both
     ANSI rendering and image reconstruction together.
+
+    Transparent source pixels do not imply transparent output pixels: if the
+    selected ANSI foreground or background escape paints a region, the
+    reconstruction paints that region too. Background-only non-space cells are
+    rejected because their glyph-shaped pixels would use the terminal's unknown
+    default foreground.
 *   **Display-size contract**: The `4×8` sparkline footprint is a renderer-local
     glyph grid, not permission to shrink the visible terminal cell rectangle.
     Interactive viewport construction expands spark crops to the footprint

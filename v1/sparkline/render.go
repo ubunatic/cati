@@ -261,16 +261,7 @@ func RenderToImage(img image.Image, outCols, outRows int, mode Mode) image.Image
 
 			for y := y0; y <= y1; y++ {
 				for x := x0; x <= x1; x++ {
-					src := rgbaAt(img, x, y)
-					if src.A == 0 {
-						setRGBA(dst, x, y, color.RGBA{})
-						continue
-					}
-					c := cell.BG
-					if maskContains(cell.Ch, x-x0, y-y0, cw, ch) {
-						c = cell.FG
-					}
-					setRGBA(dst, x, y, c)
+					setRGBA(dst, x, y, reconstructedCellColor(cell, x-x0, y-y0, cw, ch))
 				}
 			}
 		}
@@ -323,16 +314,7 @@ func RenderToImageJ(img image.Image, outCols, outRows int, mode Mode, jobs int) 
 					ch := y1 - y0 + 1
 					for y := y0; y <= y1; y++ {
 						for x := x0; x <= x1; x++ {
-							src := rgbaAt(img, x, y)
-							if src.A == 0 {
-								setRGBA(dst, x, y, color.RGBA{})
-								continue
-							}
-							c := cell.BG
-							if maskContains(cell.Ch, x-x0, y-y0, cw, ch) {
-								c = cell.FG
-							}
-							setRGBA(dst, x, y, c)
+							setRGBA(dst, x, y, reconstructedCellColor(cell, x-x0, y-y0, cw, ch))
 						}
 					}
 				}
@@ -686,6 +668,12 @@ func findBestCandidate(img image.Image, _ image.Rectangle, x0, x1, y0, y1 int, c
 		// opaque pixels; RenderOpts/RenderToImage treat A=0 as "no sequence".
 		fgAvg := avgColorOpaque(fgSum, fgN)
 		bgAvg := avgColorOpaque(bgSum, bgN)
+		// A background-only non-space cell would rely on the terminal's
+		// unknown default foreground for the glyph-shaped region. Do not emit
+		// a reconstruction that cannot be represented deterministically.
+		if fgAvg.A == 0 && bgAvg.A != 0 && cand.ch != ' ' {
+			continue
+		}
 
 		var err float64
 		for y := 0; y < blockH; y++ {
@@ -750,6 +738,23 @@ func avgColorOpaque(sum acc, n int) color.RGBA {
 		B: uint8(sum.b / float64(n)),
 		A: 255,
 	}
+}
+
+// reconstructedCellColor returns the color actually painted by the ANSI cell
+// at one renderer pixel. A transparent source pixel is not a reason to skip
+// reconstruction: an emitted foreground or background escape still paints
+// that terminal region. Unpainted regions remain transparent.
+func reconstructedCellColor(cell cellResult, x, y, width, height int) color.RGBA {
+	if maskContains(cell.Ch, x, y, width, height) {
+		if cell.FG.A != 0 {
+			return cell.FG
+		}
+		return color.RGBA{}
+	}
+	if cell.BG.A != 0 {
+		return cell.BG
+	}
+	return color.RGBA{}
 }
 
 // FindOptimalSplit tries all character levels 0..7 for the pixel block

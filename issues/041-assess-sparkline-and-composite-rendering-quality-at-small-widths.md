@@ -1,6 +1,6 @@
 # 041 — Assess sparkline and composite rendering quality at small widths
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug
@@ -84,3 +84,37 @@ Run targeted sparkline and `cmd` tests, then `go test ./...`, `go vet ./...`,
 reconstructed pixels for each original repro and near-miss. If implementation
 changes result, update `docs/SparklinePixelArt.md` and this ticket in the same
 commit; otherwise record the measured limits and leave goldens untouched.
+
+## 5. Assessment and Resolution
+
+The production width matrix covered widths 8–20 for cati, emojig, and four
+geometric fixtures across `half/split`, `spark`, `spark+quad`, `six+half`, and
+`spark+six`. All 390 serial/4-worker ANSI comparisons were byte-identical, and
+all modes preserved requested widths and row boundaries. At 20 columns the
+geometric spark and spark+six reconstructions were lossless; diagonal and
+circle error at 10 columns matched the intrinsic cell-resolution limit.
+
+Composite selection differed materially by fixture (spark versus spark+quad
+differed at 10/13 checker widths), while an external RMSE control showed that
+the larger spark+six candidate family can still score worse across different
+cell geometries. This is evidence for future shared-metric/grid work, not a
+proven defect in the current production metrics; that work remains out of
+scope here.
+
+A concrete defect was reproduced in `RenderToImage`: it discarded every
+source-transparent pixel even when the selected ANSI glyph foreground or
+background escape painted that region. The fix centralizes emitted-coverage
+reconstruction for serial and worker paths and rejects background-only
+non-space cells whose glyph pixels would depend on the terminal's unknown
+default foreground. Tests cover foreground/background/unpainted coverage,
+transparent selected regions, and background-only prevention. Existing opaque
+goldens and JPEG decoder-family goldens are predicted unchanged, so none were
+regenerated.
+
+The reproducible smoke matrix is checked in as
+`v1/sparkline/quality_assessment_test.go`; it exercises cati, four geometric
+fixtures, and a transparent synthetic fixture across all five current
+user-facing family modes at widths 8–20, asserting requested geometry plus
+serial/worker ANSI and reconstruction parity. The emojig SVG remains covered
+by the command/golden pipeline because this package-level matrix intentionally
+avoids adding an SVG decoder dependency.

@@ -293,6 +293,58 @@ func TestRenderToImageHonorsNonZeroBounds(t *testing.T) {
 	}
 }
 
+func TestReconstructedCellColorIncludesEmittedTransparentCoverage(t *testing.T) {
+	cell := cellResult{
+		Ch: '▘',
+		FG: color.RGBA{R: 200, A: 255},
+		BG: color.RGBA{B: 100, A: 255},
+	}
+
+	if got := reconstructedCellColor(cell, 0, 0, 2, 2); got != cell.FG {
+		t.Fatalf("foreground coverage = %#v, want %#v", got, cell.FG)
+	}
+	if got := reconstructedCellColor(cell, 1, 1, 2, 2); got != cell.BG {
+		t.Fatalf("background coverage = %#v, want %#v", got, cell.BG)
+	}
+
+	transparent := cellResult{Ch: '▘', FG: color.RGBA{R: 200, A: 255}}
+	if got := reconstructedCellColor(transparent, 1, 1, 2, 2); got != (color.RGBA{}) {
+		t.Fatalf("unpainted coverage = %#v, want transparent", got)
+	}
+}
+
+func TestRenderTransparentHalfEmitsOnlyForeground(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	for x := 0; x < 2; x++ {
+		img.SetRGBA(x, 0, color.RGBA{R: 200, G: 20, A: 255})
+	}
+
+	var out strings.Builder
+	if err := Render(&out, img, 1, Options{Mode: HalfSplit, NoLinePrefix: true}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if want := "\x1b[38;2;200;20;0m▀\x1b[0m\n"; out.String() != want {
+		t.Fatalf("ANSI output = %q, want exactly %q", out.String(), want)
+	}
+	if strings.Contains(out.String(), "\x1b[48;") {
+		t.Fatalf("transparent lower half unexpectedly emitted background: %q", out.String())
+	}
+}
+
+func TestFindBestCandidateRejectsBackgroundOnlyNonSpace(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 2, 1))
+	img.SetRGBA(1, 0, color.RGBA{B: 255, A: 255})
+	candidates := []candidate{
+		{ch: '▌', mask: func(x, _, _, _ int) bool { return x == 0 }},
+		{ch: ' ', mask: func(_, _, _, _ int) bool { return false }},
+	}
+
+	got := findBestCandidate(img, img.Bounds(), 0, 1, 0, 0, candidates)
+	if got.Ch != ' ' {
+		t.Fatalf("background-only non-space candidate was selected: %#v", got)
+	}
+}
+
 func TestRenderOptsSparkQuad(t *testing.T) {
 	img := image.NewRGBA(image.Rect(0, 0, 4, 8))
 	for y := 0; y < 8; y++ {
