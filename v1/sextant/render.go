@@ -523,9 +523,10 @@ func scoreMask(pixels [6]color.RGBA, mask uint8) (cellResult, int) {
 }
 
 func chooseCell(pixels [6]color.RGBA, mode Mode) cellResult {
-	mask := directMask(pixels)
-	cell, _ := scoreMask(pixels, mask)
-	return cell
+	// Evaluate every representable mask. The direct luma threshold is a useful
+	// tie-break preference, but it is not generally the lowest-error encoding
+	// once a cell contains antialiasing or more than two colours.
+	return chooseBestCell(pixels, allMasks())
 }
 
 func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {

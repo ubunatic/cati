@@ -373,7 +373,7 @@ func loadRenderModeEntries() []renderModeEntry {
 	renderers := map[string]renderCfg{
 		"halfblock_exact":      {id: 0},
 		"sparkline_half_split": {id: 8, mode: modeHalfSplit, sparkMode: sparkline.HalfSplit},
-		"quad_split_half":      {id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true}},
+		"quad_split_half":      {id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true, HalfblockThreshold: 2}},
 		"sparkline_spark":      {id: 9, mode: modeSpark, sparkMode: sparkline.Spark},
 		"sparkline_spark_quad": {id: 3, mode: modeSparkQuad, sparkMode: sparkline.Quad},
 		"sextant_2x3":          {id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant},
@@ -442,6 +442,12 @@ func sameRenderMode(a, b renderCfg) bool {
 	}
 	if (a.preScale == nil) != (b.preScale == nil) {
 		return false
+	}
+	if a.quadOpts.SplitHalf || b.quadOpts.SplitHalf {
+		// Threshold is a quality policy, not a distinct cycle mode. This also
+		// keeps older callers' zero-threshold startup config canonicalizable.
+		a.quadOpts.HalfblockThreshold = 0
+		b.quadOpts.HalfblockThreshold = 0
 	}
 	return a.quadOpts == b.quadOpts
 }

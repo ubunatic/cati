@@ -173,7 +173,7 @@ calling `RenderOpts`.
 
 | Field | Type | Effect |
 |-------|------|--------|
-| `HalfblockThreshold` | `int` | Fall back to `▀`/`▄` when exact coverage < N (only on 3+-colour cells) |
+| `HalfblockThreshold` | `int` | Fall back to `▀`/`▄` when exact coverage < N; also stabilizes ambiguous `SplitHalf` cells |
 | `Blend` | `BlendMode` | Neighbourhood pixel blending (see below) |
 | `SplitHalf` | `bool` | Derive fg/bg from halfblock row-averages; apply quad mask for sub-cell precision |
 | `SplitHalfNeighbors` | `bool` | Extends `SplitHalf`: also tries left/above cell colours as bg candidate, picks lowest quantisation error |
@@ -192,6 +192,11 @@ calling `RenderOpts`.
 visible blurring on photographic content. `SplitHalf` and `SplitHalfNeighbors`
 give the cleanest results. Halfblock mode is perceptually most pleasant because
 its 1:1 "square pixels" are easier on the eye than quad's 1:2 sub-pixels.
+
+The user-facing `quad` mode enables `SplitHalf` with `HalfblockThreshold: 2`.
+Clean two-colour edges remain quadrant glyphs; unstable cells use a stable
+halfblock glyph instead of isolated noisy quadrants. Library callers can select
+the same policy with `Options{SplitHalf: true, HalfblockThreshold: 2}`.
 
 ### Colour space reduction (`ReduceColors`)
 

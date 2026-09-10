@@ -108,7 +108,8 @@ type Options struct {
 	// HalfblockThreshold: when > 0, a cell whose best colour-pair exact
 	// coverage (how many of the 4 pixels match fg or bg exactly, 0–4) is
 	// below this value falls back to halfblock encoding (▀/▄ from top/bottom
-	// row averages).  Only applies when the cell has 3+ distinct colours.
+	// row averages). For SplitHalf it also guards against unstable local masks.
+	// It applies to cells with 3+ distinct colours in the general path.
 	HalfblockThreshold int
 
 	// Blend controls neighbourhood pixel blending.  See BlendMode constants.
@@ -333,7 +334,7 @@ func halfblockFallback(pixels [4]color.RGBA) quadCell {
 // then applies the quad mask for sub-cell precision.
 // When withNeighbors is true it also considers the fg/bg of left/above cells as
 // candidate bg colours, picking the one with the lowest total quantisation error.
-func splitHalfCell(pixels [4]color.RGBA, left, above *quadCell, withNeighbors bool) quadCell {
+func splitHalfCell(pixels [4]color.RGBA, left, above *quadCell, withNeighbors bool, threshold int) quadCell {
 	top := avgRGB(pixels[0], pixels[1]) // UL+UR average → top colour
 	bot := avgRGB(pixels[2], pixels[3]) // LL+LR average → bottom colour
 	topT := isTransparent(top)
@@ -380,6 +381,13 @@ func splitHalfCell(pixels [4]color.RGBA, left, above *quadCell, withNeighbors bo
 	}
 
 	mask := buildMask(pixels, fg, bg, hasBG)
+	// The split-half colour pair is deliberately stable, but applying a quad
+	// mask to a poorly represented cell creates isolated noisy quadrants.  Let
+	// callers request the same conservative halfblock fallback used by the
+	// general quantiser; this was previously skipped by the SplitHalf fast path.
+	if hasBG && threshold > 0 && len(collectUnique(pixels)) > 2 && exactCoverage(pixels, fg, bg, true) < threshold {
+		return halfblockFallback(pixels)
+	}
 	if mask == 0 {
 		if !hasBG {
 			return quadCell{ch: ' ', transparent: true}
@@ -618,7 +626,8 @@ func compileCell(pixels [4]color.RGBA, left, above *quadCell, opts Options) quad
 		return compileCellLumSplit(pixels)
 	}
 	if opts.SplitHalf {
-		return splitHalfCell(pixels, left, above, opts.SplitHalfNeighbors)
+		cell := splitHalfCell(pixels, left, above, opts.SplitHalfNeighbors, opts.HalfblockThreshold)
+		return cell
 	}
 
 	unique := collectUnique(pixels)

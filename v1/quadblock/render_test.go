@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"ubunatic.com/cati/v1/core"
 	"ubunatic.com/cati/v1/halfblock"
 )
 
@@ -100,46 +101,46 @@ func TestQuadCharTable(t *testing.T) {
 
 func TestBuildMask(t *testing.T) {
 	cases := []struct {
-		name    string
-		pixels  [4]color.RGBA // UL, UR, LL, LR
-		fg, bg  color.RGBA
-		hasBG   bool
+		name     string
+		pixels   [4]color.RGBA // UL, UR, LL, LR
+		fg, bg   color.RGBA
+		hasBG    bool
 		wantMask uint8
 	}{
 		{
-			name:     "all fg → 1111",
-			pixels:   [4]color.RGBA{red, red, red, red},
-			fg: red, hasBG: false,
+			name:   "all fg → 1111",
+			pixels: [4]color.RGBA{red, red, red, red},
+			fg:     red, hasBG: false,
 			wantMask: 0b1111,
 		},
 		{
-			name:     "all transparent → 0000",
-			pixels:   [4]color.RGBA{transp, transp, transp, transp},
-			fg: red, hasBG: false,
+			name:   "all transparent → 0000",
+			pixels: [4]color.RGBA{transp, transp, transp, transp},
+			fg:     red, hasBG: false,
 			wantMask: 0b0000,
 		},
 		{
-			name:     "UL only → 1000",
-			pixels:   [4]color.RGBA{red, transp, transp, transp},
-			fg: red, hasBG: false,
+			name:   "UL only → 1000",
+			pixels: [4]color.RGBA{red, transp, transp, transp},
+			fg:     red, hasBG: false,
 			wantMask: 0b1000,
 		},
 		{
-			name:     "top half → 1100",
-			pixels:   [4]color.RGBA{red, red, transp, transp},
-			fg: red, hasBG: false,
+			name:   "top half → 1100",
+			pixels: [4]color.RGBA{red, red, transp, transp},
+			fg:     red, hasBG: false,
 			wantMask: 0b1100,
 		},
 		{
-			name:     "two-colour top=fg bot=bg → 1100",
-			pixels:   [4]color.RGBA{red, red, blue, blue},
-			fg: red, bg: blue, hasBG: true,
+			name:   "two-colour top=fg bot=bg → 1100",
+			pixels: [4]color.RGBA{red, red, blue, blue},
+			fg:     red, bg: blue, hasBG: true,
 			wantMask: 0b1100,
 		},
 		{
-			name:     "diagonal UL+LR → 1001",
-			pixels:   [4]color.RGBA{red, blue, blue, red},
-			fg: red, bg: blue, hasBG: true,
+			name:   "diagonal UL+LR → 1001",
+			pixels: [4]color.RGBA{red, blue, blue, red},
+			fg:     red, bg: blue, hasBG: true,
 			wantMask: 0b1001,
 		},
 	}
@@ -275,6 +276,66 @@ func TestCompileCell_VerticalSplit(t *testing.T) {
 				t.Fatalf("fg/bg: got fg=%v bg=%v hasBG=%v, want red/blue", c.fg, c.bg, c.hasBG)
 			}
 		})
+	}
+}
+
+func TestCompileCell_SplitHalfThresholdFallsBackForUnstableCell(t *testing.T) {
+	pixels := [4]color.RGBA{
+		rgba(100, 100, 100, 255), rgba(102, 102, 102, 255),
+		rgba(101, 101, 101, 255), rgba(103, 103, 103, 255),
+	}
+	c := compileCell(pixels, nil, nil, Options{SplitHalf: true, HalfblockThreshold: 2})
+	want := halfblockFallback(pixels)
+	if c.ch != want.ch || c.hasBG != want.hasBG || !eqRGB(c.fg, want.fg) {
+		t.Fatalf("cell = %#v, want halfblock fallback %#v", c, want)
+	}
+}
+
+func TestCompileCell_SplitHalfThresholdZeroPreservesQuadMask(t *testing.T) {
+	pixels := [4]color.RGBA{red, rgba(220, 0, 0, 255), blue, rgba(0, 0, 220, 255)}
+	without := compileCell(pixels, nil, nil, Options{SplitHalf: true})
+	zero := compileCell(pixels, nil, nil, Options{SplitHalf: true, HalfblockThreshold: 0})
+	if zero.ch != without.ch || zero.hasBG != without.hasBG || !eqRGB(zero.fg, without.fg) || !eqRGB(zero.bg, without.bg) {
+		t.Fatalf("threshold zero changed SplitHalf: got %#v, want %#v", zero, without)
+	}
+}
+
+func TestRenderToGrid_SmallLogoWidthMatrix(t *testing.T) {
+	img, err := halfblock.LoadImage("../../assets/cati_0001.png")
+	if err != nil {
+		t.Skipf("small logo fixture unavailable: %v", err)
+	}
+	partial := func(grid *core.Grid) int {
+		n := 0
+		for _, row := range grid.Cells {
+			for _, cell := range row {
+				switch cell.Ch {
+				case '▘', '▝', '▖', '▗', '▚', '▞', '▛', '▜', '▙', '▟':
+					n++
+				}
+			}
+		}
+		return n
+	}
+	reduced := false
+	for width := 8; width <= 20; width++ {
+		grid, err := RenderToGrid(img, width, Options{SplitHalf: true, HalfblockThreshold: 2})
+		if err != nil {
+			t.Fatalf("width %d: RenderToGrid: %v", width, err)
+		}
+		if grid.Width == 0 || grid.Height == 0 || grid.Width > width {
+			t.Fatalf("width %d: grid=%dx%d, want non-empty width <= target", width, grid.Width, grid.Height)
+		}
+		baseline, err := RenderToGrid(img, width, Options{SplitHalf: true})
+		if err != nil {
+			t.Fatalf("width %d baseline: RenderToGrid: %v", width, err)
+		}
+		if partial(grid) < partial(baseline) {
+			reduced = true
+		}
+	}
+	if !reduced {
+		t.Fatal("threshold policy did not reduce any partial quad glyphs across widths 8–20")
 	}
 }
 
@@ -439,8 +500,8 @@ func TestScaleToFit(t *testing.T) {
 	orig := solidImage(100, 50, red)
 
 	cases := []struct {
-		name       string
-		cols, rows int
+		name         string
+		cols, rows   int
 		wantW, wantH int
 	}{
 		// stretchedW=200 ≤ maxW=200, srcH=50 ≤ maxH=∞ → scale to 200×50.

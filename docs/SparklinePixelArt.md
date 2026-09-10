@@ -63,6 +63,12 @@ levels to two-dimensional candidate masks. For each terminal cell it:
 `six+half` uses `2×6`, and `spark+six` uses `4×24`. Quad candidates in
 `spark+quad` are upsampled to `4×8`: each quadrant covers a `2×4` rectangle.
 
+Native sextant rendering applies the same deterministic SSE principle to its
+representable `2×3` masks. It scores geometry-aware heuristic candidates and
+uses the direct luma mask only to break equal-score ties. This improves
+antialiased small renders without changing the intrinsic six-region resolution
+or terminal font requirements.
+
 ### Tiebreaker: prefer non-splitting characters
 
 When two candidates have equal primary SSE, a secondary tiebreaker is applied

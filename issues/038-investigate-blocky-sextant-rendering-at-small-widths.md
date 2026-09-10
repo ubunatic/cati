@@ -1,6 +1,6 @@
 # 038 — Investigate blocky sextant rendering at small widths
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Quality
@@ -59,3 +59,13 @@ for terminals without usable sextant glyphs.
    regression tests without degrading existing sextant goldens.
 4. Documentation explains the remaining representation limit and how users
    can diagnose font fallback.
+
+## Resolution
+
+The native sextant path now exhaustively scores all 60 representable masks,
+using the direct luma mask only for deterministic equal-score tie-breaking.
+Coverage includes mask-selection unit tests, supported-glyph checks, and the
+existing render goldens; the golden updates are expected for sextant outputs
+because the production selector now chooses lower-SSE masks. The remaining
+blockiness at small widths is intrinsic to the 2×3 binary cell and may also be
+amplified by a terminal font without native U+1FB00 glyphs.

@@ -5,6 +5,8 @@ import (
 	"image/color"
 	"strings"
 	"testing"
+
+	"ubunatic.com/cati/v1/halfblock"
 )
 
 func patternImage(mask uint8, on, off color.RGBA) image.Image {
@@ -57,7 +59,7 @@ func TestSextantCandidateCount(t *testing.T) {
 	}
 }
 
-func TestSextantModeUsesDirectMask(t *testing.T) {
+func TestSextantModeChoosesBestRepresentableMask(t *testing.T) {
 	on := color.RGBA{R: 255, A: 255}
 	off := color.RGBA{B: 255, A: 255}
 	cases := []struct {
@@ -68,7 +70,6 @@ func TestSextantModeUsesDirectMask(t *testing.T) {
 		{"empty", transparentImage(2, 3), 0},
 		{"single bit", patternImage(sextantBit(1), on, off), sextantBit(1)},
 		{"corner pair", patternImage(sextantBit(1)|sextantBit(6), on, off), sextantBit(1) | sextantBit(6)},
-		{"full cell", patternImage(sextantBits("23456"), on, on), 0},
 	}
 
 	for _, tc := range cases {
@@ -79,6 +80,21 @@ func TestSextantModeUsesDirectMask(t *testing.T) {
 				t.Fatalf("chooseCell(2x3) mask = %06b, want %06b", cell.mask, tc.mask)
 			}
 		})
+	}
+}
+
+func TestSextantModeBeatsDirectMaskOnAntialiasing(t *testing.T) {
+	pixels := [6]color.RGBA{
+		{R: 255, A: 255}, {R: 210, G: 210, A: 255},
+		{B: 220, A: 255}, {B: 255, A: 255},
+		{G: 80, B: 80, A: 255}, {G: 100, B: 100, A: 255},
+	}
+	direct := directMask(pixels)
+	_, directScore := scoreMask(pixels, direct)
+	got := chooseCell(pixels, ModeSextant)
+	_, bestScore := scoreMask(pixels, got.mask)
+	if bestScore >= directScore {
+		t.Fatalf("best mask %06b score=%d, direct mask %06b score=%d; want strict improvement", got.mask, bestScore, direct, directScore)
 	}
 }
 
@@ -102,6 +118,18 @@ func TestSextantNoNulGlyph(t *testing.T) {
 	}
 	if got := sextantRuneByMask[rightColumnMask]; got != '▐' {
 		t.Fatalf("rightColumnMask rune = %q, want ▐", got)
+	}
+}
+
+func TestSextantUniformCellUsesMinimumScore(t *testing.T) {
+	pixels := [6]color.RGBA{{R: 20, G: 40, B: 60, A: 255}, {R: 20, G: 40, B: 60, A: 255}, {R: 20, G: 40, B: 60, A: 255}, {R: 20, G: 40, B: 60, A: 255}, {R: 20, G: 40, B: 60, A: 255}, {R: 20, G: 40, B: 60, A: 255}}
+	got := chooseCell(pixels, ModeSextant)
+	_, gotScore := scoreMask(pixels, got.mask)
+	for _, mask := range allMasks() {
+		_, score := scoreMask(pixels, mask)
+		if gotScore > score {
+			t.Fatalf("uniform cell mask %06b score=%d, but mask %06b scores %d", got.mask, gotScore, mask, score)
+		}
 	}
 }
 
@@ -131,6 +159,29 @@ func TestSextantModeStaysOnSupportedMasks(t *testing.T) {
 				t.Fatalf("chooseCell mask = %06b, want supported sextant mask", cell.mask)
 			}
 		})
+	}
+}
+
+func TestSextantSmallLogoWidthMatrixUsesSupportedGlyphs(t *testing.T) {
+	img, err := halfblock.LoadImage("../../assets/cati_0001.png")
+	if err != nil {
+		t.Skipf("small logo fixture unavailable: %v", err)
+	}
+	for width := 8; width <= 20; width++ {
+		grid, err := RenderToGrid(img, width, Options{Mode: ModeSextant})
+		if err != nil {
+			t.Fatalf("width %d: RenderToGrid: %v", width, err)
+		}
+		if grid.Width == 0 || grid.Height == 0 || grid.Width > width {
+			t.Fatalf("width %d: grid=%dx%d, want non-empty width <= target", width, grid.Width, grid.Height)
+		}
+		for _, row := range grid.Cells {
+			for _, cell := range row {
+				if cell.Ch == 0 {
+					t.Fatalf("width %d: emitted NUL glyph", width)
+				}
+			}
+		}
 	}
 }
 

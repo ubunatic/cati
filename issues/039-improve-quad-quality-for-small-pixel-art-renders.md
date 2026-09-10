@@ -1,6 +1,6 @@
 # 039 — Improve quad quality for small pixel-art renders
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Quality
@@ -63,3 +63,13 @@ Evaluate, with reproducible fixtures and tuned parameters:
    near-equal colors and hard edges.
 4. Results document when halfblock fallback is selected and preserve the
    existing user-facing mode semantics.
+
+## Resolution
+
+The user-facing `quad` mode now enables `HalfblockThreshold: 2` alongside
+`SplitHalf`. Ambiguous 3+ colour cells that cannot exactly represent at least
+two source pixels use the stable halfblock fallback; clean two-colour edges
+retain quadrant precision. The library behavior remains opt-in through the
+same `Options` fields, and the small-logo width matrix plus near-equal,
+hard-edge, and threshold-zero tests cover the decision. Quad golden updates
+are expected where this conservative policy changes the reconstructed cell.
