@@ -63,11 +63,13 @@ levels to two-dimensional candidate masks. For each terminal cell it:
 `six+half` uses `2×6`, and `spark+six` uses `4×24`. Quad candidates in
 `spark+quad` are upsampled to `4×8`: each quadrant covers a `2×4` rectangle.
 
-Native sextant rendering applies the same deterministic SSE principle to its
-representable `2×3` masks. It scores geometry-aware heuristic candidates and
-uses the direct luma mask only to break equal-score ties. This improves
-antialiased small renders without changing the intrinsic six-region resolution
-or terminal font requirements.
+Native sextant rendering applies the same deterministic SSE principle to all 64
+possible `2×3` masks, including the `▌`/`▐` aliases and empty/full masks. It
+penalizes painting transparent source regions according to the actual ANSI
+coverage, then uses the direct luma mask only to break equal-score ties. Image
+reconstruction uses that same coverage model, so transparent-edge defects are
+visible to tests. The intrinsic six-region resolution and terminal font
+requirements remain unchanged.
 
 ### Tiebreaker: prefer non-splitting characters
 

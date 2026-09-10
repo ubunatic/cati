@@ -50,12 +50,26 @@ func TestSextantMaskTable(t *testing.T) {
 }
 
 func TestSextantCandidateCount(t *testing.T) {
-	if got := len(sextantMasks); got != 60 {
-		t.Fatalf("len(sextantMasks) = %d, want 60", got)
+	if got := len(allMasks()); got != 64 {
+		t.Fatalf("len(allMasks()) = %d, want 64", got)
 	}
-	// 60 native sextant glyphs + the two half-block column patterns (▌ ▐).
-	if got := len(sextantRuneByMask); got != 62 {
-		t.Fatalf("len(sextantRuneByMask) = %d, want 62", got)
+	seen := make(map[uint8]bool, 64)
+	for i, mask := range allMasks() {
+		if seen[mask] {
+			t.Fatalf("allMasks() contains duplicate mask %06b", mask)
+		}
+		seen[mask] = true
+		if mask != uint8(i) {
+			t.Fatalf("allMasks()[%d] = %06b, want deterministic mask %06b", i, mask, i)
+		}
+	}
+	for _, mask := range []uint8{0, 0b111111, leftColumnMask, rightColumnMask} {
+		if _, ok := seen[mask]; !ok {
+			t.Fatalf("allMasks() omits %06b", mask)
+		}
+	}
+	if got := len(sextantRuneByMask); got != 64 {
+		t.Fatalf("len(sextantRuneByMask) = %d, want 64", got)
 	}
 }
 
@@ -80,6 +94,16 @@ func TestSextantModeChoosesBestRepresentableMask(t *testing.T) {
 				t.Fatalf("chooseCell(2x3) mask = %06b, want %06b", cell.mask, tc.mask)
 			}
 		})
+	}
+}
+
+func TestSextantModeUsesColumnAliases(t *testing.T) {
+	left := color.RGBA{R: 255, A: 255}
+	right := color.RGBA{B: 255, A: 255}
+	pixels := [6]color.RGBA{left, right, left, right, left, right}
+	cell := chooseCell(pixels, ModeSextant)
+	if cell.mask != leftColumnMask || cell.ch != '▌' {
+		t.Fatalf("vertical split = mask %06b rune %q, want mask %06b rune ▌", cell.mask, cell.ch, leftColumnMask)
 	}
 }
 
@@ -143,8 +167,8 @@ func TestSextantModeStaysOnSupportedMasks(t *testing.T) {
 		{"single bit", patternImage(sextantBit(1), on, off)},
 		{"full cell", patternImage(sextantBits("23456"), on, on)},
 	}
-	supported := make(map[uint8]struct{}, len(sextantMasks))
-	for _, mask := range sextantMasks {
+	supported := make(map[uint8]struct{}, len(allMasks()))
+	for _, mask := range allMasks() {
 		supported[mask] = struct{}{}
 	}
 
@@ -159,6 +183,71 @@ func TestSextantModeStaysOnSupportedMasks(t *testing.T) {
 				t.Fatalf("chooseCell mask = %06b, want supported sextant mask", cell.mask)
 			}
 		})
+	}
+}
+
+func TestSextantTransparentBottomEdgeDoesNotGrow(t *testing.T) {
+	opaque := color.RGBA{R: 240, G: 80, A: 255}
+	transparent := color.RGBA{}
+	pixels := [6]color.RGBA{opaque, opaque, opaque, opaque, transparent, transparent}
+	cell := chooseCell(pixels, ModeSextant)
+	if emittedCoverage(cell, 4) || emittedCoverage(cell, 5) {
+		t.Fatalf("selected cell %06b paints transparent bottom edge: %#v", cell.mask, cell)
+	}
+	if !emittedCoverage(cell, 0) || !emittedCoverage(cell, 1) || !emittedCoverage(cell, 2) || !emittedCoverage(cell, 3) {
+		t.Fatalf("selected cell %06b failed to paint opaque top edge: %#v", cell.mask, cell)
+	}
+}
+
+func TestSextantRenderToImagePreservesTransparentCoverage(t *testing.T) {
+	opaque := color.RGBA{R: 240, G: 80, A: 255}
+	src := patternImage(sextantBits("1234"), opaque, color.RGBA{})
+	got := RenderToImage(src, ModeSextant)
+	for i := 4; i < 6; i++ {
+		p := toRGBA(got.At(i%2, i/2))
+		if p.A != 0 {
+			t.Fatalf("reconstructed transparent pixel %d = %#v, want transparent", i, p)
+		}
+	}
+}
+
+func TestSextantBackgroundEscapeCoversTransparentRegions(t *testing.T) {
+	cell := cellResult{
+		mask:  leftColumnMask,
+		hasFG: true,
+		hasBG: true,
+	}
+	for i := 0; i < 6; i++ {
+		if !emittedCoverage(cell, i) {
+			t.Fatalf("background cell does not cover region %d", i)
+		}
+	}
+}
+
+func TestSextantANSIAndImageCoverageAgree(t *testing.T) {
+	opaque := color.RGBA{R: 240, G: 80, A: 255}
+	src := patternImage(sextantBits("1234"), opaque, color.RGBA{})
+	grid, err := RenderToGrid(src, 0, Options{Mode: ModeSextant})
+	if err != nil {
+		t.Fatalf("RenderToGrid: %v", err)
+	}
+	cell := chooseCell(sampleBlock(src, 0, 2, 0, 3), ModeSextant)
+	if grid.Cells[0][0].Ch != cell.ch {
+		t.Fatalf("grid rune %q, chooseCell rune %q", grid.Cells[0][0].Ch, cell.ch)
+	}
+	var ansi strings.Builder
+	if err := Render(&ansi, src, 0, Options{Mode: ModeSextant, NoLinePrefix: true}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(ansi.String(), fgRGB(opaque)) || strings.Contains(ansi.String(), bgRGB(opaque)) {
+		t.Fatalf("ANSI output does not match foreground-only coverage: %q", ansi.String())
+	}
+	got := RenderToImage(src, ModeSextant)
+	for i := 0; i < 6; i++ {
+		painted := toRGBA(got.At(i%2, i/2)).A != 0
+		if painted != emittedCoverage(cell, i) {
+			t.Fatalf("pixel %d painted=%v, emittedCoverage=%v; cell=%#v", i, painted, emittedCoverage(cell, i), cell)
+		}
 	}
 }
 

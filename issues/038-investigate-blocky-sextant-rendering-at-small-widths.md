@@ -23,8 +23,8 @@ degradation.
   colors).
 - The output uses Unicode sextant glyphs; terminal font coverage and fallback
   behavior can change the apparent weight and shape of those regions.
-- Sextant selection is heuristic rather than an exhaustive search of all
-  representable masks.
+- Sextant selection scores all 64 six-region masks, including the two column
+  aliases and empty/full special cases.
 
 ## Reproduction and diagnosis
 
@@ -60,12 +60,33 @@ for terminals without usable sextant glyphs.
 4. Documentation explains the remaining representation limit and how users
    can diagnose font fallback.
 
+## Previous Attempt (Reopened)
+
+The previous attempt made the native sextant path score 60 native masks, but was
+reopened after visual regression. It omitted the supported `▌`/`▐` masks and
+empty/full masks, and transparent pixels had no overpaint penalty. The cati
+logo consequently showed repeated bottom-edge protrusions. `RenderToImage`
+also skipped transparent pixels, so image tests could hide what ANSI output
+painted. These defects must be fixed before #038 can close.
+
+## Reopened Plan
+
+- Score all 64 six-region masks, including empty/full and the `▌`/`▐` aliases.
+- Penalize candidate coverage of transparent pixels and make reconstruction
+  reflect emitted glyph coverage.
+- Add small-logo width 8–20 regression checks for transparent-edge overpaint,
+  supported vertical splits, and ANSI/image consistency.
+- Re-run both Go decoder-family golden suites and document any remaining
+  representation or font-fallback limitations.
+
 ## Resolution
 
-The native sextant path now exhaustively scores all 60 representable masks,
-using the direct luma mask only for deterministic equal-score tie-breaking.
-Coverage includes mask-selection unit tests, supported-glyph checks, and the
-existing render goldens; the golden updates are expected for sextant outputs
-because the production selector now chooses lower-SSE masks. The remaining
-blockiness at small widths is intrinsic to the 2×3 binary cell and may also be
-amplified by a terminal font without native U+1FB00 glyphs.
+The sextant selector now evaluates all 64 masks deterministically and applies a
+large penalty when the emitted ANSI cell would paint transparent source
+regions. Empty/full cells and the `▌`/`▐` aliases are included. Native image
+reconstruction now uses the same emitted-coverage model as ANSI output, so
+transparent-edge overpaint is tested rather than hidden. Focused tests cover
+aliases, transparent edges, background escapes, reconstruction, ANSI/image
+agreement, and the cati logo across widths 8–20. Sextant goldens were updated
+for both supported Go decoder families because the corrected coverage model
+changes the rendered native-sextant pixels.

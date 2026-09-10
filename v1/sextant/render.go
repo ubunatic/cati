@@ -91,6 +91,11 @@ func init() {
 	// which shifts the rest of the row and leaves the right edge unfilled.
 	sextantRuneByMask[leftColumnMask] = '▌'
 	sextantRuneByMask[rightColumnMask] = '▐'
+	// Empty and full cells are emitted as spaces with an optional color escape;
+	// keeping them in the table makes the candidate set complete while
+	// scoreMask handles their special display semantics below.
+	sextantRuneByMask[0] = ' '
+	sextantRuneByMask[0b111111] = ' '
 }
 
 // leftColumnMask / rightColumnMask are the two full-column patterns that map to
@@ -498,6 +503,9 @@ func scoreMask(pixels [6]color.RGBA, mask uint8) (cellResult, int) {
 	score := 0
 	for i, p := range pixels {
 		if isTransparent(p) {
+			if emittedCoverage(cell, i) {
+				score += transparentOverpaintPenalty
+			}
 			continue
 		}
 		target := bg
@@ -520,6 +528,26 @@ func scoreMask(pixels [6]color.RGBA, mask uint8) (cellResult, int) {
 		}
 	}
 	return cell, score
+}
+
+// transparentOverpaintPenalty is deliberately larger than the maximum RGB
+// error for one sampled region. It makes preserving transparent source pixels
+// more important than a small color approximation error, matching what an
+// ANSI terminal actually paints.
+const transparentOverpaintPenalty = 1 << 24
+
+// emittedCoverage reports whether an emitted cell paints the sampled region.
+// A background escape covers the complete terminal cell; without one, only
+// foreground sextant bits paint pixels and the terminal's existing background
+// remains untouched.
+func emittedCoverage(cell cellResult, idx int) bool {
+	if cell.transparent {
+		return false
+	}
+	if cell.hasBG {
+		return true
+	}
+	return cell.hasFG && maskContains(cell.mask, idx)
 }
 
 func chooseCell(pixels [6]color.RGBA, mode Mode) cellResult {
@@ -552,8 +580,10 @@ func maskOverlap(a, b uint8) int {
 }
 
 func allMasks() []uint8 {
-	out := make([]uint8, len(sextantMasks))
-	copy(out, sextantMasks)
+	out := make([]uint8, 64)
+	for mask := range out {
+		out[mask] = uint8(mask)
+	}
 	return out
 }
 
@@ -753,8 +783,8 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 					x1 := min(x0+blockCols, b.Max.X)
 					pixels := sampleBlock(img, x0, x1, y0, y1)
 					cell := chooseCell(pixels, mode)
-					for idx, px := range pixels {
-						if isTransparent(px) {
+					for idx := range pixels {
+						if !emittedCoverage(cell, idx) {
 							continue
 						}
 						target := cell.bg
