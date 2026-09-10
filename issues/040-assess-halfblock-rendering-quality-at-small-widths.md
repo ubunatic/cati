@@ -1,6 +1,6 @@
 # 040 — Assess halfblock rendering quality at small widths
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug
@@ -80,3 +80,25 @@ Run targeted `v1/halfblock` and `cmd` tests first, then `go test ./...`,
 the original repro and its near-miss from raw output and reconstructed pixels.
 Update the relevant evergreen rendering documentation and this ticket in the
 same implementation commit if a fix is made.
+
+## 5. Assessment and Resolution
+
+The width matrix for the cati logo at widths 8–20 produced stable serial and
+worker cell decisions, no non-empty transparent reconstruction pixels, and the
+expected `ceil(fitted-height/2)` terminal row count. This did not establish a
+general small-width halfblock quality regression; the remaining loss of detail
+is consistent with the intrinsic `1x2` representation and nearest-neighbour
+sampling.
+
+A concrete defect was measured with a `1x2` partially transparent source:
+ANSI emitted the premultiplied RGB value as an opaque true-color escape, while
+`RenderToImage` retained the source alpha. The reconstruction therefore did
+not represent the rendered terminal image and could skew PSNR/SSIM or smart
+render selection.
+
+The fix makes reconstructed painted foreground/background halves opaque while
+leaving halves without an emitted color escape transparent. Regression tests
+cover top-only (`▀`), bottom-only (`▄`), two-color foreground/background,
+ANSI escape bytes, odd-height behavior, and serial/worker reconstruction
+equivalence. No goldens change for the opaque corpus; partial-alpha fixtures
+would intentionally change to match the ANSI contract.

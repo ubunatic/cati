@@ -336,6 +336,14 @@ func cellEscape(c core.Cell) string {
 	return b.String()
 }
 
+// ansiColor returns the opaque pixel represented by an ANSI true-color
+// escape. ANSI RGB escapes do not carry alpha; transparent halves are
+// represented by the absence of a foreground/background escape instead.
+func ansiColor(c color.RGBA) color.RGBA {
+	c.A = 255
+	return c
+}
+
 // RenderToImage renders the image using the halfblock algorithm and returns a new image.
 func RenderToImage(img image.Image) *image.RGBA {
 	return RenderToImageJ(img, 1)
@@ -366,6 +374,16 @@ func RenderToImageJ(img image.Image, jobs int) *image.RGBA {
 				fg := c.Fg
 				if !c.HasFg {
 					fg = bg
+				}
+				if c.HasBg {
+					bg = ansiColor(bg)
+				} else {
+					bg = color.RGBA{}
+				}
+				if c.HasFg {
+					fg = ansiColor(fg)
+				} else {
+					fg = color.RGBA{}
 				}
 
 				switch c.Ch {

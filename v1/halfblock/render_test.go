@@ -102,11 +102,11 @@ func TestScaleToFit(t *testing.T) {
 	orig := solidImage(100, 50, red)
 
 	tests := []struct {
-		name    string
-		cols    int
-		rows    int
-		wantW   int
-		wantH   int
+		name  string
+		cols  int
+		rows  int
+		wantW int
+		wantH int
 	}{
 		// Width-only constraint (rows=0)
 		{"width only, fits", 200, 0, 100, 50},
@@ -237,6 +237,65 @@ func TestRender_TwoColors(t *testing.T) {
 	}
 	if !strings.Contains(out, "48;2;0;0;255") {
 		t.Errorf("expected blue bg escape in output: %q", out)
+	}
+}
+
+func TestRenderToImage_ANSIColorsAreOpaque(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 1, 2))
+	img.SetNRGBA(0, 0, color.NRGBA{R: 200, G: 40, B: 10, A: 128})
+	img.SetNRGBA(0, 1, color.NRGBA{})
+
+	var ansi strings.Builder
+	if err := Render(&ansi, img, 1, Options{NoLinePrefix: true}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if want := "\x1b[38;2;100;20;5m▀\x1b[0m"; !strings.Contains(ansi.String(), want) {
+		t.Fatalf("ANSI output = %q, want %q", ansi.String(), want)
+	}
+
+	serial := RenderToImage(img)
+	got := serial.RGBAAt(0, 0)
+	if got != (color.RGBA{R: 100, G: 20, B: 5, A: 255}) {
+		t.Fatalf("RenderToImage painted pixel = %#v, want opaque premultiplied ANSI color", got)
+	}
+	if got := serial.RGBAAt(0, 1); got != (color.RGBA{}) {
+		t.Fatalf("RenderToImage transparent half = %#v, want transparent", got)
+	}
+	parallel := RenderToImageJ(img, 2)
+	if parallel.RGBAAt(0, 0) != serial.RGBAAt(0, 0) || parallel.RGBAAt(0, 1) != serial.RGBAAt(0, 1) {
+		t.Fatalf("worker reconstruction differs: serial=%v/%v parallel=%v/%v",
+			serial.RGBAAt(0, 0), serial.RGBAAt(0, 1), parallel.RGBAAt(0, 0), parallel.RGBAAt(0, 1))
+	}
+
+	bottom := image.NewNRGBA(image.Rect(0, 0, 1, 2))
+	bottom.SetNRGBA(0, 1, color.NRGBA{R: 10, G: 40, B: 200, A: 128})
+	var bottomANSI strings.Builder
+	if err := Render(&bottomANSI, bottom, 1, Options{NoLinePrefix: true}); err != nil {
+		t.Fatalf("Render bottom-only: %v", err)
+	}
+	if want := "\x1b[38;2;5;20;100m▄\x1b[0m"; !strings.Contains(bottomANSI.String(), want) {
+		t.Fatalf("bottom ANSI output = %q, want %q", bottomANSI.String(), want)
+	}
+	if got := RenderToImage(bottom).RGBAAt(0, 1); got != (color.RGBA{R: 5, G: 20, B: 100, A: 255}) {
+		t.Fatalf("bottom painted pixel = %#v, want opaque premultiplied ANSI color", got)
+	}
+}
+
+func TestRenderToImage_ANSIBackgroundIsOpaque(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 1, 2))
+	img.SetRGBA(0, 0, color.RGBA{R: 255, A: 255})
+	img.SetRGBA(0, 1, color.RGBA{B: 255, A: 255})
+
+	var ansi strings.Builder
+	if err := Render(&ansi, img, 1, Options{NoLinePrefix: true}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(ansi.String(), "\x1b[48;2;0;0;255m") {
+		t.Fatalf("ANSI output lacks blue background: %q", ansi.String())
+	}
+	got := RenderToImage(img)
+	if got.RGBAAt(0, 0) != (color.RGBA{R: 255, A: 255}) || got.RGBAAt(0, 1) != (color.RGBA{B: 255, A: 255}) {
+		t.Fatalf("opaque two-color reconstruction = %v/%v", got.RGBAAt(0, 0), got.RGBAAt(0, 1))
 	}
 }
 

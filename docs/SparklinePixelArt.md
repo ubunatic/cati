@@ -163,6 +163,12 @@ The legacy 1D split logic requires that the pixel array passed to the error mini
     not silently become `8×4` cells just because one spark cell analyzes a
     `4×8` block.
 
+The halfblock renderer follows the same reconstruction contract: an ANSI
+true-color escape paints an opaque RGB value, so `RenderToImage` writes
+painted halves with alpha 255 and leaves halves without a corresponding escape
+transparent. This keeps image metrics and smart-width selection consistent with
+what the terminal actually displays, including partially transparent sources.
+
 > [!WARNING]
 > Reintroducing horizontal 1/8 block modes under `4×8` geometry will be
 > approximate. Use an `8×8` spark-family geometry first if exact horizontal
