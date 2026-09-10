@@ -25,6 +25,37 @@ type RenderQuality struct {
 	EdgeCont   float64 // weighted recall of reference edges [0,1]; 1 = all edges preserved
 }
 
+// PSNR computes peak signal-to-noise ratio between two equally sized images.
+// RGB and alpha channels are compared from the image.Color RGBA values after
+// conversion to 8-bit channels; alpha is included as a fourth channel. The peak value is 255. Identical images return
+// +Inf. Images with different dimensions or no pixels return 0.
+func PSNR(a, b image.Image) float64 {
+	ab, bb := a.Bounds(), b.Bounds()
+	if ab.Dx() != bb.Dx() || ab.Dy() != bb.Dy() || ab.Dx() <= 0 || ab.Dy() <= 0 {
+		return 0
+	}
+	var sum float64
+	for y := 0; y < ab.Dy(); y++ {
+		for x := 0; x < ab.Dx(); x++ {
+			ar, ag, abv, aa := a.At(ab.Min.X+x, ab.Min.Y+y).RGBA()
+			br, bg, bbv, ba := b.At(bb.Min.X+x, bb.Min.Y+y).RGBA()
+			for _, d := range [4]float64{
+				float64(ar>>8) - float64(br>>8),
+				float64(ag>>8) - float64(bg>>8),
+				float64(abv>>8) - float64(bbv>>8),
+				float64(aa>>8) - float64(ba>>8),
+			} {
+				sum += d * d
+			}
+		}
+	}
+	if sum == 0 {
+		return math.Inf(1)
+	}
+	mse := sum / float64(ab.Dx()*ab.Dy()*4)
+	return 10 * math.Log10((255*255)/mse)
+}
+
 // luma returns the BT.709 luminance of c in [0, 1].
 func luma(c color.Color) float64 {
 	r, g, b, _ := c.RGBA()
@@ -263,4 +294,3 @@ func QualityGridDims(vpW, vpH int, pixPerCol, pixPerRow int, k int) (int, int) {
 	cellH := vpH / pixPerRow
 	return k * cellW, k * cellH
 }
-

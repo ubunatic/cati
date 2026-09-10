@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -156,7 +157,10 @@ func TestGoldenRenders(t *testing.T) {
 		}
 		for _, a := range algos {
 			renderName := fmt.Sprintf("render_%s_%dch.png", a.name, c.n)
-			renderPath := filepath.Join(folderPath, renderName)
+			renderPath, err := goldenRenderPath(folderPath, renderName, sourcePath)
+			if err != nil {
+				t.Fatal(err)
+			}
 			meta := map[string]string{
 				"Algorithm": a.name,
 				"Chars":     fmt.Sprintf("%d", c.n),
@@ -173,6 +177,10 @@ func TestGoldenRenders(t *testing.T) {
 			}
 
 			if _, err := os.Stat(renderPath); os.IsNotExist(err) {
+				if isJPEGPath(sourcePath) {
+					t.Errorf("missing JPEG golden %s for %s; generate it with GOTOOLCHAIN=%s GOWORK=off go test ./cmd -run TestGoldenRenders -update", renderPath, runtime.Version(), runtime.Version())
+					continue
+				}
 				t.Logf("creating golden %s", renderName)
 				if err := testhelper.SavePNG(renderPath, rendered, meta); err != nil {
 					t.Errorf("save golden %s: %v", renderPath, err)
@@ -188,6 +196,129 @@ func TestGoldenRenders(t *testing.T) {
 				t.Errorf("%s/%s: rendered image differs from golden", c.folder, renderName)
 			}
 		}
+	}
+}
+
+// goldenRenderPath selects a decoder-family-specific golden for JPEG sources.
+// Go 1.26 replaced image/jpeg, so those goldens must remain strict but can
+// legitimately differ before versus after that decoder change. PNG sources
+// are lossless and continue to use the shared path.
+func goldenRenderPath(folder, renderName, sourcePath string) (string, error) {
+	if !isJPEGPath(sourcePath) {
+		return filepath.Join(folder, renderName), nil
+	}
+	variant, err := jpegGoldenVariant(runtime.Version())
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(folder, strings.TrimSuffix(renderName, ".png")+"."+variant+".png"), nil
+}
+
+func jpegGoldenVariant(version string) (string, error) {
+	major, minor, ok := parseGoMajorMinor(version)
+	if !ok {
+		return "", fmt.Errorf("unsupported Go runtime %s for JPEG goldens; expected a Go version", version)
+	}
+	if major > 1 || (major == 1 && minor >= 26) {
+		return "go1.26-plus", nil
+	}
+	return "go1.25-minus", nil
+}
+
+func parseGoMajorMinor(version string) (major, minor int, ok bool) {
+	for _, token := range strings.Fields(version) {
+		if !strings.HasPrefix(token, "go") {
+			continue
+		}
+		parts := strings.Split(strings.TrimPrefix(token, "go"), ".")
+		if len(parts) < 2 {
+			continue
+		}
+		if _, err := fmt.Sscanf(parts[0], "%d", &major); err != nil {
+			continue
+		}
+		if _, err := fmt.Sscanf(parts[1], "%d", &minor); err != nil {
+			continue
+		}
+		return major, minor, true
+	}
+	return 0, 0, false
+}
+
+func isJPEGPath(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".jpg" || ext == ".jpeg"
+}
+
+func TestGoldenRenderPath(t *testing.T) {
+	const folder = "testdata/sample"
+	const name = "render_halfblock_24ch.png"
+
+	got, err := goldenRenderPath(folder, name, "sample.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	variant, err := jpegGoldenVariant(runtime.Version())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(folder, "render_halfblock_24ch."+variant+".png")
+	if got != want {
+		t.Fatalf("JPEG golden path = %q, want %q", got, want)
+	}
+
+	got, err = goldenRenderPath(folder, name, "source.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = filepath.Join(folder, name)
+	if got != want {
+		t.Fatalf("PNG golden path = %q, want %q", got, want)
+	}
+}
+
+func TestJPEGGoldenVariantBoundary(t *testing.T) {
+	tests := []struct {
+		version string
+		want    string
+	}{
+		{"go1.25.0", "go1.25-minus"},
+		{"go1.25.99", "go1.25-minus"},
+		{"go1.26.0", "go1.26-plus"},
+		{"go1.26.5", "go1.26-plus"},
+		{"go1.27.0", "go1.26-plus"},
+		{"devel go1.27-abc", "go1.26-plus"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.version, func(t *testing.T) {
+			got, err := jpegGoldenVariant(tc.version)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Fatalf("jpegGoldenVariant(%q) = %q, want %q", tc.version, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestGoldenEqualIgnoresPNGMetadata(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	img.SetRGBA(0, 0, color.RGBA{R: 255, A: 255})
+	img.SetRGBA(1, 1, color.RGBA{B: 255, A: 255})
+	dir := t.TempDir()
+	firstPath := filepath.Join(dir, "first.png")
+	secondPath := filepath.Join(dir, "second.png")
+	if err := testhelper.SavePNG(firstPath, img, map[string]string{"Algorithm": "half", "Chars": "24"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := testhelper.SavePNG(secondPath, img, map[string]string{"Algorithm": "quad", "Chars": "80"}); err != nil {
+		t.Fatal(err)
+	}
+	first := goldenLoad(t, firstPath)
+	second := goldenLoad(t, secondPath)
+	if !goldenEqual(first, second) {
+		t.Fatal("metadata-only PNG change was treated as a pixel difference")
 	}
 }
 

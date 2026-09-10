@@ -14,6 +14,9 @@ VIDEO_AT   ?= 1s
 
 export GOCACHE ?= /tmp/cati-gocache
 
+# Keep stdlib-decoder goldens reproducible and ignore any enclosing workspace.
+GO_TEST_ENV := GOWORK=off GOTOOLCHAIN=go1.25.0
+
 help: 🤖  # show this help
 	@grep -E '^[a-zA-Z_-]+:.*[⚙🤖].*#+' $(MAKEFILE_LIST) | \
 	awk 'BEGIN {FS = ":.*#+ "}; {printf "    $(_prim)%-15s$(_rst) %s\n", $$1, $$2}'
@@ -42,17 +45,17 @@ install: ⚙️ build  ## install to ~/go/bin (user)
 	go install ./cmd/cati ./cmd/catiplay ./cmd/catibrowse
 
 test: ⚙️  ## run linter and tests
-	go vet ./...
-	go test ./...
+	$(GO_TEST_ENV) go vet ./...
+	$(GO_TEST_ENV) go test ./...
 
 test-player: ⚙️  ## run catiplay-specific tests
-	go test -tags=catiplay ./cmd
+	$(GO_TEST_ENV) go test -tags=catiplay ./cmd
 
 test-browser: ⚙️  ## run catibrowse-specific tests
-	go test -tags=catibrowse ./cmd
+	$(GO_TEST_ENV) go test -tags=catibrowse ./cmd
 
 test-integration: ⚙️ build  ## run terminal integration tests
-	go test -tags=integration .
+	$(GO_TEST_ENV) go test -tags=integration .
 
 test-all: ⚙️ test test-player test-browser test-integration  ## run default and optional tests
 

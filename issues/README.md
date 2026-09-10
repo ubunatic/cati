@@ -36,6 +36,8 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [032](032-jpeg-golden-toolchain-drift.md) | JPEG-sourced golden drift across Go toolchain patch versions | ✅ Closed |
 | [033](033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md) | Render() unconditionally emits erase-line+CR prefix, breaks composed layouts | 🔴 Open |
 | [034](034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md) | quadblock/sextant have no image loader, must import halfblock.LoadImage | 🔴 Open |
+| [035](035-make-png-golden-comparisons-ignore-non-rendering-metadata.md) | Make PNG golden comparisons ignore non-rendering metadata | 🔴 Open |
+| [036](036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md) | Add smart render mode that selects the best width by PSNR | 🔴 Open |
 
 ## Archived
 

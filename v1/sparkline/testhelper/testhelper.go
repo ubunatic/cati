@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 // GenerateFixtures creates special regression fixture images under testdataDir.
@@ -61,7 +62,7 @@ func GenerateFixtures(testdataDir string) error {
 //   - demo_cross_20x20:   yellow 4-pixel-wide cross on blue background
 func GenerateGeometrics(testdataDir string) error {
 	const sz = 20
-	red  := color.RGBA{R: 255, A: 255}
+	red := color.RGBA{R: 255, A: 255}
 	blue := color.RGBA{B: 255, A: 255}
 	yell := color.RGBA{R: 255, G: 255, A: 255}
 
@@ -267,8 +268,13 @@ func injectMetadata(pngBytes []byte, metadata map[string]string) ([]byte, error)
 			return nil, fmt.Errorf("unexpected EOF inside chunk")
 		}
 		if chunkType == "IEND" {
-			for k, v := range metadata {
-				chunks = append(chunks, makeTextChunk(k, v)...)
+			keys := make([]string, 0, len(metadata))
+			for k := range metadata {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				chunks = append(chunks, makeTextChunk(k, metadata[k])...)
 			}
 		}
 		chunks = append(chunks, pngBytes[idx:idx+totalLen]...)

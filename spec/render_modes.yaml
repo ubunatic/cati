@@ -8,6 +8,12 @@ cycle:
   - six+half
   - spark+six
 
+smart:
+  metric: psnr
+  max_reduction: 0.10
+  step: terminal-column
+  tie_break: widest
+
 modes:
   - name: half
     aliases: [h]

@@ -201,6 +201,11 @@ func pairToCell(top, bot color.RGBA) cell {
 type Options struct {
 	Rows int
 	Jobs int
+
+	// NoLinePrefix omits the erase-line and carriage-return prefix emitted
+	// before each rendered line. Set this when composing output alongside
+	// other content on the same terminal row.
+	NoLinePrefix bool
 }
 
 // RenderToGrid scales and converts the image into a grid of terminal cells.
@@ -288,6 +293,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 }
 
 // Render writes the image to w as ANSI half-block art followed by a newline.
+// By default each line starts with an erase-line/carriage-return prefix for
+// standalone redraws; set Options.NoLinePrefix when composing output with
+// other content on the same terminal row.
 func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 	grid, err := RenderToGrid(img, cols, opts)
 	if err != nil {
@@ -296,7 +304,9 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 
 	for y := 0; y < grid.Height; y++ {
 		var sb strings.Builder
-		sb.WriteString(ansiLinePrefix)
+		if !opts.NoLinePrefix {
+			sb.WriteString(ansiLinePrefix)
+		}
 		for x := 0; x < grid.Width; x++ {
 			c := grid.Cells[y][x]
 			if c.Transparent {

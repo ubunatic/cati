@@ -30,6 +30,9 @@ func TestSpecRenderModesLoad(t *testing.T) {
 	if len(rm.Cycle) == 0 {
 		t.Fatal("render_modes.yaml defines no cycle")
 	}
+	if rm.Smart.Metric != "psnr" || rm.Smart.Step != "terminal-column" || rm.Smart.TieBreak != "widest" || rm.Smart.MaxReduction <= 0 || rm.Smart.MaxReduction > 1 {
+		t.Fatalf("invalid smart render policy: %+v", rm.Smart)
+	}
 }
 
 func TestSpecRenderModesIntegrity(t *testing.T) {

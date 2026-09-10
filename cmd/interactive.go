@@ -117,6 +117,7 @@ type renderCfg struct {
 	jobs        int
 	gray        bool                     // when true, convert image to grayscale before rendering
 	grayColors  quadblock.ColorReduction // active grayscale palette level (ColorGray4/8/64/256)
+	smart       bool                     // opt-in nearby-width PSNR selection for static renders
 }
 
 // grayLevels is the cycle order for the G key: off → 256 → 64 → 8 → 4 → off.
@@ -425,6 +426,7 @@ func canonicalRenderCfg(rc renderCfg) renderCfg {
 			canon.jobs = rc.jobs
 			canon.gray = rc.gray
 			canon.grayColors = rc.grayColors
+			canon.smart = rc.smart
 			return canon
 		}
 	}
@@ -454,6 +456,7 @@ func cycleRenderCfg(rc renderCfg) (renderCfg, string) {
 			next.cfg.jobs = rc.jobs
 			next.cfg.gray = rc.gray
 			next.cfg.grayColors = rc.grayColors
+			next.cfg.smart = rc.smart
 			return next.cfg, next.name
 		}
 	}
@@ -462,6 +465,7 @@ func cycleRenderCfg(rc renderCfg) (renderCfg, string) {
 	next.cfg.jobs = rc.jobs
 	next.cfg.gray = rc.gray
 	next.cfg.grayColors = rc.grayColors
+	next.cfg.smart = rc.smart
 	return next.cfg, next.name
 }
 
@@ -476,6 +480,7 @@ func cycleRenderCfgPrev(rc renderCfg) (renderCfg, string) {
 			prev.cfg.jobs = rc.jobs
 			prev.cfg.gray = rc.gray
 			prev.cfg.grayColors = rc.grayColors
+			prev.cfg.smart = rc.smart
 			return prev.cfg, prev.name
 		}
 	}
@@ -484,6 +489,7 @@ func cycleRenderCfgPrev(rc renderCfg) (renderCfg, string) {
 	prev.cfg.jobs = rc.jobs
 	prev.cfg.gray = rc.gray
 	prev.cfg.grayColors = rc.grayColors
+	prev.cfg.smart = rc.smart
 	return prev.cfg, prev.name
 }
 

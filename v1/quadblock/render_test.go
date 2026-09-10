@@ -338,6 +338,17 @@ func TestRender_AllTransparent(t *testing.T) {
 	}
 }
 
+func TestRender_NoLinePrefix(t *testing.T) {
+	img := solidImage(2, 2, red)
+	var sb strings.Builder
+	if err := Render(&sb, img, 0, Options{NoLinePrefix: true}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(sb.String(), ansiLinePrefix) || strings.Contains(sb.String(), "\r") {
+		t.Fatalf("NoLinePrefix output contains line prefix: %q", sb.String())
+	}
+}
+
 func TestRender_TwoColorHalves(t *testing.T) {
 	// A 4×2 image: pixel row 0 = red (UL+UR), pixel row 1 = blue (LL+LR).
 	// Each terminal cell sees top=red, bot=blue → ▀ fg=red bg=blue.

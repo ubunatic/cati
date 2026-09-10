@@ -15,6 +15,11 @@ import (
 )
 
 type Options struct {
+	// NoLinePrefix omits the erase-line and carriage-return prefix emitted
+	// before each rendered line. Set this when composing output alongside
+	// other content on the same terminal row.
+	NoLinePrefix bool
+
 	Mode    Mode
 	Rows    int
 	Jobs    int
@@ -198,7 +203,9 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 
 	for y := 0; y < grid.Height; y++ {
 		var sb strings.Builder
-		sb.WriteString(ansiLinePrefix)
+		if !opts.NoLinePrefix {
+			sb.WriteString(ansiLinePrefix)
+		}
 		for x := 0; x < grid.Width; x++ {
 			cell := grid.Cells[y][x]
 			if cell.Transparent {

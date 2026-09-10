@@ -3,6 +3,7 @@ package sextant
 import (
 	"image"
 	"image/color"
+	"strings"
 	"testing"
 )
 
@@ -150,5 +151,16 @@ func TestRenderToImageRoundTrip(t *testing.T) {
 				t.Fatalf("pixel (%d,%d) = %#v, want %#v", x, y, gotPixel, wantPixel)
 			}
 		}
+	}
+}
+
+func TestRender_NoLinePrefix(t *testing.T) {
+	img := patternImage(0x3f, color.RGBA{R: 255, A: 255}, color.RGBA{})
+	var sb strings.Builder
+	if err := Render(&sb, img, 0, Options{Mode: ModeSextant, NoLinePrefix: true}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(sb.String(), ansiLinePrefix) || strings.Contains(sb.String(), "\r") {
+		t.Fatalf("NoLinePrefix output contains line prefix: %q", sb.String())
 	}
 }

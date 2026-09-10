@@ -16,6 +16,7 @@ Welcome to the Cati developer documentation. The following resources cover our p
 *   [Go Library API](GoLibrary.md) — Import and use Cati's high-performance renderers in your own Go applications and TUIs.
 *   [Go Conventions](Go.md) — Development guidelines for writing Go code, state management, error handling, CLI verbs, and testing.
 *   [Make Conventions](Make.md) — Standardized Makefile structures, target phony declarations using the sentinel `⚙️` trick, and self-documenting rules.
+*   [Testing](Testing.md) — Daily test command, opt-in player/browser/integration suites, benchmarks, preflight checks, and golden-image testing.
 
 ---
 

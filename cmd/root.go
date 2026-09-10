@@ -41,6 +41,7 @@ func New() *cobra.Command {
 	var renderMode string
 	var prescaler string
 	var fullComp bool
+	var smart bool
 	var initialZoom string
 	var timeRange string
 	var crop string
@@ -76,6 +77,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 				return err
 			}
 			rc.jobs = jobs
+			rc.smart = smart
 			if playMode {
 				return forwardCommand("catiplay", os.Args[1:])
 			}
@@ -114,6 +116,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
+	root.Flags().BoolVar(&smart, "smart", false, "choose the best nearby width by PSNR (static renders; slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
 	root.Flags().StringVarP(&crop, "crop", "c", "", "crop final output in terminal cells: W:H, W:H:X:Y, auto|a|1|true, or [l|c|r],[t|m|b]")
 	root.Flags().StringVar(&timeRange, "range", "", `playback window: "5s" plays first 5 s; "5s:7s" plays 5 s–7 s (supports s/m/h suffixes, bare seconds, mm:ss)`)
@@ -126,6 +129,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 
 	root.AddCommand(forwardSubcommand("play", "catiplay", "play media with catiplay"))
 	root.AddCommand(forwardSubcommand("browse", "catibrowse", "browse files with catibrowse"))
+	root.AddCommand(modesCommand())
 
 	return root
 }
@@ -143,6 +147,7 @@ func NewPlay() *cobra.Command {
 	var renderMode string
 	var prescaler string
 	var fullComp bool
+	var smart bool
 	var initialZoom string
 	var timeRange string
 	var crop string
@@ -155,6 +160,9 @@ func NewPlay() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return fmt.Errorf("requires at least 1 arg(s), only received 0")
+			}
+			if smart {
+				return fmt.Errorf("--smart is currently supported for static cati renders only")
 			}
 			if !ansiMode {
 				return fmt.Errorf("only --ansi mode is supported in this version")
@@ -171,6 +179,7 @@ func NewPlay() *cobra.Command {
 				return err
 			}
 			rc.jobs = jobs
+			rc.smart = smart
 			rc = canonicalRenderCfg(rc)
 			paths, err := expandArgs(args, recursive)
 			if err != nil {
@@ -209,6 +218,7 @@ func NewPlay() *cobra.Command {
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
+	root.Flags().BoolVar(&smart, "smart", false, "choose the best nearby width by PSNR (static renders; slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
 	root.Flags().StringVarP(&crop, "crop", "c", "", "crop final playback output in terminal cells: W:H, W:H:X:Y, auto|a|1|true, or [l|c|r],[t|m|b]")
 	root.Flags().StringVar(&timeRange, "range", "", `playback window: "5s" plays first 5 s; "5s:7s" plays 5 s-7 s (supports s/m/h suffixes, bare seconds, mm:ss)`)
@@ -226,6 +236,7 @@ func NewBrowse() *cobra.Command {
 	var renderMode string
 	var prescaler string
 	var fullComp bool
+	var smart bool
 	var initialZoom string
 
 	root := &cobra.Command{
@@ -236,6 +247,9 @@ func NewBrowse() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return fmt.Errorf("requires at least 1 arg(s), only received 0")
+			}
+			if smart {
+				return fmt.Errorf("--smart is currently supported for static cati renders only")
 			}
 			if !ansiMode {
 				return fmt.Errorf("only --ansi mode is supported in this version")
@@ -252,6 +266,7 @@ func NewBrowse() *cobra.Command {
 				return err
 			}
 			rc.jobs = jobs
+			rc.smart = smart
 			_ = legacyInteractive
 			return browser(args, width, height, canonicalRenderCfg(rc), fullComp, initialZoom, jobs)
 		},
@@ -265,6 +280,7 @@ func NewBrowse() *cobra.Command {
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
+	root.Flags().BoolVar(&smart, "smart", false, "choose the best nearby width by PSNR (static renders; slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
 
 	return root
@@ -330,6 +346,9 @@ func forwardToPlayer(path string, width, height int, rc renderCfg, fullComp bool
 	}
 	if fullComp {
 		args = append(args, "--full-comp")
+	}
+	if rc.smart {
+		args = append(args, "--smart")
 	}
 	args = append(args, path)
 	return forwardCommand("catiplay", args)
@@ -443,7 +462,11 @@ func run(o opts, rc renderCfg, args []string) error {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 
-		img, err = prepareRenderedImageChecked(img, nil, termCols, termRows, rc, o.initialZoom)
+		if o.initialZoom == "" {
+			img, err = smartPrepare(img, termCols, termRows, rc)
+		} else {
+			img, err = prepareRenderedImageChecked(img, nil, termCols, termRows, rc, o.initialZoom)
+		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}

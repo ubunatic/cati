@@ -8,7 +8,11 @@
 ./cati photo.png
 ./cati play --fps 15 frames/
 ./cati browse ~/Pictures/
+./cati modes
 ```
+
+`cati modes` lists the available render modes with a side-by-side cati/emojig
+logo demo.
 
 ▶ Watch the recorded demo reel on the website: <https://ubunatic.com/cati>
 

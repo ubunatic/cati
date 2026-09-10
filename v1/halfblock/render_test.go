@@ -183,6 +183,17 @@ func TestRender_TransparentImage(t *testing.T) {
 	}
 }
 
+func TestRender_NoLinePrefix(t *testing.T) {
+	img := solidImage(2, 2, rgba(255, 0, 0, 255))
+	var sb strings.Builder
+	if err := Render(&sb, img, img.Bounds().Dx(), Options{NoLinePrefix: true}); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(sb.String(), ansiLinePrefix) || strings.Contains(sb.String(), "\r") {
+		t.Fatalf("NoLinePrefix output contains line prefix: %q", sb.String())
+	}
+}
+
 func TestRender_OddHeight(t *testing.T) {
 	// 4x3 image (odd height) — last terminal row has only a top pixel.
 	red := rgba(255, 0, 0, 255)

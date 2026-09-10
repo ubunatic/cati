@@ -28,6 +28,7 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
   5-phase loop (Advisory -> Dev -> Review -> Hygiene -> Retro), zero zombie guarantee
 - Issue Tracking Practices @docs/IssueTracking.md,
   P0-P3 priorities, metadata headers (Status, Priority, Severity, Category), tracker sync
+- Advanced test layers @docs/Testing.md — consult for player, browser, and terminal integration testing; basic library work usually only needs `make test`.
 <!-- harnez:end Language Conventions -->
 
 ## Asset Generation & Licensing

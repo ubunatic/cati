@@ -222,12 +222,20 @@ type RenderModeDef struct {
 	Colorer   string              `yaml:"colorer"`
 }
 
+type SmartRenderPolicy struct {
+	Metric       string  `yaml:"metric"`
+	MaxReduction float64 `yaml:"max_reduction"`
+	Step         string  `yaml:"step"`
+	TieBreak     string  `yaml:"tie_break"`
+}
+
 type RenderModesSpec struct {
 	Cycle     []string            `yaml:"cycle"`
 	Modes     []RenderModeDef     `yaml:"modes"`
 	GlyphSets map[string][]string `yaml:"glyph_sets"`
 	Colorers  map[string]string   `yaml:"colorers"`
 	Renderers map[string]string   `yaml:"renderers"`
+	Smart     SmartRenderPolicy   `yaml:"smart"`
 }
 
 func LoadRenderModes() (RenderModesSpec, error) {

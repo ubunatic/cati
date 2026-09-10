@@ -100,6 +100,11 @@ const (
 
 // Options configures quality trade-offs of the quad-block renderer.
 type Options struct {
+	// NoLinePrefix omits the erase-line and carriage-return prefix emitted
+	// before each rendered line. Set this when composing output alongside
+	// other content on the same terminal row.
+	NoLinePrefix bool
+
 	// HalfblockThreshold: when > 0, a cell whose best colour-pair exact
 	// coverage (how many of the 4 pixels match fg or bg exactly, 0–4) is
 	// below this value falls back to halfblock encoding (▀/▄ from top/bottom
@@ -800,6 +805,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 }
 
 // Render writes img to w as ANSI quadrant-block art.
+// By default each line starts with an erase-line/carriage-return prefix for
+// standalone redraws; set Options.NoLinePrefix when composing output with
+// other content on the same terminal row.
 func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 	grid, err := RenderToGrid(img, cols, opts)
 	if err != nil {
@@ -808,7 +816,9 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 
 	for y := 0; y < grid.Height; y++ {
 		var sb strings.Builder
-		sb.WriteString(ansiLinePrefix)
+		if !opts.NoLinePrefix {
+			sb.WriteString(ansiLinePrefix)
+		}
 		for x := 0; x < grid.Width; x++ {
 			c := grid.Cells[y][x]
 			if c.Transparent {
