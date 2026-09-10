@@ -41,6 +41,8 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 035 | [035-make-png-golden-comparisons-ignore-non-rendering-metadata.md](035-make-png-golden-comparisons-ignore-non-rendering-metadata.md) | Make PNG golden comparisons ignore non-rendering metadata | Open |
 | 036 | [036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md](036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md) | Add smart render mode that selects the best width by PSNR | Open |
 | 037 | [037-extend-smart-rendering-to-algorithm-native-sub-cell-steps.md](037-extend-smart-rendering-to-algorithm-native-sub-cell-steps.md) | Extend smart rendering to algorithm-native sub-cell steps | Closed — resolved in 322cca7 |
+| 038 | [038-investigate-blocky-sextant-rendering-at-small-widths.md](038-investigate-blocky-sextant-rendering-at-small-widths.md) | Investigate blocky sextant rendering at small widths | Open |
+| 039 | [039-improve-quad-quality-for-small-pixel-art-renders.md](039-improve-quad-quality-for-small-pixel-art-renders.md) | Improve quad quality for small pixel-art renders | Open |
 
 ## Archived
 
