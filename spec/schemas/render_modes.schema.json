@@ -3,7 +3,7 @@
   "title": "Cati render modes spec",
   "type": "object",
   "additionalProperties": false,
-  "required": ["cycle", "modes", "glyph_sets", "colorers", "renderers", "smart"],
+  "required": ["cycle", "modes", "glyph_sets", "colorers", "renderers", "smart", "set_registry", "composition_order", "compositions"],
   "properties": {
     "cycle": {
       "type": "array",
@@ -59,6 +59,33 @@
         "max_reduction": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
         "step": { "enum": ["terminal-column", "native"] },
         "tie_break": { "const": "widest" }
+      }
+    },
+    "set_registry": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "geometry"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 0 },
+          "name": { "type": "string", "minLength": 1 },
+          "geometry": { "$ref": "#/$defs/geometry" },
+          "glyphs": { "type": "array", "items": { "type": "string" } },
+          "generated": { "type": "string", "minLength": 1 },
+          "approximate": { "type": "boolean" }
+        }
+      }
+    },
+    "composition_order": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "compositions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "integer", "minimum": 0 }
       }
     }
   },

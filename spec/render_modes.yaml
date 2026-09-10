@@ -116,3 +116,92 @@ renderers:
   sparkline_spark_quad: v1/sparkline SparkQuad
   sparkline_six_half: v1/sparkline SixHalf
   sparkline_spark_six: v1/sparkline SparkSix
+
+# Stable glyph-set registry. IDs are identifiers, not geometry encodings.
+set_registry:
+  - id: 0
+    name: fulls
+    geometry: { w: 1, h: 1 }
+    glyphs: [" ", "█"]
+  - id: 1
+    name: sides
+    geometry: { w: 1, h: 2 }
+    glyphs: [" ", "▌", "▐"]
+  - id: 2
+    name: halves
+    geometry: { w: 1, h: 2 }
+    glyphs: [" ", "▀", "▄"]
+  - id: 4
+    name: quads
+    geometry: { w: 2, h: 2 }
+    glyphs: [" ", "▘", "▝", "▖", "▗", "▚", "▞", "▛", "▜", "▙", "▟"]
+  - id: 6
+    name: sextants
+    geometry: { w: 2, h: 3 }
+    generated: sextant_2x3_with_columns
+  - id: 9
+    name: ninelikes
+    geometry: { w: 3, h: 3 }
+    approximate: true
+    glyphs: [" ", "╺", "╸", "━", "┃", "┣", "┫", "╋", "┳", "┻", "┓", "┏", "┗", "┛", "╻", "╹", "▪", "╏", "╍"]
+  - id: 14
+    name: vbars
+    geometry: { w: 1, h: 4 }
+    approximate: true
+    glyphs: [" ", "▂", "▄", "▆"]
+  - id: 15
+    name: vmbars
+    geometry: { w: 1, h: 4 }
+    approximate: true
+    glyphs: [" ", "🬋", "🬇", "🬃"]
+  - id: 44
+    name: bars
+    geometry: { w: 4, h: 4 }
+    approximate: true
+    glyphs: [" ", "▂", "▄", "▆", "▎", "▌", "▊"]
+  - id: 45
+    name: mbars
+    geometry: { w: 4, h: 4 }
+    approximate: true
+    glyphs: [" ", "🬋", "🬇", "🬃", "┃", "╻", "╹", "▪", "╏"]
+  - id: 86
+    name: morebars
+    geometry: { w: 8, h: 8 }
+    approximate: true
+    glyphs: [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "▎", "▍", "▌", "▋", "▊"]
+  - id: 88
+    name: allbars
+    geometry: { w: 8, h: 8 }
+    approximate: true
+    glyphs: [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "▏", "▎", "▍", "▌", "▋", "▊", "▉"]
+
+# Exact, case-sensitive named unions. A name is resolved before '+' grammar.
+composition_order: [full, half, quad, quad+, bars, bars+, six, 2x3, 3x3, all, all+, z, z+]
+compositions:
+  f: [0]
+  full: [0]
+  1x1: [0]
+  h: [0, 2]
+  half: [0, 2]
+  1x2: [0, 2]
+  q: [0, 1, 2, 4]
+  quad: [0, 1, 2, 4]
+  Q: [0, 1, 2, 4, 14, 15]
+  quad+: [0, 1, 2, 4, 14, 15]
+  b: [0, 1, 2, 4, 44]
+  bars: [0, 1, 2, 4, 44]
+  B: [0, 1, 2, 4, 86]
+  bars+: [0, 1, 2, 4, 86]
+  x: [0, 1, 2, 4, 6]
+  six: [0, 1, 2, 4, 6]
+  6: [0, 1, 6]
+  2x3: [0, 1, 6]
+  9: [0, 1, 6, 9]
+  3x3: [0, 1, 6, 9]
+  a: [0, 1, 2, 4, 6, 9]
+  all: [0, 1, 2, 4, 6, 9]
+  A: [0, 1, 2, 4, 6, 9, 44]
+  all+: [0, 1, 2, 4, 6, 9, 44]
+  z: [0, 1, 2, 4, 6, 9, 86]
+  Z: [0, 1, 2, 4, 6, 9, 88]
+  z+: [0, 1, 2, 4, 6, 9, 88]

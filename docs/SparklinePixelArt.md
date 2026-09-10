@@ -17,6 +17,18 @@ by mapping each terminal cell's source block to the Unicode glyph and two
 colours that minimise reconstruction error. The canonical mode surface is
 declared in `spec/render_modes.yaml`; Go keeps the scoring and rendering code.
 
+### Composable set registry
+
+`spec/render_modes.yaml` also owns the stable glyph-set registry (IDs 0, 1, 2,
+4, 6, 9, 14, 15, 44, 45, 86, and 88). `spec.ResolveGlyphSetExpression` inserts
+set 0, removes duplicate IDs, sorts numerically, and computes common geometry
+with an LCM per axis. This keeps a `3x3` label honest when its union is really
+`6x3`, and distinguishes exact standard coverage from experimental
+approximation. The debug grammar is `d` or `d<id>[,<id>...]`; names and aliases
+are case-sensitive and a complete registered name wins before `+` union
+parsing. Registry-only unions are currently metadata/debug surfaces until
+their renderer and reconstruction contracts are validated.
+
 | Mode | Visual Representation | Growth Direction | Character Set |
 | :--- | :--- | :--- | :--- |
 | `Vertical` (`spark/vert`) | ` ▂▃▄▅▆▇█` | Bottom-to-Top (Upward) | `U+2581` – `U+2588` |

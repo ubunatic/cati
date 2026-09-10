@@ -42,6 +42,12 @@ as `cati modes half six --info`.
 With `--smart -w 0`, the command lists the selected modes without rendering
 demo images.
 
+Composable registry modes are inspectable with `cati modes --smart -w 0 --info`.
+Names are case-sensitive (`q` and `Q` differ); debug expressions use `d` plus
+comma-separated set IDs, for example `d1,6,9,44`. Registry-only experimental
+unions are reported with normalized IDs and LCM geometry but are not passed to
+a renderer until their coverage contract is validated.
+
 ---
 
 ## Install

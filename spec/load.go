@@ -1,7 +1,9 @@
 package spec
 
 import (
+	"fmt"
 	"io/fs"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -213,16 +215,16 @@ type RenderModeGeometry struct {
 }
 
 type RenderModeDef struct {
-	Name       string              `yaml:"name"`
-	Aliases    []string            `yaml:"aliases"`
-	Description string             `yaml:"description"`
-	Renderer   string              `yaml:"renderer"`
-	Cell       RenderModeGeometry  `yaml:"cell"`
-	Analysis   *RenderModeGeometry `yaml:"analysis"`
-	GlyphSets  []string            `yaml:"glyph_sets"`
-	Colorer    string              `yaml:"colorer"`
-	SmartStep  string              `yaml:"smart_step"`
-	NativeStep int                 `yaml:"native_step"`
+	Name        string              `yaml:"name"`
+	Aliases     []string            `yaml:"aliases"`
+	Description string              `yaml:"description"`
+	Renderer    string              `yaml:"renderer"`
+	Cell        RenderModeGeometry  `yaml:"cell"`
+	Analysis    *RenderModeGeometry `yaml:"analysis"`
+	GlyphSets   []string            `yaml:"glyph_sets"`
+	Colorer     string              `yaml:"colorer"`
+	SmartStep   string              `yaml:"smart_step"`
+	NativeStep  int                 `yaml:"native_step"`
 }
 
 type SmartRenderPolicy struct {
@@ -233,12 +235,15 @@ type SmartRenderPolicy struct {
 }
 
 type RenderModesSpec struct {
-	Cycle     []string            `yaml:"cycle"`
-	Modes     []RenderModeDef     `yaml:"modes"`
-	GlyphSets map[string][]string `yaml:"glyph_sets"`
-	Colorers  map[string]string   `yaml:"colorers"`
-	Renderers map[string]string   `yaml:"renderers"`
-	Smart     SmartRenderPolicy   `yaml:"smart"`
+	Cycle            []string            `yaml:"cycle"`
+	Modes            []RenderModeDef     `yaml:"modes"`
+	GlyphSets        map[string][]string `yaml:"glyph_sets"`
+	Colorers         map[string]string   `yaml:"colorers"`
+	Renderers        map[string]string   `yaml:"renderers"`
+	Smart            SmartRenderPolicy   `yaml:"smart"`
+	SetRegistry      []GlyphSetDef       `yaml:"set_registry"`
+	Compositions     map[string][]int    `yaml:"compositions"`
+	CompositionOrder []string            `yaml:"composition_order"`
 }
 
 func LoadRenderModes() (RenderModesSpec, error) {
@@ -249,6 +254,152 @@ func LoadRenderModes() (RenderModesSpec, error) {
 	}
 	err = yaml.Unmarshal(data, &spec)
 	return spec, err
+}
+
+type GlyphSetDef struct {
+	ID          int                `yaml:"id"`
+	Name        string             `yaml:"name"`
+	Geometry    RenderModeGeometry `yaml:"geometry"`
+	Glyphs      []string           `yaml:"glyphs"`
+	Generated   string             `yaml:"generated"`
+	Approximate bool               `yaml:"approximate"`
+}
+
+type GlyphSetResolution struct {
+	IDs         []int
+	Glyphs      []rune
+	Geometry    RenderModeGeometry
+	Approximate bool
+}
+
+// ResolveGlyphSetExpression resolves a named union or the d<ids> debug grammar.
+// Names and aliases are case-sensitive; IDs are sorted and set 0 is implicit.
+func ResolveGlyphSetExpression(expression string) (GlyphSetResolution, error) {
+	rm, err := LoadRenderModes()
+	if err != nil {
+		return GlyphSetResolution{}, fmt.Errorf("load render mode registry: %w", err)
+	}
+	defs := make(map[int]GlyphSetDef, len(rm.SetRegistry))
+	byName := make(map[string]int, len(rm.SetRegistry))
+	for _, def := range rm.SetRegistry {
+		if _, ok := defs[def.ID]; ok || def.Name == "" {
+			return GlyphSetResolution{}, fmt.Errorf("invalid glyph set %q/%d", def.Name, def.ID)
+		}
+		defs[def.ID] = def
+		byName[def.Name] = def.ID
+	}
+	ids, err := resolveExpression(expression, rm.Compositions, byName, defs)
+	if err != nil {
+		return GlyphSetResolution{}, err
+	}
+	seen := map[int]bool{0: true}
+	normalized := []int{0}
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			normalized = append(normalized, id)
+		}
+	}
+	sort.Ints(normalized)
+	res := GlyphSetResolution{IDs: normalized, Geometry: RenderModeGeometry{W: 1, H: 1}}
+	for _, id := range normalized {
+		def := defs[id]
+		res.Geometry.W = lcm(res.Geometry.W, def.Geometry.W)
+		res.Geometry.H = lcm(res.Geometry.H, def.Geometry.H)
+		res.Approximate = res.Approximate || def.Approximate
+		glyphs := def.Glyphs
+		if def.Generated == "sextant_2x3_with_columns" {
+			glyphs = append([]string{" "}, generatedSextants()...)
+		}
+		for _, glyph := range glyphs {
+			for _, r := range glyph {
+				if !containsRune(res.Glyphs, r) {
+					res.Glyphs = append(res.Glyphs, r)
+				}
+			}
+		}
+	}
+	return res, nil
+}
+
+func resolveExpression(expr string, compositions map[string][]int, names map[string]int, defs map[int]GlyphSetDef) ([]int, error) {
+	if ids, ok := compositions[expr]; ok {
+		return append([]int(nil), ids...), nil
+	}
+	if expr == "" {
+		return nil, fmt.Errorf("empty glyph-set expression")
+	}
+	if strings.HasPrefix(expr, "d") {
+		if expr == "d" {
+			return []int{0}, nil
+		}
+		body := strings.TrimPrefix(expr, "d")
+		if body == "" {
+			return nil, fmt.Errorf("empty debug expression")
+		}
+		parts := strings.Split(body, ",")
+		ids := make([]int, 0, len(parts))
+		for _, part := range parts {
+			if part == "" {
+				return nil, fmt.Errorf("empty token in debug expression %q", expr)
+			}
+			id, err := strconv.Atoi(part)
+			if err != nil || id < 0 || strconv.Itoa(id) != part {
+				return nil, fmt.Errorf("invalid set ID %q in %q", part, expr)
+			}
+			if _, ok := defs[id]; !ok {
+				return nil, fmt.Errorf("unknown glyph set ID %d", id)
+			}
+			ids = append(ids, id)
+		}
+		return ids, nil
+	}
+	parts := strings.Split(expr, "+")
+	ids := make([]int, 0, len(parts))
+	for _, part := range parts {
+		if part == "" {
+			return nil, fmt.Errorf("empty union operand in %q", expr)
+		}
+		if id, ok := names[part]; ok {
+			ids = append(ids, id)
+			continue
+		}
+		if id, ok := compositions[part]; ok {
+			ids = append(ids, id...)
+			continue
+		}
+		return nil, fmt.Errorf("unknown union operand %q", part)
+	}
+	return ids, nil
+}
+
+func generatedSextants() []string {
+	out := make([]string, 0, 62)
+	for r := rune(0x1fb00); r <= 0x1fb3b; r++ {
+		out = append(out, string(r))
+	}
+	out = append(out, "▌", "▐")
+	return out
+}
+func containsRune(rs []rune, r rune) bool {
+	for _, x := range rs {
+		if x == r {
+			return true
+		}
+	}
+	return false
+}
+func gcd(a, b int) int {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
+}
+func lcm(a, b int) int {
+	if a <= 0 || b <= 0 {
+		return 0
+	}
+	return a / gcd(a, b) * b
 }
 
 // ── Controls Spec ────────────────────────────────────────────────────────────

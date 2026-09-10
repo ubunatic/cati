@@ -119,6 +119,20 @@ func TestModesCommandRejectsUnknownSelection(t *testing.T) {
 	}
 }
 
+func TestModesInfoListsRegistryCompositionsAndPreservesCase(t *testing.T) {
+	var out bytes.Buffer
+	cmd := modesCommand()
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--smart", "-w", "0", "Q", "q", "d1,6,9,44", "--info"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("modes registry info: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "Q\n") || !strings.Contains(text, "quad\n") || !strings.Contains(text, "sets: [0 1 6 9 44]") || !strings.Contains(text, "geometry: 12x12") {
+		t.Fatalf("registry info missing from %q", text)
+	}
+}
+
 func TestPadANSILine(t *testing.T) {
 	line := "\x1b[38;2;1;2;3m██\x1b[0m"
 	got := padANSILine(line, 5)

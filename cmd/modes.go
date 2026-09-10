@@ -69,10 +69,36 @@ func listModes(out io.Writer, info bool, names []string) error {
 	return nil
 }
 
+func listableRenderModes() ([]renderModeEntry, error) {
+	entries := append([]renderModeEntry(nil), renderModes...)
+	rm, err := spec.LoadRenderModes()
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range rm.CompositionOrder {
+		if _, ok := renderModeAliases[name]; ok {
+			continue
+		}
+		entries = append(entries, renderModeEntry{name: name, registryOnly: true})
+	}
+	return entries, nil
+}
+
 func runModesDemoSelected(out io.Writer, width int, smart, info bool, names []string) error {
-	entries, err := selectedRenderModes(names)
+	var entries []renderModeEntry
+	var err error
+	if len(names) == 0 {
+		entries = renderModes
+	} else {
+		entries, err = selectedRenderModes(names)
+	}
 	if err != nil {
 		return err
+	}
+	for _, entry := range entries {
+		if entry.registryOnly {
+			return fmt.Errorf("mode %q is inspectable but has no safe demo renderer", entry.name)
+		}
 	}
 	cati, err := decodeEmbeddedLogo()
 	if err != nil {
@@ -128,12 +154,16 @@ func runModesDemoSelected(out io.Writer, width int, smart, info bool, names []st
 
 func selectedRenderModes(names []string) ([]renderModeEntry, error) {
 	if len(names) == 0 {
-		return renderModes, nil
+		return listableRenderModes()
 	}
 	selected := make([]renderModeEntry, 0, len(names))
 	for _, name := range names {
 		canonical, ok := renderModeAliases[name]
 		if !ok {
+			if _, err := spec.ResolveGlyphSetExpression(name); err == nil {
+				selected = append(selected, renderModeEntry{name: name, registryOnly: true})
+				continue
+			}
 			return nil, fmt.Errorf("unknown render mode %q", name)
 		}
 		for _, entry := range renderModes {
@@ -156,12 +186,33 @@ func writeModeInfo(out io.Writer, entry renderModeEntry, modeSpec spec.RenderMod
 			}
 		}
 	}
-	fmt.Fprintf(out, "  info: %s\n", def.Description)
+	if entry.registryOnly {
+		def.Description = "Resolved composable glyph-set mode."
+	}
+	resolution, err := spec.ResolveGlyphSetExpression(entry.name)
+	if err == nil {
+		fmt.Fprintf(out, "  info: %s\n  sets: %v\n  geometry: %dx%d%s\n", def.Description, resolution.IDs, resolution.Geometry.W, resolution.Geometry.H, approximateSuffix(resolution.Approximate))
+	} else {
+		fmt.Fprintf(out, "  info: %s\n", def.Description)
+	}
 	shapes := modeGlyphs(entry, modeSpec)
 	fmt.Fprintln(out, "  shapes:", wrapGlyphs(shapes, 74, len("  shapes: ")))
 }
 
+func approximateSuffix(approximate bool) string {
+	if approximate {
+		return " (approximate coverage)"
+	}
+	return ""
+}
+
 func modeGlyphs(entry renderModeEntry, modeSpec spec.RenderModesSpec) []rune {
+	if entry.registryOnly {
+		resolution, err := spec.ResolveGlyphSetExpression(entry.name)
+		if err == nil {
+			return resolution.Glyphs
+		}
+	}
 	seen := map[rune]struct{}{}
 	var result []rune
 	for _, setName := range entry.definition.GlyphSets {

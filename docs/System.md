@@ -145,6 +145,10 @@ The stable zoom and viewport helpers now live in `internal/viewgeom`. The app la
 renderer into the active cycle entry so display names, geometry, metrics, and
 `r`/`R` cycling all agree. The user-facing mode contract is loaded from
 `spec/render_modes.yaml`: names, aliases, cycle order, cell geometry, glyph
+sets, and composable set-registry contracts. The exported resolver normalizes
+debug and named unions with exact case-sensitive lookup and per-axis LCM
+geometry; experimental unions remain inspectable until their renderers are
+validated.
 families, and colorer names live in spec, while Go owns the executable renderer
 implementations. The main app cycle is currently `half → half/split → quad →
 spark → spark+quad → six → six+half → spark+six`. The accepted short aliases are

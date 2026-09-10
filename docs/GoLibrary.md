@@ -78,6 +78,15 @@ func main() {
 
 ## Loading SVGs
 
+## Resolving composable glyph sets
+
+The `ubunatic.com/cati/spec` package exposes the same spec-owned registry used
+by the CLI. `spec.ResolveGlyphSetExpression("d1,6,9,44")` returns normalized,
+sorted IDs, the union glyph inventory, approximation status, and exact common
+geometry (per-axis LCM). Names and aliases are case-sensitive. The expression
+grammar and migration table for legacy mode names are documented in issue
+[#043](../issues/043-compose-named-and-debug-render-modes-from-glyph-set-ids.md).
+
 `halfblock.LoadImage(path)` supports PNG, JPEG, SVG, and first-frame video
 loading. SVGs are rasterized through `rsvg-convert`; callers that already know
 their render pixel budget should prefer `halfblock.LoadImageWithTarget(path,

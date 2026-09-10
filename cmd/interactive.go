@@ -358,10 +358,11 @@ func renderValidatedGated(w io.Writer, orig, vp image.Image, state viewState, te
 }
 
 type renderModeEntry struct {
-	name       string
-	aliases    []string
-	definition spec.RenderModeDef
-	cfg        renderCfg
+	name         string
+	aliases      []string
+	definition   spec.RenderModeDef
+	cfg          renderCfg
+	registryOnly bool
 }
 
 // renderModes is loaded from spec/render_modes.yaml. Each entry's cfg.id must

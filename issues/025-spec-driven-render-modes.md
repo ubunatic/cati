@@ -64,6 +64,16 @@ benchmark high-grid unions. Run `make test`, `go vet ./...`, `make install`, and
 `make preflight`; update Spec, GoLibrary, SparklinePixelArt and RenderPipelines
 documentation. Predict any golden changes before regeneration per the playbook.
 
+### Registry milestone — 2026-09-11
+
+The first composable-registry slice is shipped with #043: YAML now owns stable
+numeric IDs, plural set names, inventories, geometry, approximation flags, and
+case-sensitive named unions. `spec.ResolveGlyphSetExpression` is the reusable
+library contract and uses per-axis LCM normalization. Renderer dispatch remains
+on the existing named backends; registry-only unions are deliberately metadata
+and debug surfaces until #014 validates their executable masks and
+reconstruction behavior.
+
 ## Historical implementation notes
 
 Render modes are currently defined in Go across the mode registry, CLI parser,

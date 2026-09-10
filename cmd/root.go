@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/halfblock"
 
 	catiterm "ubunatic.com/cati/v1/term"
@@ -500,15 +501,18 @@ func loadImageForRender(path string, termCols, termRows int, rc renderCfg, initi
 // parseRenderMode converts a --mode flag value into a canonical renderCfg.
 // The empty value defaults to halfblock.
 func parseRenderMode(mode string) (renderCfg, error) {
-	key := strings.ToLower(strings.TrimSpace(mode))
+	key := strings.TrimSpace(mode)
 	if name, ok := renderModeAliases[key]; ok {
 		return findRenderModeByName(name)
+	}
+	if _, err := spec.ResolveGlyphSetExpression(key); err == nil {
+		return renderCfg{}, fmt.Errorf("render mode %q resolves to a glyph-set union but has no safe renderer; use `cati modes %s --info` to inspect it", mode, mode)
 	}
 	return renderCfg{}, fmt.Errorf("unknown --mode %q; valid: h, hs, q, s, sq, x, xh, sx", mode)
 }
 
 func findRenderModeByName(name string) (renderCfg, error) {
-	if canonical, ok := renderModeAliases[strings.ToLower(strings.TrimSpace(name))]; ok {
+	if canonical, ok := renderModeAliases[strings.TrimSpace(name)]; ok {
 		name = canonical
 	}
 	for _, m := range renderModes {

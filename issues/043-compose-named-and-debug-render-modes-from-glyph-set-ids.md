@@ -74,6 +74,18 @@ Experimental sets 9, 15, and 45 remain registry/debug-only until #014 proves
 their coverage and reconstruction contracts. Set 14/44/86/88 metadata may be
 listed and resolved, but no named mode silently claims experimental rendering.
 
+### Implemented slice — 2026-09-11
+
+The spec-owned registry and resolver are implemented. CLI `modes --info` lists
+the registry compositions and debug expressions, reports normalized IDs,
+approximation status, and LCM geometry, while ordinary render demos continue
+using the unchanged legacy backends. Library callers can use
+`spec.ResolveGlyphSetExpression` directly. Registry-only unions intentionally
+return a clear “no safe renderer” error when selected for image rendering;
+player/browser dispatch therefore remains on the proven named renderer set.
+This is a dependency follow-up for the remaining executable arbitrary-union
+dispatcher, mask coverage, reconstruction, and new-mode golden work.
+
 | Short | Name | Set IDs |
 |---|---|---|
 | f, 1 | full, 1x1 | 0 |
