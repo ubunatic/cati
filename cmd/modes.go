@@ -31,13 +31,16 @@ func modesCommand() *cobra.Command {
 		Short: "list render modes with a cati/emojig logo demo",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if width == 0 && smart {
+				return listModes(cmd.OutOrStdout(), info, args)
+			}
 			if width < 1 {
 				return fmt.Errorf("--width must be greater than zero")
 			}
 			return runModesDemoSelected(cmd.OutOrStdout(), width, smart, info, args)
 		},
 	}
-	cmd.Flags().IntVarP(&width, "width", "w", 12, "target width of each logo demo")
+	cmd.Flags().IntVarP(&width, "width", "w", 12, "target width of each logo demo (0 with --smart lists modes only)")
 	cmd.Flags().BoolVar(&smart, "smart", false, "choose the best nearby width by PSNR")
 	cmd.Flags().BoolVar(&info, "info", false, "explain each mode and list its supported Unicode shapes")
 	return cmd
@@ -45,6 +48,25 @@ func modesCommand() *cobra.Command {
 
 func runModesDemo(out io.Writer, width int, smart bool) error {
 	return runModesDemoSelected(out, width, smart, false, nil)
+}
+
+func listModes(out io.Writer, info bool, names []string) error {
+	entries, err := selectedRenderModes(names)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "Available render modes:")
+	modeSpec, err := spec.LoadRenderModes()
+	if err != nil {
+		return fmt.Errorf("load render mode metadata: %w", err)
+	}
+	for _, entry := range entries {
+		fmt.Fprintln(out, entry.name)
+		if info {
+			writeModeInfo(out, entry, modeSpec)
+		}
+	}
+	return nil
 }
 
 func runModesDemoSelected(out io.Writer, width int, smart, info bool, names []string) error {

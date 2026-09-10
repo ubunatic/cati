@@ -25,6 +25,25 @@ func TestModesCommandDemo(t *testing.T) {
 	}
 }
 
+func TestModesCommandSmartZeroWidthListsWithoutRendering(t *testing.T) {
+	cmd := modesCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--smart", "-w", "0", "half"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("modes --smart -w 0: %v", err)
+	}
+	text := out.String()
+	if !strings.Contains(text, "Available render modes:\nhalf\n") {
+		t.Fatalf("list-only output = %q", text)
+	}
+	if strings.Contains(text, "cati logo") || strings.Contains(text, "emojig") || strings.Contains(text, "\x1b[") {
+		t.Fatalf("list-only output rendered an image: %q", text)
+	}
+}
+
 func TestModesCommandInfoFiltersAliasesAndListsShapes(t *testing.T) {
 	var out bytes.Buffer
 	if err := runModesDemoSelected(&out, 8, false, true, []string{"h"}); err != nil {

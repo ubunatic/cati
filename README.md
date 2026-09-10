@@ -39,6 +39,9 @@ followed by its rendering strategy and the complete Unicode shape inventory
 used by that mode. For a smaller comparison, pass mode names or aliases such
 as `cati modes half six --info`.
 
+With `--smart -w 0`, the command lists the selected modes without rendering
+demo images.
+
 ---
 
 ## Install
