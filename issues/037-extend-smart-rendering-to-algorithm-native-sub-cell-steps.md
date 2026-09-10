@@ -1,6 +1,6 @@
 # 037 — Extend smart rendering to algorithm-native sub-cell steps
 
-**Status**: Open
+**Status**: Closed — resolved in 322cca7
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature

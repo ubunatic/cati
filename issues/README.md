@@ -38,7 +38,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | [034](034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md) | quadblock/sextant have no image loader, must import halfblock.LoadImage | 🔴 Open |
 | [035](035-make-png-golden-comparisons-ignore-non-rendering-metadata.md) | Make PNG golden comparisons ignore non-rendering metadata | 🔴 Open |
 | [036](036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md) | Add smart render mode that selects the best width by PSNR | 🔴 Open |
-| [037](037-extend-smart-rendering-to-algorithm-native-sub-cell-steps.md) | Extend smart rendering to algorithm-native sub-cell steps | 🔴 Open |
+| [037](037-extend-smart-rendering-to-algorithm-native-sub-cell-steps.md) | Extend smart rendering to algorithm-native sub-cell steps | ✅ Closed |
 
 ## Archived
 
