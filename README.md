@@ -12,7 +12,8 @@
 ```
 
 `cati modes` lists the available render modes with a side-by-side cati/emojig
-logo demo.
+logo demo. Pass `--info` to add a concise explanation and the complete Unicode
+shape inventory below each mode; positional names and aliases filter the demo.
 
 ▶ Watch the recorded demo reel on the website: <https://ubunatic.com/cati>
 
@@ -32,6 +33,11 @@ Each terminal cell encodes **two vertical pixel rows** using Unicode block chara
 Combined with 24-bit ANSI true-color (`\x1b[38;2;R;G;Bm`) this gives effective resolution of **terminal-width × (2 × terminal-height)** pixels.
 
 Beyond half-blocks, `--mode` selects higher-resolution renderers: **quad** (2×2 quadrant blocks), **six** (2×3 sextant blocks), and **spark** (shape-grouping sparkline mode) — plus combined modes like `spark+quad` and `six+half`.
+
+Use `cati modes --info` when comparing modes interactively: each demo is
+followed by its rendering strategy and the complete Unicode shape inventory
+used by that mode. For a smaller comparison, pass mode names or aliases such
+as `cati modes half six --info`.
 
 ---
 

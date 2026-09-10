@@ -1,6 +1,6 @@
 # 042 — Add `--info` metadata to `cati modes` demos
 
-**Status:** Open
+**Status:** Closed
 **Priority:** P2
 **Severity:** S3
 **Category:** Feature
@@ -84,3 +84,22 @@ readability for the sextant-heavy modes.
   fields until the spec needs richer prose?
 - What compact, deterministic notation should represent generated sextant
   masks while still satisfying the requirement to list all available shapes?
+
+## Resolution
+
+Implemented in `cati modes [modes...] --info`.
+
+- Mode selection accepts canonical names and spec-defined aliases; no names
+  still means all modes.
+- Each selected demo is followed by one spec-sourced explanation and a
+  wrapped, de-duplicated inventory of its supported Unicode shapes.
+- Generated sextants are expanded from the renderer's actual candidate table;
+  the invisible U+0020 space is displayed as `␠` for readability.
+- Metadata appears once per mode after the normal/smart presentation and does
+  not alter rendering bytes when `--info` is absent.
+- Focused CLI tests cover filtering, aliases, unknown names, smart composition,
+  stable metadata placement, and complete generated inventories.
+- README usage documentation and the render-mode schema/spec now include the
+  descriptions used by the command.
+
+Validation: `make test`, `go vet ./...`, `make install`, and `make preflight`.

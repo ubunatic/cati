@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
 	"ubunatic.com/cati/v1/sextant"
@@ -24,23 +25,33 @@ const embeddedCatiLogo = "iVBORw0KGgoAAAANSUhEUgAAABgAAAAOCAYAAAA1+Nx+AAAAAXNSR0
 func modesCommand() *cobra.Command {
 	var width int
 	var smart bool
+	var info bool
 	cmd := &cobra.Command{
-		Use:   "modes",
+		Use:   "modes [modes...]",
 		Short: "list render modes with a cati/emojig logo demo",
-		Args:  cobra.NoArgs,
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if width < 1 {
 				return fmt.Errorf("--width must be greater than zero")
 			}
-			return runModesDemo(cmd.OutOrStdout(), width, smart)
+			return runModesDemoSelected(cmd.OutOrStdout(), width, smart, info, args)
 		},
 	}
 	cmd.Flags().IntVarP(&width, "width", "w", 12, "target width of each logo demo")
 	cmd.Flags().BoolVar(&smart, "smart", false, "choose the best nearby width by PSNR")
+	cmd.Flags().BoolVar(&info, "info", false, "explain each mode and list its supported Unicode shapes")
 	return cmd
 }
 
 func runModesDemo(out io.Writer, width int, smart bool) error {
+	return runModesDemoSelected(out, width, smart, false, nil)
+}
+
+func runModesDemoSelected(out io.Writer, width int, smart, info bool, names []string) error {
+	entries, err := selectedRenderModes(names)
+	if err != nil {
+		return err
+	}
 	cati, err := decodeEmbeddedLogo()
 	if err != nil {
 		return err
@@ -52,7 +63,11 @@ func runModesDemo(out io.Writer, width int, smart bool) error {
 	}
 
 	fmt.Fprintln(out, "Available render modes (cati logo | emojig logo):")
-	for _, entry := range renderModes {
+	modeSpec, err := spec.LoadRenderModes()
+	if err != nil {
+		return fmt.Errorf("load render mode metadata: %w", err)
+	}
+	for _, entry := range entries {
 		normal, err := renderModePair(cati, emojig, width, entry.cfg, false, entry.name)
 		if err != nil {
 			return err
@@ -61,6 +76,9 @@ func runModesDemo(out io.Writer, width int, smart bool) error {
 			fmt.Fprintf(out, "\n%s\n", entry.name)
 			for _, line := range normal {
 				fmt.Fprintln(out, line)
+			}
+			if info {
+				writeModeInfo(out, entry, modeSpec)
 			}
 			continue
 		}
@@ -79,8 +97,103 @@ func runModesDemo(out io.Writer, width int, smart bool) error {
 			}
 			fmt.Fprintf(out, "%s    %s\n", left, right)
 		}
+		if info {
+			writeModeInfo(out, entry, modeSpec)
+		}
 	}
 	return nil
+}
+
+func selectedRenderModes(names []string) ([]renderModeEntry, error) {
+	if len(names) == 0 {
+		return renderModes, nil
+	}
+	selected := make([]renderModeEntry, 0, len(names))
+	for _, name := range names {
+		canonical, ok := renderModeAliases[name]
+		if !ok {
+			return nil, fmt.Errorf("unknown render mode %q", name)
+		}
+		for _, entry := range renderModes {
+			if entry.name == canonical {
+				selected = append(selected, entry)
+				break
+			}
+		}
+	}
+	return selected, nil
+}
+
+func writeModeInfo(out io.Writer, entry renderModeEntry, modeSpec spec.RenderModesSpec) {
+	def := entry.definition
+	if def.Description == "" {
+		for _, candidate := range modeSpec.Modes {
+			if candidate.Name == entry.name {
+				def = candidate
+				break
+			}
+		}
+	}
+	fmt.Fprintf(out, "  info: %s\n", def.Description)
+	shapes := modeGlyphs(entry, modeSpec)
+	fmt.Fprintln(out, "  shapes:", wrapGlyphs(shapes, 74, len("  shapes: ")))
+}
+
+func modeGlyphs(entry renderModeEntry, modeSpec spec.RenderModesSpec) []rune {
+	seen := map[rune]struct{}{}
+	var result []rune
+	for _, setName := range entry.definition.GlyphSets {
+		values := modeSpec.GlyphSets[setName]
+		if len(values) == 1 && strings.HasPrefix(values[0], "generated:") {
+			if setName == "six" {
+				values = make([]string, 0)
+				for _, r := range sextant.Glyphs() {
+					values = append(values, string(r))
+				}
+			}
+		}
+		for _, value := range values {
+			for _, r := range value {
+				if _, ok := seen[r]; !ok {
+					seen[r] = struct{}{}
+					result = append(result, r)
+				}
+			}
+		}
+	}
+	return result
+}
+
+func wrapGlyphs(shapes []rune, width, prefixWidth int) string {
+	if len(shapes) == 0 {
+		return "(none)"
+	}
+	var b strings.Builder
+	lineWidth := prefixWidth
+	for i, r := range shapes {
+		glyphWidth := 1
+		if i > 0 {
+			glyphWidth++
+		}
+		if lineWidth+glyphWidth > width && b.Len() > 0 {
+			b.WriteString("\n")
+			b.WriteString(strings.Repeat(" ", prefixWidth))
+			lineWidth = prefixWidth
+			glyphWidth = 1
+		}
+		if i > 0 && lineWidth > prefixWidth {
+			b.WriteByte(' ')
+		}
+		if r == ' ' {
+			// A literal space is invisible in an inventory; U+2420 is the
+			// conventional visible marker for the supported U+0020 shape.
+			b.WriteRune('␠')
+		} else {
+			b.WriteRune(r)
+		}
+		lineWidth += glyphWidth
+	}
+	return b.String()
 }
 
 func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bool, name string) ([]string, error) {

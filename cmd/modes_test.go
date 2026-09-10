@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"ubunatic.com/cati/spec"
+	"ubunatic.com/cati/v1/sextant"
 )
 
 func TestModesCommandDemo(t *testing.T) {
@@ -19,6 +22,81 @@ func TestModesCommandDemo(t *testing.T) {
 		if !strings.Contains(text, entry.name) {
 			t.Errorf("demo missing mode %q", entry.name)
 		}
+	}
+}
+
+func TestModesCommandInfoFiltersAliasesAndListsShapes(t *testing.T) {
+	var out bytes.Buffer
+	if err := runModesDemoSelected(&out, 8, false, true, []string{"h"}); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	if strings.Count(text, "\n  info:") != 1 {
+		t.Fatalf("info output has wrong number of descriptions: %q", text)
+	}
+	if !strings.Contains(text, "  info: Maps each terminal cell") {
+		t.Fatalf("description missing: %q", text)
+	}
+	if !strings.Contains(text, "  shapes: ␠ ▀ ▄ █") {
+		t.Fatalf("half glyph inventory missing: %q", text)
+	}
+	if strings.Contains(text, "sparkline") {
+		t.Fatalf("alias selection rendered another mode: %q", text)
+	}
+}
+
+func TestModesCommandInfoAllModesAndSmartMetadataOnce(t *testing.T) {
+	var out bytes.Buffer
+	if err := runModesDemoSelected(&out, 8, true, true, nil); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, entry := range renderModes {
+		if got := strings.Count(text, "\n  info: "+entry.definition.Description); got != 1 {
+			t.Errorf("mode %q has %d info descriptions, want 1", entry.name, got)
+		}
+	}
+	if !strings.Contains(text, "+smart") {
+		t.Fatal("smart presentation missing")
+	}
+	if !strings.Contains(text, "shapes: ") {
+		t.Fatal("shape metadata missing")
+	}
+}
+
+func TestModesCommandInfoUsesCompleteGeneratedSextantInventory(t *testing.T) {
+	modeSpec, err := spec.LoadRenderModes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := renderModes[0]
+	for _, candidate := range renderModes {
+		if candidate.name == "six" {
+			entry = candidate
+			break
+		}
+	}
+	shapes := modeGlyphs(entry, modeSpec)
+	if len(shapes) != len(sextant.Glyphs()) {
+		t.Fatalf("six inventory has %d glyphs, want %d", len(shapes), len(sextant.Glyphs()))
+	}
+	for _, shape := range sextant.Glyphs() {
+		found := false
+		for _, got := range shapes {
+			if got == shape {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("six inventory omits %q", shape)
+		}
+	}
+}
+
+func TestModesCommandRejectsUnknownSelection(t *testing.T) {
+	if _, err := selectedRenderModes([]string{"not-a-mode"}); err == nil || !strings.Contains(err.Error(), `unknown render mode "not-a-mode"`) {
+		t.Fatalf("unknown mode error = %v", err)
 	}
 }
 

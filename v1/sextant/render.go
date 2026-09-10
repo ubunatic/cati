@@ -70,6 +70,22 @@ func (m Mode) String() string {
 	return "2x3"
 }
 
+// Glyphs returns the unique Unicode shapes accepted by the sextant candidate
+// set, in deterministic rune order.
+func Glyphs() []rune {
+	result := make([]rune, 0, len(sextantRuneByMask))
+	seen := make(map[rune]struct{}, len(sextantRuneByMask))
+	for _, r := range sextantRuneByMask {
+		if _, ok := seen[r]; ok {
+			continue
+		}
+		seen[r] = struct{}{}
+		result = append(result, r)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+	return result
+}
+
 var (
 	sextantRuneByMask = map[uint8]rune{}
 	sextantMasks      []uint8

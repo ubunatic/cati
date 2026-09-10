@@ -17,6 +17,7 @@ smart:
 modes:
   - name: half
     aliases: [h]
+    description: "Maps each terminal cell to the top and bottom halves of a 1x2 pixel block."
     renderer: halfblock_exact
     cell: { w: 1, h: 2 }
     glyph_sets: [half]
@@ -26,6 +27,7 @@ modes:
 
   - name: half/split
     aliases: [hs, split]
+    description: "Chooses a two-colour half or side split that best matches each 2x2 pixel block."
     renderer: sparkline_half_split
     cell: { w: 2, h: 2 }
     glyph_sets: [half, side]
@@ -35,6 +37,7 @@ modes:
 
   - name: quad
     aliases: [q]
+    description: "Chooses half, side, or quadrant shapes that best match each 2x2 pixel block."
     renderer: quad_split_half
     cell: { w: 2, h: 2 }
     glyph_sets: [half, side, quad]
@@ -44,6 +47,7 @@ modes:
 
   - name: spark
     aliases: [s]
+    description: "Chooses fractional vertical or horizontal sparkline fills for each 4x8 pixel block."
     renderer: sparkline_spark
     cell: { w: 4, h: 8 }
     glyph_sets: [half, side, spark_vertical, spark_horizontal]
@@ -53,6 +57,7 @@ modes:
 
   - name: spark+quad
     aliases: [sq, qs]
+    description: "Chooses sparkline, half, side, or quadrant shapes for each 4x8 pixel block."
     renderer: sparkline_spark_quad
     cell: { w: 4, h: 8 }
     glyph_sets: [half, side, quad, spark_vertical, spark_horizontal]
@@ -62,6 +67,7 @@ modes:
 
   - name: six
     aliases: [x]
+    description: "Chooses one of 64 six-part masks for each 2x3 pixel block."
     renderer: sextant_2x3
     cell: { w: 2, h: 3 }
     glyph_sets: [six]
@@ -71,6 +77,7 @@ modes:
 
   - name: six+half
     aliases: [xh, hx]
+    description: "Chooses six-part, half, or side shapes for each 2x6 pixel block."
     renderer: sparkline_six_half
     cell: { w: 2, h: 6 }
     glyph_sets: [six, half]
@@ -80,6 +87,7 @@ modes:
 
   - name: spark+six
     aliases: [sx, xs]
+    description: "Chooses sparkline, half, side, or six-part shapes for each 4x24 pixel block."
     renderer: sparkline_spark_six
     cell: { w: 4, h: 24 }
     glyph_sets: [half, side, six, spark_vertical, spark_horizontal]

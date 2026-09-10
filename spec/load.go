@@ -215,6 +215,7 @@ type RenderModeGeometry struct {
 type RenderModeDef struct {
 	Name       string              `yaml:"name"`
 	Aliases    []string            `yaml:"aliases"`
+	Description string             `yaml:"description"`
 	Renderer   string              `yaml:"renderer"`
 	Cell       RenderModeGeometry  `yaml:"cell"`
 	Analysis   *RenderModeGeometry `yaml:"analysis"`

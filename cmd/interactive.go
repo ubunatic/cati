@@ -358,9 +358,10 @@ func renderValidatedGated(w io.Writer, orig, vp image.Image, state viewState, te
 }
 
 type renderModeEntry struct {
-	name    string
-	aliases []string
-	cfg     renderCfg
+	name       string
+	aliases    []string
+	definition spec.RenderModeDef
+	cfg        renderCfg
 }
 
 // renderModes is loaded from spec/render_modes.yaml. Each entry's cfg.id must
@@ -399,7 +400,7 @@ func loadRenderModeEntries() []renderModeEntry {
 		if !ok {
 			continue
 		}
-		entries = append(entries, renderModeEntry{name: def.Name, aliases: def.Aliases, cfg: cfg})
+		entries = append(entries, renderModeEntry{name: def.Name, aliases: def.Aliases, definition: def, cfg: cfg})
 	}
 	if len(entries) == 0 {
 		return []renderModeEntry{{name: "half", aliases: []string{"h"}, cfg: renderCfg{id: 0}}}
