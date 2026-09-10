@@ -18,6 +18,46 @@ U+1FB5x 	🭐 	🭑 	🭒 	🭓 	🭔 	🭕 	🭖 	🭗 	🭘 	🭙 	🭚 	🭛 
 U+1FB6x 	🭠 	🭡 	🭢 	🭣 	🭤 	🭥 	🭦 	🭧 	🭨 	🭩 	🭪 	🭫 	🭬 	🭭 	🭮 	🭯
 
 ## Prep
+
+## SetIdeas implementation scope — 2026-09-11
+
+Own the experimental sets for [#025](025-spec-driven-render-modes.md) and
+[#043](043-compose-named-and-debug-render-modes-from-glyph-set-ids.md), reusing this
+existing glyph-expansion ticket rather than filing a duplicate. The historical
+sextant phase below is already represented by the current dedicated renderer.
+
+Measured by repository inspection at `33b625b`: the spec has a generated sextant
+family but no ninelikes/vmbars/mbars registry entries. The user-authored
+[SetIdeas](../docs/SetIdeas.md) proposes these exact inventories (␠ means space):
+
+- 9 ninelikes: ␠ ╺ ╸ ━ ┃ ┣ ┫ ╋ ┳ ┻ ┓ ┏ ┗ ┛ ╻ ╹ ▪ ╏ ╍
+- 15 vmbars: ␠ 🬋 🬇 🬃
+- 45 mbars: ␠ 🬋 🬇 🬃 ┃ ╻ ╹ ▪ ╏
+
+### Scope, acceptance and verification
+
+- [ ] Define explicit ideal coverage and approximation metadata for every glyph
+  using #025's schema; document font-dependent thickness, gaps and fallback.
+  Unknown: these shapes have not been established here as exact 3x3 cell masks.
+- [ ] Provide a checked-in reproducible glyph probe with named font/tool versions
+  and measured coverage errors. Coordinate font research with #009; do not infer
+  terminal appearance from a Unicode name alone.
+- [ ] Resolve set 15's native thirds versus quad+'s proposed 2x4 approximation:
+  exact combination with fourths needs height 12. Specify resampling/error bounds
+  if preserving requested 2x4 analysis; keep native and analysis geometry separate.
+- [ ] Validate set 9's proposed 3x3 model, including dotted/dashed glyphs. Declare
+  approximations or unavailable entries rather than inventing exact masks.
+- [ ] Ship sets 9/15/45 through the registry, with debug access to 45 even when
+  no named mode uses it. Enable dependent named modes in #043 only once coverage
+  and reconstruction tests pass. No automatic experimental default.
+- [ ] Test every glyph, bounds, transparency, FG/BG consistency and worker parity;
+  assess cati/emojig and geometry fixtures at widths 8–20 with recorded error and
+  cost. Add predicted new goldens and update SparklinePixelArt documentation.
+
+Depends on #025 for integration; probes can precede it. Moredots, diagonals,
+triangles and higher-resolution experimental families remain outside this delivery.
+Run `make test`, `go vet ./...`, `make install`, and `make preflight`; follow the
+rendering playbook before any golden update. Preserve SetIdeas unchanged.
 - check which fonts support which subset
 - document them here (and later in docs/)
 

@@ -9,6 +9,11 @@
 ---
 
 ## Issue
+SetIdeas delivery is now owned by #025 (registry), #014 (experimental coverage),
+and #043 (mode surface/migration). This ticket retains broader Unicode/font
+research and supplies reproducible font evidence to #014; it does not duplicate
+their implementation. Moredots and diagonals remain outside the current delivery.
+
 Explore Unicode and terminal-font glyph candidates that could complement the
 current sparkline algorithms. Algorithm quality, mask scoring, reconstruction,
 transparency, and small-width assessment are tracked in #041; this ticket

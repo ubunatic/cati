@@ -1,9 +1,70 @@
 # 025 — Spec-driven render modes, glyph families, geometry, and colorers
 
 **Status:** 🔄 In Progress  
+**Priority**: P2 (Medium)
+**Severity**: Moderate
+**Category**: Architecture
 **Refs:** [009](009-explore-more-sparkline-rendering-modes.md), [014](014-more-boxdrawing-chars-unicode-v13.md), [021](021-golden-storage-resolution-all-algos.md), [docs/Spec.md](../docs/Spec.md), [docs/System.md](../docs/System.md)
 
 ## Summary
+
+## Current implementation scope — 2026-09-11
+
+This section supersedes the historical target tables and incomplete checklists
+below. Implement the reusable set registry and normalized rendering contract from
+[SetIdeas](../docs/SetIdeas.md). User-authored design input is currently untracked;
+preserve it and arrange its inclusion separately before relying on that link in a
+fresh checkout. Named modes and migration belong to [#043](043-compose-named-and-debug-render-modes-from-glyph-set-ids.md);
+experimental mask definitions belong to [#014](014-more-boxdrawing-chars-unicode-v13.md).
+
+### Measured baseline
+
+At `33b625b`, `spec/render_modes.yaml` defines eight modes and six string-keyed
+glyph sets. `spec/load.go` uses `map[string][]string` for glyph sets; modes carry
+string references and explicit cell/optional analysis dimensions. The spec is
+already loaded, but `v1/sparkline/render.go` still selects Go candidate bundles in
+`FindBestCell` and geometry in `defaultCellGeometry`. `cmd/modes.go` separately
+expands glyph inventories, including a generated sextant marker. A declarative
+list therefore does not yet drive arbitrary candidate composition.
+
+### Scope and acceptance
+
+- [ ] Define schema-validated reusable sets with stable IDs and plural names:
+  0 fulls, 1 sides, 2 halves, 4 quads, 6 sextants, 14 vbars, 44 bars,
+  86 morebars, 88 allbars. Reserve 9 ninelikes, 15 vmbars and 45 mbars for #014.
+  Copy the exact inventories from SetIdeas; visible `␠` denotes actual space.
+- [ ] Store explicit native coverage geometry, glyph identity, and exact versus
+  approximate coverage metadata. IDs are identifiers, not geometry encodings.
+  Go owns scoring and executable mask operations; YAML owns set membership and
+  declared contracts, without shadow tables.
+- [ ] Normalize unions deterministically: associative, commutative, idempotent,
+  duplicate-free coverage with a stable representative/tie policy. Keep empty
+  and full coverage distinct even if ANSI can emit both using a colored space.
+  Complement masks are not interchangeable unless FG/BG and transparency
+  semantics are preserved and tested.
+- [ ] Derive exact common grids by per-axis LCM. Validate bounds and resource
+  limits before allocating. Keep sampling geometry, analysis geometry, and
+  terminal aspect correction distinct. Approximation must be declared explicitly;
+  never silently round a thirds-based mask to fourths.
+- [ ] Drive candidate selection, ANSI output, image reconstruction and reported
+  inventory from the same resolved union. Preserve optimized existing renderers
+  only where their candidate/coverage contract demonstrably agrees.
+- [ ] Expose a usable library resolution/rendering path without requiring cmd
+  imports. Test zero-value/default behavior and retain documented old APIs.
+
+### Dependencies and verification
+
+Foundation for #043; standard sets can ship before #014. Coordinate shared
+geometry with #013/#008 without expanding this into their quality/viewport
+refactors. Test registry schema, unknown IDs, duplicate IDs/names, invalid grids,
+missing-spec behavior, all union laws, exact half/quad/sextant mask coverage,
+and deterministic ordering. Exercise cropped/odd/transparent fixtures, ANSI versus
+reconstruction and serial/worker parity. Prove dimensions at widths 8–20 and
+benchmark high-grid unions. Run `make test`, `go vet ./...`, `make install`, and
+`make preflight`; update Spec, GoLibrary, SparklinePixelArt and RenderPipelines
+documentation. Predict any golden changes before regeneration per the playbook.
+
+## Historical implementation notes
 
 Render modes are currently defined in Go across the mode registry, CLI parser,
 renderer implementations, tests, and docs. The next render-mode work should move
