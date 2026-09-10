@@ -1,4 +1,12 @@
-# Using more unicode goodness!
+# 014 — More Unicode goodness
+
+**Status**: In Progress
+**Priority**: P2 (Medium)
+**Severity**: Moderate
+**Category**: Feature
+**Related**: `docs/SparklinePixelArt.md`
+
+---
 
      x: 	0 	1 	2 	3 	4 	5 	6 	7 	8 	9 	A 	B 	C 	D 	E 	F
 U+1FB0x 	🬀 	🬁 	🬂 	🬃 	🬄 	🬅 	🬆 	🬇 	🬈 	🬉 	🬊 	🬋 	🬌 	🬍 	🬎 	🬏

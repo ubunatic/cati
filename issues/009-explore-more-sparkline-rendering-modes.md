@@ -1,4 +1,12 @@
-# 009-explore-more-sparkline-rendering-modes.md
+# 009 — Explore more sparkline rendering modes
+
+**Status**: Open
+**Priority**: P2 (Medium)
+**Severity**: Moderate
+**Category**: Feature
+**Related**: `docs/SparklinePixelArt.md`
+
+---
 
 ## Issue
 Explore more rendering modes for sparklines, including vertical/horizontal sparkline characters (like 1/8, 3/4 blocks and their foreground/background inversion). Also check what other full-cell characters are usable (triangles, curves, etc.). Assume each cell is at least 8x8 pixels; analyze the 8x8 block to decide on the best character + foreground/background combination.
