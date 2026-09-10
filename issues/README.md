@@ -45,6 +45,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 039 | [039-improve-quad-quality-for-small-pixel-art-renders.md](039-improve-quad-quality-for-small-pixel-art-renders.md) | Improve quad quality for small pixel-art renders | Closed |
 | 040 | [040-assess-halfblock-rendering-quality-at-small-widths.md](040-assess-halfblock-rendering-quality-at-small-widths.md) | Assess halfblock rendering quality at small widths | Closed |
 | 041 | [041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md](041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md) | Assess sparkline and composite rendering quality at small widths | Closed |
+| 042 | [042-add-info-metadata-to-cati-modes-demos.md](042-add-info-metadata-to-cati-modes-demos.md) | Add `--info` metadata to `cati modes` demos | Open |
 
 ## Archived
 
