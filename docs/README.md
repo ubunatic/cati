@@ -11,6 +11,7 @@ Welcome to the Cati developer documentation. The following resources cover our p
 *   [Spec System & Browser Design](Design.md) — The `spec/` YAML-driven config system: template engine (`renderTpl`/`if()`), color system, button/label/view pipeline, full hint-bar variable table (`meta.*`, `ssim`, `last_key`, …), scrollbar, dense-mode grid, split-screen preview.
 *   [Quad-Block Pixel Art](QuadPixelArt.md) — Half-block vs. quad-block layout math, the 2× horizontal stretch aspect-ratio correction, neighbour-aware colour quantisation, and the quadrant character lookup table.
 *   [Sparkline Pixel Art](SparklinePixelArt.md) — Sparkline layout math, horizontal and vertical orientation, optimal-split character and color selection, and the test helper suite.
+*   [Glyph Edge Artifacts & 1D Bar Dynamics](GlyphEdgeArtifacts.md) — Analysis of 1D bar/sparkline edge dynamics on curved contours (hairlines, thin ears, horns) and 2D set comparison.
 *   [Render Experiment Lessons](RenderExperimentLessons.md) — Short notes from the removed sextant search and geomshape render experiments.
 *   [Rendering Bug & Golden-Change Playbook](RenderingBugPlaybook.md) — How to diagnose visual/geometry bugs (prove the root cause with numbers first) and change golden images safely. **Read before fixing any rendering bug or touching `testdata/` goldens.**
 *   [Go Library API](GoLibrary.md) — Import and use Cati's high-performance renderers in your own Go applications and TUIs.
