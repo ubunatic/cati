@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -256,16 +257,29 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 		if err != nil {
 			return nil, fmt.Errorf("load emojig logo %q: %w", emojigPath, err)
 		}
-		items := make([]renderedDemoItem, 0, len(entries))
-		for _, entry := range entries {
-			_, stats, err := renderModePair(cati, emojig, 12, entry.cfg, false, entry.name)
+		items := make([]renderedDemoItem, len(entries))
+		errs := make([]error, len(entries))
+		var wg sync.WaitGroup
+		for i, entry := range entries {
+			wg.Add(1)
+			go func(idx int, ent renderModeEntry) {
+				defer wg.Done()
+				_, stats, err := renderModePair(cati, emojig, 12, ent.cfg, false, ent.name)
+				if err != nil {
+					errs[idx] = err
+					return
+				}
+				items[idx] = renderedDemoItem{
+					entry:       ent,
+					normalStats: stats,
+				}
+			}(i, entry)
+		}
+		wg.Wait()
+		for _, err := range errs {
 			if err != nil {
 				return nil, err
 			}
-			items = append(items, renderedDemoItem{
-				entry:       entry,
-				normalStats: stats,
-			})
 		}
 		if err := sortRenderedDemoItems(items, sortKey, false); err != nil {
 			return nil, err
@@ -406,73 +420,121 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 	if err != nil {
 		return fmt.Errorf("load render mode metadata: %w", err)
 	}
-	items := make([]renderedDemoItem, 0, len(entries))
-	for _, entry := range entries {
-		normal, normalStats, err := renderModePair(cati, emojig, width, entry.cfg, false, entry.name)
-		if err != nil {
-			return err
-		}
-		leftTitle := fmt.Sprintf("%s (%dms, w=%d, ssim=%.2f)", entry.name, normalStats.dur.Milliseconds(), normalStats.w, normalStats.ssim)
-		item := renderedDemoItem{
-			entry:       entry,
-			leftTitle:   leftTitle,
-			normalLines: normal,
-			normalStats: normalStats,
-		}
-		if smart {
-			smartLines, smartStats, err := renderModePair(cati, emojig, width, entry.cfg, true, entry.name)
-			if err != nil {
-				return err
-			}
-			item.smartTitle = fmt.Sprintf("+smart (%dms, w=%d, ssim=%.2f)", smartStats.dur.Milliseconds(), smartStats.w, smartStats.ssim)
-			item.smartLines = smartLines
-			item.smartStats = smartStats
-			colW := ansiLinesWidth(normal) + 4
-			if len(leftTitle)+4 > colW {
-				colW = len(leftTitle) + 4
-			}
-			item.colW = colW
-		}
-		items = append(items, item)
-	}
 
 	sortKey := filter.sort
 	if filter.bySSIM && sortKey == "" {
 		sortKey = "ssim"
 	}
-	if sortKey != "" {
-		if err := sortRenderedDemoItems(items, sortKey, smart); err != nil {
+
+	// 1. Streaming case: unsorted or alphabetical sort (no need to wait for all modes).
+	if sortKey == "" || sortKey == "name" || sortKey == "-name" {
+		if sortKey == "name" {
+			sort.SliceStable(entries, func(i, j int) bool {
+				return entries[i].name < entries[j].name
+			})
+		} else if sortKey == "-name" {
+			sort.SliceStable(entries, func(i, j int) bool {
+				return entries[i].name > entries[j].name
+			})
+		}
+		for _, entry := range entries {
+			item, err := renderSingleDemoItem(cati, emojig, width, smart, entry)
+			if err != nil {
+				return err
+			}
+			printDemoItem(out, item, smart, info, modeSpec)
+		}
+		return nil
+	}
+
+	// 2. Metric sorting case: compute all entries in parallel across CPU cores, sort, then print.
+	items := make([]renderedDemoItem, len(entries))
+	errs := make([]error, len(entries))
+	var wg sync.WaitGroup
+	for i, entry := range entries {
+		wg.Add(1)
+		go func(idx int, ent renderModeEntry) {
+			defer wg.Done()
+			item, err := renderSingleDemoItem(cati, emojig, width, smart, ent)
+			if err != nil {
+				errs[idx] = err
+				return
+			}
+			items[idx] = item
+		}(i, entry)
+	}
+	wg.Wait()
+
+	for _, err := range errs {
+		if err != nil {
 			return err
 		}
 	}
 
+	if err := sortRenderedDemoItems(items, sortKey, smart); err != nil {
+		return err
+	}
+
 	for _, item := range items {
-		if !smart {
-			fmt.Fprintf(out, "\n%s\n", item.leftTitle)
-			for _, line := range item.normalLines {
-				fmt.Fprintln(out, line)
-			}
-			if info {
-				writeModeInfo(out, item.entry, modeSpec)
-			}
-			continue
+		printDemoItem(out, item, smart, info, modeSpec)
+	}
+	return nil
+}
+
+func renderSingleDemoItem(cati, emojig image.Image, width int, smart bool, entry renderModeEntry) (renderedDemoItem, error) {
+	normal, normalStats, err := renderModePair(cati, emojig, width, entry.cfg, false, entry.name)
+	if err != nil {
+		return renderedDemoItem{}, err
+	}
+	leftTitle := fmt.Sprintf("%s (%dms, w=%d, ssim=%.2f)", entry.name, normalStats.dur.Milliseconds(), normalStats.w, normalStats.ssim)
+	item := renderedDemoItem{
+		entry:       entry,
+		leftTitle:   leftTitle,
+		normalLines: normal,
+		normalStats: normalStats,
+	}
+	if smart {
+		smartLines, smartStats, err := renderModePair(cati, emojig, width, entry.cfg, true, entry.name)
+		if err != nil {
+			return renderedDemoItem{}, err
 		}
-		fmt.Fprintf(out, "\n%-*s%s\n", item.colW, item.leftTitle, item.smartTitle)
-		for i := 0; i < max(len(item.normalLines), len(item.smartLines)); i++ {
-			var left, right string
-			if i < len(item.normalLines) {
-				left = item.normalLines[i]
-			}
-			if i < len(item.smartLines) {
-				right = item.smartLines[i]
-			}
-			fmt.Fprintf(out, "%s    %s\n", padANSILine(left, item.colW-4), right)
+		item.smartTitle = fmt.Sprintf("+smart (%dms, w=%d, ssim=%.2f)", smartStats.dur.Milliseconds(), smartStats.w, smartStats.ssim)
+		item.smartLines = smartLines
+		item.smartStats = smartStats
+		colW := ansiLinesWidth(normal) + 4
+		if len(leftTitle)+4 > colW {
+			colW = len(leftTitle) + 4
+		}
+		item.colW = colW
+	}
+	return item, nil
+}
+
+func printDemoItem(out io.Writer, item renderedDemoItem, smart, info bool, modeSpec spec.RenderModesSpec) {
+	if !smart {
+		fmt.Fprintf(out, "\n%s\n", item.leftTitle)
+		for _, line := range item.normalLines {
+			fmt.Fprintln(out, line)
 		}
 		if info {
 			writeModeInfo(out, item.entry, modeSpec)
 		}
+		return
 	}
-	return nil
+	fmt.Fprintf(out, "\n%-*s%s\n", item.colW, item.leftTitle, item.smartTitle)
+	for i := 0; i < max(len(item.normalLines), len(item.smartLines)); i++ {
+		var left, right string
+		if i < len(item.normalLines) {
+			left = item.normalLines[i]
+		}
+		if i < len(item.smartLines) {
+			right = item.smartLines[i]
+		}
+		fmt.Fprintf(out, "%s    %s\n", padANSILine(left, item.colW-4), right)
+	}
+	if info {
+		writeModeInfo(out, item.entry, modeSpec)
+	}
 }
 
 type renderedDemoItem struct {
