@@ -830,11 +830,11 @@ type modePairRawResult struct {
 func renderModePairRaw(cati, emojig image.Image, width int, cfg renderCfg, smart bool, name string) (modePairRawResult, error) {
 	start := time.Now()
 	cfg.smart = smart
-	left, _, err := smartPrepareWithWidth(cati, width, 7, cfg)
+	left, _, err := smartPrepareSelected(cati, width, 7, cfg)
 	if err != nil {
 		return modePairRawResult{}, fmt.Errorf("fit %s cati logo: %w", name, err)
 	}
-	right, rightW, err := smartPrepareWithWidth(emojig, width, 7, cfg)
+	right, rightW, err := smartPrepareSelected(emojig, width, 7, cfg)
 	if err != nil {
 		return modePairRawResult{}, fmt.Errorf("fit %s emojig logo: %w", name, err)
 	}

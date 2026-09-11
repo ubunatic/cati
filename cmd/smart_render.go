@@ -182,7 +182,7 @@ func smartPrepare(orig image.Image, termCols, termRows int, rc renderCfg) (image
 	return img, err
 }
 
-func smartPrepareWithWidth(orig image.Image, termCols, termRows int, rc renderCfg) (image.Image, int, error) {
+func smartPrepareSelected(orig image.Image, termCols, termRows int, rc renderCfg) (image.Image, int, error) {
 	if !rc.smart {
 		fit, err := fitRenderedImageChecked(orig, termCols, termRows, rc)
 		if err != nil {
@@ -243,5 +243,16 @@ func smartPrepareWithWidth(orig image.Image, termCols, termRows int, rc renderCf
 		return base, renderedCellSize(base, rc).Cols, nil
 	}
 	contentWidth := renderedCellSize(selected, rc).Cols
+	return selected, contentWidth, nil
+}
+
+func smartPrepareWithWidth(orig image.Image, termCols, termRows int, rc renderCfg) (image.Image, int, error) {
+	selected, contentWidth, err := smartPrepareSelected(orig, termCols, termRows, rc)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !rc.smart {
+		return selected, contentWidth, nil
+	}
 	return padSmartImage(selected, termCols, rc), contentWidth, nil
 }
