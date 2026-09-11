@@ -24,6 +24,13 @@ When evaluating terminal image rendering, information loss occurs at two distinc
 * **What it measures**: How closely the mode's glyph codebook can reproduce the intermediate downscaled bitmap at that mode's native resolution, ignoring how much detail was discarded during downscaling.
 * **Behavior**: Full-block ($1\times 1$) trivially achieves $E_{\text{fit}} = 0\%$ because a $1\times 1$ subpixel cell exactly matches `█` or ` `, whereas a complex 2D codebook with partial coverage (e.g. Sextant $2\times 3$ with missing shapes) may have non-zero fitting residual.
 
+### Efficiency Index ($\text{Eff}$ / Quality vs Latency Trade-Off)
+* **Definition**: Evaluates the computational cost required to achieve a given level of reconstruction fidelity.
+* **Formula**:
+  $$\text{Score} = E_{\text{src}} \times T_{\text{render}}$$
+* **What it measures**: Algorithmic return-on-investment. Fast native algorithms (e.g. direct lookup tables at $\sim 0\text{--}1\text{ms}$) with low error score best, whereas heavy multi-candidate search routines incurring high millisecond overhead for minimal error improvements score lower.
+* **CLI usage**: `cati modes --sort eff` (or `--sort efficiency`).
+
 ---
 
 ## 2. Comparison Summary

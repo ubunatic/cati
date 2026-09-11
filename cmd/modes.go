@@ -112,7 +112,7 @@ func modesCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&setFilter, "set", "s", "", "filter to modes containing specific glyph set ID(s) (comma-separated, e.g. -s 6, -s 1,6)")
 	cmd.Flags().StringVar(&maxGeoFilter, "max-geo", "", "filter to modes with geometry at most WxH (e.g. --max-geo 4x4)")
 	cmd.Flags().BoolVar(&listSets, "sets", false, "list registered glyph sets from the spec registry")
-	cmd.Flags().StringVar(&sortOrder, "sort", "", "sort modes by: psnr (highest PSNR / lowest error first), -psnr (lowest PSNR), time (fastest), -time, name, -name")
+	cmd.Flags().StringVar(&sortOrder, "sort", "", "sort modes by: psnr (highest PSNR / lowest error first), -psnr, time (fastest), -time, eff (or efficiency: lowest error*time), -eff, name, -name")
 	cmd.Flags().BoolVar(&byPSNR, "by-psnr", false, "sort modes by highest PSNR (lowest error) first")
 	return cmd
 }
@@ -244,7 +244,7 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 			return res[i].name > res[j].name
 		})
 		return res, nil
-	case "psnr", "err", "best", "-psnr", "-err", "worst", "time", "dur", "fastest", "-time", "-dur", "slowest":
+	case "psnr", "err", "best", "-psnr", "-err", "worst", "time", "dur", "fastest", "-time", "-dur", "slowest", "eff", "efficiency", "-eff", "-efficiency":
 		cati, err := decodeEmbeddedLogo()
 		if err != nil {
 			return nil, err
@@ -274,7 +274,7 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 		}
 		return res, nil
 	default:
-		return nil, fmt.Errorf("unknown sort order %q (expected: psnr, -psnr, time, -time, name, -name)", sortKey)
+		return nil, fmt.Errorf("unknown sort order %q (expected: psnr, -psnr, time, -time, eff, -eff, name, -name)", sortKey)
 	}
 }
 
@@ -538,6 +538,36 @@ func sortRenderedDemoItems(items []renderedDemoItem, sortKey string, smart bool)
 			}
 			return items[i].entry.name < items[j].entry.name
 		})
+	case "eff", "efficiency":
+		sort.SliceStable(items, func(i, j int) bool {
+			statI := items[i].normalStats
+			statJ := items[j].normalStats
+			if smart {
+				statI = items[i].smartStats
+				statJ = items[j].smartStats
+			}
+			effI := statI.err * float64(max(1, statI.dur.Microseconds()))
+			effJ := statJ.err * float64(max(1, statJ.dur.Microseconds()))
+			if effI != effJ {
+				return effI < effJ
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "-eff", "-efficiency":
+		sort.SliceStable(items, func(i, j int) bool {
+			statI := items[i].normalStats
+			statJ := items[j].normalStats
+			if smart {
+				statI = items[i].smartStats
+				statJ = items[j].smartStats
+			}
+			effI := statI.err * float64(max(1, statI.dur.Microseconds()))
+			effJ := statJ.err * float64(max(1, statJ.dur.Microseconds()))
+			if effI != effJ {
+				return effI > effJ
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
 	case "name":
 		sort.SliceStable(items, func(i, j int) bool {
 			return items[i].entry.name < items[j].entry.name
@@ -547,7 +577,7 @@ func sortRenderedDemoItems(items []renderedDemoItem, sortKey string, smart bool)
 			return items[i].entry.name > items[j].entry.name
 		})
 	default:
-		return fmt.Errorf("unknown sort order %q (expected: psnr, -psnr, time, -time, name, -name)", sortKey)
+		return fmt.Errorf("unknown sort order %q (expected: psnr, -psnr, time, -time, eff, -eff, name, -name)", sortKey)
 	}
 	return nil
 }

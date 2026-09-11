@@ -349,6 +349,22 @@ func TestModesSorting(t *testing.T) {
 		}
 	})
 
+	t.Run("demo sort by efficiency", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"-w", "12", "--sort", "eff", "half", "quad", "six"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("modes --sort eff: %v", err)
+		}
+		text := out.String()
+		for _, want := range []string{"half (", "quad (", "six ("} {
+			if !strings.Contains(text, want) {
+				t.Errorf("output missing %q in:\n%s", want, text)
+			}
+		}
+	})
+
 	t.Run("invalid sort flag", func(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
