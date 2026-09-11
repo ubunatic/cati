@@ -46,7 +46,10 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 040 | [040-assess-halfblock-rendering-quality-at-small-widths.md](040-assess-halfblock-rendering-quality-at-small-widths.md) | Assess halfblock rendering quality at small widths | Closed |
 | 041 | [041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md](041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md) | Assess sparkline and composite rendering quality at small widths | Closed |
 | 042 | [042-add-info-metadata-to-cati-modes-demos.md](042-add-info-metadata-to-cati-modes-demos.md) | Add `--info` metadata to `cati modes` demos | Closed |
-| 043 | [043-compose-named-and-debug-render-modes-from-glyph-set-ids.md](043-compose-named-and-debug-render-modes-from-glyph-set-ids.md) | Compose named and debug render modes from glyph set IDs | ✅ Closed |
+| 043 | [043-compose-named-and-debug-render-modes-from-glyph-set-ids.md](043-compose-named-and-debug-render-modes-from-glyph-set-ids.md) | Compose named and debug render modes from glyph set IDs | Closed |
+| 044 | [044-modes-command-custom-image-input-support.md](044-modes-command-custom-image-input-support.md) | Modes Command Custom Image Input Support | Open |
+| 045 | [045-modes-command-test-asset-presets-and-sample-shortcuts.md](045-modes-command-test-asset-presets-and-sample-shortcuts.md) | Modes Command Test Asset Presets and Sample Shortcuts | Open |
+| 046 | [046-modes-command-dataset-benchmark-scorecard.md](046-modes-command-dataset-benchmark-scorecard.md) | Modes Command Dataset Benchmark Scorecard | Open |
 
 ## Archived
 
