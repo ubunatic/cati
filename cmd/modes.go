@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -246,7 +247,7 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 			return res[i].name > res[j].name
 		})
 		return res, nil
-	case "ssim", "psnr", "best", "quality", "-ssim", "-psnr", "worst", "time", "dur", "fastest", "-time", "-dur", "slowest", "eff", "efficiency", "-eff", "-efficiency":
+	case "ssim", "psnr", "best", "quality", "-ssim", "-psnr", "worst", "eff", "efficiency", "-eff", "-efficiency":
 		cati, err := decodeEmbeddedLogo()
 		if err != nil {
 			return nil, err
@@ -256,15 +257,57 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 		if err != nil {
 			return nil, fmt.Errorf("load emojig logo %q: %w", emojigPath, err)
 		}
-		items := make([]renderedDemoItem, 0, len(entries))
+		// Phase 1: Sequential isolated measurement
+		items := make([]*renderedDemoItem, 0, len(entries))
 		for _, entry := range entries {
-			_, stats, err := renderModePair(cati, emojig, 12, entry.cfg, false, entry.name)
+			raw, err := renderModePairRaw(cati, emojig, 12, entry.cfg, false, entry.name)
 			if err != nil {
 				return nil, err
 			}
-			items = append(items, renderedDemoItem{
+			items = append(items, &renderedDemoItem{
 				entry:       entry,
-				normalStats: stats,
+				normalStats: modeDemoStats{dur: raw.dur, w: raw.contentW},
+				normalRaw:   raw,
+			})
+		}
+		// Phase 2: Parallel SSIM computation
+		var wg sync.WaitGroup
+		for _, it := range items {
+			wg.Add(1)
+			go func(item *renderedDemoItem) {
+				defer wg.Done()
+				item.normalStats.ssim = calcModePairSSIM(cati, emojig, item.normalRaw, 12)
+			}(it)
+		}
+		wg.Wait()
+
+		if err := sortRenderedDemoItems(items, sortKey, false); err != nil {
+			return nil, err
+		}
+		res := make([]renderModeEntry, len(items))
+		for i, it := range items {
+			res[i] = it.entry
+		}
+		return res, nil
+	case "time", "dur", "fastest", "-time", "-dur", "slowest":
+		cati, err := decodeEmbeddedLogo()
+		if err != nil {
+			return nil, err
+		}
+		emojigPath := filepath.Join("testdata", "emojig-icon.svg")
+		emojig, err := halfblock.LoadImage(emojigPath)
+		if err != nil {
+			return nil, fmt.Errorf("load emojig logo %q: %w", emojigPath, err)
+		}
+		items := make([]*renderedDemoItem, 0, len(entries))
+		for _, entry := range entries {
+			raw, err := renderModePairRaw(cati, emojig, 12, entry.cfg, false, entry.name)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, &renderedDemoItem{
+				entry:       entry,
+				normalStats: modeDemoStats{dur: raw.dur, w: raw.contentW},
 			})
 		}
 		if err := sortRenderedDemoItems(items, sortKey, false); err != nil {
@@ -424,62 +467,83 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 			})
 		}
 		for _, entry := range entries {
-			item, err := renderSingleDemoItem(cati, emojig, width, smart, entry)
+			item, err := renderSingleDemoItemRaw(cati, emojig, width, smart, entry)
 			if err != nil {
 				return err
 			}
-			printDemoItem(out, item, smart, info, modeSpec)
+			computeDemoItemMetrics(cati, emojig, item, width, smart)
+			printDemoItem(out, *item, smart, info, modeSpec)
 		}
 		return nil
 	}
 
-	// 2. Metric sorting case: compute entries sequentially in isolation for accurate benchmark timings, sort, then print.
-	items := make([]renderedDemoItem, 0, len(entries))
+	// 2. Metric sorting case:
+	// Phase 1: Isolated sequential rendering and latency measurement
+	items := make([]*renderedDemoItem, 0, len(entries))
 	for _, entry := range entries {
-		item, err := renderSingleDemoItem(cati, emojig, width, smart, entry)
+		item, err := renderSingleDemoItemRaw(cati, emojig, width, smart, entry)
 		if err != nil {
 			return err
 		}
 		items = append(items, item)
 	}
 
+	// Phase 2: Parallel error and quality metric computation across all cores
+	var wg sync.WaitGroup
+	for _, it := range items {
+		wg.Add(1)
+		go func(item *renderedDemoItem) {
+			defer wg.Done()
+			computeDemoItemMetrics(cati, emojig, item, width, smart)
+		}(it)
+	}
+	wg.Wait()
+
 	if err := sortRenderedDemoItems(items, sortKey, smart); err != nil {
 		return err
 	}
 
 	for _, item := range items {
-		printDemoItem(out, item, smart, info, modeSpec)
+		printDemoItem(out, *item, smart, info, modeSpec)
 	}
 	return nil
 }
 
-func renderSingleDemoItem(cati, emojig image.Image, width int, smart bool, entry renderModeEntry) (renderedDemoItem, error) {
-	normal, normalStats, err := renderModePair(cati, emojig, width, entry.cfg, false, entry.name)
+func renderSingleDemoItemRaw(cati, emojig image.Image, width int, smart bool, entry renderModeEntry) (*renderedDemoItem, error) {
+	normalRaw, err := renderModePairRaw(cati, emojig, width, entry.cfg, false, entry.name)
 	if err != nil {
-		return renderedDemoItem{}, err
+		return nil, err
 	}
-	leftTitle := fmt.Sprintf("%s (%dms, w=%d, ssim=%.2f)", entry.name, normalStats.dur.Milliseconds(), normalStats.w, normalStats.ssim)
-	item := renderedDemoItem{
+	item := &renderedDemoItem{
 		entry:       entry,
-		leftTitle:   leftTitle,
-		normalLines: normal,
-		normalStats: normalStats,
+		normalLines: normalRaw.pairLines,
+		normalStats: modeDemoStats{dur: normalRaw.dur, w: normalRaw.contentW},
+		normalRaw:   normalRaw,
 	}
 	if smart {
-		smartLines, smartStats, err := renderModePair(cati, emojig, width, entry.cfg, true, entry.name)
+		smartRaw, err := renderModePairRaw(cati, emojig, width, entry.cfg, true, entry.name)
 		if err != nil {
-			return renderedDemoItem{}, err
+			return nil, err
 		}
-		item.smartTitle = fmt.Sprintf("+smart (%dms, w=%d, ssim=%.2f)", smartStats.dur.Milliseconds(), smartStats.w, smartStats.ssim)
-		item.smartLines = smartLines
-		item.smartStats = smartStats
-		colW := ansiLinesWidth(normal) + 4
-		if len(leftTitle)+4 > colW {
-			colW = len(leftTitle) + 4
+		item.smartLines = smartRaw.pairLines
+		item.smartStats = modeDemoStats{dur: smartRaw.dur, w: smartRaw.contentW}
+		item.smartRaw = smartRaw
+	}
+	return item, nil
+}
+
+func computeDemoItemMetrics(cati, emojig image.Image, item *renderedDemoItem, width int, smart bool) {
+	item.normalStats.ssim = calcModePairSSIM(cati, emojig, item.normalRaw, width)
+	item.leftTitle = fmt.Sprintf("%s (%dms, w=%d, ssim=%.2f)", item.entry.name, item.normalStats.dur.Milliseconds(), item.normalStats.w, item.normalStats.ssim)
+	if smart {
+		item.smartStats.ssim = calcModePairSSIM(cati, emojig, item.smartRaw, width)
+		item.smartTitle = fmt.Sprintf("+smart (%dms, w=%d, ssim=%.2f)", item.smartStats.dur.Milliseconds(), item.smartStats.w, item.smartStats.ssim)
+		colW := ansiLinesWidth(item.normalLines) + 4
+		if len(item.leftTitle)+4 > colW {
+			colW = len(item.leftTitle) + 4
 		}
 		item.colW = colW
 	}
-	return item, nil
 }
 
 func printDemoItem(out io.Writer, item renderedDemoItem, smart, info bool, modeSpec spec.RenderModesSpec) {
@@ -514,13 +578,15 @@ type renderedDemoItem struct {
 	leftTitle   string
 	normalLines []string
 	normalStats modeDemoStats
+	normalRaw   modePairRawResult
 	smartTitle  string
 	smartLines  []string
 	smartStats  modeDemoStats
+	smartRaw    modePairRawResult
 	colW        int
 }
 
-func sortRenderedDemoItems(items []renderedDemoItem, sortKey string, smart bool) error {
+func sortRenderedDemoItems(items []*renderedDemoItem, sortKey string, smart bool) error {
 	switch strings.ToLower(strings.TrimSpace(sortKey)) {
 	case "ssim", "psnr", "best", "quality":
 		sort.SliceStable(items, func(i, j int) bool {
@@ -750,62 +816,42 @@ type modeDemoStats struct {
 	ssim float64
 }
 
-func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bool, name string) ([]string, modeDemoStats, error) {
+type modePairRawResult struct {
+	left       image.Image
+	right      image.Image
+	leftLines  []string
+	rightLines []string
+	pairLines  []string
+	contentW   int
+	dur        time.Duration
+	cfg        renderCfg
+}
+
+func renderModePairRaw(cati, emojig image.Image, width int, cfg renderCfg, smart bool, name string) (modePairRawResult, error) {
 	start := time.Now()
 	cfg.smart = smart
 	left, _, err := smartPrepareWithWidth(cati, width, 7, cfg)
 	if err != nil {
-		return nil, modeDemoStats{}, fmt.Errorf("fit %s cati logo: %w", name, err)
+		return modePairRawResult{}, fmt.Errorf("fit %s cati logo: %w", name, err)
 	}
 	right, rightW, err := smartPrepareWithWidth(emojig, width, 7, cfg)
 	if err != nil {
-		return nil, modeDemoStats{}, fmt.Errorf("fit %s emojig logo: %w", name, err)
+		return modePairRawResult{}, fmt.Errorf("fit %s emojig logo: %w", name, err)
 	}
 	leftLines, err := renderDemoLines(left, cfg)
 	if err != nil {
-		return nil, modeDemoStats{}, fmt.Errorf("render %s cati logo: %w", name, err)
+		return modePairRawResult{}, fmt.Errorf("render %s cati logo: %w", name, err)
 	}
 	rightLines, err := renderDemoLines(right, cfg)
 	if err != nil {
-		return nil, modeDemoStats{}, fmt.Errorf("render %s emojig logo: %w", name, err)
+		return modePairRawResult{}, fmt.Errorf("render %s emojig logo: %w", name, err)
 	}
 	dur := time.Since(start)
-
-	recLeft := renderReconstruction(left, cfg)
-	recRight := renderReconstruction(right, cfg)
 
 	contentW := rightW
 	if contentW <= 0 {
 		contentW = width
 	}
-
-	// Compare reconstructions against original source images on a common high-resolution
-	// canonical canvas (12x24 subpixels per cell) so that low-resolution modes (full, half)
-	// correctly reflect their structural fidelity compared to high-resolution modes (six, quad).
-	const cellSubW = 12
-	const cellSubH = 24
-
-	leftCols := renderedCellSize(left, cfg).Cols
-	if leftCols <= 0 {
-		leftCols = width
-	}
-	leftCanonW := leftCols * cellSubW
-	leftCanonH := 7 * cellSubH
-	refLeft := metrics.PyramidDownscale(cati, leftCanonW, leftCanonH)
-	upscaledLeft := nnUpscale(recLeft, leftCanonW, leftCanonH)
-	ssimLeft := metrics.SSIMLuminance(refLeft, upscaledLeft)
-
-	rightCols := renderedCellSize(right, cfg).Cols
-	if rightCols <= 0 {
-		rightCols = contentW
-	}
-	rightCanonW := rightCols * cellSubW
-	rightCanonH := 7 * cellSubH
-	refRight := metrics.PyramidDownscale(emojig, rightCanonW, rightCanonH)
-	upscaledRight := nnUpscale(recRight, rightCanonW, rightCanonH)
-	ssimRight := metrics.SSIMLuminance(refRight, upscaledRight)
-
-	avgSSIM := (ssimLeft + ssimRight) / 2.0
 
 	leftWidth := ansiLinesWidth(leftLines)
 	lines := make([]string, 0, max(len(leftLines), len(rightLines)))
@@ -819,7 +865,58 @@ func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bo
 		}
 		lines = append(lines, fmt.Sprintf("  %s  |  %s", padANSILine(leftLine, leftWidth), padANSILine(rightLine, leftWidth)))
 	}
-	return lines, modeDemoStats{dur: dur, w: contentW, ssim: avgSSIM}, nil
+	return modePairRawResult{
+		left:       left,
+		right:      right,
+		leftLines:  leftLines,
+		rightLines: rightLines,
+		pairLines:  lines,
+		contentW:   contentW,
+		dur:        dur,
+		cfg:        cfg,
+	}, nil
+}
+
+func calcModePairSSIM(cati, emojig image.Image, raw modePairRawResult, width int) float64 {
+	recLeft := renderReconstruction(raw.left, raw.cfg)
+	recRight := renderReconstruction(raw.right, raw.cfg)
+
+	// Compare reconstructions against original source images on a common high-resolution
+	// canonical canvas (12x24 subpixels per cell) so that low-resolution modes (full, half)
+	// correctly reflect their structural fidelity compared to high-resolution modes (six, quad).
+	const cellSubW = 12
+	const cellSubH = 24
+
+	leftCols := renderedCellSize(raw.left, raw.cfg).Cols
+	if leftCols <= 0 {
+		leftCols = width
+	}
+	leftCanonW := leftCols * cellSubW
+	leftCanonH := 7 * cellSubH
+	refLeft := metrics.PyramidDownscale(cati, leftCanonW, leftCanonH)
+	upscaledLeft := nnUpscale(recLeft, leftCanonW, leftCanonH)
+	ssimLeft := metrics.SSIMLuminance(refLeft, upscaledLeft)
+
+	rightCols := renderedCellSize(raw.right, raw.cfg).Cols
+	if rightCols <= 0 {
+		rightCols = raw.contentW
+	}
+	rightCanonW := rightCols * cellSubW
+	rightCanonH := 7 * cellSubH
+	refRight := metrics.PyramidDownscale(emojig, rightCanonW, rightCanonH)
+	upscaledRight := nnUpscale(recRight, rightCanonW, rightCanonH)
+	ssimRight := metrics.SSIMLuminance(refRight, upscaledRight)
+
+	return (ssimLeft + ssimRight) / 2.0
+}
+
+func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bool, name string) ([]string, modeDemoStats, error) {
+	raw, err := renderModePairRaw(cati, emojig, width, cfg, smart, name)
+	if err != nil {
+		return nil, modeDemoStats{}, err
+	}
+	ssim := calcModePairSSIM(cati, emojig, raw, width)
+	return raw.pairLines, modeDemoStats{dur: raw.dur, w: raw.contentW, ssim: ssim}, nil
 }
 
 func nnUpscale(img image.Image, dstW, dstH int) image.Image {
