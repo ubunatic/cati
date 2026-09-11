@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -257,29 +256,16 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 		if err != nil {
 			return nil, fmt.Errorf("load emojig logo %q: %w", emojigPath, err)
 		}
-		items := make([]renderedDemoItem, len(entries))
-		errs := make([]error, len(entries))
-		var wg sync.WaitGroup
-		for i, entry := range entries {
-			wg.Add(1)
-			go func(idx int, ent renderModeEntry) {
-				defer wg.Done()
-				_, stats, err := renderModePair(cati, emojig, 12, ent.cfg, false, ent.name)
-				if err != nil {
-					errs[idx] = err
-					return
-				}
-				items[idx] = renderedDemoItem{
-					entry:       ent,
-					normalStats: stats,
-				}
-			}(i, entry)
-		}
-		wg.Wait()
-		for _, err := range errs {
+		items := make([]renderedDemoItem, 0, len(entries))
+		for _, entry := range entries {
+			_, stats, err := renderModePair(cati, emojig, 12, entry.cfg, false, entry.name)
 			if err != nil {
 				return nil, err
 			}
+			items = append(items, renderedDemoItem{
+				entry:       entry,
+				normalStats: stats,
+			})
 		}
 		if err := sortRenderedDemoItems(items, sortKey, false); err != nil {
 			return nil, err
@@ -447,28 +433,14 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 		return nil
 	}
 
-	// 2. Metric sorting case: compute all entries in parallel across CPU cores, sort, then print.
-	items := make([]renderedDemoItem, len(entries))
-	errs := make([]error, len(entries))
-	var wg sync.WaitGroup
-	for i, entry := range entries {
-		wg.Add(1)
-		go func(idx int, ent renderModeEntry) {
-			defer wg.Done()
-			item, err := renderSingleDemoItem(cati, emojig, width, smart, ent)
-			if err != nil {
-				errs[idx] = err
-				return
-			}
-			items[idx] = item
-		}(i, entry)
-	}
-	wg.Wait()
-
-	for _, err := range errs {
+	// 2. Metric sorting case: compute entries sequentially in isolation for accurate benchmark timings, sort, then print.
+	items := make([]renderedDemoItem, 0, len(entries))
+	for _, entry := range entries {
+		item, err := renderSingleDemoItem(cati, emojig, width, smart, entry)
 		if err != nil {
 			return err
 		}
+		items = append(items, item)
 	}
 
 	if err := sortRenderedDemoItems(items, sortKey, smart); err != nil {
