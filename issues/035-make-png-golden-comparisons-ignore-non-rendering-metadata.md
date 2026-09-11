@@ -1,6 +1,6 @@
 # 035 — Make PNG golden comparisons ignore non-rendering metadata
 
-**Status**: Open
+**Status**: Closed (Verified with metadata isolation and negative difference tests in `cmd/golden_render_test.go`)
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Infrastructure

@@ -322,6 +322,45 @@ func TestGoldenEqualIgnoresPNGMetadata(t *testing.T) {
 	}
 }
 
+func TestGoldenEqualDetectsPixelDifferences(t *testing.T) {
+	base := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			base.SetRGBA(x, y, color.RGBA{R: 100, G: 150, B: 200, A: 255})
+		}
+	}
+
+	// 1. Dimension mismatch
+	diffDim := image.NewRGBA(image.Rect(0, 0, 4, 5))
+	if goldenEqual(base, diffDim) {
+		t.Error("goldenEqual did not detect dimension difference")
+	}
+
+	// 2. Alpha mismatch
+	diffAlpha := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			diffAlpha.SetRGBA(x, y, color.RGBA{R: 100, G: 150, B: 200, A: 255})
+		}
+	}
+	diffAlpha.SetRGBA(2, 2, color.RGBA{R: 100, G: 150, B: 200, A: 254})
+	if goldenEqual(base, diffAlpha) {
+		t.Error("goldenEqual did not detect alpha difference")
+	}
+
+	// 3. 1-LSB colour drift (e.g. #032 JPEG decoder drift)
+	diffColor := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			diffColor.SetRGBA(x, y, color.RGBA{R: 100, G: 150, B: 200, A: 255})
+		}
+	}
+	diffColor.SetRGBA(1, 1, color.RGBA{R: 101, G: 150, B: 200, A: 255})
+	if goldenEqual(base, diffColor) {
+		t.Error("goldenEqual did not detect 1-LSB pixel drift")
+	}
+}
+
 // goldenCharBlock returns the minimal aspect-correct per-character pixel block
 // W×H such that every registered render mode's cell geometry divides it exactly
 // (integer kX = W/CellW, kY = H/CellH with no remainder) and H = 2·W

@@ -5,11 +5,11 @@ This document outlines the strategic product direction for Cati, using a Now / N
 ## Now (Priority 1): "cati modes" & Quality Metrics
 *Our immediate focus is on the Analysis Suite and establishing a rigorous foundation for measuring visual quality.*
 
-*   **Custom Image Input Support** (Issue #044): Allow arbitrary image inputs into the `cati modes` analysis tool.
-*   **Test Asset Presets & Sample Shortcuts** (Issue #045): Streamline testing and developer workflows with quick-access sample sets.
-*   **Dataset Benchmark Scorecard** (Issue #046): Implement systematic benchmarking (e.g., PSNR, SSIM, MSE) to evaluate render pipelines objectively.
-*   **Golden Comparison & Metadata** (Issue #035): Ensure PNG golden image comparisons ignore non-rendering metadata for reliable test suites.
-*   **Related items:** Address any lingering foundational analysis bugs (e.g., legacy issue #006).
+*   **Custom Image Input Support** (Issue #044): ✅ Completed — `-i / --image` and positional input support for single and pair analysis.
+*   **Test Asset Presets & Sample Shortcuts** (Issue #045): ✅ Completed — `-p / --preset / --sample` shortcuts and listing for geometric and photographic suites.
+*   **Dataset Benchmark Scorecard** (Issue #046): ✅ Completed — `--benchmark / --suite` multi-image evaluation scorecard with category SSIM, latencies, and efficiency index.
+*   **Golden Comparison & Metadata** (Issue #035): ✅ Completed — verified metadata-independent comparison with pixel difference detection tests.
+*   **Related items:** Foundational two-phase isolated benchmarking and quality metrics.
 
 ## Next (Priority 2): Rendering Engine & Glyph Quality
 *Once we can measure quality accurately, we will refine the core rendering capabilities and explore advanced optimization.*

@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/png"
 	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -56,15 +57,30 @@ func modesCommand() *cobra.Command {
 	var sortOrder string
 	var bySSIM bool
 	var byPSNR bool
+	var imageFlags []string
+	var samplePresetFlag string
+	var presetAliasFlag string
+	var benchmarkFlag bool
+	var suiteFlag bool
 
 	cmd := &cobra.Command{
-		Use:   "modes [modes...]",
-		Short: "list render modes with a cati/emojig logo demo",
+		Use:   "modes [modes/images...]",
+		Short: "list render modes with logo demos, presets, custom images, or benchmark scorecards",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if listSets {
 				return listGlyphSets(cmd.OutOrStdout())
 			}
+
+			// Check preset listing
+			chosenPreset := samplePresetFlag
+			if chosenPreset == "" {
+				chosenPreset = presetAliasFlag
+			}
+			if chosenPreset == "list" || chosenPreset == "help" {
+				return listSamplePresets(cmd.OutOrStdout())
+			}
+
 			var setIDs []int
 			if setFilter != "" {
 				ids, err := parseSetIDs(setFilter)
@@ -81,6 +97,42 @@ func modesCommand() *cobra.Command {
 				}
 				maxGeo = geo
 			}
+
+			// Separate mode filter names from image/preset arguments
+			var modeNames []string
+			var inputRefs []string
+
+			for _, imgRef := range imageFlags {
+				if imgRef != "" {
+					inputRefs = append(inputRefs, imgRef)
+				}
+			}
+			if chosenPreset != "" {
+				for _, p := range strings.Split(chosenPreset, ",") {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						inputRefs = append(inputRefs, p)
+					}
+				}
+			}
+
+			for _, arg := range args {
+				if len(imageFlags) == 0 && chosenPreset == "" && isImageFileOrPreset(arg) {
+					inputRefs = append(inputRefs, arg)
+				} else {
+					modeNames = append(modeNames, arg)
+				}
+			}
+
+			var inputImages []loadedImage
+			for _, ref := range inputRefs {
+				loaded, err := loadNamedImage(ref)
+				if err != nil {
+					return err
+				}
+				inputImages = append(inputImages, loaded)
+			}
+
 			filter := modesFilter{
 				list:     listOnly || (width == 0 && smart),
 				all:      allModes,
@@ -93,13 +145,38 @@ func modesCommand() *cobra.Command {
 				sort:     sortOrder,
 				bySSIM:   bySSIM || byPSNR,
 			}
+
 			if filter.list {
-				return listModesFiltered(cmd.OutOrStdout(), info, args, filter)
+				return listModesFiltered(cmd.OutOrStdout(), info, modeNames, filter)
 			}
 			if width < 1 {
 				return fmt.Errorf("--width must be greater than zero")
 			}
-			return runModesDemoSelectedFiltered(cmd.OutOrStdout(), width, smart, info, args, filter)
+
+			// Filter mode entries
+			var entries []renderModeEntry
+			var err error
+			if len(modeNames) == 0 {
+				if filter.legacy {
+					entries = append([]renderModeEntry(nil), legacyRenderModes...)
+				} else if filter.all {
+					entries = append(append([]renderModeEntry(nil), renderModes...), legacyRenderModes...)
+				} else {
+					entries, err = listableRenderModes()
+				}
+			} else {
+				entries, err = selectedRenderModes(modeNames)
+			}
+			if err != nil {
+				return err
+			}
+			entries = applyModesFilter(entries, filter)
+
+			if benchmarkFlag || suiteFlag {
+				return runModesBenchmarkScorecard(cmd.OutOrStdout(), width, smart, entries, sortOrder)
+			}
+
+			return runModesDemoWithImages(cmd.OutOrStdout(), width, smart, info, entries, filter, inputImages)
 		},
 	}
 	cmd.Flags().IntVarP(&width, "width", "w", 12, "target width of each logo demo (0 with --smart or -l lists modes only)")
@@ -117,7 +194,39 @@ func modesCommand() *cobra.Command {
 	cmd.Flags().StringVar(&sortOrder, "sort", "", "sort modes by: ssim (highest SSIM first), -ssim, time (fastest), -time, eff (or efficiency: lowest (1-ssim)*time), -eff, name, -name")
 	cmd.Flags().BoolVar(&bySSIM, "by-ssim", false, "sort modes by highest SSIM first")
 	cmd.Flags().BoolVar(&byPSNR, "by-psnr", false, "sort modes by highest SSIM first (alias for --by-ssim)")
+	cmd.Flags().StringSliceVarP(&imageFlags, "image", "i", nil, "custom image path(s) or presets to evaluate (repeatable or comma-separated)")
+	cmd.Flags().StringVarP(&samplePresetFlag, "sample", "p", "", "test asset sample preset or 'list' (e.g. circle, soldering, summer, darth)")
+	cmd.Flags().StringVar(&presetAliasFlag, "preset", "", "alias for --sample")
+	cmd.Flags().BoolVar(&benchmarkFlag, "benchmark", false, "run dataset benchmark scorecard across test assets")
+	cmd.Flags().BoolVar(&suiteFlag, "suite", false, "alias for --benchmark")
 	return cmd
+}
+
+func isImageFileOrPreset(arg string) bool {
+	clean := strings.TrimSpace(arg)
+	if clean == "" {
+		return false
+	}
+	lower := strings.ToLower(clean)
+	// Known non-mode presets
+	for _, p := range samplePresets {
+		if p.name == lower {
+			return true
+		}
+	}
+	ext := strings.ToLower(filepath.Ext(clean))
+	if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".svg" || ext == ".webp" || ext == ".gif" || ext == ".bmp" {
+		return true
+	}
+	if _, err := os.Stat(clean); err == nil {
+		// If it's a file on disk and not a known mode alias
+		if _, ok := renderModeAliases[clean]; !ok {
+			if _, ok := legacyRenderModeAliases[clean]; !ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func parseSetIDs(s string) ([]int, error) {
@@ -260,7 +369,7 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 		// Phase 1: Sequential isolated measurement
 		items := make([]*renderedDemoItem, 0, len(entries))
 		for _, entry := range entries {
-			raw, err := renderModePairRaw(cati, emojig, 12, entry.cfg, false, entry.name)
+			raw, err := renderModePairRaw(cati, emojig, 12, entry.cfg, false, entry.name, 7)
 			if err != nil {
 				return nil, err
 			}
@@ -301,7 +410,7 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 		}
 		items := make([]*renderedDemoItem, 0, len(entries))
 		for _, entry := range entries {
-			raw, err := renderModePairRaw(cati, emojig, 12, entry.cfg, false, entry.name)
+			raw, err := renderModePairRaw(cati, emojig, 12, entry.cfg, false, entry.name, 7)
 			if err != nil {
 				return nil, err
 			}
@@ -434,17 +543,10 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 		return err
 	}
 	entries = applyModesFilter(entries, filter)
-	cati, err := decodeEmbeddedLogo()
-	if err != nil {
-		return err
-	}
-	emojigPath := filepath.Join("testdata", "emojig-icon.svg")
-	emojig, err := halfblock.LoadImage(emojigPath)
-	if err != nil {
-		return fmt.Errorf("load emojig logo %q: %w", emojigPath, err)
-	}
+	return runModesDemoWithImages(out, width, smart, info, entries, filter, nil)
+}
 
-	fmt.Fprintln(out, "Available render modes (cati logo | emojig logo):")
+func runModesDemoWithImages(out io.Writer, width int, smart, info bool, entries []renderModeEntry, filter modesFilter, inputImages []loadedImage) error {
 	modeSpec, err := spec.LoadRenderModes()
 	if err != nil {
 		return fmt.Errorf("load render mode metadata: %w", err)
@@ -455,7 +557,91 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 		sortKey = "ssim"
 	}
 
-	// 1. Streaming case: unsorted or alphabetical sort (no need to wait for all modes).
+	// Case 1: Single Image Mode
+	if len(inputImages) == 1 {
+		imgItem := inputImages[0]
+		fmt.Fprintf(out, "Available render modes for %s (standard | +smart):\n", imgItem.name)
+
+		if sortKey == "" || sortKey == "name" || sortKey == "-name" {
+			if sortKey == "name" {
+				sort.SliceStable(entries, func(i, j int) bool {
+					return entries[i].name < entries[j].name
+				})
+			} else if sortKey == "-name" {
+				sort.SliceStable(entries, func(i, j int) bool {
+					return entries[i].name > entries[j].name
+				})
+			}
+			for _, entry := range entries {
+				item, err := renderSingleImageItemRaw(imgItem.img, width, entry)
+				if err != nil {
+					return err
+				}
+				computeSingleImageItemMetrics(imgItem.img, item, width)
+				printSingleImageDemoItem(out, *item, info, modeSpec)
+			}
+			return nil
+		}
+
+		// Phase 1: Isolated sequential rendering and latency measurement
+		items := make([]*renderedSingleDemoItem, 0, len(entries))
+		for _, entry := range entries {
+			item, err := renderSingleImageItemRaw(imgItem.img, width, entry)
+			if err != nil {
+				return err
+			}
+			items = append(items, item)
+		}
+
+		// Phase 2: Parallel SSIM computation across all cores
+		var wg sync.WaitGroup
+		for _, it := range items {
+			wg.Add(1)
+			go func(item *renderedSingleDemoItem) {
+				defer wg.Done()
+				computeSingleImageItemMetrics(imgItem.img, item, width)
+			}(it)
+		}
+		wg.Wait()
+
+		if err := sortSingleImageDemoItems(items, sortKey); err != nil {
+			return err
+		}
+		for _, item := range items {
+			printSingleImageDemoItem(out, *item, info, modeSpec)
+		}
+		return nil
+	}
+
+	// Case 2: Pair Mode (Default or 2 images)
+	var leftImg, rightImg image.Image
+	var leftName, rightName string
+	var termRows int
+	if len(inputImages) >= 2 {
+		leftImg = inputImages[0].img
+		leftName = inputImages[0].name
+		rightImg = inputImages[1].img
+		rightName = inputImages[1].name
+		termRows = 0
+	} else {
+		cati, err := decodeEmbeddedLogo()
+		if err != nil {
+			return err
+		}
+		emojigPath := filepath.Join("testdata", "emojig-icon.svg")
+		emojig, err := halfblock.LoadImage(emojigPath)
+		if err != nil {
+			return fmt.Errorf("load emojig logo %q: %w", emojigPath, err)
+		}
+		leftImg = cati
+		leftName = "cati logo"
+		rightImg = emojig
+		rightName = "emojig logo"
+		termRows = 7
+	}
+
+	fmt.Fprintf(out, "Available render modes (%s | %s):\n", leftName, rightName)
+
 	if sortKey == "" || sortKey == "name" || sortKey == "-name" {
 		if sortKey == "name" {
 			sort.SliceStable(entries, func(i, j int) bool {
@@ -467,21 +653,21 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 			})
 		}
 		for _, entry := range entries {
-			item, err := renderSingleDemoItemRaw(cati, emojig, width, smart, entry)
+			item, err := renderSingleDemoItemRaw(leftImg, rightImg, width, smart, entry, termRows)
 			if err != nil {
 				return err
 			}
-			computeDemoItemMetrics(cati, emojig, item, width, smart)
+			computeDemoItemMetrics(leftImg, rightImg, item, width, smart)
 			printDemoItem(out, *item, smart, info, modeSpec)
 		}
 		return nil
 	}
 
-	// 2. Metric sorting case:
+	// Metric sorting case:
 	// Phase 1: Isolated sequential rendering and latency measurement
 	items := make([]*renderedDemoItem, 0, len(entries))
 	for _, entry := range entries {
-		item, err := renderSingleDemoItemRaw(cati, emojig, width, smart, entry)
+		item, err := renderSingleDemoItemRaw(leftImg, rightImg, width, smart, entry, termRows)
 		if err != nil {
 			return err
 		}
@@ -494,7 +680,7 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 		wg.Add(1)
 		go func(item *renderedDemoItem) {
 			defer wg.Done()
-			computeDemoItemMetrics(cati, emojig, item, width, smart)
+			computeDemoItemMetrics(leftImg, rightImg, item, width, smart)
 		}(it)
 	}
 	wg.Wait()
@@ -509,8 +695,158 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 	return nil
 }
 
-func renderSingleDemoItemRaw(cati, emojig image.Image, width int, smart bool, entry renderModeEntry) (*renderedDemoItem, error) {
-	normalRaw, err := renderModePairRaw(cati, emojig, width, entry.cfg, false, entry.name)
+type renderedSingleDemoItem struct {
+	entry       renderModeEntry
+	leftTitle   string
+	normalLines []string
+	normalStats modeDemoStats
+	normalRaw   image.Image
+	smartTitle  string
+	smartLines  []string
+	smartStats  modeDemoStats
+	smartRaw    image.Image
+	colW        int
+}
+
+func renderSingleImageItemRaw(src image.Image, width int, entry renderModeEntry) (*renderedSingleDemoItem, error) {
+	// Normal
+	normalCfg := entry.cfg
+	normalCfg.smart = false
+	start := time.Now()
+	normalFitted, normalW, err := smartPrepareSelected(src, width, 0, normalCfg)
+	if err != nil {
+		return nil, fmt.Errorf("prepare %s: %w", entry.name, err)
+	}
+	normalLines, err := renderDemoLines(normalFitted, normalCfg)
+	normalDur := time.Since(start)
+	if err != nil {
+		return nil, fmt.Errorf("render %s: %w", entry.name, err)
+	}
+
+	// Smart
+	smartCfg := entry.cfg
+	smartCfg.smart = true
+	start = time.Now()
+	smartFitted, smartW, err := smartPrepareSelected(src, width, 0, smartCfg)
+	if err != nil {
+		return nil, fmt.Errorf("prepare smart %s: %w", entry.name, err)
+	}
+	smartLines, err := renderDemoLines(smartFitted, smartCfg)
+	smartDur := time.Since(start)
+	if err != nil {
+		return nil, fmt.Errorf("render smart %s: %w", entry.name, err)
+	}
+
+	return &renderedSingleDemoItem{
+		entry:       entry,
+		normalLines: normalLines,
+		normalStats: modeDemoStats{dur: normalDur, w: normalW},
+		normalRaw:   normalFitted,
+		smartLines:  smartLines,
+		smartStats:  modeDemoStats{dur: smartDur, w: smartW},
+		smartRaw:    smartFitted,
+	}, nil
+}
+
+func computeSingleImageItemMetrics(src image.Image, item *renderedSingleDemoItem, width int) {
+	normalCfg := item.entry.cfg
+	normalCfg.smart = false
+	item.normalStats.ssim = calcSingleImageSSIM(src, item.normalRaw, normalCfg, width)
+	item.leftTitle = fmt.Sprintf("%s (%dms, w=%d, ssim=%.2f)", item.entry.name, item.normalStats.dur.Milliseconds(), item.normalStats.w, item.normalStats.ssim)
+
+	smartCfg := item.entry.cfg
+	smartCfg.smart = true
+	item.smartStats.ssim = calcSingleImageSSIM(src, item.smartRaw, smartCfg, width)
+	item.smartTitle = fmt.Sprintf("+smart (%dms, w=%d, ssim=%.2f)", item.smartStats.dur.Milliseconds(), item.smartStats.w, item.smartStats.ssim)
+
+	colW := ansiLinesWidth(item.normalLines) + 4
+	if len(item.leftTitle)+4 > colW {
+		colW = len(item.leftTitle) + 4
+	}
+	item.colW = colW
+}
+
+func printSingleImageDemoItem(out io.Writer, item renderedSingleDemoItem, info bool, modeSpec spec.RenderModesSpec) {
+	fmt.Fprintf(out, "\n%-*s%s\n", item.colW, item.leftTitle, item.smartTitle)
+	for i := 0; i < max(len(item.normalLines), len(item.smartLines)); i++ {
+		var left, right string
+		if i < len(item.normalLines) {
+			left = item.normalLines[i]
+		}
+		if i < len(item.smartLines) {
+			right = item.smartLines[i]
+		}
+		fmt.Fprintf(out, "%s    %s\n", padANSILine(left, item.colW-4), right)
+	}
+	if info {
+		writeModeInfo(out, item.entry, modeSpec)
+	}
+}
+
+func sortSingleImageDemoItems(items []*renderedSingleDemoItem, sortKey string) error {
+	switch strings.ToLower(strings.TrimSpace(sortKey)) {
+	case "ssim", "psnr", "best", "quality":
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].normalStats.ssim != items[j].normalStats.ssim {
+				return items[i].normalStats.ssim > items[j].normalStats.ssim
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "-ssim", "-psnr", "worst":
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].normalStats.ssim != items[j].normalStats.ssim {
+				return items[i].normalStats.ssim < items[j].normalStats.ssim
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "time", "dur", "fastest":
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].normalStats.dur != items[j].normalStats.dur {
+				return items[i].normalStats.dur < items[j].normalStats.dur
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "-time", "-dur", "slowest":
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].normalStats.dur != items[j].normalStats.dur {
+				return items[i].normalStats.dur > items[j].normalStats.dur
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "eff", "efficiency":
+		sort.SliceStable(items, func(i, j int) bool {
+			effI := (1.0 - items[i].normalStats.ssim) * float64(max(1, items[i].normalStats.dur.Microseconds()))
+			effJ := (1.0 - items[j].normalStats.ssim) * float64(max(1, items[j].normalStats.dur.Microseconds()))
+			if effI != effJ {
+				return effI < effJ
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "-eff", "-efficiency":
+		sort.SliceStable(items, func(i, j int) bool {
+			effI := (1.0 - items[i].normalStats.ssim) * float64(max(1, items[i].normalStats.dur.Microseconds()))
+			effJ := (1.0 - items[j].normalStats.ssim) * float64(max(1, items[j].normalStats.dur.Microseconds()))
+			if effI != effJ {
+				return effI > effJ
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "name":
+		sort.SliceStable(items, func(i, j int) bool {
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "-name":
+		sort.SliceStable(items, func(i, j int) bool {
+			return items[i].entry.name > items[j].entry.name
+		})
+	default:
+		return fmt.Errorf("unknown sort order %q (expected: ssim, -ssim, time, -time, eff, -eff, name, -name)", sortKey)
+	}
+	return nil
+}
+
+func renderSingleDemoItemRaw(leftImg, rightImg image.Image, width int, smart bool, entry renderModeEntry, termRows int) (*renderedDemoItem, error) {
+	normalRaw, err := renderModePairRaw(leftImg, rightImg, width, entry.cfg, false, entry.name, termRows)
 	if err != nil {
 		return nil, err
 	}
@@ -521,7 +857,7 @@ func renderSingleDemoItemRaw(cati, emojig image.Image, width int, smart bool, en
 		normalRaw:   normalRaw,
 	}
 	if smart {
-		smartRaw, err := renderModePairRaw(cati, emojig, width, entry.cfg, true, entry.name)
+		smartRaw, err := renderModePairRaw(leftImg, rightImg, width, entry.cfg, true, entry.name, termRows)
 		if err != nil {
 			return nil, err
 		}
@@ -532,11 +868,11 @@ func renderSingleDemoItemRaw(cati, emojig image.Image, width int, smart bool, en
 	return item, nil
 }
 
-func computeDemoItemMetrics(cati, emojig image.Image, item *renderedDemoItem, width int, smart bool) {
-	item.normalStats.ssim = calcModePairSSIM(cati, emojig, item.normalRaw, width)
+func computeDemoItemMetrics(leftImg, rightImg image.Image, item *renderedDemoItem, width int, smart bool) {
+	item.normalStats.ssim = calcModePairSSIM(leftImg, rightImg, item.normalRaw, width)
 	item.leftTitle = fmt.Sprintf("%s (%dms, w=%d, ssim=%.2f)", item.entry.name, item.normalStats.dur.Milliseconds(), item.normalStats.w, item.normalStats.ssim)
 	if smart {
-		item.smartStats.ssim = calcModePairSSIM(cati, emojig, item.smartRaw, width)
+		item.smartStats.ssim = calcModePairSSIM(leftImg, rightImg, item.smartRaw, width)
 		item.smartTitle = fmt.Sprintf("+smart (%dms, w=%d, ssim=%.2f)", item.smartStats.dur.Milliseconds(), item.smartStats.w, item.smartStats.ssim)
 		colW := ansiLinesWidth(item.normalLines) + 4
 		if len(item.leftTitle)+4 > colW {
@@ -799,8 +1135,6 @@ func wrapGlyphs(shapes []rune, width, prefixWidth int) string {
 			b.WriteByte(' ')
 		}
 		if r == ' ' {
-			// A literal space is invisible in an inventory; U+2420 is the
-			// conventional visible marker for the supported U+0020 shape.
 			b.WriteRune('␠')
 		} else {
 			b.WriteRune(r)
@@ -827,24 +1161,24 @@ type modePairRawResult struct {
 	cfg        renderCfg
 }
 
-func renderModePairRaw(cati, emojig image.Image, width int, cfg renderCfg, smart bool, name string) (modePairRawResult, error) {
+func renderModePairRaw(leftSrc, rightSrc image.Image, width int, cfg renderCfg, smart bool, name string, termRows int) (modePairRawResult, error) {
 	start := time.Now()
 	cfg.smart = smart
-	left, _, err := smartPrepareSelected(cati, width, 7, cfg)
+	left, _, err := smartPrepareSelected(leftSrc, width, termRows, cfg)
 	if err != nil {
-		return modePairRawResult{}, fmt.Errorf("fit %s cati logo: %w", name, err)
+		return modePairRawResult{}, fmt.Errorf("fit %s left logo: %w", name, err)
 	}
-	right, rightW, err := smartPrepareSelected(emojig, width, 7, cfg)
+	right, rightW, err := smartPrepareSelected(rightSrc, width, termRows, cfg)
 	if err != nil {
-		return modePairRawResult{}, fmt.Errorf("fit %s emojig logo: %w", name, err)
+		return modePairRawResult{}, fmt.Errorf("fit %s right logo: %w", name, err)
 	}
 	leftLines, err := renderDemoLines(left, cfg)
 	if err != nil {
-		return modePairRawResult{}, fmt.Errorf("render %s cati logo: %w", name, err)
+		return modePairRawResult{}, fmt.Errorf("render %s left logo: %w", name, err)
 	}
 	rightLines, err := renderDemoLines(right, cfg)
 	if err != nil {
-		return modePairRawResult{}, fmt.Errorf("render %s emojig logo: %w", name, err)
+		return modePairRawResult{}, fmt.Errorf("render %s right logo: %w", name, err)
 	}
 	dur := time.Since(start)
 
@@ -877,41 +1211,33 @@ func renderModePairRaw(cati, emojig image.Image, width int, cfg renderCfg, smart
 	}, nil
 }
 
-func calcModePairSSIM(cati, emojig image.Image, raw modePairRawResult, width int) float64 {
-	recLeft := renderReconstruction(raw.left, raw.cfg)
-	recRight := renderReconstruction(raw.right, raw.cfg)
-
-	// Compare reconstructions against original source images on a common high-resolution
-	// canonical canvas (12x24 subpixels per cell) so that low-resolution modes (full, half)
-	// correctly reflect their structural fidelity compared to high-resolution modes (six, quad).
+func calcSingleImageSSIM(src image.Image, prepared image.Image, cfg renderCfg, targetWidth int) float64 {
+	rec := renderReconstruction(prepared, cfg)
 	const cellSubW = 12
 	const cellSubH = 24
 
-	leftCols := renderedCellSize(raw.left, raw.cfg).Cols
-	if leftCols <= 0 {
-		leftCols = width
+	cols := renderedCellSize(prepared, cfg).Cols
+	if cols <= 0 {
+		cols = targetWidth
 	}
-	leftCanonW := leftCols * cellSubW
-	leftCanonH := 7 * cellSubH
-	refLeft := metrics.PyramidDownscale(cati, leftCanonW, leftCanonH)
-	upscaledLeft := nnUpscale(recLeft, leftCanonW, leftCanonH)
-	ssimLeft := metrics.SSIMLuminance(refLeft, upscaledLeft)
+	spec := cfg.viewSpec()
+	numRows := max(1, prepared.Bounds().Dy()/spec.CellH)
+	canonW := cols * cellSubW
+	canonH := numRows * cellSubH
 
-	rightCols := renderedCellSize(raw.right, raw.cfg).Cols
-	if rightCols <= 0 {
-		rightCols = raw.contentW
-	}
-	rightCanonW := rightCols * cellSubW
-	rightCanonH := 7 * cellSubH
-	refRight := metrics.PyramidDownscale(emojig, rightCanonW, rightCanonH)
-	upscaledRight := nnUpscale(recRight, rightCanonW, rightCanonH)
-	ssimRight := metrics.SSIMLuminance(refRight, upscaledRight)
+	ref := metrics.PyramidDownscale(src, canonW, canonH)
+	upscaled := nnUpscale(rec, canonW, canonH)
+	return metrics.SSIMLuminance(ref, upscaled)
+}
 
+func calcModePairSSIM(leftSrc, rightSrc image.Image, raw modePairRawResult, width int) float64 {
+	ssimLeft := calcSingleImageSSIM(leftSrc, raw.left, raw.cfg, width)
+	ssimRight := calcSingleImageSSIM(rightSrc, raw.right, raw.cfg, raw.contentW)
 	return (ssimLeft + ssimRight) / 2.0
 }
 
 func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bool, name string) ([]string, modeDemoStats, error) {
-	raw, err := renderModePairRaw(cati, emojig, width, cfg, smart, name)
+	raw, err := renderModePairRaw(cati, emojig, width, cfg, smart, name, 7)
 	if err != nil {
 		return nil, modeDemoStats{}, err
 	}
@@ -934,31 +1260,6 @@ func nnUpscale(img image.Image, dstW, dstH int) image.Image {
 		}
 	}
 	return dst
-}
-
-func imageMSEPercent(ref, rend image.Image) float64 {
-	rb, tb := ref.Bounds(), rend.Bounds()
-	dx := min(rb.Dx(), tb.Dx())
-	dy := min(rb.Dy(), tb.Dy())
-	if dx <= 0 || dy <= 0 {
-		return 0
-	}
-	var sum float64
-	for y := 0; y < dy; y++ {
-		for x := 0; x < dx; x++ {
-			ar, ag, ab, aa := ref.At(rb.Min.X+x, rb.Min.Y+y).RGBA()
-			br, bg, bb, ba := rend.At(tb.Min.X+x, tb.Min.Y+y).RGBA()
-			for _, d := range [4]float64{
-				float64(ar>>8) - float64(br>>8),
-				float64(ag>>8) - float64(bg>>8),
-				float64(ab>>8) - float64(bb>>8),
-				float64(aa>>8) - float64(ba>>8),
-			} {
-				sum += d * d
-			}
-		}
-	}
-	return (sum / (float64(dx*dy*4) * 255.0 * 255.0)) * 100.0
 }
 
 func ansiLinesWidth(lines []string) int {

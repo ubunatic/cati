@@ -38,7 +38,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 032 | [032-jpeg-golden-toolchain-drift.md](032-jpeg-golden-toolchain-drift.md) | JPEG-sourced golden drift across Go toolchain patch versions | ✅ Closed |
 | 033 | [033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md](033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md) | Render() unconditionally emits erase-line+CR prefix, breaks composed layouts | Open |
 | 034 | [034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md](034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md) | quadblock and sextant have no image loader, must import halfblock.LoadImage | Open |
-| 035 | [035-make-png-golden-comparisons-ignore-non-rendering-metadata.md](035-make-png-golden-comparisons-ignore-non-rendering-metadata.md) | Make PNG golden comparisons ignore non-rendering metadata | Open |
+| 035 | [035-make-png-golden-comparisons-ignore-non-rendering-metadata.md](035-make-png-golden-comparisons-ignore-non-rendering-metadata.md) | Make PNG golden comparisons ignore non-rendering metadata | ✅ Closed |
 | 036 | [036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md](036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md) | Add smart render mode that selects the best width by PSNR | Open |
 | 037 | [037-extend-smart-rendering-to-algorithm-native-sub-cell-steps.md](037-extend-smart-rendering-to-algorithm-native-sub-cell-steps.md) | Extend smart rendering to algorithm-native sub-cell steps | Closed — resolved in 322cca7 |
 | 038 | [038-investigate-blocky-sextant-rendering-at-small-widths.md](038-investigate-blocky-sextant-rendering-at-small-widths.md) | Investigate blocky sextant rendering at small widths | Closed |
@@ -47,9 +47,9 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 041 | [041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md](041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md) | Assess sparkline and composite rendering quality at small widths | Closed |
 | 042 | [042-add-info-metadata-to-cati-modes-demos.md](042-add-info-metadata-to-cati-modes-demos.md) | Add `--info` metadata to `cati modes` demos | Closed |
 | 043 | [043-compose-named-and-debug-render-modes-from-glyph-set-ids.md](043-compose-named-and-debug-render-modes-from-glyph-set-ids.md) | Compose named and debug render modes from glyph set IDs | Closed |
-| 044 | [044-modes-command-custom-image-input-support.md](044-modes-command-custom-image-input-support.md) | Modes Command Custom Image Input Support | Open |
-| 045 | [045-modes-command-test-asset-presets-and-sample-shortcuts.md](045-modes-command-test-asset-presets-and-sample-shortcuts.md) | Modes Command Test Asset Presets and Sample Shortcuts | Open |
-| 046 | [046-modes-command-dataset-benchmark-scorecard.md](046-modes-command-dataset-benchmark-scorecard.md) | Modes Command Dataset Benchmark Scorecard | Open |
+| 044 | [044-modes-command-custom-image-input-support.md](044-modes-command-custom-image-input-support.md) | Modes Command Custom Image Input Support | ✅ Closed |
+| 045 | [045-modes-command-test-asset-presets-and-sample-shortcuts.md](045-modes-command-test-asset-presets-and-sample-shortcuts.md) | Modes Command Test Asset Presets and Sample Shortcuts | ✅ Closed |
+| 046 | [046-modes-command-dataset-benchmark-scorecard.md](046-modes-command-dataset-benchmark-scorecard.md) | Modes Command Dataset Benchmark Scorecard | ✅ Closed |
 
 ## Archived
 

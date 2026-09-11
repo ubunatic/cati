@@ -1,6 +1,6 @@
 # 045 — Modes Command Test Asset Presets and Sample Shortcuts
 
-**Status**: Open
+**Status**: Closed (Implemented in `cmd/modes_presets.go` and `cmd/modes.go`)
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature

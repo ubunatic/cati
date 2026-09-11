@@ -267,6 +267,14 @@ The `cati modes` CLI command provides side-by-side visual and metric analysis ac
    * Smart rendering (`--smart`) selects optimal aspect widths (`selected`) and optionally applies centering margins via `padSmartImage`.
    * For metric analysis and reference comparison, `smartPrepareSelected` provides the unpadded candidate bounding box directly. Downscaling the reference image against the unpadded content region prevents horizontal aspect distortion and spurious black margin penalties.
 
+3. **Custom Image Inputs & Sample Presets**:
+   * Custom images can be passed via `-i / --image <path>` or positional arguments. Single image inputs display standard vs `+smart` candidates side-by-side per mode. Image pairs display left vs right comparisons.
+   * Built-in test asset presets (`-p / --preset / --sample <name>`) map to standard geometric test shapes (`circle`, `checker`, `cross`, `diag`, `horiz`, `verti`, `gradient`) and real-world photographic samples (`soldering`, `summer`, `darth`). Available presets are discoverable via `cati modes --sample list`.
+
+4. **Dataset Benchmark Scorecard (`--benchmark` / `--suite`)**:
+   * Evaluates all active modes across the complete 11-asset test corpus (synthetic geometric patterns and photographic samples).
+   * Computes category-specific SSIM scores (`Geo SSIM`, `Photo SSIM`), aggregate quality (`Total SSIM`), average execution latency, and an efficiency index `(1 - SSIM) * latency` presented in a clean tabular summary.
+
 ### Viewer Core Consolidation (June 2026)
 
 `interactiveWithChan` (image viewer) and `interactiveVideo` (video viewer) shared ~80% of their logic as independent duplicates. Every fix — zoom, pan, render-mode switch, `show_info`, `preserveZoomForMode` — had to be applied twice. The solution is `cmd/viewer_core.go`, a thin coordinator struct that both callers delegate to:

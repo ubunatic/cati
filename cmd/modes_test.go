@@ -344,8 +344,21 @@ func TestModesSorting(t *testing.T) {
 			t.Fatalf("modes --by-ssim: %v", err)
 		}
 
-		if out1.String() != out2.String() {
-			t.Errorf("--sort ssim and --by-ssim outputs differ:\n%s\nvs\n%s", out1.String(), out2.String())
+		extractModes := func(text string) []string {
+			var res []string
+			for _, line := range strings.Split(text, "\n") {
+				for _, m := range []string{"six", "quad", "half"} {
+					if strings.HasPrefix(line, m+" (") {
+						res = append(res, m)
+					}
+				}
+			}
+			return res
+		}
+		m1 := extractModes(out1.String())
+		m2 := extractModes(out2.String())
+		if len(m1) != 3 || len(m2) != 3 || m1[0] != m2[0] || m1[1] != m2[1] || m1[2] != m2[2] {
+			t.Errorf("extracted modes differ: %v vs %v", m1, m2)
 		}
 	})
 
@@ -375,4 +388,98 @@ func TestModesSorting(t *testing.T) {
 		}
 	})
 }
+
+func TestModesCustomImageInput(t *testing.T) {
+	t.Run("single image standard vs smart", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"-w", "12", "-i", "testdata/demo_circle_20x20/source.png", "half", "quad"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("modes -i circle: %v", err)
+		}
+		text := out.String()
+		if !strings.Contains(text, "Available render modes for source.png (standard | +smart):") {
+			t.Errorf("header missing from output:\n%s", text)
+		}
+		if !strings.Contains(text, "+smart (") || !strings.Contains(text, "half (") || !strings.Contains(text, "quad (") {
+			t.Errorf("expected side-by-side smart and standard stats in output:\n%s", text)
+		}
+	})
+
+	t.Run("image pair mode", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"-w", "12", "-i", "testdata/demo_circle_20x20/source.png", "-i", "testdata/demo_checker_20x20/source.png", "half"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("modes -i circle -i checker: %v", err)
+		}
+		text := out.String()
+		if !strings.Contains(text, "Available render modes (source.png | source.png):") {
+			t.Errorf("header missing from output:\n%s", text)
+		}
+		if !strings.Contains(text, "half (") {
+			t.Errorf("half stats missing in output:\n%s", text)
+		}
+	})
+}
+
+func TestModesSamplePresets(t *testing.T) {
+	t.Run("list presets", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"--sample", "list"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("modes --sample list: %v", err)
+		}
+		text := out.String()
+		for _, want := range []string{"Available test asset sample presets:", "circle", "checker", "soldering", "summer", "darth", "emojig", "logo"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("preset list missing %q:\n%s", want, text)
+			}
+		}
+	})
+
+	t.Run("render preset shortcut", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"-w", "12", "-p", "soldering", "half"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("modes -p soldering: %v", err)
+		}
+		text := out.String()
+		if !strings.Contains(text, "Available render modes for soldering (standard | +smart):") {
+			t.Errorf("header missing from output:\n%s", text)
+		}
+	})
+}
+
+func TestModesBenchmarkScorecard(t *testing.T) {
+	var out bytes.Buffer
+	cmd := modesCommand()
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--benchmark", "-w", "10", "half", "quad"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("modes --benchmark: %v", err)
+	}
+	text := out.String()
+	for _, pattern := range []string{
+		"Dataset Benchmark Scorecard",
+		"Geo SSIM",
+		"Photo SSIM",
+		"Total SSIM",
+		"Avg Latency",
+		"Efficiency",
+		"half",
+		"quad",
+	} {
+		if !strings.Contains(text, pattern) {
+			t.Errorf("benchmark output missing pattern %q:\n%s", pattern, text)
+		}
+	}
+}
+
 

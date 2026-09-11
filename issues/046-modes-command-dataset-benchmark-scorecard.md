@@ -1,6 +1,6 @@
 # 046 — Modes Command Dataset Benchmark Scorecard
 
-**Status**: Open
+**Status**: Closed (Implemented in `cmd/modes_benchmark.go` and `cmd/modes.go`)
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Feature

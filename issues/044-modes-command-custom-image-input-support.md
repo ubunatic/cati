@@ -1,6 +1,6 @@
 # 044 — Modes Command Custom Image Input Support
 
-**Status**: Open
+**Status**: Closed (Implemented `-i / --image` and positional path support in `cmd/modes.go`)
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
