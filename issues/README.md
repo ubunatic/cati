@@ -20,7 +20,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 014 | [014-more-boxdrawing-chars-unicode-v13.md](014-more-boxdrawing-chars-unicode-v13.md) | More Unicode goodness | In Progress |
 | 015 | [015-spark-bottom-row-halfcell-fit.md](015-spark-bottom-row-halfcell-fit.md) | Spark/quad garbled bottom row at mid-cell fit heights | ✅ Closed |
 | 016 | [016-worker-copy-consolidation.md](016-worker-copy-consolidation.md) | Worker-Copy Render Paths: Keep Clones for Tuning, Consolidate Later | 🔴 Open |
-| 017 | [017-gpu-glyph-mapping-spark-mode.md](017-gpu-glyph-mapping-spark-mode.md) | GPU Assistance for Glyph Mapping, Starting with Spark Mode | 🔴 Open |
+| 017 | [017-gpu-glyph-mapping-spark-mode.md](017-gpu-glyph-mapping-spark-mode.md) | GPU Assistance for Glyph Mapping, Starting with Spark Mode | 🔄 In Progress |
 | 018 | [018-sparkline-allocation-reduction.md](018-sparkline-allocation-reduction.md) | Reduce Allocation Pressure in Spark Mode | 🔴 Open |
 | 019 | [019-video-audio-drift-on-long-playback.md](019-video-audio-drift-on-long-playback.md) | Video audio drift on longer playback | 🔴 Open |
 | 020 | [020-sextant-column-mask-nul-glyph.md](020-sextant-column-mask-nul-glyph.md) | Sextant pure-column masks emit NUL glyph (garbled right edge) | ✅ Closed |

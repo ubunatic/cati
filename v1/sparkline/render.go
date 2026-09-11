@@ -637,6 +637,11 @@ func quadMask(ul, ur, ll, lr bool) func(x, y, w, h int) bool {
 // FindBestCell tries the active mode's glyph candidates for the pixel block
 // [x0..x1] × [y0..y1] and returns the lowest-SSE reconstruction.
 func FindBestCell(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, mode Mode) cellResult {
+	w := x1 - x0 + 1
+	h := y1 - y0 + 1
+	if bitCands := getPrecomputedBitCandidates(mode, w, h); bitCands != nil {
+		return findBestCandidateFast(img, x0, x1, y0, y1, bitCands)
+	}
 	candidates := verticalCandidates
 	switch mode {
 	case HalfSplit:
@@ -667,6 +672,10 @@ func findBestCandidate(img image.Image, _ image.Rectangle, x0, x1, y0, y1 int, c
 	blockH := y1 - y0 + 1
 	if blockW <= 0 || blockH <= 0 {
 		return cellResult{Ch: ' ', Err: math.MaxFloat64}
+	}
+	if blockW*blockH <= 128 {
+		bitCands := makeBitCandidates(candidates, blockW, blockH)
+		return findBestCandidateFast(img, x0, x1, y0, y1, bitCands)
 	}
 
 	best := cellResult{Ch: ' ', Err: math.MaxFloat64}

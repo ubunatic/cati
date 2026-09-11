@@ -42,6 +42,27 @@ func BenchmarkFindBestCellVertical(b *testing.B) {
 	benchmarkFindBestCell(b, Vertical)
 }
 
+func BenchmarkFindBestCellHalfSplit(b *testing.B) {
+	benchmarkFindBestCell(b, HalfSplit)
+}
+
+func BenchmarkFindBestCellSpark(b *testing.B) {
+	benchmarkFindBestCell(b, Spark)
+}
+
 func BenchmarkFindBestCellQuad(b *testing.B) {
 	benchmarkFindBestCell(b, Quad)
 }
+
+func BenchmarkFindBestCellSextant(b *testing.B) {
+	benchmarkFindBestCell(b, Sextant)
+}
+
+func BenchmarkFindBestCellSixHalf(b *testing.B) {
+	benchmarkFindBestCell(b, SixHalf)
+}
+
+func BenchmarkFindBestCellBest(b *testing.B) {
+	benchmarkFindBestCell(b, Best)
+}
+
