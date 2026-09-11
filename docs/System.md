@@ -255,6 +255,18 @@ The naive `steps[len-1-i]` reversed-index pattern is wrong — it produces ascen
 
 **Renderer reconstruction for quality metrics.** SSIM, blockiness, and edge continuity compare the ideal source crop against a reconstruction of what the terminal renderer actually emits. Halfblock is represented by the viewport image itself, quad uses `quadblock.RenderToImage`, and spark uses `sparkline.RenderToImage`. The rendered reconstruction is normalized to the common `metrics.GridK × metrics.GridK` per-terminal-cell quality grid: smaller outputs are nearest-neighbour upscaled, while denser outputs are pyramid-downscaled. Never compare spark quality against the raw NN viewport; that scores the sampler, not the glyph renderer.
 
+### Quality Benchmarking & Two-Phase Execution (`cati modes`)
+
+The `cati modes` CLI command provides side-by-side visual and metric analysis across all registered render modes and dynamic candidate solvers (`--smart`).
+
+1. **Two-Phase Decoupled Pipeline**:
+   * **Phase 1 (Isolated Sequential Timing)**: Wall-clock latency (`dur`) is measured on a single thread one mode at a time. Running combinatorial glyph searches (such as `z` and `z+`) in parallel saturated CPU cores and distorted latency measurements of fast modes (e.g. `quad` and `half`). Sequential execution ensures clean, reproducible, uncontended timing.
+   * **Phase 2 (Parallelized Quality Evaluation)**: Once the raw rendered outputs and latencies are captured, mathematical post-processing (reconstruction, pyramid downscaling, and SSIM luminance convolution) runs concurrently across all available CPU cores using `sync.WaitGroup`, cutting wall-clock analysis time without affecting latency measurements.
+
+2. **Unpadded Content Separation**:
+   * Smart rendering (`--smart`) selects optimal aspect widths (`selected`) and optionally applies centering margins via `padSmartImage`.
+   * For metric analysis and reference comparison, `smartPrepareSelected` provides the unpadded candidate bounding box directly. Downscaling the reference image against the unpadded content region prevents horizontal aspect distortion and spurious black margin penalties.
+
 ### Viewer Core Consolidation (June 2026)
 
 `interactiveWithChan` (image viewer) and `interactiveVideo` (video viewer) shared ~80% of their logic as independent duplicates. Every fix — zoom, pan, render-mode switch, `show_info`, `preserveZoomForMode` — had to be applied twice. The solution is `cmd/viewer_core.go`, a thin coordinator struct that both callers delegate to:
