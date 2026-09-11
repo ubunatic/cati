@@ -24,11 +24,18 @@ When evaluating terminal image rendering, information loss occurs at two distinc
 * **What it measures**: How closely the mode's glyph codebook can reproduce the intermediate downscaled bitmap at that mode's native resolution, ignoring how much detail was discarded during downscaling.
 * **Behavior**: Full-block ($1\times 1$) trivially achieves $E_{\text{fit}} = 0\%$ because a $1\times 1$ subpixel cell exactly matches `█` or ` `, whereas a complex 2D codebook with partial coverage (e.g. Sextant $2\times 3$ with missing shapes) may have non-zero fitting residual.
 
-### Efficiency Index ($\text{Eff}$ / Quality vs Latency Trade-Off)
-* **Definition**: Evaluates the computational cost required to achieve a given level of reconstruction fidelity.
+### Structural Similarity Index ($\text{SSIM}$ / Perceptual Quality)
+* **Aliases**: Mean Structural Similarity, $\text{SSIM}_{\text{luma}}$.
+* **Definition**: A perceptual metric (Wang et al. 2004) evaluating luminance, contrast, and structural pattern correlation across local $8\times 8$ pixel windows between the terminal reconstruction and the original source reference image.
 * **Formula**:
-  $$\text{Score} = E_{\text{src}} \times T_{\text{render}}$$
-* **What it measures**: Algorithmic return-on-investment. Fast native algorithms (e.g. direct lookup tables at $\sim 0\text{--}1\text{ms}$) with low error score best, whereas heavy multi-candidate search routines incurring high millisecond overhead for minimal error improvements score lower.
+  $$\text{SSIM}(x, y) = \frac{(2\mu_x\mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)}$$
+* **What it measures**: Perceived human visual similarity (ranging from `0.0` for no correlation to `1.0` for identical structure). Used across `cati modes` (`ssim=0.XX`), the interactive viewer hint bar, and `cmd/render_quality_test.go`.
+
+### Efficiency Index ($\text{Eff}$ / Quality vs Latency Trade-Off)
+* **Definition**: Evaluates the computational cost required to achieve a given level of structural reconstruction fidelity.
+* **Formula**:
+  $$\text{Score} = (1.0 - \text{SSIM}) \times T_{\text{render}}$$
+* **What it measures**: Algorithmic return-on-investment. Fast native algorithms (e.g. direct lookup tables at $\sim 0\text{--}1\text{ms}$) with high SSIM score best (lowest product), whereas heavy multi-candidate search routines incurring high millisecond overhead for minimal perceptual gain score lower.
 * **CLI usage**: `cati modes --sort eff` (or `--sort efficiency`).
 
 ---
@@ -37,8 +44,9 @@ When evaluating terminal image rendering, information loss occurs at two distinc
 
 | Metric | Target / Reference | Answers the Question | Ranking for `full` ($1\times 1$) vs `six` ($2\times 3$) |
 | :--- | :--- | :--- | :--- |
-| **End-to-End Error** ($E_{\text{src}}$)<br>`err` in `cati modes` | Original Source Image | *"Which algorithm best displays the original image in my terminal?"* | **`six` wins** (much higher detail, lower error). `full` is worst. |
+| **Structural Similarity** ($\text{SSIM}$)<br>`ssim` in `cati modes` | Original Source Image | *"Which algorithm best preserves the shapes, edges, and contrast of the original art?"* | **`six` wins** (e.g. $\text{ssim}=0.75$). `full` is worst ($\text{ssim}=0.56$). |
 | **Fitting Error** ($E_{\text{fit}}$)<br>`err_fit` | Downscaled Subpixel Grid | *"How well did the solver fit the glyphs to its own low-res target?"* | **`full` wins (0%)** because $1\times 1$ matching is trivial. |
+| **Efficiency Index** ($\text{Eff}$)<br>`--sort eff` | Source Image & Runtime | *"Which mode delivers the best quality per millisecond of compute?"* | **`six` / `quad` win** ($\sim 0\text{--}1\text{ms}$ with high structural fidelity). |
 
 ---
 

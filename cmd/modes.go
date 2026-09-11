@@ -36,7 +36,7 @@ type modesFilter struct {
 	setIDs   []int
 	maxGeo   *spec.RenderModeGeometry
 	sort     string
-	byPSNR   bool
+	bySSIM   bool
 }
 
 func modesCommand() *cobra.Command {
@@ -53,6 +53,7 @@ func modesCommand() *cobra.Command {
 	var maxGeoFilter string
 	var listSets bool
 	var sortOrder string
+	var bySSIM bool
 	var byPSNR bool
 
 	cmd := &cobra.Command{
@@ -89,7 +90,7 @@ func modesCommand() *cobra.Command {
 				setIDs:   setIDs,
 				maxGeo:   maxGeo,
 				sort:     sortOrder,
-				byPSNR:   byPSNR,
+				bySSIM:   bySSIM || byPSNR,
 			}
 			if filter.list {
 				return listModesFiltered(cmd.OutOrStdout(), info, args, filter)
@@ -112,8 +113,9 @@ func modesCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&setFilter, "set", "s", "", "filter to modes containing specific glyph set ID(s) (comma-separated, e.g. -s 6, -s 1,6)")
 	cmd.Flags().StringVar(&maxGeoFilter, "max-geo", "", "filter to modes with geometry at most WxH (e.g. --max-geo 4x4)")
 	cmd.Flags().BoolVar(&listSets, "sets", false, "list registered glyph sets from the spec registry")
-	cmd.Flags().StringVar(&sortOrder, "sort", "", "sort modes by: psnr (highest PSNR / lowest error first), -psnr, time (fastest), -time, eff (or efficiency: lowest error*time), -eff, name, -name")
-	cmd.Flags().BoolVar(&byPSNR, "by-psnr", false, "sort modes by highest PSNR (lowest error) first")
+	cmd.Flags().StringVar(&sortOrder, "sort", "", "sort modes by: ssim (highest SSIM first), -ssim, time (fastest), -time, eff (or efficiency: lowest (1-ssim)*time), -eff, name, -name")
+	cmd.Flags().BoolVar(&bySSIM, "by-ssim", false, "sort modes by highest SSIM first")
+	cmd.Flags().BoolVar(&byPSNR, "by-psnr", false, "sort modes by highest SSIM first (alias for --by-ssim)")
 	return cmd
 }
 
@@ -206,8 +208,8 @@ func listModesFiltered(out io.Writer, info bool, names []string, filter modesFil
 	}
 	entries = applyModesFilter(entries, filter)
 	sortKey := filter.sort
-	if filter.byPSNR && sortKey == "" {
-		sortKey = "psnr"
+	if filter.bySSIM && sortKey == "" {
+		sortKey = "ssim"
 	}
 	if sortKey != "" {
 		sorted, err := sortModeEntries(entries, sortKey)
@@ -244,7 +246,7 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 			return res[i].name > res[j].name
 		})
 		return res, nil
-	case "psnr", "err", "best", "-psnr", "-err", "worst", "time", "dur", "fastest", "-time", "-dur", "slowest", "eff", "efficiency", "-eff", "-efficiency":
+	case "ssim", "psnr", "best", "quality", "-ssim", "-psnr", "worst", "time", "dur", "fastest", "-time", "-dur", "slowest", "eff", "efficiency", "-eff", "-efficiency":
 		cati, err := decodeEmbeddedLogo()
 		if err != nil {
 			return nil, err
@@ -274,7 +276,7 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 		}
 		return res, nil
 	default:
-		return nil, fmt.Errorf("unknown sort order %q (expected: psnr, -psnr, time, -time, eff, -eff, name, -name)", sortKey)
+		return nil, fmt.Errorf("unknown sort order %q (expected: ssim, -ssim, time, -time, eff, -eff, name, -name)", sortKey)
 	}
 }
 
@@ -410,7 +412,7 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 		if err != nil {
 			return err
 		}
-		leftTitle := fmt.Sprintf("%s (%dms, w=%d, err=%.1f%%)", entry.name, normalStats.dur.Milliseconds(), normalStats.w, normalStats.err)
+		leftTitle := fmt.Sprintf("%s (%dms, w=%d, ssim=%.2f)", entry.name, normalStats.dur.Milliseconds(), normalStats.w, normalStats.ssim)
 		item := renderedDemoItem{
 			entry:       entry,
 			leftTitle:   leftTitle,
@@ -422,7 +424,7 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 			if err != nil {
 				return err
 			}
-			item.smartTitle = fmt.Sprintf("+smart (%dms, w=%d, err=%.1f%%)", smartStats.dur.Milliseconds(), smartStats.w, smartStats.err)
+			item.smartTitle = fmt.Sprintf("+smart (%dms, w=%d, ssim=%.2f)", smartStats.dur.Milliseconds(), smartStats.w, smartStats.ssim)
 			item.smartLines = smartLines
 			item.smartStats = smartStats
 			colW := ansiLinesWidth(normal) + 4
@@ -435,8 +437,8 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 	}
 
 	sortKey := filter.sort
-	if filter.byPSNR && sortKey == "" {
-		sortKey = "psnr"
+	if filter.bySSIM && sortKey == "" {
+		sortKey = "ssim"
 	}
 	if sortKey != "" {
 		if err := sortRenderedDemoItems(items, sortKey, smart); err != nil {
@@ -486,29 +488,29 @@ type renderedDemoItem struct {
 
 func sortRenderedDemoItems(items []renderedDemoItem, sortKey string, smart bool) error {
 	switch strings.ToLower(strings.TrimSpace(sortKey)) {
-	case "psnr", "err", "best":
+	case "ssim", "psnr", "best", "quality":
 		sort.SliceStable(items, func(i, j int) bool {
-			errI := items[i].normalStats.err
-			errJ := items[j].normalStats.err
+			sI := items[i].normalStats.ssim
+			sJ := items[j].normalStats.ssim
 			if smart {
-				errI = items[i].smartStats.err
-				errJ = items[j].smartStats.err
+				sI = items[i].smartStats.ssim
+				sJ = items[j].smartStats.ssim
 			}
-			if errI != errJ {
-				return errI < errJ
+			if sI != sJ {
+				return sI > sJ
 			}
 			return items[i].entry.name < items[j].entry.name
 		})
-	case "-psnr", "-err", "worst":
+	case "-ssim", "-psnr", "worst":
 		sort.SliceStable(items, func(i, j int) bool {
-			errI := items[i].normalStats.err
-			errJ := items[j].normalStats.err
+			sI := items[i].normalStats.ssim
+			sJ := items[j].normalStats.ssim
 			if smart {
-				errI = items[i].smartStats.err
-				errJ = items[j].smartStats.err
+				sI = items[i].smartStats.ssim
+				sJ = items[j].smartStats.ssim
 			}
-			if errI != errJ {
-				return errI > errJ
+			if sI != sJ {
+				return sI < sJ
 			}
 			return items[i].entry.name < items[j].entry.name
 		})
@@ -546,8 +548,8 @@ func sortRenderedDemoItems(items []renderedDemoItem, sortKey string, smart bool)
 				statI = items[i].smartStats
 				statJ = items[j].smartStats
 			}
-			effI := statI.err * float64(max(1, statI.dur.Microseconds()))
-			effJ := statJ.err * float64(max(1, statJ.dur.Microseconds()))
+			effI := (1.0 - statI.ssim) * float64(max(1, statI.dur.Microseconds()))
+			effJ := (1.0 - statJ.ssim) * float64(max(1, statJ.dur.Microseconds()))
 			if effI != effJ {
 				return effI < effJ
 			}
@@ -561,8 +563,8 @@ func sortRenderedDemoItems(items []renderedDemoItem, sortKey string, smart bool)
 				statI = items[i].smartStats
 				statJ = items[j].smartStats
 			}
-			effI := statI.err * float64(max(1, statI.dur.Microseconds()))
-			effJ := statJ.err * float64(max(1, statJ.dur.Microseconds()))
+			effI := (1.0 - statI.ssim) * float64(max(1, statI.dur.Microseconds()))
+			effJ := (1.0 - statJ.ssim) * float64(max(1, statJ.dur.Microseconds()))
 			if effI != effJ {
 				return effI > effJ
 			}
@@ -577,7 +579,7 @@ func sortRenderedDemoItems(items []renderedDemoItem, sortKey string, smart bool)
 			return items[i].entry.name > items[j].entry.name
 		})
 	default:
-		return fmt.Errorf("unknown sort order %q (expected: psnr, -psnr, time, -time, eff, -eff, name, -name)", sortKey)
+		return fmt.Errorf("unknown sort order %q (expected: ssim, -ssim, time, -time, eff, -eff, name, -name)", sortKey)
 	}
 	return nil
 }
@@ -709,9 +711,9 @@ func wrapGlyphs(shapes []rune, width, prefixWidth int) string {
 }
 
 type modeDemoStats struct {
-	dur time.Duration
-	w   int
-	err float64
+	dur  time.Duration
+	w    int
+	ssim float64
 }
 
 func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bool, name string) ([]string, modeDemoStats, error) {
@@ -745,7 +747,7 @@ func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bo
 
 	// Compare reconstructions against original source images on a common high-resolution
 	// canonical canvas (12x24 subpixels per cell) so that low-resolution modes (full, half)
-	// correctly reflect their loss of detail compared to high-resolution modes (six, quad).
+	// correctly reflect their structural fidelity compared to high-resolution modes (six, quad).
 	const cellSubW = 12
 	const cellSubH = 24
 
@@ -757,7 +759,7 @@ func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bo
 	leftCanonH := 7 * cellSubH
 	refLeft := metrics.PyramidDownscale(cati, leftCanonW, leftCanonH)
 	upscaledLeft := nnUpscale(recLeft, leftCanonW, leftCanonH)
-	errLeft := imageMSEPercent(refLeft, upscaledLeft)
+	ssimLeft := metrics.SSIMLuminance(refLeft, upscaledLeft)
 
 	rightCols := renderedCellSize(right, cfg).Cols
 	if rightCols <= 0 {
@@ -767,9 +769,9 @@ func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bo
 	rightCanonH := 7 * cellSubH
 	refRight := metrics.PyramidDownscale(emojig, rightCanonW, rightCanonH)
 	upscaledRight := nnUpscale(recRight, rightCanonW, rightCanonH)
-	errRight := imageMSEPercent(refRight, upscaledRight)
+	ssimRight := metrics.SSIMLuminance(refRight, upscaledRight)
 
-	avgErr := (errLeft + errRight) / 2.0
+	avgSSIM := (ssimLeft + ssimRight) / 2.0
 
 	leftWidth := ansiLinesWidth(leftLines)
 	lines := make([]string, 0, max(len(leftLines), len(rightLines)))
@@ -783,7 +785,7 @@ func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bo
 		}
 		lines = append(lines, fmt.Sprintf("  %s  |  %s", padANSILine(leftLine, leftWidth), padANSILine(rightLine, leftWidth)))
 	}
-	return lines, modeDemoStats{dur: dur, w: contentW, err: avgErr}, nil
+	return lines, modeDemoStats{dur: dur, w: contentW, ssim: avgSSIM}, nil
 }
 
 func nnUpscale(img image.Image, dstW, dstH int) image.Image {

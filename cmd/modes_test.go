@@ -267,7 +267,7 @@ func TestModesStatsInTitle(t *testing.T) {
 		t.Fatalf("modes --smart: %v", err)
 	}
 	text := out.String()
-	for _, pattern := range []string{"half (", "w=12", "err=", "+smart (", "spark+six ("} {
+	for _, pattern := range []string{"half (", "w=12", "ssim=", "+smart (", "spark+six ("} {
 		if !strings.Contains(text, pattern) {
 			t.Errorf("expected stats pattern %q in output:\n%s", pattern, text)
 		}
@@ -328,24 +328,24 @@ func TestModesSorting(t *testing.T) {
 		}
 	})
 
-	t.Run("demo sort by psnr and by-psnr flag", func(t *testing.T) {
+	t.Run("demo sort by ssim and by-ssim flag", func(t *testing.T) {
 		var out1, out2 bytes.Buffer
 		cmd1 := modesCommand()
 		cmd1.SetOut(&out1)
-		cmd1.SetArgs([]string{"-w", "12", "--sort", "psnr", "half", "quad", "six"})
+		cmd1.SetArgs([]string{"-w", "12", "--sort", "ssim", "half", "quad", "six"})
 		if err := cmd1.Execute(); err != nil {
-			t.Fatalf("modes --sort psnr: %v", err)
+			t.Fatalf("modes --sort ssim: %v", err)
 		}
 
 		cmd2 := modesCommand()
 		cmd2.SetOut(&out2)
-		cmd2.SetArgs([]string{"-w", "12", "--by-psnr", "half", "quad", "six"})
+		cmd2.SetArgs([]string{"-w", "12", "--by-ssim", "half", "quad", "six"})
 		if err := cmd2.Execute(); err != nil {
-			t.Fatalf("modes --by-psnr: %v", err)
+			t.Fatalf("modes --by-ssim: %v", err)
 		}
 
 		if out1.String() != out2.String() {
-			t.Errorf("--sort psnr and --by-psnr outputs differ:\n%s\nvs\n%s", out1.String(), out2.String())
+			t.Errorf("--sort ssim and --by-ssim outputs differ:\n%s\nvs\n%s", out1.String(), out2.String())
 		}
 	})
 
