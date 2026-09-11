@@ -246,3 +246,106 @@ func TestModesListGlyphSets(t *testing.T) {
 		}
 	}
 }
+
+func TestModesStatsInTitle(t *testing.T) {
+	var out bytes.Buffer
+	cmd := modesCommand()
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"--smart", "-w", "12", "half", "spark+six"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("modes --smart: %v", err)
+	}
+	text := out.String()
+	for _, pattern := range []string{"half (", "w=12", "err=", "+smart (", "spark+six ("} {
+		if !strings.Contains(text, pattern) {
+			t.Errorf("expected stats pattern %q in output:\n%s", pattern, text)
+		}
+	}
+}
+
+func TestModesSorting(t *testing.T) {
+	t.Run("list sort by name", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"-l", "--sort", "name", "six", "half", "quad"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("modes -l --sort name: %v", err)
+		}
+		lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+		// Filter out header
+		var modes []string
+		for _, l := range lines {
+			if l != "Available render modes:" {
+				modes = append(modes, l)
+			}
+		}
+		expected := []string{"half", "quad", "six"}
+		if len(modes) != len(expected) {
+			t.Fatalf("expected %v, got %v", expected, modes)
+		}
+		for i := range expected {
+			if modes[i] != expected[i] {
+				t.Errorf("at index %d: expected %s, got %s", i, expected[i], modes[i])
+			}
+		}
+	})
+
+	t.Run("list sort by -name", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"-l", "--sort", "-name", "six", "half", "quad"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("modes -l --sort -name: %v", err)
+		}
+		lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+		var modes []string
+		for _, l := range lines {
+			if l != "Available render modes:" {
+				modes = append(modes, l)
+			}
+		}
+		expected := []string{"six", "quad", "half"}
+		if len(modes) != len(expected) {
+			t.Fatalf("expected %v, got %v", expected, modes)
+		}
+		for i := range expected {
+			if modes[i] != expected[i] {
+				t.Errorf("at index %d: expected %s, got %s", i, expected[i], modes[i])
+			}
+		}
+	})
+
+	t.Run("demo sort by psnr and by-psnr flag", func(t *testing.T) {
+		var out1, out2 bytes.Buffer
+		cmd1 := modesCommand()
+		cmd1.SetOut(&out1)
+		cmd1.SetArgs([]string{"-w", "12", "--sort", "psnr", "half", "quad", "six"})
+		if err := cmd1.Execute(); err != nil {
+			t.Fatalf("modes --sort psnr: %v", err)
+		}
+
+		cmd2 := modesCommand()
+		cmd2.SetOut(&out2)
+		cmd2.SetArgs([]string{"-w", "12", "--by-psnr", "half", "quad", "six"})
+		if err := cmd2.Execute(); err != nil {
+			t.Fatalf("modes --by-psnr: %v", err)
+		}
+
+		if out1.String() != out2.String() {
+			t.Errorf("--sort psnr and --by-psnr outputs differ:\n%s\nvs\n%s", out1.String(), out2.String())
+		}
+	})
+
+	t.Run("invalid sort flag", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"-l", "--sort", "invalid_sort_key"})
+		if err := cmd.Execute(); err == nil {
+			t.Fatalf("expected error for invalid sort key, got nil")
+		}
+	})
+}
+

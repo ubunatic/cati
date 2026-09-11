@@ -8,8 +8,10 @@ import (
 	"image/png"
 	"io"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/cati/spec"
@@ -31,6 +33,8 @@ type modesFilter struct {
 	approx   bool
 	setIDs   []int
 	maxGeo   *spec.RenderModeGeometry
+	sort     string
+	byPSNR   bool
 }
 
 func modesCommand() *cobra.Command {
@@ -45,6 +49,8 @@ func modesCommand() *cobra.Command {
 	var setFilter string
 	var maxGeoFilter string
 	var listSets bool
+	var sortOrder string
+	var byPSNR bool
 
 	cmd := &cobra.Command{
 		Use:   "modes [modes...]",
@@ -78,6 +84,8 @@ func modesCommand() *cobra.Command {
 				approx:   approxOnly,
 				setIDs:   setIDs,
 				maxGeo:   maxGeo,
+				sort:     sortOrder,
+				byPSNR:   byPSNR,
 			}
 			if filter.list {
 				return listModesFiltered(cmd.OutOrStdout(), info, args, filter)
@@ -99,6 +107,8 @@ func modesCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&setFilter, "set", "s", "", "filter to modes containing specific glyph set ID(s) (comma-separated, e.g. -s 6, -s 1,6)")
 	cmd.Flags().StringVar(&maxGeoFilter, "max-geo", "", "filter to modes with geometry at most WxH (e.g. --max-geo 4x4)")
 	cmd.Flags().BoolVar(&listSets, "sets", false, "list registered glyph sets from the spec registry")
+	cmd.Flags().StringVar(&sortOrder, "sort", "", "sort modes by: psnr (highest PSNR / lowest error first), -psnr (lowest PSNR), time (fastest), -time, name, -name")
+	cmd.Flags().BoolVar(&byPSNR, "by-psnr", false, "sort modes by highest PSNR (lowest error) first")
 	return cmd
 }
 
@@ -178,6 +188,17 @@ func listModesFiltered(out io.Writer, info bool, names []string, filter modesFil
 		return err
 	}
 	entries = applyModesFilter(entries, filter)
+	sortKey := filter.sort
+	if filter.byPSNR && sortKey == "" {
+		sortKey = "psnr"
+	}
+	if sortKey != "" {
+		sorted, err := sortModeEntries(entries, sortKey)
+		if err != nil {
+			return err
+		}
+		entries = sorted
+	}
 	fmt.Fprintln(out, "Available render modes:")
 	modeSpec, err := spec.LoadRenderModes()
 	if err != nil {
@@ -190,6 +211,54 @@ func listModesFiltered(out io.Writer, info bool, names []string, filter modesFil
 		}
 	}
 	return nil
+}
+
+func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEntry, error) {
+	switch strings.ToLower(strings.TrimSpace(sortKey)) {
+	case "name":
+		res := append([]renderModeEntry(nil), entries...)
+		sort.SliceStable(res, func(i, j int) bool {
+			return res[i].name < res[j].name
+		})
+		return res, nil
+	case "-name":
+		res := append([]renderModeEntry(nil), entries...)
+		sort.SliceStable(res, func(i, j int) bool {
+			return res[i].name > res[j].name
+		})
+		return res, nil
+	case "psnr", "err", "best", "-psnr", "-err", "worst", "time", "dur", "fastest", "-time", "-dur", "slowest":
+		cati, err := decodeEmbeddedLogo()
+		if err != nil {
+			return nil, err
+		}
+		emojigPath := filepath.Join("testdata", "emojig-icon.svg")
+		emojig, err := halfblock.LoadImage(emojigPath)
+		if err != nil {
+			return nil, fmt.Errorf("load emojig logo %q: %w", emojigPath, err)
+		}
+		items := make([]renderedDemoItem, 0, len(entries))
+		for _, entry := range entries {
+			_, stats, err := renderModePair(cati, emojig, 12, entry.cfg, false, entry.name)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, renderedDemoItem{
+				entry:       entry,
+				normalStats: stats,
+			})
+		}
+		if err := sortRenderedDemoItems(items, sortKey, false); err != nil {
+			return nil, err
+		}
+		res := make([]renderModeEntry, len(items))
+		for i, it := range items {
+			res[i] = it.entry
+		}
+		return res, nil
+	default:
+		return nil, fmt.Errorf("unknown sort order %q (expected: psnr, -psnr, time, -time, name, -name)", sortKey)
+	}
 }
 
 func applyModesFilter(entries []renderModeEntry, filter modesFilter) []renderModeEntry {
@@ -312,39 +381,150 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 	if err != nil {
 		return fmt.Errorf("load render mode metadata: %w", err)
 	}
+	items := make([]renderedDemoItem, 0, len(entries))
 	for _, entry := range entries {
-		normal, err := renderModePair(cati, emojig, width, entry.cfg, false, entry.name)
+		normal, normalStats, err := renderModePair(cati, emojig, width, entry.cfg, false, entry.name)
 		if err != nil {
 			return err
 		}
+		leftTitle := fmt.Sprintf("%s (%dms, w=%d, err=%.1f%%)", entry.name, normalStats.dur.Milliseconds(), normalStats.w, normalStats.err)
+		item := renderedDemoItem{
+			entry:       entry,
+			leftTitle:   leftTitle,
+			normalLines: normal,
+			normalStats: normalStats,
+		}
+		if smart {
+			smartLines, smartStats, err := renderModePair(cati, emojig, width, entry.cfg, true, entry.name)
+			if err != nil {
+				return err
+			}
+			item.smartTitle = fmt.Sprintf("+smart (%dms, w=%d, err=%.1f%%)", smartStats.dur.Milliseconds(), smartStats.w, smartStats.err)
+			item.smartLines = smartLines
+			item.smartStats = smartStats
+			colW := ansiLinesWidth(normal) + 4
+			if len(leftTitle)+4 > colW {
+				colW = len(leftTitle) + 4
+			}
+			item.colW = colW
+		}
+		items = append(items, item)
+	}
+
+	sortKey := filter.sort
+	if filter.byPSNR && sortKey == "" {
+		sortKey = "psnr"
+	}
+	if sortKey != "" {
+		if err := sortRenderedDemoItems(items, sortKey, smart); err != nil {
+			return err
+		}
+	}
+
+	for _, item := range items {
 		if !smart {
-			fmt.Fprintf(out, "\n%s\n", entry.name)
-			for _, line := range normal {
+			fmt.Fprintf(out, "\n%s\n", item.leftTitle)
+			for _, line := range item.normalLines {
 				fmt.Fprintln(out, line)
 			}
 			if info {
-				writeModeInfo(out, entry, modeSpec)
+				writeModeInfo(out, item.entry, modeSpec)
 			}
 			continue
 		}
-		smartLines, err := renderModePair(cati, emojig, width, entry.cfg, true, entry.name)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(out, "\n%-*s+smart\n", ansiLinesWidth(normal)+4, entry.name)
-		for i := 0; i < max(len(normal), len(smartLines)); i++ {
+		fmt.Fprintf(out, "\n%-*s%s\n", item.colW, item.leftTitle, item.smartTitle)
+		for i := 0; i < max(len(item.normalLines), len(item.smartLines)); i++ {
 			var left, right string
-			if i < len(normal) {
-				left = normal[i]
+			if i < len(item.normalLines) {
+				left = item.normalLines[i]
 			}
-			if i < len(smartLines) {
-				right = smartLines[i]
+			if i < len(item.smartLines) {
+				right = item.smartLines[i]
 			}
-			fmt.Fprintf(out, "%s    %s\n", left, right)
+			fmt.Fprintf(out, "%s    %s\n", padANSILine(left, item.colW-4), right)
 		}
 		if info {
-			writeModeInfo(out, entry, modeSpec)
+			writeModeInfo(out, item.entry, modeSpec)
 		}
+	}
+	return nil
+}
+
+type renderedDemoItem struct {
+	entry       renderModeEntry
+	leftTitle   string
+	normalLines []string
+	normalStats modeDemoStats
+	smartTitle  string
+	smartLines  []string
+	smartStats  modeDemoStats
+	colW        int
+}
+
+func sortRenderedDemoItems(items []renderedDemoItem, sortKey string, smart bool) error {
+	switch strings.ToLower(strings.TrimSpace(sortKey)) {
+	case "psnr", "err", "best":
+		sort.SliceStable(items, func(i, j int) bool {
+			errI := items[i].normalStats.err
+			errJ := items[j].normalStats.err
+			if smart {
+				errI = items[i].smartStats.err
+				errJ = items[j].smartStats.err
+			}
+			if errI != errJ {
+				return errI < errJ
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "-psnr", "-err", "worst":
+		sort.SliceStable(items, func(i, j int) bool {
+			errI := items[i].normalStats.err
+			errJ := items[j].normalStats.err
+			if smart {
+				errI = items[i].smartStats.err
+				errJ = items[j].smartStats.err
+			}
+			if errI != errJ {
+				return errI > errJ
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "time", "dur", "fastest":
+		sort.SliceStable(items, func(i, j int) bool {
+			durI := items[i].normalStats.dur
+			durJ := items[j].normalStats.dur
+			if smart {
+				durI = items[i].smartStats.dur
+				durJ = items[j].smartStats.dur
+			}
+			if durI != durJ {
+				return durI < durJ
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "-time", "-dur", "slowest":
+		sort.SliceStable(items, func(i, j int) bool {
+			durI := items[i].normalStats.dur
+			durJ := items[j].normalStats.dur
+			if smart {
+				durI = items[i].smartStats.dur
+				durJ = items[j].smartStats.dur
+			}
+			if durI != durJ {
+				return durI > durJ
+			}
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "name":
+		sort.SliceStable(items, func(i, j int) bool {
+			return items[i].entry.name < items[j].entry.name
+		})
+	case "-name":
+		sort.SliceStable(items, func(i, j int) bool {
+			return items[i].entry.name > items[j].entry.name
+		})
+	default:
+		return fmt.Errorf("unknown sort order %q (expected: psnr, -psnr, time, -time, name, -name)", sortKey)
 	}
 	return nil
 }
@@ -466,24 +646,46 @@ func wrapGlyphs(shapes []rune, width, prefixWidth int) string {
 	return b.String()
 }
 
-func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bool, name string) ([]string, error) {
+type modeDemoStats struct {
+	dur time.Duration
+	w   int
+	err float64
+}
+
+func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bool, name string) ([]string, modeDemoStats, error) {
+	start := time.Now()
 	cfg.smart = smart
-	left, err := smartPrepare(cati, width, 7, cfg)
+	left, _, err := smartPrepareWithWidth(cati, width, 7, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("fit %s cati logo: %w", name, err)
+		return nil, modeDemoStats{}, fmt.Errorf("fit %s cati logo: %w", name, err)
 	}
-	right, err := smartPrepare(emojig, width, 7, cfg)
+	right, rightW, err := smartPrepareWithWidth(emojig, width, 7, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("fit %s emojig logo: %w", name, err)
+		return nil, modeDemoStats{}, fmt.Errorf("fit %s emojig logo: %w", name, err)
 	}
 	leftLines, err := renderDemoLines(left, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("render %s cati logo: %w", name, err)
+		return nil, modeDemoStats{}, fmt.Errorf("render %s cati logo: %w", name, err)
 	}
 	rightLines, err := renderDemoLines(right, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("render %s emojig logo: %w", name, err)
+		return nil, modeDemoStats{}, fmt.Errorf("render %s emojig logo: %w", name, err)
 	}
+	dur := time.Since(start)
+
+	recLeft := renderReconstruction(left, cfg)
+	recRight := renderReconstruction(right, cfg)
+	refLeft := smartReference(cati, recLeft.Bounds().Dx(), recLeft.Bounds().Dy(), cfg)
+	refRight := smartReference(emojig, recRight.Bounds().Dx(), recRight.Bounds().Dy(), cfg)
+	errLeft := imageMSEPercent(refLeft, recLeft)
+	errRight := imageMSEPercent(refRight, recRight)
+	avgErr := (errLeft + errRight) / 2.0
+
+	contentW := rightW
+	if contentW <= 0 {
+		contentW = width
+	}
+
 	leftWidth := ansiLinesWidth(leftLines)
 	lines := make([]string, 0, max(len(leftLines), len(rightLines)))
 	for i := 0; i < max(len(leftLines), len(rightLines)); i++ {
@@ -496,7 +698,32 @@ func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bo
 		}
 		lines = append(lines, fmt.Sprintf("  %s  |  %s", padANSILine(leftLine, leftWidth), padANSILine(rightLine, leftWidth)))
 	}
-	return lines, nil
+	return lines, modeDemoStats{dur: dur, w: contentW, err: avgErr}, nil
+}
+
+func imageMSEPercent(ref, rend image.Image) float64 {
+	rb, tb := ref.Bounds(), rend.Bounds()
+	dx := min(rb.Dx(), tb.Dx())
+	dy := min(rb.Dy(), tb.Dy())
+	if dx <= 0 || dy <= 0 {
+		return 0
+	}
+	var sum float64
+	for y := 0; y < dy; y++ {
+		for x := 0; x < dx; x++ {
+			ar, ag, ab, aa := ref.At(rb.Min.X+x, rb.Min.Y+y).RGBA()
+			br, bg, bb, ba := rend.At(tb.Min.X+x, tb.Min.Y+y).RGBA()
+			for _, d := range [4]float64{
+				float64(ar>>8) - float64(br>>8),
+				float64(ag>>8) - float64(bg>>8),
+				float64(ab>>8) - float64(bb>>8),
+				float64(aa>>8) - float64(ba>>8),
+			} {
+				sum += d * d
+			}
+		}
+	}
+	return (sum / (float64(dx*dy*4) * 255.0 * 255.0)) * 100.0
 }
 
 func ansiLinesWidth(lines []string) int {

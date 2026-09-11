@@ -178,8 +178,18 @@ func padSmartImage(img image.Image, targetCols int, rc renderCfg) image.Image {
 }
 
 func smartPrepare(orig image.Image, termCols, termRows int, rc renderCfg) (image.Image, error) {
+	img, _, err := smartPrepareWithWidth(orig, termCols, termRows, rc)
+	return img, err
+}
+
+func smartPrepareWithWidth(orig image.Image, termCols, termRows int, rc renderCfg) (image.Image, int, error) {
 	if !rc.smart {
-		return fitRenderedImageChecked(orig, termCols, termRows, rc)
+		fit, err := fitRenderedImageChecked(orig, termCols, termRows, rc)
+		if err != nil {
+			return nil, 0, err
+		}
+		w := renderedCellSize(fit, rc).Cols
+		return fit, w, nil
 	}
 	if rc.gray {
 		orig = quadblock.ReduceColors(orig, rc.grayColors)
@@ -187,19 +197,19 @@ func smartPrepare(orig image.Image, termCols, termRows int, rc renderCfg) (image
 	if termCols <= 0 {
 		derived, err := fitRenderedImageChecked(orig, termCols, termRows, rc)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		termCols = renderedCellSize(derived, rc).Cols
 		if termCols <= 0 {
-			return derived, nil
+			return derived, 0, nil
 		}
 	}
 	base, err := fitRenderedImageChecked(orig, termCols, termRows, rc)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if base.Bounds().Dx() <= 0 || base.Bounds().Dy() <= 0 {
-		return base, nil
+		return base, renderedCellSize(base, rc).Cols, nil
 	}
 	ref := smartReference(orig, base.Bounds().Dx(), base.Bounds().Dy(), rc)
 	candidates := make(map[int]image.Image)
@@ -223,14 +233,15 @@ func smartPrepare(orig image.Image, termCols, termRows int, rc renderCfg) (image
 	}
 	winner, ok := smartScoreCandidates(ref, candidates)
 	if !ok {
-		return base, nil
+		return base, renderedCellSize(base, rc).Cols, nil
 	}
 	selected, err := fitRenderedImageChecked(orig, winner.width, termRows, rc)
 	if nativeSmartStep(rc) {
 		selected, err = fitNativeWidthChecked(orig, winner.width, termRows, rc)
 	}
 	if err != nil {
-		return base, nil
+		return base, renderedCellSize(base, rc).Cols, nil
 	}
-	return padSmartImage(selected, termCols, rc), nil
+	contentWidth := renderedCellSize(selected, rc).Cols
+	return padSmartImage(selected, termCols, rc), contentWidth, nil
 }
