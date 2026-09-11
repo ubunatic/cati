@@ -185,6 +185,13 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 	}
 	autoCropCols, autoCropRows := catiterm.TermWidth(), catiterm.TermHeight()
 
+	if rc.useGlyphs() {
+		w, h := rc.renderCellSize()
+		if w*h > 128 {
+			fmt.Fprintf(os.Stderr, "cati: warning: mode %q is not yet optimized (geometry %dx%d > 128px); realtime playback may drop frames\n", rc.name, w, h)
+		}
+	}
+
 	restore, sigs, quit := playTerminal()
 	defer restore()
 	defer signal.Stop(sigs)

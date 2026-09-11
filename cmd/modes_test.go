@@ -482,4 +482,71 @@ func TestModesBenchmarkScorecard(t *testing.T) {
 	}
 }
 
+func TestModesCommandOptimizedFilters(t *testing.T) {
+	t.Run("filter optimized modes only", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"-l", "--optimized"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("modes -l --optimized: %v", err)
+		}
+		text := out.String()
+		if !strings.Contains(text, "half\n") || !strings.Contains(text, "quad\n") || !strings.Contains(text, "all\n") {
+			t.Errorf("expected optimized modes (half, quad, all) in output:\n%s", text)
+		}
+		if strings.Contains(text, "all+\n") || strings.Contains(text, "\nz\n") || strings.Contains(text, "z+\n") {
+			t.Errorf("unoptimized modes (all+, z, z+) should not be present with --optimized:\n%s", text)
+		}
+	})
+
+	t.Run("filter unoptimized modes only", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"-l", "--unoptimized"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("modes -l --unoptimized: %v", err)
+		}
+		text := out.String()
+		if !strings.Contains(text, "all+\n") || !strings.Contains(text, "\nz\n") || !strings.Contains(text, "z+\n") {
+			t.Errorf("expected unoptimized modes (all+, z, z+) in output:\n%s", text)
+		}
+		if strings.Contains(text, "half\n") || strings.Contains(text, "quad\n") || strings.Contains(text, "\nall\n") {
+			t.Errorf("optimized modes (half, quad, all) should not be present with --unoptimized:\n%s", text)
+		}
+	})
+}
+
+func TestModesCommandInfoOptimizationStatus(t *testing.T) {
+	t.Run("optimized mode info", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"-l", "--info", "all"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("modes -l --info all: %v", err)
+		}
+		text := out.String()
+		if !strings.Contains(text, "status: optimized (bitwise algebraic solver)") {
+			t.Errorf("expected status optimized for 'all' mode, got:\n%s", text)
+		}
+	})
+
+	t.Run("unoptimized mode info", func(t *testing.T) {
+		var out bytes.Buffer
+		cmd := modesCommand()
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"-l", "--info", "all+"})
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("modes -l --info all+: %v", err)
+		}
+		text := out.String()
+		if !strings.Contains(text, "status: not yet optimized") {
+			t.Errorf("expected status not yet optimized for 'all+' mode, got:\n%s", text)
+		}
+	})
+}
+
+
 

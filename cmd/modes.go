@@ -29,16 +29,18 @@ import (
 const embeddedCatiLogo = "iVBORw0KGgoAAAANSUhEUgAAABgAAAAOCAYAAAA1+Nx+AAAAAXNSR0IArs4c6QAAARdJREFUOI1jVBL3/f/WQ42BFkB4xy0GlrceagzCO24x/BWUpKrhzO+fM/wVlGRgYWBggBhuZ0xVC97+vMUgcPIzAxOlBvG5yGBlwwCKBeLF4hgKQmaKMITMFEFRA8PoBn+5/RG/Bd8vsqJoDJkpwnD4FjPD4VvMcMO/X2Rl+H6RFcUQmME8qvwYFrAgcz7tecLAwCDDIF4szvCy9yUDAwMDnEZVw8DAqY9wyL+HnzEMxuoDiMbfGC6kBKD4ABYEMFcevsUMD/816W8wghAG+Fxk4HrwWoBsOAMDJHgOIxkIC0JkgByx2CIZSxygAlxxAAPI4Y8tLijOB4QACwMDJFu//XmLqgbDih9GJXHf/9Quh2CA+f1zBgAYdXGLiM0UnAAAAABJRU5ErkJggg=="
 
 type modesFilter struct {
-	list     bool
-	all      bool
-	composed bool
-	legacy   bool
-	exact    bool
-	approx   bool
-	setIDs   []int
-	maxGeo   *spec.RenderModeGeometry
-	sort     string
-	bySSIM   bool
+	list        bool
+	all         bool
+	composed    bool
+	legacy      bool
+	exact       bool
+	approx      bool
+	optimized   bool
+	unoptimized bool
+	setIDs      []int
+	maxGeo      *spec.RenderModeGeometry
+	sort        string
+	bySSIM      bool
 }
 
 func modesCommand() *cobra.Command {
@@ -51,6 +53,8 @@ func modesCommand() *cobra.Command {
 	var legacyOnly bool
 	var exactOnly bool
 	var approxOnly bool
+	var optimizedOnly bool
+	var unoptimizedOnly bool
 	var setFilter string
 	var maxGeoFilter string
 	var listSets bool
@@ -134,16 +138,18 @@ func modesCommand() *cobra.Command {
 			}
 
 			filter := modesFilter{
-				list:     listOnly || (width == 0 && smart),
-				all:      allModes,
-				composed: composedOnly,
-				legacy:   legacyOnly,
-				exact:    exactOnly,
-				approx:   approxOnly,
-				setIDs:   setIDs,
-				maxGeo:   maxGeo,
-				sort:     sortOrder,
-				bySSIM:   bySSIM || byPSNR,
+				list:        listOnly || (width == 0 && smart),
+				all:         allModes,
+				composed:    composedOnly,
+				legacy:      legacyOnly,
+				exact:       exactOnly,
+				approx:      approxOnly,
+				optimized:   optimizedOnly,
+				unoptimized: unoptimizedOnly,
+				setIDs:      setIDs,
+				maxGeo:      maxGeo,
+				sort:        sortOrder,
+				bySSIM:      bySSIM || byPSNR,
 			}
 
 			if filter.list {
@@ -188,6 +194,10 @@ func modesCommand() *cobra.Command {
 	cmd.Flags().BoolVarP(&legacyOnly, "legacy", "L", false, "filter to legacy renderer modes")
 	cmd.Flags().BoolVar(&exactOnly, "exact", false, "filter to modes with exact (non-approximate) glyph coverage")
 	cmd.Flags().BoolVar(&approxOnly, "approx", false, "filter to modes with approximate glyph coverage")
+	cmd.Flags().BoolVar(&optimizedOnly, "optimized", false, "filter to modes with bitwise optimized solvers")
+	cmd.Flags().BoolVar(&optimizedOnly, "opt", false, "alias for --optimized")
+	cmd.Flags().BoolVar(&unoptimizedOnly, "unoptimized", false, "filter to modes without bitwise optimized solvers (scalar fallback)")
+	cmd.Flags().BoolVar(&unoptimizedOnly, "no-opt", false, "alias for --unoptimized")
 	cmd.Flags().StringVarP(&setFilter, "set", "s", "", "filter to modes containing specific glyph set ID(s) (comma-separated, e.g. -s 6, -s 1,6)")
 	cmd.Flags().StringVar(&maxGeoFilter, "max-geo", "", "filter to modes with geometry at most WxH (e.g. --max-geo 4x4)")
 	cmd.Flags().BoolVar(&listSets, "sets", false, "list registered glyph sets from the spec registry")
@@ -432,8 +442,21 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 	}
 }
 
+func isModeOptimized(entry renderModeEntry) bool {
+	if entry.cfg.useGlyphs() || entry.registryOnly {
+		res, err := spec.ResolveGlyphSetExpression(entry.name)
+		if err == nil {
+			return res.Optimized
+		}
+	}
+	if entry.definition.Name != "" {
+		return entry.definition.Optimized
+	}
+	return true
+}
+
 func applyModesFilter(entries []renderModeEntry, filter modesFilter) []renderModeEntry {
-	if !filter.composed && !filter.legacy && !filter.exact && !filter.approx && len(filter.setIDs) == 0 && filter.maxGeo == nil {
+	if !filter.composed && !filter.legacy && !filter.exact && !filter.approx && !filter.optimized && !filter.unoptimized && len(filter.setIDs) == 0 && filter.maxGeo == nil {
 		return entries
 	}
 	modeSpec, err := spec.LoadRenderModes()
@@ -453,6 +476,12 @@ func applyModesFilter(entries []renderModeEntry, filter modesFilter) []renderMod
 			continue
 		}
 		if filter.legacy && isComposed {
+			continue
+		}
+		if filter.optimized && !isModeOptimized(entry) {
+			continue
+		}
+		if filter.unoptimized && isModeOptimized(entry) {
 			continue
 		}
 		if filter.exact {
@@ -1066,11 +1095,15 @@ func writeModeInfo(out io.Writer, entry renderModeEntry, modeSpec spec.RenderMod
 	if entry.registryOnly {
 		def.Description = "Resolved composable glyph-set mode."
 	}
+	statusStr := "optimized (bitwise algebraic solver)"
+	if !isModeOptimized(entry) {
+		statusStr = "not yet optimized (slow scalar fallback; cell geometry > 128px)"
+	}
 	resolution, err := spec.ResolveGlyphSetExpression(entry.name)
 	if err == nil {
-		fmt.Fprintf(out, "  info: %s\n  sets: %v\n  geometry: %dx%d%s\n", def.Description, resolution.IDs, resolution.Geometry.W, resolution.Geometry.H, approximateSuffix(resolution.Approximate))
+		fmt.Fprintf(out, "  info: %s\n  sets: %v\n  geometry: %dx%d%s\n  status: %s\n", def.Description, resolution.IDs, resolution.Geometry.W, resolution.Geometry.H, approximateSuffix(resolution.Approximate), statusStr)
 	} else {
-		fmt.Fprintf(out, "  info: %s\n", def.Description)
+		fmt.Fprintf(out, "  info: %s\n  status: %s\n", def.Description, statusStr)
 	}
 	shapes := modeGlyphs(entry, modeSpec)
 	fmt.Fprintln(out, "  shapes:", wrapGlyphs(shapes, 74, len("  shapes: ")))

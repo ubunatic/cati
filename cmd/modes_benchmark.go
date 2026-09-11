@@ -132,8 +132,13 @@ func runModesBenchmarkScorecard(out io.Writer, width int, smart bool, entries []
 		})
 	}
 
-	// Sort results
-	sortBenchmarkResults(results, sortKey)
+	hasUnoptimized := false
+	for _, r := range results {
+		if !isModeOptimized(r.entry) {
+			hasUnoptimized = true
+			break
+		}
+	}
 
 	// Print Scorecard
 	fmt.Fprintf(out, "Dataset Benchmark Scorecard (%d modes across %d test assets, width=%d):\n\n", len(results), len(corpus), width)
@@ -141,8 +146,15 @@ func runModesBenchmarkScorecard(out io.Writer, width int, smart bool, entries []
 	fmt.Fprintf(out, "  ----  %-18s  %8s  %10s  %10s  %11s  %10s\n", "------------------", "--------", "----------", "----------", "-----------", "----------")
 	for i, r := range results {
 		latStr := formatBenchmarkLatency(r.avgLatency)
+		displayName := r.entry.name
+		if !isModeOptimized(r.entry) {
+			displayName += "*"
+		}
 		fmt.Fprintf(out, "  %4d  %-18s  %8.3f  %10.3f  %10.3f  %11s  %10.2f\n",
-			i+1, r.entry.name, r.geoSSIM, r.photoSSIM, r.totalSSIM, latStr, r.efficiency)
+			i+1, displayName, r.geoSSIM, r.photoSSIM, r.totalSSIM, latStr, r.efficiency)
+	}
+	if hasUnoptimized {
+		fmt.Fprintln(out, "\n  * Mode is not yet bitwise optimized (cell geometry > 128px; runs via scalar fallback)")
 	}
 	return nil
 }

@@ -29,6 +29,7 @@ modes:
     colorer: top_bottom
     smart_step: terminal-column
     native_step: 1
+    optimized: true
 
   - name: half/split
     aliases: [hs, split]
@@ -39,6 +40,7 @@ modes:
     colorer: fg_bg_sse
     smart_step: native
     native_step: 1
+    optimized: true
 
   - name: quad
     aliases: [q]
@@ -49,6 +51,7 @@ modes:
     colorer: top_bottom
     smart_step: native
     native_step: 1
+    optimized: true
 
   - name: spark
     aliases: [s]
@@ -59,6 +62,7 @@ modes:
     colorer: fg_bg_sse
     smart_step: native
     native_step: 1
+    optimized: true
 
   - name: spark+quad
     aliases: [sq, qs]
@@ -69,6 +73,7 @@ modes:
     colorer: fg_bg_sse
     smart_step: native
     native_step: 1
+    optimized: true
 
   - name: 2x3
     aliases: ["6"]
@@ -79,6 +84,7 @@ modes:
     colorer: fg_bg_sse
     smart_step: native
     native_step: 1
+    optimized: true
 
   - name: six+half
     aliases: [xh, hx]
@@ -89,6 +95,7 @@ modes:
     colorer: fg_bg_sse
     smart_step: native
     native_step: 1
+    optimized: true
 
   - name: spark+six
     aliases: [sx, xs]
@@ -99,6 +106,7 @@ modes:
     colorer: fg_bg_sse
     smart_step: native
     native_step: 1
+    optimized: true
 
 glyph_sets:
   half: [" ", "▀", "▄", "█"]
@@ -129,63 +137,75 @@ set_registry:
     geometry: { w: 1, h: 1 }
     glyphs: [" ", "█"]
     masks: {" ": "0", "█": "1"}
+    optimized: true
   - id: 1
     name: sides
     geometry: { w: 2, h: 1 }
     glyphs: [" ", "▌", "▐"]
     masks: {" ": "00", "▌": "10", "▐": "01"}
+    optimized: true
   - id: 2
     name: halves
     geometry: { w: 1, h: 2 }
     glyphs: [" ", "▀", "▄"]
     masks: {" ": "00", "▀": "10", "▄": "01"}
+    optimized: true
   - id: 4
     name: quads
     geometry: { w: 2, h: 2 }
     glyphs: [" ", "▘", "▝", "▖", "▗", "▚", "▞", "▛", "▜", "▙", "▟"]
     masks: {" ": "0000", "▘": "1000", "▝": "0100", "▖": "0010", "▗": "0001", "▚": "1001", "▞": "0110", "▛": "1110", "▜": "1101", "▙": "1011", "▟": "0111"}
+    optimized: true
   - id: 6
     name: sextants
     geometry: { w: 2, h: 3 }
     generated: sextant_2x3
+    optimized: true
   - id: 9
     name: ninelikes
     geometry: { w: 3, h: 3 }
     approximate: true
     glyphs: [" ", "╺", "╸", "━", "┃", "┣", "┫", "╋", "┳", "┻", "┓", "┏", "┗", "┛", "╻", "╹", "▪", "╏", "╍"]
     masks: {" ": "000000000", "╺": "000011000", "╸": "000110000", "━": "000111000", "┃": "010010010", "┣": "010011010", "┫": "010110010", "╋": "010111010", "┳": "000111010", "┻": "010111000", "┓": "000110010", "┏": "000011010", "┗": "010011000", "┛": "010110000", "╻": "000010010", "╹": "010010000", "▪": "000010000", "╏": "010000010", "╍": "000101000"}
+    optimized: true
   - id: 14
     name: vbars
     geometry: { w: 1, h: 4 }
     masks: {" ": "0000", "▂": "0001", "▄": "0011", "▆": "0111"}
     glyphs: [" ", "▂", "▄", "▆"]
+    optimized: true
   - id: 15
     name: vmbars
     geometry: { w: 2, h: 4 }
     approximate: true
     glyphs: [" ", "🬋", "🬇", "🬃"]
     masks: {" ": "00000000", "🬋": "00111100", "🬇": "00010100", "🬃": "00101000"}
+    optimized: true
   - id: 44
     name: bars
     geometry: { w: 4, h: 4 }
     glyphs: [" ", "▂", "▄", "▆", "▎", "▌", "▊"]
     masks: {" ": "0000000000000000", "▂": "0000000000001111", "▄": "0000000011111111", "▆": "0000111111111111", "▎": "1000100010001000", "▌": "1100110011001100", "▊": "1110111011101110"}
+    optimized: true
   - id: 45
     name: mbars
     geometry: { w: 4, h: 4 }
     approximate: true
     glyphs: [" ", "🬋", "🬇", "🬃", "┃", "╻", "╹", "▪", "╏"]
     masks: {" ": "0000000000000000", "🬋": "0000111111110000", "🬇": "0000001100110000", "🬃": "0000110011000000", "┃": "0110011001100110", "╻": "0000011001100110", "╹": "0110011001100000", "▪": "0000011001100000", "╏": "0100000001000000"}
+    optimized: true
   - id: 86
     name: morebars
     geometry: { w: 8, h: 8 }
     glyphs: [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "▎", "▍", "▌", "▋", "▊"]
     generated: unicode_bars
+    optimized: true
   - id: 88
     name: allbars
     geometry: { w: 8, h: 8 }
     glyphs: [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "▏", "▎", "▍", "▌", "▋", "▊", "▉"]
     generated: unicode_bars
+    optimized: true
 
 # Exact, case-sensitive named unions. A name is resolved before '+' grammar.
 composition_order: [full, half, quad, quad+, bars, bars+, six, 2x3, 3x3, all, all+, z, z+]

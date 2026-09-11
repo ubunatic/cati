@@ -112,6 +112,16 @@ func TestSpecRenderModesIntegrity(t *testing.T) {
 			t.Fatalf("render cycle references undefined mode %q", name)
 		}
 	}
+	for _, mode := range rm.Modes {
+		if !mode.Optimized {
+			t.Errorf("built-in render mode %q should have optimized: true in spec", mode.Name)
+		}
+	}
+	for _, set := range rm.SetRegistry {
+		if !set.Optimized {
+			t.Errorf("registry glyph set %d (%s) should have optimized: true in spec", set.ID, set.Name)
+		}
+	}
 }
 
 // TestSpecButtonsLoad verifies the button key-def loader returns a populated map

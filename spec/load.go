@@ -225,6 +225,7 @@ type RenderModeDef struct {
 	Colorer     string              `yaml:"colorer"`
 	SmartStep   string              `yaml:"smart_step"`
 	NativeStep  int                 `yaml:"native_step"`
+	Optimized   bool                `yaml:"optimized"`
 }
 
 type SmartRenderPolicy struct {
@@ -270,6 +271,7 @@ type GlyphSetDef struct {
 	Masks       map[string]string  `yaml:"masks"`
 	Generated   string             `yaml:"generated"`
 	Approximate bool               `yaml:"approximate"`
+	Optimized   bool               `yaml:"optimized"`
 }
 
 type GlyphShape struct {
@@ -283,6 +285,7 @@ type GlyphSetResolution struct {
 	Shapes      []GlyphShape
 	Geometry    RenderModeGeometry
 	Approximate bool
+	Optimized   bool
 }
 
 // ResolveGlyphSetExpression resolves a named union or the d<ids> debug grammar.
@@ -321,6 +324,7 @@ func ResolveGlyphSetExpression(expression string) (GlyphSetResolution, error) {
 		res.Geometry.H = lcm(res.Geometry.H, def.Geometry.H)
 		res.Approximate = res.Approximate || def.Approximate
 	}
+	res.Optimized = (res.Geometry.W * res.Geometry.H) <= 128
 	for _, id := range normalized {
 		def := defs[id]
 		for _, shape := range glyphSetShapes(def) {

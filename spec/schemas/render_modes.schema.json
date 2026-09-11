@@ -31,7 +31,8 @@
           },
           "colorer": { "type": "string", "minLength": 1 },
           "smart_step": { "enum": ["terminal-column", "native"] },
-          "native_step": { "type": "integer", "minimum": 1 }
+          "native_step": { "type": "integer", "minimum": 1 },
+          "optimized": { "type": "boolean" }
         }
       }
     },
@@ -77,7 +78,8 @@
             "additionalProperties": { "type": "string", "pattern": "^[01]+$" }
           },
           "generated": { "enum": ["sextant_2x3", "unicode_bars"] },
-          "approximate": { "type": "boolean" }
+          "approximate": { "type": "boolean" },
+          "optimized": { "type": "boolean" }
         }
       }
     },
