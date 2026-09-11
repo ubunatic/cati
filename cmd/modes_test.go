@@ -152,6 +152,17 @@ func TestModesFilterFlags(t *testing.T) {
 		avoidModes []string
 	}{
 		{
+			name:       "default excludes legacy",
+			args:       []string{"-l"},
+			wantModes:  []string{"full", "half", "quad", "quad+", "bars", "bars+", "six", "2x3", "3x3", "all", "all+", "z", "z+"},
+			avoidModes: []string{"spark", "spark+quad", "six+half", "spark+six", "half/split"},
+		},
+		{
+			name:       "all modes includes legacy",
+			args:       []string{"-l", "-a"},
+			wantModes:  []string{"full", "half", "quad", "quad+", "bars", "bars+", "six", "2x3", "3x3", "all", "all+", "z", "z+", "half/split", "spark", "spark+quad", "six+half", "spark+six"},
+		},
+		{
 			name:       "composed only",
 			args:       []string{"-l", "-c"},
 			wantModes:  []string{"full", "half", "quad", "quad+", "bars", "bars+", "six", "2x3", "3x3", "all", "all+", "z", "z+"},

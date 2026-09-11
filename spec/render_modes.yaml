@@ -12,11 +12,6 @@ cycle:
   - all+
   - z
   - z+
-  - half/split
-  - spark
-  - spark+quad
-  - six+half
-  - spark+six
 
 smart:
   metric: psnr

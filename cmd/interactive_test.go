@@ -571,10 +571,17 @@ func TestHorizontalGradientSparkQuadQualityAtZoomKThree(t *testing.T) {
 		recenterForMode(&state, src, termCols, termRows, oldRC, rc)
 	}
 
-	spark := scores["spark+quad"]
-	for _, mode := range []string{"half"} {
-		if spark+1e-9 < scores[mode] {
-			t.Fatalf("spark+quad SSIM %.6f below %s %.6f (scores: %#v)", spark, mode, scores[mode], scores)
+	if sparkRC, err := parseRenderMode("spark+quad"); err == nil {
+		st := state
+		vp := buildViewport(src, &st, termCols, termRows, sparkRC)
+		ref := buildRef(src, st, termCols, termRows, sparkRC, metrics.GridK, false)
+		scores["spark+quad"] = computeQuality(ref, vp, sparkRC).SSIM
+	}
+
+	for _, mode := range []string{"quad", "spark+quad"} {
+		score := scores[mode]
+		if score+1e-9 < scores["half"] {
+			t.Fatalf("%s SSIM %.6f below half %.6f (scores: %#v)", mode, score, scores["half"], scores)
 		}
 	}
 }

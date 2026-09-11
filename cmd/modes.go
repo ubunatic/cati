@@ -28,6 +28,7 @@ const embeddedCatiLogo = "iVBORw0KGgoAAAANSUhEUgAAABgAAAAOCAYAAAA1+Nx+AAAAAXNSR0
 
 type modesFilter struct {
 	list     bool
+	all      bool
 	composed bool
 	legacy   bool
 	exact    bool
@@ -43,6 +44,7 @@ func modesCommand() *cobra.Command {
 	var smart bool
 	var info bool
 	var listOnly bool
+	var allModes bool
 	var composedOnly bool
 	var legacyOnly bool
 	var exactOnly bool
@@ -79,6 +81,7 @@ func modesCommand() *cobra.Command {
 			}
 			filter := modesFilter{
 				list:     listOnly || (width == 0 && smart),
+				all:      allModes,
 				composed: composedOnly,
 				legacy:   legacyOnly,
 				exact:    exactOnly,
@@ -101,6 +104,7 @@ func modesCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&smart, "smart", false, "choose the best nearby width by PSNR")
 	cmd.Flags().BoolVar(&info, "info", false, "explain each mode and list its supported Unicode shapes")
 	cmd.Flags().BoolVarP(&listOnly, "list", "l", false, "list mode names without rendering logo demos")
+	cmd.Flags().BoolVarP(&allModes, "all", "a", false, "include legacy modes in list or demo")
 	cmd.Flags().BoolVarP(&composedOnly, "composed", "c", false, "filter to composable / registry modes")
 	cmd.Flags().BoolVarP(&legacyOnly, "legacy", "L", false, "filter to legacy renderer modes")
 	cmd.Flags().BoolVar(&exactOnly, "exact", false, "filter to modes with exact (non-approximate) glyph coverage")
@@ -184,7 +188,19 @@ func listModes(out io.Writer, info bool, names []string) error {
 }
 
 func listModesFiltered(out io.Writer, info bool, names []string, filter modesFilter) error {
-	entries, err := selectedRenderModes(names)
+	var entries []renderModeEntry
+	var err error
+	if len(names) == 0 {
+		if filter.legacy {
+			entries = append([]renderModeEntry(nil), legacyRenderModes...)
+		} else if filter.all {
+			entries = append(append([]renderModeEntry(nil), renderModes...), legacyRenderModes...)
+		} else {
+			entries, err = listableRenderModes()
+		}
+	} else {
+		entries, err = selectedRenderModes(names)
+	}
 	if err != nil {
 		return err
 	}
@@ -359,7 +375,13 @@ func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, na
 	var entries []renderModeEntry
 	var err error
 	if len(names) == 0 {
-		entries = renderModes
+		if filter.legacy {
+			entries = append([]renderModeEntry(nil), legacyRenderModes...)
+		} else if filter.all {
+			entries = append(append([]renderModeEntry(nil), renderModes...), legacyRenderModes...)
+		} else {
+			entries, err = listableRenderModes()
+		}
 	} else {
 		entries, err = selectedRenderModes(names)
 	}
@@ -536,20 +558,29 @@ func selectedRenderModes(names []string) ([]renderModeEntry, error) {
 	}
 	selected := make([]renderModeEntry, 0, len(names))
 	for _, name := range names {
-		canonical, ok := renderModeAliases[name]
-		if !ok {
-			if cfg, err := parseRenderMode(name); err == nil {
-				selected = append(selected, renderModeEntry{name: name, cfg: cfg, registryOnly: true})
-				continue
+		if canonical, ok := renderModeAliases[name]; ok {
+			for _, entry := range renderModes {
+				if entry.name == canonical {
+					selected = append(selected, entry)
+					break
+				}
 			}
-			return nil, fmt.Errorf("unknown render mode %q", name)
+			continue
 		}
-		for _, entry := range renderModes {
-			if entry.name == canonical {
-				selected = append(selected, entry)
-				break
+		if legCanon, ok := legacyRenderModeAliases[name]; ok {
+			for _, entry := range legacyRenderModes {
+				if entry.name == legCanon {
+					selected = append(selected, entry)
+					break
+				}
 			}
+			continue
 		}
+		if cfg, err := parseRenderMode(name); err == nil {
+			selected = append(selected, renderModeEntry{name: name, cfg: cfg, registryOnly: true})
+			continue
+		}
+		return nil, fmt.Errorf("unknown render mode %q", name)
 	}
 	return selected, nil
 }

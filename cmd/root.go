@@ -505,6 +505,9 @@ func parseRenderMode(mode string) (renderCfg, error) {
 	if name, ok := renderModeAliases[key]; ok {
 		return findRenderModeByName(name)
 	}
+	if name, ok := legacyRenderModeAliases[key]; ok {
+		return findRenderModeByName(name)
+	}
 	resolution, err := spec.ResolveGlyphSetExpression(key)
 	if err == nil {
 		return renderCfg{id: -1, name: key, glyph: &resolution}, nil
@@ -517,6 +520,14 @@ func findRenderModeByName(name string) (renderCfg, error) {
 		name = canonical
 	}
 	for _, m := range renderModes {
+		if m.name == name {
+			return m.cfg, nil
+		}
+	}
+	if legCanon, ok := legacyRenderModeAliases[name]; ok {
+		name = legCanon
+	}
+	for _, m := range legacyRenderModes {
 		if m.name == name {
 			return m.cfg, nil
 		}

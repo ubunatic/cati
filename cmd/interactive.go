@@ -421,11 +421,48 @@ type renderModeEntry struct {
 	registryOnly bool
 }
 
-// renderModes is loaded from spec/render_modes.yaml. Each entry's cfg.id must
-// be stable and unique so that cycleRenderCfg and rcModeName can find entries by id.
 var renderModes = loadRenderModeEntries()
 
 var renderModeAliases = buildRenderModeAliases(renderModes)
+
+var legacyRenderModes = loadLegacyRenderModeEntries()
+
+var legacyRenderModeAliases = buildRenderModeAliases(legacyRenderModes)
+
+func loadLegacyRenderModeEntries() []renderModeEntry {
+	renderers := map[string]renderCfg{
+		"halfblock_exact":      {id: 0},
+		"sparkline_half_split": {id: 8, mode: modeHalfSplit, sparkMode: sparkline.HalfSplit},
+		"quad_split_half":      {id: 1, mode: modeQuad, quadOpts: quadblock.Options{SplitHalf: true, HalfblockThreshold: 2}},
+		"sparkline_spark":      {id: 9, mode: modeSpark, sparkMode: sparkline.Spark},
+		"sparkline_spark_quad": {id: 3, mode: modeSparkQuad, sparkMode: sparkline.Quad},
+		"sextant_2x3":          {id: 6, mode: modeSextant, sextantMode: sextant.ModeSextant},
+		"sparkline_six_half":   {id: 10, mode: modeSixHalf, sparkMode: sparkline.SixHalf},
+		"sparkline_spark_six":  {id: 5, mode: modeSparkSix, sparkMode: sparkline.Best},
+	}
+
+	modeSpec, err := spec.LoadRenderModes()
+	if err != nil {
+		return nil
+	}
+	cycleSet := make(map[string]bool, len(modeSpec.Cycle))
+	for _, name := range modeSpec.Cycle {
+		cycleSet[name] = true
+	}
+	var entries []renderModeEntry
+	for _, def := range modeSpec.Modes {
+		if cycleSet[def.Name] {
+			continue
+		}
+		cfg, ok := renderers[def.Renderer]
+		if !ok {
+			continue
+		}
+		cfg.name = def.Name
+		entries = append(entries, renderModeEntry{name: def.Name, aliases: def.Aliases, definition: def, cfg: cfg})
+	}
+	return entries
+}
 
 func loadRenderModeEntries() []renderModeEntry {
 	renderers := map[string]renderCfg{
