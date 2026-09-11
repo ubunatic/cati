@@ -86,6 +86,24 @@ player/browser dispatch therefore remains on the proven named renderer set.
 This is a dependency follow-up for the remaining executable arbitrary-union
 dispatcher, mask coverage, reconstruction, and new-mode golden work.
 
+### Registry repair milestone — 2026-09-11
+
+The resumed sprint reproduced the expected red baseline: `go test -count=1
+./spec ./cmd` failed only because `d1` still expected the old, incorrect 1x2
+geometry after sides became 2x1. The registry now carries validated row-major
+coverage masks. Every explicit inventory must have one correctly-sized binary
+mask per glyph; generated sextant and Unicode-bar inventories have named,
+validated generators. Composition references, IDs, set names and listing order
+are validated while loading the embedded spec.
+
+The four three-quarter quadrant masks were corrected (`▛=1110`, `▜=1101`,
+`▙=1011`, `▟=0111`). Experimental sets 9, 15 and 45 retain an explicit
+approximation marker and handpicked masks; set 15 uses 2x4 coverage so its split
+middle bars remain distinguishable. Sets 86 and 88 use exact 8x8 bar semantics.
+Numeric aliases `1`, `2` and `4` now resolve as mode aliases, with `2` following
+the binding half decision `[0,2]`. `docs/SetIdeas.md` remains untouched at SHA-256
+`d88598cbf1e13e61b29f7b4bed9020f21d045e7db74a61ce131f193ffd272ea0`.
+
 | Short | Name | Set IDs |
 |---|---|---|
 | f, 1 | full, 1x1 | 0 |

@@ -252,8 +252,13 @@ func LoadRenderModes() (RenderModesSpec, error) {
 	if err != nil {
 		return spec, err
 	}
-	err = yaml.Unmarshal(data, &spec)
-	return spec, err
+	if err = yaml.Unmarshal(data, &spec); err != nil {
+		return spec, err
+	}
+	if err = validateGlyphRegistry(spec); err != nil {
+		return RenderModesSpec{}, err
+	}
+	return spec, nil
 }
 
 type GlyphSetDef struct {
@@ -261,13 +266,20 @@ type GlyphSetDef struct {
 	Name        string             `yaml:"name"`
 	Geometry    RenderModeGeometry `yaml:"geometry"`
 	Glyphs      []string           `yaml:"glyphs"`
+	Masks       map[string]string  `yaml:"masks"`
 	Generated   string             `yaml:"generated"`
 	Approximate bool               `yaml:"approximate"`
+}
+
+type GlyphShape struct {
+	Glyph rune
+	Mask  []bool
 }
 
 type GlyphSetResolution struct {
 	IDs         []int
 	Glyphs      []rune
+	Shapes      []GlyphShape
 	Geometry    RenderModeGeometry
 	Approximate bool
 }
@@ -307,19 +319,166 @@ func ResolveGlyphSetExpression(expression string) (GlyphSetResolution, error) {
 		res.Geometry.W = lcm(res.Geometry.W, def.Geometry.W)
 		res.Geometry.H = lcm(res.Geometry.H, def.Geometry.H)
 		res.Approximate = res.Approximate || def.Approximate
-		glyphs := def.Glyphs
-		if def.Generated == "sextant_2x3_with_columns" {
-			glyphs = append([]string{" "}, generatedSextants()...)
-		}
-		for _, glyph := range glyphs {
-			for _, r := range glyph {
-				if !containsRune(res.Glyphs, r) {
-					res.Glyphs = append(res.Glyphs, r)
-				}
+	}
+	for _, id := range normalized {
+		def := defs[id]
+		for _, shape := range glyphSetShapes(def) {
+			if containsRune(res.Glyphs, shape.Glyph) {
+				continue
 			}
+			res.Glyphs = append(res.Glyphs, shape.Glyph)
+			res.Shapes = append(res.Shapes, GlyphShape{
+				Glyph: shape.Glyph,
+				Mask:  scaleMask(shape.Mask, def.Geometry, res.Geometry),
+			})
 		}
 	}
 	return res, nil
+}
+
+func validateGlyphRegistry(rm RenderModesSpec) error {
+	defs := make(map[int]GlyphSetDef, len(rm.SetRegistry))
+	names := make(map[string]int, len(rm.SetRegistry))
+	for _, def := range rm.SetRegistry {
+		if def.ID < 0 || def.Name == "" || def.Geometry.W <= 0 || def.Geometry.H <= 0 {
+			return fmt.Errorf("invalid glyph set %q/%d", def.Name, def.ID)
+		}
+		if _, exists := defs[def.ID]; exists {
+			return fmt.Errorf("duplicate glyph set ID %d", def.ID)
+		}
+		if owner, exists := names[def.Name]; exists {
+			return fmt.Errorf("duplicate glyph set name %q (IDs %d and %d)", def.Name, owner, def.ID)
+		}
+		defs[def.ID] = def
+		names[def.Name] = def.ID
+		shapes, err := parseGlyphSetShapes(def)
+		if err != nil {
+			return fmt.Errorf("glyph set %d (%s): %w", def.ID, def.Name, err)
+		}
+		if len(shapes) == 0 {
+			return fmt.Errorf("glyph set %d (%s) has no shapes", def.ID, def.Name)
+		}
+	}
+	if _, ok := defs[0]; !ok {
+		return fmt.Errorf("glyph set 0 is required")
+	}
+	for name, ids := range rm.Compositions {
+		if name == "" {
+			return fmt.Errorf("empty composition name")
+		}
+		for _, id := range ids {
+			if _, ok := defs[id]; !ok {
+				return fmt.Errorf("composition %q references unknown glyph set ID %d", name, id)
+			}
+		}
+	}
+	seenOrder := make(map[string]bool, len(rm.CompositionOrder))
+	for _, name := range rm.CompositionOrder {
+		if seenOrder[name] {
+			return fmt.Errorf("duplicate composition_order name %q", name)
+		}
+		seenOrder[name] = true
+		if _, ok := rm.Compositions[name]; !ok {
+			return fmt.Errorf("composition_order references unknown composition %q", name)
+		}
+	}
+	return nil
+}
+
+func glyphSetShapes(def GlyphSetDef) []GlyphShape {
+	shapes, _ := parseGlyphSetShapes(def)
+	return shapes
+}
+
+func parseGlyphSetShapes(def GlyphSetDef) ([]GlyphShape, error) {
+	if def.Generated != "" {
+		switch def.Generated {
+		case "sextant_2x3":
+			return generatedSextantShapes(), nil
+		case "unicode_bars":
+			return generatedBarShapes(def)
+		default:
+			return nil, fmt.Errorf("unknown mask generator %q", def.Generated)
+		}
+	}
+	if len(def.Glyphs) == 0 || len(def.Masks) != len(def.Glyphs) {
+		return nil, fmt.Errorf("glyph and mask inventories differ (%d glyphs, %d masks)", len(def.Glyphs), len(def.Masks))
+	}
+	wantLen := def.Geometry.W * def.Geometry.H
+	seen := make(map[rune]bool, len(def.Glyphs))
+	shapes := make([]GlyphShape, 0, len(def.Glyphs))
+	for _, value := range def.Glyphs {
+		runes := []rune(value)
+		if len(runes) != 1 || seen[runes[0]] {
+			return nil, fmt.Errorf("glyph %q must be one unique rune", value)
+		}
+		seen[runes[0]] = true
+		bits, ok := def.Masks[value]
+		if !ok || len(bits) != wantLen {
+			return nil, fmt.Errorf("glyph %q mask length is %d, want %d", value, len(bits), wantLen)
+		}
+		mask := make([]bool, wantLen)
+		for i, bit := range []byte(bits) {
+			switch bit {
+			case '0':
+			case '1':
+				mask[i] = true
+			default:
+				return nil, fmt.Errorf("glyph %q mask contains %q", value, bit)
+			}
+		}
+		shapes = append(shapes, GlyphShape{Glyph: runes[0], Mask: mask})
+	}
+	return shapes, nil
+}
+
+func scaleMask(mask []bool, from, to RenderModeGeometry) []bool {
+	result := make([]bool, to.W*to.H)
+	for y := 0; y < to.H; y++ {
+		for x := 0; x < to.W; x++ {
+			result[y*to.W+x] = mask[(y*from.H/to.H)*from.W+x*from.W/to.W]
+		}
+	}
+	return result
+}
+
+func generatedBarShapes(def GlyphSetDef) ([]GlyphShape, error) {
+	shapes := make([]GlyphShape, 0, len(def.Glyphs))
+	for _, value := range def.Glyphs {
+		runes := []rune(value)
+		if len(runes) != 1 {
+			return nil, fmt.Errorf("glyph %q must be one rune", value)
+		}
+		ch := runes[0]
+		mask := make([]bool, def.Geometry.W*def.Geometry.H)
+		for y := 0; y < def.Geometry.H; y++ {
+			for x := 0; x < def.Geometry.W; x++ {
+				on, ok := unicodeBarContains(ch, x, y, def.Geometry.W, def.Geometry.H)
+				if !ok {
+					return nil, fmt.Errorf("glyph %q is not a supported bar", value)
+				}
+				mask[y*def.Geometry.W+x] = on
+			}
+		}
+		shapes = append(shapes, GlyphShape{Glyph: ch, Mask: mask})
+	}
+	return shapes, nil
+}
+
+func unicodeBarContains(ch rune, x, y, w, h int) (bool, bool) {
+	if ch == ' ' {
+		return false, true
+	}
+	if ch == '█' {
+		return true, true
+	}
+	if ch >= '▁' && ch <= '▇' {
+		level := int(ch-'▁') + 1
+		return (h-y)*8 <= level*h, true
+	}
+	horizontal := map[rune]int{'▏': 1, '▎': 2, '▍': 3, '▌': 4, '▋': 5, '▊': 6, '▉': 7}
+	level, ok := horizontal[ch]
+	return (x+1)*8 <= level*w, ok
 }
 
 func resolveExpression(expr string, compositions map[string][]int, names map[string]int, defs map[int]GlyphSetDef) ([]int, error) {
@@ -373,13 +532,17 @@ func resolveExpression(expr string, compositions map[string][]int, names map[str
 	return ids, nil
 }
 
-func generatedSextants() []string {
-	out := make([]string, 0, 62)
-	for r := rune(0x1fb00); r <= 0x1fb3b; r++ {
-		out = append(out, string(r))
+func generatedSextantShapes() []GlyphShape {
+	const subsets = "1 2 12 3 13 23 123 4 14 24 124 34 134 234 1234 5 15 25 125 35 235 1235 45 145 245 1245 345 1345 2345 12345 6 16 26 126 36 136 236 1236 46 146 1246 346 1346 2346 12346 56 156 256 1256 356 1356 2356 12356 456 1456 2456 12456 3456 13456 23456"
+	shapes := []GlyphShape{{Glyph: ' ', Mask: make([]bool, 6)}}
+	for i, subset := range strings.Fields(subsets) {
+		mask := make([]bool, 6)
+		for _, digit := range subset {
+			mask[int(digit-'1')] = true
+		}
+		shapes = append(shapes, GlyphShape{Glyph: rune(0x1fb00 + i), Mask: mask})
 	}
-	out = append(out, "▌", "▐")
-	return out
+	return shapes
 }
 func containsRune(rs []rune, r rune) bool {
 	for _, x := range rs {

@@ -72,7 +72,11 @@
           "name": { "type": "string", "minLength": 1 },
           "geometry": { "$ref": "#/$defs/geometry" },
           "glyphs": { "type": "array", "items": { "type": "string" } },
-          "generated": { "type": "string", "minLength": 1 },
+          "masks": {
+            "type": "object",
+            "additionalProperties": { "type": "string", "pattern": "^[01]+$" }
+          },
+          "generated": { "enum": ["sextant_2x3", "unicode_bars"] },
           "approximate": { "type": "boolean" }
         }
       }
