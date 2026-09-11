@@ -13,6 +13,8 @@
 - [Spec System & Browser Design](Design.md)
 - [Quad-Block Pixel Art](QuadPixelArt.md)
 - [Sparkline Pixel Art](SparklinePixelArt.md)
+- [Glyph Edge Artifacts](GlyphEdgeArtifacts.md)
+- [Glossary & Metric Taxonomy](Glossary.md)
 - [Render Experiment Lessons](RenderExperimentLessons.md)
 - [Rendering Bug & Golden Playbook](RenderingBugPlaybook.md)
 - [Go Conventions](Go.md)

@@ -12,6 +12,7 @@ Welcome to the Cati developer documentation. The following resources cover our p
 *   [Quad-Block Pixel Art](QuadPixelArt.md) — Half-block vs. quad-block layout math, the 2× horizontal stretch aspect-ratio correction, neighbour-aware colour quantisation, and the quadrant character lookup table.
 *   [Sparkline Pixel Art](SparklinePixelArt.md) — Sparkline layout math, horizontal and vertical orientation, optimal-split character and color selection, and the test helper suite.
 *   [Glyph Edge Artifacts & 1D Bar Dynamics](GlyphEdgeArtifacts.md) — Analysis of 1D bar/sparkline edge dynamics on curved contours (hairlines, thin ears, horns) and 2D set comparison.
+*   [Glossary & Metric Taxonomy](Glossary.md) — Comprehensive taxonomy of error metrics (End-to-End $E_{\text{src}}$ vs Fitting $E_{\text{fit}}$), spatial geometry, glyph sets, and smart rendering terms.
 *   [Render Experiment Lessons](RenderExperimentLessons.md) — Short notes from the removed sextant search and geomshape render experiments.
 *   [Rendering Bug & Golden-Change Playbook](RenderingBugPlaybook.md) — How to diagnose visual/geometry bugs (prove the root cause with numbers first) and change golden images safely. **Read before fixing any rendering bug or touching `testdata/` goldens.**
 *   [Go Library API](GoLibrary.md) — Import and use Cati's high-performance renderers in your own Go applications and TUIs.

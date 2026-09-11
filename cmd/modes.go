@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/cati/internal/metrics"
 	"ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
@@ -675,16 +676,39 @@ func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bo
 
 	recLeft := renderReconstruction(left, cfg)
 	recRight := renderReconstruction(right, cfg)
-	refLeft := smartReference(cati, recLeft.Bounds().Dx(), recLeft.Bounds().Dy(), cfg)
-	refRight := smartReference(emojig, recRight.Bounds().Dx(), recRight.Bounds().Dy(), cfg)
-	errLeft := imageMSEPercent(refLeft, recLeft)
-	errRight := imageMSEPercent(refRight, recRight)
-	avgErr := (errLeft + errRight) / 2.0
 
 	contentW := rightW
 	if contentW <= 0 {
 		contentW = width
 	}
+
+	// Compare reconstructions against original source images on a common high-resolution
+	// canonical canvas (12x24 subpixels per cell) so that low-resolution modes (full, half)
+	// correctly reflect their loss of detail compared to high-resolution modes (six, quad).
+	const cellSubW = 12
+	const cellSubH = 24
+
+	leftCols := renderedCellSize(left, cfg).Cols
+	if leftCols <= 0 {
+		leftCols = width
+	}
+	leftCanonW := leftCols * cellSubW
+	leftCanonH := 7 * cellSubH
+	refLeft := metrics.PyramidDownscale(cati, leftCanonW, leftCanonH)
+	upscaledLeft := nnUpscale(recLeft, leftCanonW, leftCanonH)
+	errLeft := imageMSEPercent(refLeft, upscaledLeft)
+
+	rightCols := renderedCellSize(right, cfg).Cols
+	if rightCols <= 0 {
+		rightCols = contentW
+	}
+	rightCanonW := rightCols * cellSubW
+	rightCanonH := 7 * cellSubH
+	refRight := metrics.PyramidDownscale(emojig, rightCanonW, rightCanonH)
+	upscaledRight := nnUpscale(recRight, rightCanonW, rightCanonH)
+	errRight := imageMSEPercent(refRight, upscaledRight)
+
+	avgErr := (errLeft + errRight) / 2.0
 
 	leftWidth := ansiLinesWidth(leftLines)
 	lines := make([]string, 0, max(len(leftLines), len(rightLines)))
@@ -699,6 +723,23 @@ func renderModePair(cati, emojig image.Image, width int, cfg renderCfg, smart bo
 		lines = append(lines, fmt.Sprintf("  %s  |  %s", padANSILine(leftLine, leftWidth), padANSILine(rightLine, leftWidth)))
 	}
 	return lines, modeDemoStats{dur: dur, w: contentW, err: avgErr}, nil
+}
+
+func nnUpscale(img image.Image, dstW, dstH int) image.Image {
+	sb := img.Bounds()
+	srcW, srcH := sb.Dx(), sb.Dy()
+	if srcW == 0 || srcH == 0 || dstW == 0 || dstH == 0 {
+		return image.NewRGBA(image.Rect(0, 0, dstW, dstH))
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
+	for y := 0; y < dstH; y++ {
+		sy := y * srcH / dstH
+		for x := 0; x < dstW; x++ {
+			sx := x * srcW / dstW
+			dst.Set(x, y, img.At(sb.Min.X+sx, sb.Min.Y+sy))
+		}
+	}
+	return dst
 }
 
 func imageMSEPercent(ref, rend image.Image) float64 {
