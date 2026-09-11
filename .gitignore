@@ -7,3 +7,7 @@ assets/baby-720p.mp4
 catiplay
 catibrowse
 *.lock
+
+# local Go workspace (untracked)
+/go.work
+/go.work.sum
