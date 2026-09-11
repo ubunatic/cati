@@ -60,9 +60,8 @@ Rules:
 - **Write spec integrity tests** — see `docs/Spec.md §6` for the required test matrix; add tests whenever a new action or button is introduced
 - **Update spec and Go together** — new action = schema enum + buttons.yaml + views.yaml + Go handler + test, all in the same commit
 
-## General Rules
+- Run `make preflight` before committing — it runs `make install` (installing to `~/go/bin`), `go vet ./...`, and verifies demo scripts render without errors (`make test` is the full test suite, run separately).
 - Run `go vet ./... && make install` when a feature is ready — this is the authority on build correctness.
-- Run `make preflight` before committing — it runs `go vet` and verifies demo scripts render without errors (`make test` is the full test suite, run separately).
 - LSP diagnostics are hints only; `go build` / `make` output is authoritative. Do not fix or report errors that `go build` does not reproduce.
 - Issues found during work go in `issues/` immediately — don't save them for the end.
 - After implementing a plan, run `/evergreen` to update docs and close issues in the same commit.
