@@ -46,7 +46,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 040 | [040-assess-halfblock-rendering-quality-at-small-widths.md](040-assess-halfblock-rendering-quality-at-small-widths.md) | Assess halfblock rendering quality at small widths | Closed |
 | 041 | [041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md](041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md) | Assess sparkline and composite rendering quality at small widths | Closed |
 | 042 | [042-add-info-metadata-to-cati-modes-demos.md](042-add-info-metadata-to-cati-modes-demos.md) | Add `--info` metadata to `cati modes` demos | Closed |
-| 043 | [043-compose-named-and-debug-render-modes-from-glyph-set-ids.md](043-compose-named-and-debug-render-modes-from-glyph-set-ids.md) | Compose named and debug render modes from glyph set IDs | Open |
+| 043 | [043-compose-named-and-debug-render-modes-from-glyph-set-ids.md](043-compose-named-and-debug-render-modes-from-glyph-set-ids.md) | Compose named and debug render modes from glyph set IDs | ✅ Closed |
 
 ## Archived
 

@@ -1,6 +1,6 @@
 # 043 — Compose named and debug render modes from glyph set IDs
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
@@ -134,25 +134,25 @@ tracker validation.
 
 ## Acceptance criteria
 
-- [ ] Resolve names and aliases consistently in CLI, modes demo/listing, library,
+- [x] Resolve names and aliases consistently in CLI, modes demo/listing, library,
   player and browser. Preserve case: q/Q, b/B, a/A and z/Z are distinct.
-- [ ] Support `d` = [0], `d1` = [0,1], `d2` = [0,2], and comma-separated
+- [x] Support `d` = [0], `d1` = [0,1], `d2` = [0,2], and comma-separated
   expressions such as `d1,6,9,44`, always including set 0. Normalize repeated
   IDs and ordering, reject unknown IDs and malformed/empty tokens with useful errors.
-- [ ] Define composed-name grammar against registered names/sets; support union
+- [x] Define composed-name grammar against registered names/sets; support union
   composition without mistaking the literal suffix in `quad+` or `bars+` for a
   missing operand. Record an unambiguous grammar and test it before shipping.
-- [ ] Keep half as the default. Distinguish omitted mode filters (list all modes)
+- [x] Keep half as the default. Distinguish omitted mode filters (list all modes)
   from explicit `all` (render the named union). Numeric modes are aliases, never
   raw set IDs outside debug syntax.
-- [ ] Record a complete migration table for every existing canonical name and
+- [x] Record a complete migration table for every existing canonical name and
   alias. Decide compatibility aliases versus intentional removals, including
   `spark`, `spark+quad`, `six+half`, and `spark+six`. Explicitly document that new
   `six` is 2x6 while `2x3` preserves the native family. No silent alias collisions.
-- [ ] `cati modes --info` derives descriptions, sets, unique shapes and actual
+- [x] `cati modes --info` derives descriptions, sets, unique shapes and actual
   geometry from resolved modes. Preserve filtering, width, smart comparison and
   `--smart -w 0 --info` listing behavior. Debug modes must be inspectable too.
-- [ ] Update completion/help, cycle controls, specs/schemas, library docs, demos,
+- [x] Update completion/help, cycle controls, specs/schemas, library docs, demos,
   README and relevant evergreen rendering docs together.
 
 ## Design ambiguities to resolve explicitly
