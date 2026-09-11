@@ -144,6 +144,8 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 		cells[tr] = make([]core.Cell, outCols)
 	}
 
+	bitCandsCache := prepareBitCandidatesCache(opts.Mode, custom, pixW, pixH, outCols, outRows)
+
 	renderRow := func(tr int) {
 		for tc := 0; tc < outCols; tc++ {
 			x0 := b.Min.X + tc*pixW/outCols
@@ -154,7 +156,14 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 				continue
 			}
 
-			cell := findBestCellWithCandidates(scaled, b, x0, x1, y0, y1, opts.Mode, custom)
+			cw := x1 - x0 + 1
+			ch := y1 - y0 + 1
+			var cell cellResult
+			if bitCands := bitCandsCache[(cw<<16)|ch]; bitCands != nil {
+				cell = findBestCandidateFast(scaled, x0, x1, y0, y1, bitCands)
+			} else {
+				cell = findBestCellWithCandidates(scaled, b, x0, x1, y0, y1, opts.Mode, custom)
+			}
 			cells[tr][tc] = core.Cell{
 				Ch:          cell.Ch,
 				Fg:          cell.FG,
@@ -266,6 +275,8 @@ func renderToImageWithOptions(img image.Image, outCols, outRows int, opts Option
 
 	dst := image.NewRGBA(b)
 
+	bitCandsCache := prepareBitCandidatesCache(opts.Mode, custom, pixW, pixH, outCols, outRows)
+
 	renderRow := func(tr int) {
 		for tc := 0; tc < outCols; tc++ {
 			x0 := b.Min.X + tc*pixW/outCols
@@ -276,9 +287,14 @@ func renderToImageWithOptions(img image.Image, outCols, outRows int, opts Option
 				continue
 			}
 
-			cell := findBestCellWithCandidates(img, b, x0, x1, y0, y1, opts.Mode, custom)
 			cw := x1 - x0 + 1
 			ch := y1 - y0 + 1
+			var cell cellResult
+			if bitCands := bitCandsCache[(cw<<16)|ch]; bitCands != nil {
+				cell = findBestCandidateFast(img, x0, x1, y0, y1, bitCands)
+			} else {
+				cell = findBestCellWithCandidates(img, b, x0, x1, y0, y1, opts.Mode, custom)
+			}
 
 			for y := y0; y <= y1; y++ {
 				for x := x0; x <= x1; x++ {
@@ -634,6 +650,62 @@ func quadMask(ul, ur, ll, lr bool) func(x, y, w, h int) bool {
 	}
 }
 
+func candidatesForMode(mode Mode) []candidate {
+	switch mode {
+	case HalfSplit:
+		return halfSplitCandidates
+	case Spark:
+		return sparkCandidates
+	case Quad:
+		return sparkQuadCandidates
+	case Sextant:
+		return sextantCandidates
+	case SixHalf:
+		return sixHalfCandidates
+	case Best:
+		return bestCandidates
+	default:
+		return verticalCandidates
+	}
+}
+
+func prepareBitCandidatesCache(mode Mode, custom []candidate, pixW, pixH, outCols, outRows int) map[int][]bitCandidate {
+	candidates := custom
+	if len(candidates) == 0 {
+		candidates = candidatesForMode(mode)
+	}
+
+	cache := make(map[int][]bitCandidate, 4)
+	if outCols <= 0 || outRows <= 0 {
+		return cache
+	}
+
+	cwMin := pixW / outCols
+	cwMax := (pixW + outCols - 1) / outCols
+	chMin := pixH / outRows
+	chMax := (pixH + outRows - 1) / outRows
+
+	for _, w := range []int{cwMin, cwMax} {
+		for _, h := range []int{chMin, chMax} {
+			if w*h > 128 || w <= 0 || h <= 0 {
+				continue
+			}
+			key := (w << 16) | h
+			if _, ok := cache[key]; ok {
+				continue
+			}
+			if len(custom) == 0 {
+				if pre := getPrecomputedBitCandidates(mode, w, h); pre != nil {
+					cache[key] = pre
+					continue
+				}
+			}
+			cache[key] = makeBitCandidates(candidates, w, h)
+		}
+	}
+	return cache
+}
+
 // FindBestCell tries the active mode's glyph candidates for the pixel block
 // [x0..x1] × [y0..y1] and returns the lowest-SSE reconstruction.
 func FindBestCell(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, mode Mode) cellResult {
@@ -642,22 +714,7 @@ func FindBestCell(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, m
 	if bitCands := getPrecomputedBitCandidates(mode, w, h); bitCands != nil {
 		return findBestCandidateFast(img, x0, x1, y0, y1, bitCands)
 	}
-	candidates := verticalCandidates
-	switch mode {
-	case HalfSplit:
-		candidates = halfSplitCandidates
-	case Spark:
-		candidates = sparkCandidates
-	case Quad:
-		candidates = sparkQuadCandidates
-	case Sextant:
-		candidates = sextantCandidates
-	case SixHalf:
-		candidates = sixHalfCandidates
-	case Best:
-		candidates = bestCandidates
-	}
-	return findBestCandidate(img, bounds, x0, x1, y0, y1, candidates)
+	return findBestCandidate(img, bounds, x0, x1, y0, y1, candidatesForMode(mode))
 }
 
 func findBestCellWithCandidates(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, mode Mode, custom []candidate) cellResult {

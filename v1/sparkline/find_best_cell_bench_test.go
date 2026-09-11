@@ -66,3 +66,34 @@ func BenchmarkFindBestCellBest(b *testing.B) {
 	benchmarkFindBestCell(b, Best)
 }
 
+func BenchmarkRenderCustomShapes(b *testing.B) {
+	img := sparkGlyphBenchmarkImage(240, 144) // 40x24 cells of 6x6
+	shapes := make([]Shape, 0, 90)
+	for i := 0; i < 90; i++ {
+		mask := make([]bool, 36)
+		for j := 0; j < 36; j++ {
+			mask[j] = (j+i)%3 == 0
+		}
+		shapes = append(shapes, Shape{
+			Ch:     rune(0x2800 + i),
+			Width:  6,
+			Height: 6,
+			Mask:   mask,
+		})
+	}
+	opts := Options{
+		CellW:  6,
+		CellH:  6,
+		Shapes: shapes,
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := RenderToImageWithOptions(img, 40, 24, opts)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
