@@ -1211,6 +1211,68 @@ func renderModePairRaw(leftSrc, rightSrc image.Image, width int, cfg renderCfg, 
 	}, nil
 }
 
+// ssimTrimTransparentPadding controls whether SSIM evaluation crops out trailing
+// transparent extension rows (appended by FitDims to snap to terminal cell boundaries).
+//
+// Why this option exists:
+// Terminal render modes often have multi-pixel vertical cells (e.g. halfblock 1x2,
+// quadblock 2x2, sextant 2x3, sparkline 4x8). When a source image height results in a
+// fractional character row (e.g. 26.5 rows), FitDims snaps to a valid half-cell and appends
+// extH transparent rows so the renderer can emit a partial block character (e.g. ▀).
+//
+// If SSIM evaluation scales the source reference across the full cell bounds including extH,
+// the reference image contains genuine content at the bottom where the reconstruction is
+// transparent/black. This incurs an artificial boundary penalty on the bottom row, unfairly
+// suppressing the SSIM score of multi-pixel modes (like halfblock) relative to 1x1 modes
+// (like fulls) which have extH=0.
+//
+// Trimming the trailing transparent extension rows aligns the reference downscale exactly
+// with the active rendered content, giving a fair, distortion-free quality comparison.
+var ssimTrimTransparentPadding = true
+
+func countTrailingTransparentRows(img image.Image) int {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w <= 0 || h <= 0 {
+		return 0
+	}
+	transpRows := 0
+	for y := b.Max.Y - 1; y >= b.Min.Y; y-- {
+		allTransp := true
+		for x := b.Min.X; x < b.Max.X; x++ {
+			_, _, _, a := img.At(x, y).RGBA()
+			if a != 0 {
+				allTransp = false
+				break
+			}
+		}
+		if !allTransp {
+			break
+		}
+		transpRows++
+	}
+	return transpRows
+}
+
+func cropImageHeight(img image.Image, h int) image.Image {
+	b := img.Bounds()
+	if b.Dy() <= h {
+		return img
+	}
+	if sub, ok := img.(interface {
+		SubImage(r image.Rectangle) image.Image
+	}); ok {
+		return sub.SubImage(image.Rect(b.Min.X, b.Min.Y, b.Max.X, b.Min.Y+h))
+	}
+	out := image.NewRGBA(image.Rect(0, 0, b.Dx(), h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < b.Dx(); x++ {
+			out.Set(x, y, img.At(b.Min.X+x, b.Min.Y+y))
+		}
+	}
+	return out
+}
+
 func calcSingleImageSSIM(src image.Image, prepared image.Image, cfg renderCfg, targetWidth int) float64 {
 	rec := renderReconstruction(prepared, cfg)
 	const cellSubW = 12
@@ -1224,6 +1286,22 @@ func calcSingleImageSSIM(src image.Image, prepared image.Image, cfg renderCfg, t
 	numRows := max(1, prepared.Bounds().Dy()/spec.CellH)
 	canonW := cols * cellSubW
 	canonH := numRows * cellSubH
+
+	if ssimTrimTransparentPadding {
+		extRows := countTrailingTransparentRows(prepared)
+		contentH := prepared.Bounds().Dy() - extRows
+		if contentH > 0 && extRows > 0 {
+			kY := cellSubH / spec.CellH
+			if kY <= 0 {
+				kY = 1
+			}
+			canonContentH := contentH * kY
+			recContent := cropImageHeight(rec, contentH)
+			ref := metrics.PyramidDownscale(src, canonW, canonContentH)
+			upscaled := nnUpscale(recContent, canonW, canonContentH)
+			return metrics.SSIMLuminance(ref, upscaled)
+		}
+	}
 
 	ref := metrics.PyramidDownscale(src, canonW, canonH)
 	upscaled := nnUpscale(rec, canonW, canonH)
