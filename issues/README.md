@@ -50,6 +50,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 044 | [044-modes-command-custom-image-input-support.md](044-modes-command-custom-image-input-support.md) | Modes Command Custom Image Input Support | ✅ Closed |
 | 045 | [045-modes-command-test-asset-presets-and-sample-shortcuts.md](045-modes-command-test-asset-presets-and-sample-shortcuts.md) | Modes Command Test Asset Presets and Sample Shortcuts | ✅ Closed |
 | 046 | [046-modes-command-dataset-benchmark-scorecard.md](046-modes-command-dataset-benchmark-scorecard.md) | Modes Command Dataset Benchmark Scorecard | ✅ Closed |
+| 047 | [047-smart-render-search-timeout.md](047-smart-render-search-timeout.md) | Abort --smart search after 1s (--smart-timeout default) | 🔴 Open |
 
 ## Archived
 
