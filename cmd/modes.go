@@ -95,11 +95,6 @@ func runModesDemoSelected(out io.Writer, width int, smart, info bool, names []st
 	if err != nil {
 		return err
 	}
-	for _, entry := range entries {
-		if entry.registryOnly {
-			return fmt.Errorf("mode %q is inspectable but has no safe demo renderer", entry.name)
-		}
-	}
 	cati, err := decodeEmbeddedLogo()
 	if err != nil {
 		return err
@@ -160,8 +155,8 @@ func selectedRenderModes(names []string) ([]renderModeEntry, error) {
 	for _, name := range names {
 		canonical, ok := renderModeAliases[name]
 		if !ok {
-			if _, err := spec.ResolveGlyphSetExpression(name); err == nil {
-				selected = append(selected, renderModeEntry{name: name, registryOnly: true})
+			if cfg, err := parseRenderMode(name); err == nil {
+				selected = append(selected, renderModeEntry{name: name, cfg: cfg, registryOnly: true})
 				continue
 			}
 			return nil, fmt.Errorf("unknown render mode %q", name)
@@ -207,7 +202,7 @@ func approximateSuffix(approximate bool) string {
 }
 
 func modeGlyphs(entry renderModeEntry, modeSpec spec.RenderModesSpec) []rune {
-	if entry.registryOnly {
+	if entry.registryOnly || entry.cfg.useGlyphs() {
 		resolution, err := spec.ResolveGlyphSetExpression(entry.name)
 		if err == nil {
 			return resolution.Glyphs
@@ -338,14 +333,20 @@ func renderDemoLines(img image.Image, rc renderCfg) ([]string, error) {
 	var buf bytes.Buffer
 	var err error
 	switch {
-	case rc.mode.useSextant():
+	case rc.useGlyphs():
+		spec := rc.viewSpec()
+		opts := rc.glyphOptions()
+		opts.NoLinePrefix = true
+		opts.Rows = max(1, ceilDiv(img.Bounds().Dy(), spec.CellH))
+		err = sparkline.Render(&buf, img, max(1, ceilDiv(img.Bounds().Dx(), spec.CellW)), opts)
+	case rc.useSextant():
 		err = sextant.Render(&buf, img, 0, sextant.Options{Mode: rc.sextantMode, NoLinePrefix: true})
-	case rc.mode.useQuad():
+	case rc.useQuad():
 		opts := rc.quadOpts
 		opts.NoLinePrefix = true
 		err = quadblock.Render(&buf, img, 0, opts)
-	case rc.mode.useSpark():
-		spec := rc.mode.viewSpec()
+	case rc.useSpark():
+		spec := rc.viewSpec()
 		err = sparkline.Render(&buf, img, max(1, img.Bounds().Dx()/spec.CellW), sparkline.Options{Mode: rc.sparkMode, Rows: max(1, img.Bounds().Dy()/spec.CellH), CellW: spec.CellW, CellH: spec.CellH, AspectX: spec.AspectX, NoLinePrefix: true})
 	default:
 		err = halfblock.Render(&buf, img, 0, halfblock.Options{NoLinePrefix: true})

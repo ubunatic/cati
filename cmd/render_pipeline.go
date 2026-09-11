@@ -83,7 +83,7 @@ func prepareRenderedImageChecked(orig image.Image, state *viewState, termCols, t
 		return resizeRenderedImage(orig, scaledW, scaledH, rc), nil
 	}
 
-	spec := rc.mode.viewSpec()
+	spec := rc.viewSpec()
 	dims := spec.Dims(srcW, srcH, termCols, termRows, state.zoom)
 	scaled := resizeRenderedImage(orig, dims.ScaledW, dims.ScaledH, rc)
 
@@ -106,11 +106,11 @@ func renderTargetForSource(srcW, srcH, termCols, termRows int, rc renderCfg, ini
 		return 0, 0
 	}
 	if initialZoom == "" {
-		if spec, ok := rc.mode.v2FitSpec(); ok {
+		if spec, ok := rc.v2FitSpec(); ok {
 			plan := spec.Fit(srcW, srcH, termCols, termRows, false)
 			return plan.RenderW, plan.RenderH
 		}
-		spec := rc.mode.viewSpec()
+		spec := rc.viewSpec()
 		targetW, targetH, _ := imgutil.FitDims(srcW, srcH, spec.CellW, spec.CellH, spec.AspectX, termCols, termRows)
 		return targetW, targetH
 	}
@@ -118,17 +118,17 @@ func renderTargetForSource(srcW, srcH, termCols, termRows int, rc renderCfg, ini
 	if ok {
 		return targetW, targetH
 	}
-	if spec, ok := rc.mode.v2FitSpec(); ok {
+	if spec, ok := rc.v2FitSpec(); ok {
 		plan := spec.Fit(srcW, srcH, termCols, termRows, false)
 		return plan.RenderW, plan.RenderH
 	}
-	spec := rc.mode.viewSpec()
+	spec := rc.viewSpec()
 	fitW, fitH, _ := imgutil.FitDims(srcW, srcH, spec.CellW, spec.CellH, spec.AspectX, termCols, termRows)
 	return fitW, fitH
 }
 
 func explicitZoomRenderTarget(srcW, srcH, termCols, termRows int, rc renderCfg, initialZoom string) (int, int, bool) {
-	spec := rc.mode.viewSpec()
+	spec := rc.viewSpec()
 	if initialZoom == "w" || initialZoom == "h" {
 		zoom := spec.InitialZoomRatio(initialZoom, srcW, srcH, termCols, termRows, true)
 		dims := spec.Dims(srcW, srcH, termCols, termRows, zoom)
@@ -158,7 +158,7 @@ func fitRenderedImageChecked(img image.Image, cols, rows int, rc renderCfg) (ima
 		img = rc.preScale(img)
 	}
 	b := img.Bounds()
-	if spec, ok := rc.mode.v2FitSpec(); ok {
+	if spec, ok := rc.v2FitSpec(); ok {
 		plan := spec.Fit(b.Dx(), b.Dy(), cols, rows, false)
 		if err := validateSourceAspectWith(rc, b, plan.RenderW, plan.RenderH, spec.AspectNum, spec.AspectDen, spec.CellW, spec.CellH); err != nil {
 			return nil, err
@@ -169,7 +169,7 @@ func fitRenderedImageChecked(img image.Image, cols, rows int, rc renderCfg) (ima
 		}
 		return result, nil
 	}
-	spec := rc.mode.viewSpec()
+	spec := rc.viewSpec()
 	targetW, targetH, extH := imgutil.FitDims(b.Dx(), b.Dy(), spec.CellW, spec.CellH, spec.AspectX, cols, rows)
 	if err := validateSourceAspect(rc, b, targetW, targetH); err != nil {
 		return nil, err
@@ -182,8 +182,8 @@ func fitRenderedImageChecked(img image.Image, cols, rows int, rc renderCfg) (ima
 }
 
 func validateSourceAspect(rc renderCfg, src image.Rectangle, renderW, renderH int) error {
-	aspectNum, aspectDen := rc.mode.renderAspectCorrection()
-	cellW, cellH := rc.mode.renderCellSize()
+	aspectNum, aspectDen := rc.renderAspectCorrection()
+	cellW, cellH := rc.renderCellSize()
 	return validateSourceAspectWith(rc, src, renderW, renderH, aspectNum, aspectDen, cellW, cellH)
 }
 
@@ -223,8 +223,8 @@ func (m renderMode) renderCellSize() (cellW, cellH int) {
 }
 
 func alignRenderedCellSize(w, h int, rc renderCfg) (int, int) {
-	spec := rc.mode.viewSpec()
-	if rc.mode.useSextant() {
+	spec := rc.viewSpec()
+	if rc.useSextant() {
 		return imgutil.AlignCellSize(w, h, spec.CellW, 1)
 	}
 	return imgutil.AlignCellSize(w, h, spec.CellW, spec.CellH)

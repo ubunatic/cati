@@ -43,7 +43,7 @@ type viewerCore struct {
 	activeAction string
 	status       string
 	infoVisible  bool
-	skipQuality  bool        // when true the rerender callback skips quality computation (video playback)
+	skipQuality  bool // when true the rerender callback skips quality computation (video playback)
 	lastKey      string
 	lastVP       image.Image // last derived viewport pixel image
 
@@ -63,7 +63,7 @@ func newViewerCore(
 	cols, rows := resolveViewerTermSize(initWidth, initHeight)
 	modeName := rcModeName(rc)
 	lastNonHBID := rc.id
-	if !rc.mode.useQuad() {
+	if rc.id == 0 {
 		lastNonHBID = -1
 	}
 	return &viewerCore{
@@ -108,7 +108,7 @@ func (vc *viewerCore) handleAction(action, tok string) (quit, changed bool) {
 
 	case "inc_zoom":
 		if vc.lastSrcW > 0 {
-			steps := zoomSteps(maxZoom(vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc.mode), vc.lastSrcW)
+			steps := zoomSteps(maxZoomForCfg(vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc), vc.lastSrcW)
 			i := stepIdx(vc.state.zoom, steps)
 			if i > 0 {
 				vc.state.zoom = steps[i-1]
@@ -119,7 +119,7 @@ func (vc *viewerCore) handleAction(action, tok string) (quit, changed bool) {
 
 	case "dec_zoom":
 		if vc.lastSrcW > 0 {
-			steps := zoomSteps(maxZoom(vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc.mode), vc.lastSrcW)
+			steps := zoomSteps(maxZoomForCfg(vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc), vc.lastSrcW)
 			i := stepIdx(vc.state.zoom, steps)
 			if i < len(steps)-1 {
 				vc.state.zoom = steps[i+1]
@@ -144,8 +144,8 @@ func (vc *viewerCore) handleAction(action, tok string) (quit, changed bool) {
 			}
 			k = math.Max(k, 1.0/float64(vc.lastSrcW))
 			k = math.Min(k, float64(vc.lastSrcW))
-			mz := maxZoom(vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc.mode)
-			vc.state.zoom = vc.rc.mode.viewSpec().ZoomRatioForK(mz, k)
+			mz := maxZoomForCfg(vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc)
+			vc.state.zoom = vc.rc.viewSpec().ZoomRatioForK(mz, k)
 			vc.rerender()
 			return false, true
 		}
@@ -172,7 +172,7 @@ func (vc *viewerCore) handleAction(action, tok string) (quit, changed bool) {
 	case "toggle_halfblock":
 		oldRC := vc.rc
 		graySaved, grayColorsSaved := vc.rc.gray, vc.rc.grayColors
-		if vc.rc.mode.useQuad() {
+		if vc.rc.id != 0 {
 			vc.lastNonHBID = vc.rc.id
 			if m, n, ok := findRenderModeByID(0); ok {
 				vc.rc, vc.modeName = m, n
@@ -214,10 +214,10 @@ func (vc *viewerCore) handleAction(action, tok string) (quit, changed bool) {
 // not claim — the caller should handle it.
 func (vc *viewerCore) handleKey(tok string) (quit, changed bool, unhandledAction string) {
 	vc.lastKey = vc.inputSpec.EventName(vc.inputSpec.Classify(tok))
-	geom := vc.rc.mode.viewSpec()
+	geom := vc.rc.viewSpec()
 	mz := 1.0
 	if vc.lastSrcW > 0 {
-		mz = maxZoom(vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc.mode)
+		mz = maxZoomForCfg(vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc)
 	}
 	k := max(1, int(math.Round(mz/vc.state.zoom)))
 	hStep := max(1, min(vc.termCols/8, k))
@@ -291,11 +291,11 @@ func (vc *viewerCore) handleMouse(m input.MouseEvent) (quit, changed bool, unhan
 		changed = true
 	}
 
-	geomV := vc.rc.mode.viewSpec()
+	geomV := vc.rc.viewSpec()
 	switch {
 	// ── Scroll wheel: zoom at cursor ──────────────────────────────────────────
 	case m.IsScroll() && !m.Release && vc.lastSrcW > 0:
-		steps := zoomSteps(maxZoom(vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc.mode), vc.lastSrcW)
+		steps := zoomSteps(maxZoomForCfg(vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows(), vc.rc), vc.lastSrcW)
 		i := stepIdx(vc.state.zoom, steps)
 		if m.ScrollDir() < 0 && i > 0 {
 			zoomAtCursor(&vc.state, steps[i-1], c, r, vc.rc.mode)
@@ -323,7 +323,7 @@ func (vc *viewerCore) handleMouse(m input.MouseEvent) (quit, changed bool, unhan
 
 // hintVars builds the shared hint variable map for drawHintBar.
 func (vc *viewerCore) hintVars(fileMeta MediaMeta, hint string, extra map[string]string) map[string]string {
-	zoomLabel := vc.rc.mode.viewSpec().ZoomLevel(vc.state.zoom, vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows())
+	zoomLabel := vc.rc.viewSpec().ZoomLevel(vc.state.zoom, vc.lastSrcW, vc.lastSrcH, vc.termCols, vc.viewRows())
 	if vc.src != nil && vc.lastSrcW > 0 {
 		zoomLabel = zoomLevel(vc.state, vc.src, vc.termCols, vc.viewRows(), vc.rc)
 	}

@@ -15,6 +15,8 @@ func TestResolveGlyphSetExpression(t *testing.T) {
 		{"q", []int{0, 1, 2, 4}, 2, 2},
 		{"Q", []int{0, 1, 2, 4, 14, 15}, 2, 4},
 		{"quad+six", []int{0, 1, 2, 4, 6}, 2, 6},
+		{"quad++six", []int{0, 1, 2, 4, 6, 14, 15}, 2, 12},
+		{"fulls+quads", []int{0, 4}, 2, 2},
 		{"bars+", []int{0, 1, 2, 4, 86}, 8, 8},
 		{"1", []int{0}, 1, 1},
 		{"2", []int{0, 2}, 1, 2},
@@ -80,7 +82,7 @@ func TestResolveGlyphSetExpressionCaseAndErrors(t *testing.T) {
 			t.Errorf("%q: %v", expr, err)
 		}
 	}
-	for _, expr := range []string{"d1,,2", "d,1", "d-1", "dfoo", "d999", "d ", "unknown"} {
+	for _, expr := range []string{"d1,,2", "d,1", "d-1", "dfoo", "d999", "d ", "unknown", "quad++", "+six", "14"} {
 		if _, err := ResolveGlyphSetExpression(expr); err == nil {
 			t.Errorf("ResolveGlyphSetExpression(%q) succeeded, want error", expr)
 		}

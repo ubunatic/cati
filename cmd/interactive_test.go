@@ -384,11 +384,11 @@ func TestRenderModeZeroValueIsHalfblockAndCyclesToQuad(t *testing.T) {
 		t.Fatalf("rcModeName(zero) = %q, want half", got)
 	}
 	next, name := cycleRenderCfg(rc)
-	if name != "half/split" {
-		t.Fatalf("cycleRenderCfg(zero) name = %q, want half/split", name)
+	if name != "quad" {
+		t.Fatalf("cycleRenderCfg(zero) name = %q, want quad", name)
 	}
-	if next.mode != modeHalfSplit || next.sparkMode != sparkline.HalfSplit {
-		t.Fatalf("cycleRenderCfg(zero) = %#v, want half/split", next)
+	if next.mode != modeQuad || !next.quadOpts.SplitHalf {
+		t.Fatalf("cycleRenderCfg(zero) = %#v, want quad", next)
 	}
 }
 

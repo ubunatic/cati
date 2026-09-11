@@ -82,10 +82,16 @@ func main() {
 
 The `ubunatic.com/cati/spec` package exposes the same spec-owned registry used
 by the CLI. `spec.ResolveGlyphSetExpression("d1,6,9,44")` returns normalized,
-sorted IDs, the union glyph inventory, approximation status, and exact common
-geometry (per-axis LCM). Names and aliases are case-sensitive. The expression
-grammar and migration table for legacy mode names are documented in issue
+sorted IDs, the union glyph inventory and row-major coverage masks,
+approximation status, and exact common geometry (per-axis LCM). Names and
+aliases are case-sensitive. The expression grammar and migration table for legacy mode names are documented in issue
 [#043](../issues/043-compose-named-and-debug-render-modes-from-glyph-set-ids.md).
+
+Library renderers can convert those shapes directly to `sparkline.Shape` and
+pass them in `sparkline.Options.Shapes`; `Render`, `RenderToGrid`,
+`RenderToImageWithOptions`, and `RenderToImageWithOptionsJ` then share the same
+candidate selection and reconstruction behavior. Masks use `[]bool`, so union
+geometries are not limited to 64 subpixels.
 
 `halfblock.LoadImage(path)` supports PNG, JPEG, SVG, and first-frame video
 loading. SVGs are rasterized through `rsvg-convert`; callers that already know

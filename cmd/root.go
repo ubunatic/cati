@@ -501,18 +501,19 @@ func loadImageForRender(path string, termCols, termRows int, rc renderCfg, initi
 // parseRenderMode converts a --mode flag value into a canonical renderCfg.
 // The empty value defaults to halfblock.
 func parseRenderMode(mode string) (renderCfg, error) {
-	key := strings.TrimSpace(mode)
+	key := mode
 	if name, ok := renderModeAliases[key]; ok {
 		return findRenderModeByName(name)
 	}
-	if _, err := spec.ResolveGlyphSetExpression(key); err == nil {
-		return renderCfg{}, fmt.Errorf("render mode %q resolves to a glyph-set union but has no safe renderer; use `cati modes %s --info` to inspect it", mode, mode)
+	resolution, err := spec.ResolveGlyphSetExpression(key)
+	if err == nil {
+		return renderCfg{id: -1, name: key, glyph: &resolution}, nil
 	}
-	return renderCfg{}, fmt.Errorf("unknown --mode %q; valid: h, hs, q, s, sq, x, xh, sx", mode)
+	return renderCfg{}, fmt.Errorf("invalid --mode %q: %w", mode, err)
 }
 
 func findRenderModeByName(name string) (renderCfg, error) {
-	if canonical, ok := renderModeAliases[strings.TrimSpace(name)]; ok {
+	if canonical, ok := renderModeAliases[name]; ok {
 		name = canonical
 	}
 	for _, m := range renderModes {
@@ -520,7 +521,7 @@ func findRenderModeByName(name string) (renderCfg, error) {
 			return m.cfg, nil
 		}
 	}
-	return renderCfg{}, fmt.Errorf("unknown render mode %q", name)
+	return parseRenderMode(name)
 }
 
 // ── directory expansion ───────────────────────────────────────────────────────

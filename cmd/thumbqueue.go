@@ -147,7 +147,7 @@ func loadImageForThumb(path string, cols, rows int, rc renderCfg) (image.Image, 
 	}
 	srcW, srcH, err := halfblock.ProbeSVGDimensions(path)
 	if err != nil {
-		spec := rc.mode.viewSpec()
+		spec := rc.viewSpec()
 		return halfblock.LoadImageWithTarget(path, cols*spec.CellW, rows*spec.CellH)
 	}
 	targetW, targetH := renderTargetForSource(srcW, srcH, cols, rows, rc, "")

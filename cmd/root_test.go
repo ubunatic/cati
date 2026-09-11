@@ -173,6 +173,9 @@ func TestParseRenderMode(t *testing.T) {
 		{"default empty is half", "", "half", nil},
 		{"half short", "h", "half", nil},
 		{"half alias", "half", "half", nil},
+		{"half numeric", "2", "half", nil},
+		{"full short", "f", "full", nil},
+		{"full numeric", "1", "full", nil},
 		{"half split", "hs", "half/split", func(t *testing.T, opts quadblock.Options) {
 			if opts != (quadblock.Options{}) {
 				t.Fatalf("hs mode should not set quad options, got %#v", opts)
@@ -183,6 +186,10 @@ func TestParseRenderMode(t *testing.T) {
 				t.Fatal("quad alias should enable SplitHalf")
 			}
 		}},
+		{"quad numeric", "4", "quad", nil},
+		{"quad plus", "Q", "quad+", nil},
+		{"bars", "b", "bars", nil},
+		{"bars plus", "B", "bars+", nil},
 		{"spark", "s", "spark", func(t *testing.T, opts quadblock.Options) {
 			if opts != (quadblock.Options{}) {
 				t.Fatalf("s mode should not set quad options, got %#v", opts)
@@ -203,6 +210,14 @@ func TestParseRenderMode(t *testing.T) {
 				t.Fatalf("x mode should not set quad options, got %#v", opts)
 			}
 		}},
+		{"native sextant", "6", "2x3", nil},
+		{"three by three", "9", "3x3", nil},
+		{"all", "a", "all", nil},
+		{"all plus", "A", "all+", nil},
+		{"z", "z", "z", nil},
+		{"z plus", "Z", "z+", nil},
+		{"debug union", "d1,6,9,44", "d1,6,9,44", nil},
+		{"suffix union", "quad++six", "quad++six", nil},
 		{"six half", "xh", "six+half", func(t *testing.T, opts quadblock.Options) {
 			if opts != (quadblock.Options{}) {
 				t.Fatalf("xh mode should not set quad options, got %#v", opts)
@@ -736,7 +751,6 @@ func TestAllRenderModesStaticFitInsideTerminalBox(t *testing.T) {
 		})
 	}
 }
-
 
 type ansiGap struct {
 	found bool

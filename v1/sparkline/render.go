@@ -26,6 +26,15 @@ type Options struct {
 	CellW   int
 	CellH   int
 	AspectX int
+	// Shapes overrides Mode with an explicit, common-geometry glyph inventory.
+	Shapes []Shape
+}
+
+// Shape describes one glyph's row-major foreground mask.
+type Shape struct {
+	Ch            rune
+	Width, Height int
+	Mask          []bool
 }
 
 func (o Options) cellGeometry() (cellW, cellH, aspectX int) {
@@ -99,6 +108,10 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	var scaled image.Image
 	var outCols, outRows int
 	cellW, cellH, aspectX := opts.cellGeometry()
+	custom, err := candidatesForShapes(opts.Shapes)
+	if err != nil {
+		return nil, err
+	}
 
 	if cols > 0 || opts.Rows > 0 {
 		b := img.Bounds()
@@ -126,9 +139,6 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	pixW := b.Dx()
 	pixH := b.Dy()
 
-	blockW := max(1, pixW/outCols)
-	blockH := max(1, pixH/outRows)
-
 	cells := make([][]core.Cell, outRows)
 	for tr := 0; tr < outRows; tr++ {
 		cells[tr] = make([]core.Cell, outCols)
@@ -136,15 +146,15 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 
 	renderRow := func(tr int) {
 		for tc := 0; tc < outCols; tc++ {
-			x0 := b.Min.X + min(tc*blockW, pixW)
-			x1 := b.Min.X + min(tc*blockW+blockW, pixW) - 1
-			y0 := b.Min.Y + min(tr*blockH, pixH)
-			y1 := b.Min.Y + min(tr*blockH+blockH, pixH) - 1
+			x0 := b.Min.X + tc*pixW/outCols
+			x1 := b.Min.X + (tc+1)*pixW/outCols - 1
+			y0 := b.Min.Y + tr*pixH/outRows
+			y1 := b.Min.Y + (tr+1)*pixH/outRows - 1
 			if x1 < x0 || y1 < y0 {
 				continue
 			}
 
-			cell := FindBestCell(scaled, b, x0, x1, y0, y1, opts.Mode)
+			cell := findBestCellWithCandidates(scaled, b, x0, x1, y0, y1, opts.Mode, custom)
 			cells[tr][tc] = core.Cell{
 				Ch:          cell.Ch,
 				Fg:          cell.FG,
@@ -236,26 +246,37 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 // RenderToImage runs the same cell selection as RenderOpts but writes the
 // reconstructed glyph image instead of ANSI escape codes.
 func RenderToImage(img image.Image, outCols, outRows int, mode Mode) image.Image {
+	result, _ := RenderToImageWithOptions(img, outCols, outRows, Options{Mode: mode})
+	return result
+}
+
+// RenderToImageWithOptions reconstructs the exact pixels represented by opts.
+func RenderToImageWithOptions(img image.Image, outCols, outRows int, opts Options) (image.Image, error) {
+	return renderToImageWithOptions(img, outCols, outRows, opts, 1)
+}
+
+func renderToImageWithOptions(img image.Image, outCols, outRows int, opts Options, jobs int) (image.Image, error) {
+	custom, err := candidatesForShapes(opts.Shapes)
+	if err != nil {
+		return nil, err
+	}
 	b := img.Bounds()
 	pixW := b.Dx()
 	pixH := b.Dy()
 
-	cellW := max(1, pixW/outCols)
-	cellH := max(1, pixH/outRows)
-
 	dst := image.NewRGBA(b)
 
-	for tr := 0; tr < outRows; tr++ {
+	renderRow := func(tr int) {
 		for tc := 0; tc < outCols; tc++ {
-			x0 := b.Min.X + min(tc*cellW, pixW)
-			x1 := b.Min.X + min(tc*cellW+cellW, pixW) - 1
-			y0 := b.Min.Y + min(tr*cellH, pixH)
-			y1 := b.Min.Y + min(tr*cellH+cellH, pixH) - 1
+			x0 := b.Min.X + tc*pixW/outCols
+			x1 := b.Min.X + (tc+1)*pixW/outCols - 1
+			y0 := b.Min.Y + tr*pixH/outRows
+			y1 := b.Min.Y + (tr+1)*pixH/outRows - 1
 			if x1 < x0 || y1 < y0 {
 				continue
 			}
 
-			cell := FindBestCell(img, b, x0, x1, y0, y1, mode)
+			cell := findBestCellWithCandidates(img, b, x0, x1, y0, y1, opts.Mode, custom)
 			cw := x1 - x0 + 1
 			ch := y1 - y0 + 1
 
@@ -266,7 +287,14 @@ func RenderToImage(img image.Image, outCols, outRows int, mode Mode) image.Image
 			}
 		}
 	}
-	return dst
+	if jobs <= 1 {
+		for tr := 0; tr < outRows; tr++ {
+			renderRow(tr)
+		}
+	} else {
+		parallelRows(outRows, jobs, renderRow)
+	}
+	return dst, nil
 }
 
 // RenderJ is a compatibility wrapper.
@@ -277,58 +305,33 @@ func RenderJ(w io.Writer, img image.Image, outCols, outRows int, mode Mode, jobs
 // RenderToImageJ is a worker-aware copy of RenderToImage.
 // FIXME: copied from RenderToImage; consolidate once the worker path settles.
 func RenderToImageJ(img image.Image, outCols, outRows int, mode Mode, jobs int) image.Image {
-	if jobs <= 1 {
-		return RenderToImage(img, outCols, outRows, mode)
-	}
-	b := img.Bounds()
-	pixW := b.Dx()
-	pixH := b.Dy()
-	cellW := max(1, pixW/outCols)
-	cellH := max(1, pixH/outRows)
+	result, _ := renderToImageWithOptions(img, outCols, outRows, Options{Mode: mode}, jobs)
+	return result
+}
 
-	dst := image.NewRGBA(b)
+// RenderToImageWithOptionsJ is the worker-aware custom-shape reconstruction.
+func RenderToImageWithOptionsJ(img image.Image, outCols, outRows int, opts Options, jobs int) (image.Image, error) {
+	return renderToImageWithOptions(img, outCols, outRows, opts, jobs)
+}
 
+func parallelRows(rows, jobs int, renderRow func(int)) {
 	jobsCh := make(chan int)
 	var wg sync.WaitGroup
-	workerN := jobs
-	if workerN > outRows {
-		workerN = outRows
-	}
-	if workerN > runtime.NumCPU() {
-		workerN = runtime.NumCPU()
-	}
+	workerN := min(jobs, min(rows, runtime.NumCPU()))
 	for range workerN {
 		go func() {
-			for tr := range jobsCh {
-				for tc := 0; tc < outCols; tc++ {
-					x0 := b.Min.X + min(tc*cellW, pixW)
-					x1 := b.Min.X + min(tc*cellW+cellW, pixW) - 1
-					y0 := b.Min.Y + min(tr*cellH, pixH)
-					y1 := b.Min.Y + min(tr*cellH+cellH, pixH) - 1
-					if x1 < x0 || y1 < y0 {
-						continue
-					}
-
-					cell := FindBestCell(img, b, x0, x1, y0, y1, mode)
-					cw := x1 - x0 + 1
-					ch := y1 - y0 + 1
-					for y := y0; y <= y1; y++ {
-						for x := x0; x <= x1; x++ {
-							setRGBA(dst, x, y, reconstructedCellColor(cell, x-x0, y-y0, cw, ch))
-						}
-					}
-				}
+			for row := range jobsCh {
+				renderRow(row)
 				wg.Done()
 			}
 		}()
 	}
-	for tr := 0; tr < outRows; tr++ {
+	for row := 0; row < rows; row++ {
 		wg.Add(1)
-		jobsCh <- tr
+		jobsCh <- row
 	}
 	close(jobsCh)
 	wg.Wait()
-	return dst
 }
 
 type cellResult struct {
@@ -341,6 +344,33 @@ type cellResult struct {
 type candidate struct {
 	ch   rune
 	mask func(x, y, w, h int) bool
+}
+
+func candidatesForShapes(shapes []Shape) ([]candidate, error) {
+	if len(shapes) == 0 {
+		return nil, nil
+	}
+	seen := make(map[rune]bool, len(shapes))
+	result := make([]candidate, 0, len(shapes))
+	for _, shape := range shapes {
+		if shape.Ch == 0 || shape.Width <= 0 || shape.Height <= 0 || len(shape.Mask) != shape.Width*shape.Height {
+			return nil, fmt.Errorf("invalid custom glyph shape %q (%dx%d mask=%d)", shape.Ch, shape.Width, shape.Height, len(shape.Mask))
+		}
+		if seen[shape.Ch] {
+			return nil, fmt.Errorf("duplicate custom glyph shape %q", shape.Ch)
+		}
+		seen[shape.Ch] = true
+		shape := shape
+		result = append(result, candidate{ch: shape.Ch, mask: func(x, y, w, h int) bool {
+			if w <= 0 || h <= 0 {
+				return false
+			}
+			sx := min(shape.Width-1, x*shape.Width/w)
+			sy := min(shape.Height-1, y*shape.Height/h)
+			return shape.Mask[sy*shape.Width+sx]
+		}})
+	}
+	return result, nil
 }
 
 func maskContains(ch rune, x, y, w, h int) bool {
@@ -623,6 +653,13 @@ func FindBestCell(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, m
 		candidates = bestCandidates
 	}
 	return findBestCandidate(img, bounds, x0, x1, y0, y1, candidates)
+}
+
+func findBestCellWithCandidates(img image.Image, bounds image.Rectangle, x0, x1, y0, y1 int, mode Mode, custom []candidate) cellResult {
+	if len(custom) > 0 {
+		return findBestCandidate(img, bounds, x0, x1, y0, y1, custom)
+	}
+	return FindBestCell(img, bounds, x0, x1, y0, y1, mode)
 }
 
 func findBestCandidate(img image.Image, _ image.Rectangle, x0, x1, y0, y1 int, candidates []candidate) cellResult {

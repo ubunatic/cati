@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -108,7 +109,9 @@ func (m renderMode) v2FitSpec() (viewgeom.V2Spec, bool) {
 // unique per renderModes element. The zero id (0) belongs to "halfblock".
 type renderCfg struct {
 	id          int
+	name        string
 	mode        renderMode
+	glyph       *spec.GlyphSetResolution
 	sparkMode   sparkline.Mode
 	sextantMode sextant.Mode
 	quadOpts    quadblock.Options
@@ -118,6 +121,48 @@ type renderCfg struct {
 	gray        bool                     // when true, convert image to grayscale before rendering
 	grayColors  quadblock.ColorReduction // active grayscale palette level (ColorGray4/8/64/256)
 	smart       bool                     // opt-in nearby-width PSNR selection for static renders
+}
+
+func (rc renderCfg) viewSpec() viewgeom.Spec {
+	if rc.glyph != nil {
+		return viewgeom.NewCellRatio(rc.glyph.Geometry.W, rc.glyph.Geometry.H, 2*rc.glyph.Geometry.W, rc.glyph.Geometry.H)
+	}
+	return rc.mode.viewSpec()
+}
+
+func (rc renderCfg) useGlyphs() bool  { return rc.glyph != nil }
+func (rc renderCfg) useQuad() bool    { return !rc.useGlyphs() && rc.mode.useQuad() }
+func (rc renderCfg) useSpark() bool   { return !rc.useGlyphs() && rc.mode.useSpark() }
+func (rc renderCfg) useSextant() bool { return !rc.useGlyphs() && rc.mode.useSextant() }
+func (rc renderCfg) renderCellSize() (int, int) {
+	geom := rc.viewSpec()
+	return geom.CellW, geom.CellH
+}
+
+func (rc renderCfg) v2FitSpec() (viewgeom.V2Spec, bool) {
+	if rc.useGlyphs() {
+		return viewgeom.NewV2CellRatio(rc.glyph.Geometry.W, rc.glyph.Geometry.H, 2*rc.glyph.Geometry.W, rc.glyph.Geometry.H), true
+	}
+	return rc.mode.v2FitSpec()
+}
+
+func (rc renderCfg) renderAspectCorrection() (int, int) {
+	if spec, ok := rc.v2FitSpec(); ok {
+		return spec.AspectNum, spec.AspectDen
+	}
+	geom := rc.viewSpec()
+	return geom.AspectX, 1
+}
+
+func (rc renderCfg) glyphOptions() sparkline.Options {
+	if rc.glyph == nil {
+		return sparkline.Options{}
+	}
+	shapes := make([]sparkline.Shape, len(rc.glyph.Shapes))
+	for i, shape := range rc.glyph.Shapes {
+		shapes[i] = sparkline.Shape{Ch: shape.Glyph, Width: rc.glyph.Geometry.W, Height: rc.glyph.Geometry.H, Mask: shape.Mask}
+	}
+	return sparkline.Options{CellW: rc.glyph.Geometry.W, CellH: rc.glyph.Geometry.H, AspectX: 1, Shapes: shapes, Jobs: rc.jobs}
 }
 
 // grayLevels is the cycle order for the G key: off → 256 → 64 → 8 → 4 → off.
@@ -212,12 +257,19 @@ func viewerHintVars(meta MediaMeta, termCols int, hintTpl string, extra map[stri
 }
 
 func (rc renderCfg) render(w io.Writer, img image.Image) error {
+	if rc.useGlyphs() {
+		b := img.Bounds()
+		cellW, cellH := rc.renderCellSize()
+		opts := rc.glyphOptions()
+		opts.Rows = max(1, ceilDiv(b.Dy(), cellH))
+		return sparkline.Render(w, img, max(1, ceilDiv(b.Dx(), cellW)), opts)
+	}
 	switch rc.mode {
 	case modeSextant:
 		return sextant.Render(w, img, 0, sextant.Options{Mode: rc.sextantMode, Jobs: rc.jobs})
 	case modeHalfSplit, modeSpark, modeSparkQuad, modeSixHalf, modeSparkSix:
 		b := img.Bounds()
-		spec := rc.mode.viewSpec()
+		spec := rc.viewSpec()
 		outCols := max(1, b.Dx()/spec.CellW)
 		outRows := max(1, b.Dy()/spec.CellH)
 		return sparkline.Render(w, img, outCols, sparkline.Options{Mode: rc.sparkMode, Rows: outRows, Jobs: rc.jobs, CellW: spec.CellW, CellH: spec.CellH, AspectX: spec.AspectX})
@@ -269,11 +321,15 @@ func renderedCellSize(vp image.Image, rc renderCfg) renderCells {
 }
 
 func renderedCellSizeForPixels(w, h int, rc renderCfg) renderCells {
+	if rc.useGlyphs() {
+		cellW, cellH := rc.renderCellSize()
+		return renderCells{Cols: ceilDiv(w, cellW), Rows: ceilDiv(h, cellH)}
+	}
 	switch rc.mode {
 	case modeSextant:
 		return renderCells{Cols: ceilDiv(w, 2), Rows: ceilDiv(h, 3)}
 	case modeHalfSplit, modeSpark, modeSparkQuad, modeSixHalf, modeSparkSix:
-		spec := rc.mode.viewSpec()
+		spec := rc.viewSpec()
 		return renderCells{Cols: max(1, w/spec.CellW), Rows: max(1, h/spec.CellH)}
 	case modeQuad:
 		return renderCells{Cols: ceilDiv(w, 2), Rows: ceilDiv(h, 2)}
@@ -288,14 +344,14 @@ func expectedCellSize(orig image.Image, state viewState, termCols, termRows int,
 	if srcW <= 0 || srcH <= 0 || state.zoom <= 0 {
 		return renderCells{}
 	}
-	dims := rc.mode.viewSpec().Dims(srcW, srcH, termCols, termRows, state.zoom)
+	dims := rc.viewSpec().Dims(srcW, srcH, termCols, termRows, state.zoom)
 	dims.ClampPan(&state.panX, &state.panY)
 	viewW, viewH := dims.VisibleSize(state.panX, state.panY)
 	if viewW <= 0 || viewH <= 0 {
 		return renderCells{}
 	}
 	crop := image.Rect(viewgeom.SrcCrop(srcW, srcH, state.panX, state.panY, dims.ScaledW, dims.ScaledH, viewW, viewH))
-	k := rc.mode.viewSpec().MaxZoom(srcW, srcH, termCols, termRows) / state.zoom
+	k := rc.viewSpec().MaxZoom(srcW, srcH, termCols, termRows) / state.zoom
 	if k <= 0 {
 		return renderCells{}
 	}
@@ -309,12 +365,12 @@ func viewportPixelSizeForCells(cells renderCells, rc renderCfg) (int, int) {
 	if cells.Cols <= 0 || cells.Rows <= 0 {
 		return 0, 0
 	}
-	spec := rc.mode.viewSpec()
+	spec := rc.viewSpec()
 	return cells.Cols * spec.CellW, cells.Rows * spec.CellH
 }
 
 func alignViewportSize(viewW, viewH int, rc renderCfg) (int, int) {
-	if rc.mode.useQuad() || rc.mode.useSextant() {
+	if rc.useQuad() || rc.useSextant() || rc.useGlyphs() {
 		if viewW > 1 && viewW%2 != 0 {
 			viewW--
 		}
@@ -392,15 +448,34 @@ func loadRenderModeEntries() []renderModeEntry {
 		defs[def.Name] = def
 	}
 	entries := make([]renderModeEntry, 0, len(modeSpec.Cycle))
-	for _, name := range modeSpec.Cycle {
+	for index, name := range modeSpec.Cycle {
 		def, ok := defs[name]
-		if !ok {
-			continue
+		var cfg renderCfg
+		if ok {
+			cfg, ok = renderers[def.Renderer]
+			if !ok {
+				continue
+			}
+		} else {
+			resolution, resolveErr := spec.ResolveGlyphSetExpression(name)
+			if resolveErr != nil {
+				continue
+			}
+			cfg = renderCfg{id: 100 + index, glyph: &resolution}
+			def = spec.RenderModeDef{Name: name, Description: modeSpec.CompositionInfo[name], Renderer: "glyph_union", Cell: resolution.Geometry, Colorer: "fg_bg_sse", SmartStep: "native", NativeStep: 1}
 		}
-		cfg, ok := renderers[def.Renderer]
-		if !ok {
-			continue
+		cfg.name = name
+		resolution, resolveErr := spec.ResolveGlyphSetExpression(name)
+		_, registeredComposition := modeSpec.Compositions[name]
+		if resolveErr == nil && registeredComposition {
+			for alias, ids := range modeSpec.Compositions {
+				if alias != name && slices.Equal(ids, resolution.IDs) {
+					def.Aliases = append(def.Aliases, alias)
+				}
+			}
 		}
+		slices.Sort(def.Aliases)
+		def.Aliases = slices.Compact(def.Aliases)
 		entries = append(entries, renderModeEntry{name: def.Name, aliases: def.Aliases, definition: def, cfg: cfg})
 	}
 	if len(entries) == 0 {
@@ -410,7 +485,7 @@ func loadRenderModeEntries() []renderModeEntry {
 }
 
 func buildRenderModeAliases(entries []renderModeEntry) map[string]string {
-	aliases := map[string]string{"": entries[0].name}
+	aliases := map[string]string{"": "half"}
 	for _, entry := range entries {
 		aliases[entry.name] = entry.name
 		for _, alias := range entry.aliases {
@@ -436,6 +511,9 @@ func canonicalRenderCfg(rc renderCfg) renderCfg {
 }
 
 func sameRenderMode(a, b renderCfg) bool {
+	if a.useGlyphs() || b.useGlyphs() {
+		return a.useGlyphs() && b.useGlyphs() && a.name == b.name
+	}
 	if a.mode != b.mode || a.sparkMode != b.sparkMode {
 		return false
 	}
@@ -519,6 +597,10 @@ func maxZoom(srcW, srcH, termCols, termRows int, mode renderMode) float64 {
 	return mode.viewSpec().MaxZoom(srcW, srcH, termCols, termRows)
 }
 
+func maxZoomForCfg(srcW, srcH, termCols, termRows int, rc renderCfg) float64 {
+	return rc.viewSpec().MaxZoom(srcW, srcH, termCols, termRows)
+}
+
 // ── Zoom-levels spec (from spec/zoom_levels.yaml) ──────────────────────────────
 
 type zoomLevelsSpec struct {
@@ -585,7 +667,7 @@ func zoomLevel(state viewState, orig image.Image, termCols, termRows int, rc ren
 	info, ok := currentZoomInfo(state, orig, termCols, termRows, rc)
 	if !ok {
 		b := orig.Bounds()
-		return rc.mode.viewSpec().ZoomLevel(state.zoom, b.Dx(), b.Dy(), termCols, termRows)
+		return rc.viewSpec().ZoomLevel(state.zoom, b.Dx(), b.Dy(), termCols, termRows)
 	}
 	return fmt.Sprintf("src px/cell=%.3g", info.LadderK)
 }
@@ -596,7 +678,7 @@ func currentZoomInfo(state viewState, orig image.Image, termCols, termRows int, 
 	if srcW <= 0 || srcH <= 0 || state.zoom <= 0 {
 		return zoomInfo{}, false
 	}
-	dims := rc.mode.viewSpec().Dims(srcW, srcH, termCols, termRows, state.zoom)
+	dims := rc.viewSpec().Dims(srcW, srcH, termCols, termRows, state.zoom)
 	dims.ClampPan(&state.panX, &state.panY)
 	viewW, viewH := dims.VisibleSize(state.panX, state.panY)
 	alignedW, alignedH := alignViewportSize(viewW, viewH, rc)
@@ -812,7 +894,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 		fileMeta.DispH = fmt.Sprintf("%d", vc.viewRows())
 		fileMeta.DispMode = rcDispMode(vc.rc)
 		extra := map[string]string{}
-		cw, ch := vc.rc.mode.viewSpec().VisibleCrop(srcW, srcH, vc.state.zoom, vc.state.panX, vc.state.panY, vc.termCols, vc.viewRows())
+		cw, ch := vc.rc.viewSpec().VisibleCrop(srcW, srcH, vc.state.zoom, vc.state.panX, vc.state.panY, vc.termCols, vc.viewRows())
 		if cw > 0 && ch > 0 && (cw != srcW || ch != srcH) {
 			extra["meta.src_res"] = fmt.Sprintf("%d×%d", cw, ch)
 		}
@@ -845,7 +927,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 						if !spacePanAnchor.Active {
 							spacePanAnchor = viewgeom.NewPanAnchor(c, r, vc.state.panX, vc.state.panY)
 						}
-						vc.state.panX, vc.state.panY = vc.rc.mode.viewSpec().PanFromAnchor(spacePanAnchor, c, r)
+						vc.state.panX, vc.state.panY = vc.rc.viewSpec().PanFromAnchor(spacePanAnchor, c, r)
 						vc.rerender()
 						changed = true
 						return
@@ -955,8 +1037,8 @@ func recenterForMode(state *viewState, orig image.Image, termCols, termRows int,
 	if srcW <= 0 || srcH <= 0 {
 		return
 	}
-	oldQ := oldRC.mode.viewSpec()
-	newQ := newRC.mode.viewSpec()
+	oldQ := oldRC.viewSpec()
+	newQ := newRC.viewSpec()
 	state.panX, state.panY = oldQ.Recenter(srcW, srcH, termCols, termRows, state.zoom, oldQ, newQ, state.panX, state.panY)
 }
 
@@ -966,8 +1048,8 @@ func preserveZoomForMode(state *viewState, orig image.Image, termCols, termRows 
 		return
 	}
 	b := orig.Bounds()
-	mz := maxZoom(b.Dx(), b.Dy(), termCols, termRows, newRC.mode)
-	state.zoom = newRC.mode.viewSpec().ZoomRatioForK(mz, info.RawK)
+	mz := maxZoomForCfg(b.Dx(), b.Dy(), termCols, termRows, newRC)
+	state.zoom = newRC.viewSpec().ZoomRatioForK(mz, info.RawK)
 }
 
 // ── zoom helpers ─────────────────────────────────────────────────────────────

@@ -96,8 +96,8 @@ func TestModesCommandInfoUsesCompleteGeneratedSextantInventory(t *testing.T) {
 		}
 	}
 	shapes := modeGlyphs(entry, modeSpec)
-	if len(shapes) != len(sextant.Glyphs()) {
-		t.Fatalf("six inventory has %d glyphs, want %d", len(shapes), len(sextant.Glyphs()))
+	if len(shapes) < len(sextant.Glyphs()) {
+		t.Fatalf("six inventory has %d glyphs, want at least %d", len(shapes), len(sextant.Glyphs()))
 	}
 	for _, shape := range sextant.Glyphs() {
 		found := false
@@ -128,7 +128,7 @@ func TestModesInfoListsRegistryCompositionsAndPreservesCase(t *testing.T) {
 		t.Fatalf("modes registry info: %v", err)
 	}
 	text := out.String()
-	if !strings.Contains(text, "Q\n") || !strings.Contains(text, "quad\n") || !strings.Contains(text, "sets: [0 1 6 9 44]") || !strings.Contains(text, "geometry: 12x12") {
+	if !strings.Contains(text, "quad+\n") || !strings.Contains(text, "quad\n") || !strings.Contains(text, "sets: [0 1 6 9 44]") || !strings.Contains(text, "geometry: 12x12") {
 		t.Fatalf("registry info missing from %q", text)
 	}
 }

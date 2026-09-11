@@ -1197,12 +1197,9 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 			cellH = 1
 		}
 
-		pixScale := 1
-		if rc.mode.useQuad() {
-			pixScale = 2
-		}
-		compW := termCols * pixScale
-		compH := gridRowsLimit * 2
+		cellPixW, cellPixH := rc.renderCellSize()
+		compW := termCols * cellPixW
+		compH := gridRowsLimit * cellPixH
 		compImg := image.NewRGBA(image.Rect(0, 0, compW, compH))
 
 		// Apply background color from style
@@ -1234,9 +1231,9 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 				if previewImg != nil {
 					scaledW := previewImg.Bounds().Dx()
 					scaledH := previewImg.Bounds().Dy()
-					offsetX := (prevW*pixScale - scaledW) / 2
-					offsetY := (gridRowsLimit*2 - scaledH) / 2
-					destX := (leftW+2)*pixScale + offsetX
+					offsetX := (prevW*cellPixW - scaledW) / 2
+					offsetY := (gridRowsLimit*cellPixH - scaledH) / 2
+					destX := (leftW+2)*cellPixW + offsetX
 					destY := offsetY
 
 					for ty := 0; ty < scaledH; ty++ {
@@ -1256,17 +1253,17 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 				cellItemIdx := idx - startIdx
 				colIdx := cellItemIdx % gridCols
 				rowIdx := cellItemIdx / gridCols
-				left := colIdx * (cellW + gapX) * pixScale
+				left := colIdx * (cellW + gapX) * cellPixW
 				top := rowIdx * (cellH + gapY)
 
 				thumb := getThumbnail(items[idx], cellW, cellH-1)
 				if thumb != nil {
 					thumbW := thumb.Bounds().Dx()
 					thumbH := thumb.Bounds().Dy()
-					offsetX := (cellW*pixScale - thumbW) / 2
-					offsetY := ((cellH-1)*2 - thumbH) / 2
+					offsetX := (cellW*cellPixW - thumbW) / 2
+					offsetY := ((cellH-1)*cellPixH - thumbH) / 2
 					destX := left + offsetX
-					destY := top*2 + offsetY
+					destY := top*cellPixH + offsetY
 					if items[idx].isDir {
 						destX-- // shift folder icon 1px left for better quad alignment
 					}

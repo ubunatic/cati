@@ -1,10 +1,20 @@
 cycle:
+  - full
   - half
-  - half/split
   - quad
+  - quad+
+  - bars
+  - bars+
+  - six
+  - 2x3
+  - 3x3
+  - all
+  - all+
+  - z
+  - z+
+  - half/split
   - spark
   - spark+quad
-  - six
   - six+half
   - spark+six
 
@@ -65,8 +75,8 @@ modes:
     smart_step: native
     native_step: 1
 
-  - name: six
-    aliases: [x]
+  - name: 2x3
+    aliases: ["6"]
     description: "Chooses one of 64 six-part masks for each 2x3 pixel block."
     renderer: sextant_2x3
     cell: { w: 2, h: 3 }
@@ -184,6 +194,20 @@ set_registry:
 
 # Exact, case-sensitive named unions. A name is resolved before '+' grammar.
 composition_order: [full, half, quad, quad+, bars, bars+, six, 2x3, 3x3, all, all+, z, z+]
+composition_info:
+  full: "Uses empty and full cells at 1x1 geometry."
+  half: "Uses full cells and top/bottom halves at 1x2 geometry."
+  quad: "Combines full cells, sides, halves and quadrants at 2x2 geometry."
+  quad+: "Adds quarter-height and split-middle approximations to quad at 2x4 geometry."
+  bars: "Adds reduced horizontal and vertical bars to quad at 4x4 geometry."
+  bars+: "Adds the non-hairline eighth bars to quad at 8x8 geometry."
+  six: "Combines full cells, sides, halves, quadrants and sextants at 2x6 geometry."
+  2x3: "Uses full cells, sides and native sextants at 2x3 geometry."
+  3x3: "Combines native sextants with approximate 3x3 line shapes at actual 6x3 geometry."
+  all: "Combines quad, sextant and approximate 3x3 families at 6x6 geometry."
+  all+: "Adds reduced 4x4 bars to all at 12x12 geometry."
+  z: "Adds non-hairline eighth bars to all at 24x24 geometry."
+  z+: "Adds every eighth bar, including hairlines, to all at 24x24 geometry."
 compositions:
   f: [0]
   full: [0]

@@ -21,19 +21,27 @@ import (
 func computeQuality(ref, vp image.Image, rc renderCfg) metrics.RenderQuality {
 	var rendered image.Image
 	switch {
-	case rc.mode.useSextant():
+	case rc.useGlyphs():
+		b := vp.Bounds()
+		cellW, cellH := rc.renderCellSize()
+		if rc.jobs > 1 {
+			rendered, _ = sparkline.RenderToImageWithOptionsJ(vp, max(1, ceilDiv(b.Dx(), cellW)), max(1, ceilDiv(b.Dy(), cellH)), rc.glyphOptions(), rc.jobs)
+		} else {
+			rendered, _ = sparkline.RenderToImageWithOptions(vp, max(1, ceilDiv(b.Dx(), cellW)), max(1, ceilDiv(b.Dy(), cellH)), rc.glyphOptions())
+		}
+	case rc.useSextant():
 		if rc.jobs > 1 {
 			rendered = sextant.RenderToImageJ(vp, rc.sextantMode, rc.jobs)
 		} else {
 			rendered = sextant.RenderToImage(vp, rc.sextantMode)
 		}
-	case rc.mode.useQuad():
+	case rc.useQuad():
 		if rc.jobs > 1 {
 			rendered = quadblock.RenderToImageJ(vp, rc.quadOpts, rc.jobs)
 		} else {
 			rendered = quadblock.RenderToImage(vp, rc.quadOpts)
 		}
-	case rc.mode.useSpark():
+	case rc.useSpark():
 		b := vp.Bounds()
 		outCols := max(1, b.Dx()/rc.mode.pixCols(1))
 		outRows := max(1, b.Dy()/rc.mode.pixRows(1))
@@ -59,7 +67,7 @@ func computeQuality(ref, vp image.Image, rc renderCfg) metrics.RenderQuality {
 	rendSobel := metrics.SobelGrid(rendLuma)
 
 	boundaryStep := metrics.GridK
-	hasVerticalBoundaries := rc.mode.useQuad() || rc.mode.useSextant() || rc.mode.useSpark()
+	hasVerticalBoundaries := rc.useGlyphs() || rc.useQuad() || rc.useSextant() || rc.useSpark()
 	score := metrics.RenderQuality{
 		SSIM:       metrics.SSIMLuminance(ref, rendered),
 		Blockiness: metrics.BlockinessFromGrids(refSobel, rendSobel, hasVerticalBoundaries, boundaryStep),

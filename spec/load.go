@@ -243,6 +243,7 @@ type RenderModesSpec struct {
 	Smart            SmartRenderPolicy   `yaml:"smart"`
 	SetRegistry      []GlyphSetDef       `yaml:"set_registry"`
 	Compositions     map[string][]int    `yaml:"compositions"`
+	CompositionInfo  map[string]string   `yaml:"composition_info"`
 	CompositionOrder []string            `yaml:"composition_order"`
 }
 
@@ -381,6 +382,9 @@ func validateGlyphRegistry(rm RenderModesSpec) error {
 		if _, ok := rm.Compositions[name]; !ok {
 			return fmt.Errorf("composition_order references unknown composition %q", name)
 		}
+		if rm.CompositionInfo[name] == "" {
+			return fmt.Errorf("composition %q has no description", name)
+		}
 	}
 	return nil
 }
@@ -513,23 +517,51 @@ func resolveExpression(expr string, compositions map[string][]int, names map[str
 		}
 		return ids, nil
 	}
-	parts := strings.Split(expr, "+")
-	ids := make([]int, 0, len(parts))
-	for _, part := range parts {
-		if part == "" {
-			return nil, fmt.Errorf("empty union operand in %q", expr)
+	operands := make(map[string][]int, len(names)+len(compositions))
+	for name, id := range names {
+		operands[name] = []int{id}
+	}
+	for name, ids := range compositions {
+		operands[name] = ids
+	}
+	keys := make([]string, 0, len(operands))
+	for name := range operands {
+		keys = append(keys, name)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if len(keys[i]) != len(keys[j]) {
+			return len(keys[i]) > len(keys[j])
 		}
-		if id, ok := names[part]; ok {
-			ids = append(ids, id)
-			continue
-		}
-		if id, ok := compositions[part]; ok {
-			ids = append(ids, id...)
-			continue
-		}
-		return nil, fmt.Errorf("unknown union operand %q", part)
+		return keys[i] < keys[j]
+	})
+	ids, ok := parseNamedUnion(expr, 0, keys, operands)
+	if !ok {
+		return nil, fmt.Errorf("invalid glyph-set union %q", expr)
 	}
 	return ids, nil
+}
+
+func parseNamedUnion(expr string, offset int, names []string, operands map[string][]int) ([]int, bool) {
+	if offset >= len(expr) {
+		return nil, false
+	}
+	for _, name := range names {
+		if !strings.HasPrefix(expr[offset:], name) {
+			continue
+		}
+		next := offset + len(name)
+		if next == len(expr) {
+			return append([]int(nil), operands[name]...), true
+		}
+		if expr[next] != '+' || next+1 == len(expr) {
+			continue
+		}
+		rest, ok := parseNamedUnion(expr, next+1, names, operands)
+		if ok {
+			return append(append([]int(nil), operands[name]...), rest...), true
+		}
+	}
+	return nil, false
 }
 
 func generatedSextantShapes() []GlyphShape {

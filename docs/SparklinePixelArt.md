@@ -26,8 +26,11 @@ with an LCM per axis. This keeps a `3x3` label honest when its union is really
 `6x3`, and distinguishes exact standard coverage from experimental
 approximation. The debug grammar is `d` or `d<id>[,<id>...]`; names and aliases
 are case-sensitive and a complete registered name wins before `+` union
-parsing. Registry-only unions are currently metadata/debug surfaces until
-their renderer and reconstruction contracts are validated.
+parsing. Resolved unions are executable: their row-major masks are normalized
+to the union's LCM geometry, then passed to the same two-colour SSE candidate
+scorer used by the sparkline family. The ANSI, serial reconstruction, worker
+reconstruction, smart-width, interactive, player, and browser paths all carry
+that resolved geometry rather than inferring it from a mode name.
 
 | Mode | Visual Representation | Growth Direction | Character Set |
 | :--- | :--- | :--- | :--- |
@@ -70,6 +73,13 @@ levels to two-dimensional candidate masks. For each terminal cell it:
 3. Averages source pixels inside the mask to get foreground colour.
 4. Averages source pixels outside the mask to get background colour.
 5. Reconstructs the block and selects the rune with the lowest SSE.
+
+Callers can supply a validated inventory through `sparkline.Options.Shapes`.
+Each `sparkline.Shape` has an arbitrary-size row-major `[]bool` mask, so high
+geometries such as 24x24 are not constrained by a machine-word bit mask.
+`RenderToImageWithOptions` and its worker variant use exactly the same custom
+candidates as ANSI rendering. Non-divisible smart candidate widths partition
+the complete source extent proportionally, including the final pixel column.
 
 `half/split` uses a `2×2` block. `spark` and `spark+quad` use `4×8`.
 `six+half` uses `2×6`, and `spark+six` uses `4×24`. Quad candidates in

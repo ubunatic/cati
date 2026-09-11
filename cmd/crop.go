@@ -158,7 +158,7 @@ func applyCellCrop(img image.Image, rc renderCfg, spec cropSpec, autoCols, autoR
 	x = min(max(0, x), max(0, cells.Cols-cols))
 	y = min(max(0, y), max(0, cells.Rows-rows))
 
-	cellW, cellH := rc.mode.renderCellSize()
+	cellW, cellH := rc.renderCellSize()
 	return imgutil.CropImage(img, x*cellW, y*cellH, cols*cellW, rows*cellH)
 }
 

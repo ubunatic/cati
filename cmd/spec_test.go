@@ -106,6 +106,9 @@ func TestSpecRenderModesIntegrity(t *testing.T) {
 	}
 	for _, name := range rm.Cycle {
 		if !names[name] {
+			if _, ok := rm.Compositions[name]; ok {
+				continue
+			}
 			t.Fatalf("render cycle references undefined mode %q", name)
 		}
 	}

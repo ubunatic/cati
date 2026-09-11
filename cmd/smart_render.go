@@ -58,6 +58,9 @@ func nativeSmartStep(rc renderCfg) bool {
 }
 
 func nativeSmartStepSize(rc renderCfg) (int, bool) {
+	if rc.useGlyphs() {
+		return 1, true
+	}
 	rm, err := spec.LoadRenderModes()
 	if err != nil {
 		return 0, false
@@ -78,7 +81,7 @@ func nativeSmartTerminalStep(rc renderCfg) (int, int, bool) {
 	if !ok {
 		return 0, 0, false
 	}
-	cellW, _ := rc.mode.renderCellSize()
+	cellW, _ := rc.renderCellSize()
 	return pixelStep, max(1, cellW), true
 }
 
@@ -125,7 +128,7 @@ func fitNativeWidthChecked(img image.Image, pixelWidth, termRows int, rc renderC
 	if pixelWidth < 1 {
 		return nil, nil
 	}
-	cellW, _ := rc.mode.renderCellSize()
+	cellW, _ := rc.renderCellSize()
 	cols := max(1, (pixelWidth+cellW-1)/cellW)
 	fit, err := fitRenderedImageChecked(img, cols, termRows, rc)
 	if err != nil {
@@ -138,12 +141,19 @@ func fitNativeWidthChecked(img image.Image, pixelWidth, termRows int, rc renderC
 func renderReconstruction(img image.Image, rc renderCfg) image.Image {
 	b := img.Bounds()
 	switch {
-	case rc.mode.useSextant():
+	case rc.useGlyphs():
+		cellW, cellH := rc.renderCellSize()
+		result, err := sparkline.RenderToImageWithOptions(img, max(1, ceilDiv(b.Dx(), cellW)), max(1, ceilDiv(b.Dy(), cellH)), rc.glyphOptions())
+		if err == nil {
+			return result
+		}
+		return img
+	case rc.useSextant():
 		return sextant.RenderToImage(img, rc.sextantMode)
-	case rc.mode.useQuad():
+	case rc.useQuad():
 		return quadblock.RenderToImage(img, rc.quadOpts)
-	case rc.mode.useSpark():
-		spec := rc.mode.viewSpec()
+	case rc.useSpark():
+		spec := rc.viewSpec()
 		return sparkline.RenderToImage(img, max(1, b.Dx()/spec.CellW), max(1, b.Dy()/spec.CellH), rc.sparkMode)
 	default:
 		return halfblock.RenderToImage(img)
@@ -151,7 +161,7 @@ func renderReconstruction(img image.Image, rc renderCfg) image.Image {
 }
 
 func padSmartImage(img image.Image, targetCols int, rc renderCfg) image.Image {
-	cellW, _ := rc.mode.renderCellSize()
+	cellW, _ := rc.renderCellSize()
 	actual := renderedCellSize(img, rc).Cols
 	if targetCols <= actual || cellW <= 0 {
 		return img

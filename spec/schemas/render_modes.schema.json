@@ -3,7 +3,7 @@
   "title": "Cati render modes spec",
   "type": "object",
   "additionalProperties": false,
-  "required": ["cycle", "modes", "glyph_sets", "colorers", "renderers", "smart", "set_registry", "composition_order", "compositions"],
+  "required": ["cycle", "modes", "glyph_sets", "colorers", "renderers", "smart", "set_registry", "composition_order", "composition_info", "compositions"],
   "properties": {
     "cycle": {
       "type": "array",
@@ -84,6 +84,10 @@
     "composition_order": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
+    },
+    "composition_info": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 }
     },
     "compositions": {
       "type": "object",

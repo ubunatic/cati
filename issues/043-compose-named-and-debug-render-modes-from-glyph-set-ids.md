@@ -104,6 +104,18 @@ Numeric aliases `1`, `2` and `4` now resolve as mode aliases, with `2` following
 the binding half decision `[0,2]`. `docs/SetIdeas.md` remains untouched at SHA-256
 `d88598cbf1e13e61b29f7b4bed9020f21d045e7db74a61ce131f193ffd272ea0`.
 
+### Executable composition milestone — 2026-09-11
+
+Resolved named, debug, and suffix-bearing unions now render through the shared
+two-colour candidate scorer across static, smart, reconstruction, interactive,
+player, and browser geometry paths. `six`/`x` is the new 2x6 union and native
+sextants are `2x3`/`6`; existing sextant goldens remain unchanged. Focused tests
+cover alias identity, arbitrary masks beyond 64 bits, ANSI/reconstruction
+agreement, worker equivalence, and non-divisible smart widths. Remaining before
+closure: finish help/completion and broad docs, add justified new-mode goldens,
+and run all tagged player/browser/integration plus final install/preflight and
+tracker validation.
+
 | Short | Name | Set IDs |
 |---|---|---|
 | f, 1 | full, 1x1 | 0 |

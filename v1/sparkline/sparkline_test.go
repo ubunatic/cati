@@ -50,6 +50,61 @@ func hasCandidate(candidates []candidate, ch rune) bool {
 	return false
 }
 
+func TestCustomShapesDriveANSIAndReconstruction(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
+	on := color.RGBA{R: 240, G: 20, B: 10, A: 255}
+	off := color.RGBA{B: 220, A: 255}
+	img.Set(0, 0, on)
+	img.Set(1, 0, off)
+	img.Set(0, 1, off)
+	img.Set(1, 1, off)
+	opts := Options{CellW: 2, CellH: 2, AspectX: 2, Shapes: []Shape{
+		{Ch: ' ', Width: 2, Height: 2, Mask: []bool{false, false, false, false}},
+		{Ch: '▘', Width: 2, Height: 2, Mask: []bool{true, false, false, false}},
+		{Ch: '█', Width: 2, Height: 2, Mask: []bool{true, true, true, true}},
+	}}
+	var out strings.Builder
+	if err := Render(&out, img, 1, opts); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "▘") {
+		t.Fatalf("custom render = %q, want quadrant glyph", out.String())
+	}
+	reconstructed, err := RenderToImageWithOptions(img, 1, 1, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := color.RGBAModel.Convert(reconstructed.At(0, 0)).(color.RGBA); got.R <= got.B {
+		t.Fatalf("foreground reconstruction = %#v", got)
+	}
+}
+
+func TestCustomShapesRejectMalformedMasks(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	_, err := RenderToGrid(img, 1, Options{CellW: 2, CellH: 2, Shapes: []Shape{{Ch: 'x', Width: 2, Height: 2, Mask: []bool{true}}}})
+	if err == nil {
+		t.Fatal("malformed custom mask succeeded")
+	}
+}
+
+func TestCustomReconstructionCoversNonDivisibleWidth(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 5, 2))
+	red := color.RGBA{R: 255, A: 255}
+	for y := range 2 {
+		for x := range 5 {
+			img.Set(x, y, red)
+		}
+	}
+	opts := Options{CellW: 2, CellH: 2, Shapes: []Shape{{Ch: '█', Width: 1, Height: 1, Mask: []bool{true}}}}
+	got, err := RenderToImageWithOptions(img, 3, 1, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edge := color.RGBAModel.Convert(got.At(4, 1)).(color.RGBA); edge.A != 255 || edge.R != 255 {
+		t.Fatalf("right edge was not reconstructed: %#v", edge)
+	}
+}
+
 func TestCandidateTables(t *testing.T) {
 	if got := len(halfSplitCandidates); got != 6 {
 		t.Fatalf("halfSplitCandidates = %d entries, want 6", got)

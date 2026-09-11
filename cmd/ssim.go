@@ -29,7 +29,7 @@ func buildRef(orig image.Image, state viewState, termCols, termRows int, rc rend
 	if srcW == 0 || srcH == 0 {
 		return orig
 	}
-	dims := rc.mode.viewSpec().Dims(srcW, srcH, termCols, termRows, state.zoom)
+	dims := rc.viewSpec().Dims(srcW, srcH, termCols, termRows, state.zoom)
 	dims.ClampPan(&state.panX, &state.panY)
 
 	viewW, viewH := dims.VisibleSize(state.panX, state.panY)
@@ -61,19 +61,30 @@ func buildRef(orig image.Image, state viewState, termCols, termRows int, rc rend
 // algorithms produce different SSIM scores. ref should be a box-filter
 // downsample of the original source region.
 func renderSSIM(ref, vp image.Image, rc renderCfg) float64 {
-	if rc.mode.useSextant() {
+	if rc.useGlyphs() {
+		b := vp.Bounds()
+		cellW, cellH := rc.renderCellSize()
+		var rendered image.Image
+		if rc.jobs > 1 {
+			rendered, _ = sparkline.RenderToImageWithOptionsJ(vp, max(1, ceilDiv(b.Dx(), cellW)), max(1, ceilDiv(b.Dy(), cellH)), rc.glyphOptions(), rc.jobs)
+		} else {
+			rendered, _ = sparkline.RenderToImageWithOptions(vp, max(1, ceilDiv(b.Dx(), cellW)), max(1, ceilDiv(b.Dy(), cellH)), rc.glyphOptions())
+		}
+		return metrics.SSIMLuminance(ref, rendered)
+	}
+	if rc.useSextant() {
 		if rc.jobs > 1 {
 			return metrics.SSIMLuminance(ref, sextant.RenderToImageJ(vp, rc.sextantMode, rc.jobs))
 		}
 		return metrics.SSIMLuminance(ref, sextant.RenderToImage(vp, rc.sextantMode))
 	}
-	if rc.mode.useQuad() {
+	if rc.useQuad() {
 		if rc.jobs > 1 {
 			return metrics.SSIMLuminance(ref, quadblock.RenderToImageJ(vp, rc.quadOpts, rc.jobs))
 		}
 		return metrics.SSIMLuminance(ref, quadblock.RenderToImage(vp, rc.quadOpts))
 	}
-	if rc.mode.useSpark() {
+	if rc.useSpark() {
 		b := vp.Bounds()
 		outCols := max(1, b.Dx()/rc.mode.pixCols(1))
 		outRows := max(1, b.Dy()/rc.mode.pixRows(1))
@@ -100,6 +111,9 @@ func renderSSIM(ref, vp image.Image, rc renderCfg) float64 {
 // rcModeName returns the display name of rc in renderModes, or "?" if unknown.
 // Matches by cfg.id because renderCfg contains a func field and is not comparable.
 func rcModeName(rc renderCfg) string {
+	if rc.name != "" {
+		return rc.name
+	}
 	for _, m := range renderModes {
 		if m.cfg.id == rc.id {
 			return m.name
@@ -111,11 +125,13 @@ func rcModeName(rc renderCfg) string {
 // rcDispMode returns the coarse display-geometry label used in metadata.
 func rcDispMode(rc renderCfg) string {
 	switch {
-	case rc.mode.useSextant():
+	case rc.useGlyphs():
+		return "glyphs"
+	case rc.useSextant():
 		return "sextant"
-	case rc.mode.useQuad():
+	case rc.useQuad():
 		return "quad"
-	case rc.mode.useSpark():
+	case rc.useSpark():
 		return "spark"
 	default:
 		return "half"
