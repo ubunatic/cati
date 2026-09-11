@@ -1,6 +1,7 @@
 # Cati Documentation Index
 
 Welcome to the Cati developer documentation. The following resources cover our project guides, code rules, and architecture:
+*   [Roadmap](Roadmap.md) — Product vision, Now/Next/Later sequencing.
 
 *   [System Documentation](System.md) — Rendering pipeline, design decisions, viewer core consolidation, line-width invariant, offline website asset generation, and licensing.
     *   [Render Pipelines](RenderPipelines.md) — Step-by-step Mermaid diagrams and spatial character art pixel flows for each render mode (half-block, quad-block, sextant, sparkline).
