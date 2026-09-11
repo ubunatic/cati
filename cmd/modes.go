@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -22,28 +23,145 @@ import (
 // installed binary without depending on the repository's asset directory.
 const embeddedCatiLogo = "iVBORw0KGgoAAAANSUhEUgAAABgAAAAOCAYAAAA1+Nx+AAAAAXNSR0IArs4c6QAAARdJREFUOI1jVBL3/f/WQ42BFkB4xy0GlrceagzCO24x/BWUpKrhzO+fM/wVlGRgYWBggBhuZ0xVC97+vMUgcPIzAxOlBvG5yGBlwwCKBeLF4hgKQmaKMITMFEFRA8PoBn+5/RG/Bd8vsqJoDJkpwnD4FjPD4VvMcMO/X2Rl+H6RFcUQmME8qvwYFrAgcz7tecLAwCDDIF4szvCy9yUDAwMDnEZVw8DAqY9wyL+HnzEMxuoDiMbfGC6kBKD4ABYEMFcevsUMD/816W8wghAG+Fxk4HrwWoBsOAMDJHgOIxkIC0JkgByx2CIZSxygAlxxAAPI4Y8tLijOB4QACwMDJFu//XmLqgbDih9GJXHf/9Quh2CA+f1zBgAYdXGLiM0UnAAAAABJRU5ErkJggg=="
 
+type modesFilter struct {
+	list     bool
+	composed bool
+	legacy   bool
+	exact    bool
+	approx   bool
+	setIDs   []int
+	maxGeo   *spec.RenderModeGeometry
+}
+
 func modesCommand() *cobra.Command {
 	var width int
 	var smart bool
 	var info bool
+	var listOnly bool
+	var composedOnly bool
+	var legacyOnly bool
+	var exactOnly bool
+	var approxOnly bool
+	var setFilter string
+	var maxGeoFilter string
+	var listSets bool
+
 	cmd := &cobra.Command{
 		Use:   "modes [modes...]",
 		Short: "list render modes with a cati/emojig logo demo",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if width == 0 && smart {
-				return listModes(cmd.OutOrStdout(), info, args)
+			if listSets {
+				return listGlyphSets(cmd.OutOrStdout())
+			}
+			var setIDs []int
+			if setFilter != "" {
+				ids, err := parseSetIDs(setFilter)
+				if err != nil {
+					return err
+				}
+				setIDs = ids
+			}
+			var maxGeo *spec.RenderModeGeometry
+			if maxGeoFilter != "" {
+				geo, err := parseGeometry(maxGeoFilter)
+				if err != nil {
+					return err
+				}
+				maxGeo = geo
+			}
+			filter := modesFilter{
+				list:     listOnly || (width == 0 && smart),
+				composed: composedOnly,
+				legacy:   legacyOnly,
+				exact:    exactOnly,
+				approx:   approxOnly,
+				setIDs:   setIDs,
+				maxGeo:   maxGeo,
+			}
+			if filter.list {
+				return listModesFiltered(cmd.OutOrStdout(), info, args, filter)
 			}
 			if width < 1 {
 				return fmt.Errorf("--width must be greater than zero")
 			}
-			return runModesDemoSelected(cmd.OutOrStdout(), width, smart, info, args)
+			return runModesDemoSelectedFiltered(cmd.OutOrStdout(), width, smart, info, args, filter)
 		},
 	}
-	cmd.Flags().IntVarP(&width, "width", "w", 12, "target width of each logo demo (0 with --smart lists modes only)")
+	cmd.Flags().IntVarP(&width, "width", "w", 12, "target width of each logo demo (0 with --smart or -l lists modes only)")
 	cmd.Flags().BoolVar(&smart, "smart", false, "choose the best nearby width by PSNR")
 	cmd.Flags().BoolVar(&info, "info", false, "explain each mode and list its supported Unicode shapes")
+	cmd.Flags().BoolVarP(&listOnly, "list", "l", false, "list mode names without rendering logo demos")
+	cmd.Flags().BoolVarP(&composedOnly, "composed", "c", false, "filter to composable / registry modes")
+	cmd.Flags().BoolVarP(&legacyOnly, "legacy", "L", false, "filter to legacy renderer modes")
+	cmd.Flags().BoolVar(&exactOnly, "exact", false, "filter to modes with exact (non-approximate) glyph coverage")
+	cmd.Flags().BoolVar(&approxOnly, "approx", false, "filter to modes with approximate glyph coverage")
+	cmd.Flags().StringVarP(&setFilter, "set", "s", "", "filter to modes containing specific glyph set ID(s) (comma-separated, e.g. -s 6, -s 1,6)")
+	cmd.Flags().StringVar(&maxGeoFilter, "max-geo", "", "filter to modes with geometry at most WxH (e.g. --max-geo 4x4)")
+	cmd.Flags().BoolVar(&listSets, "sets", false, "list registered glyph sets from the spec registry")
 	return cmd
+}
+
+func parseSetIDs(s string) ([]int, error) {
+	if s == "" {
+		return nil, nil
+	}
+	parts := strings.Split(s, ",")
+	ids := make([]int, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		id, err := strconv.Atoi(p)
+		if err != nil || id < 0 {
+			return nil, fmt.Errorf("invalid set ID %q", p)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func parseGeometry(s string) (*spec.RenderModeGeometry, error) {
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(s)), "x")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid geometry %q (expected WxH, e.g. 4x4)", s)
+	}
+	w, err1 := strconv.Atoi(parts[0])
+	h, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil || w <= 0 || h <= 0 {
+		return nil, fmt.Errorf("invalid geometry %q (expected positive WxH)", s)
+	}
+	return &spec.RenderModeGeometry{W: w, H: h}, nil
+}
+
+func listGlyphSets(out io.Writer) error {
+	modeSpec, err := spec.LoadRenderModes()
+	if err != nil {
+		return fmt.Errorf("load render mode metadata: %w", err)
+	}
+	fmt.Fprintln(out, "Registered glyph sets:")
+	for _, def := range modeSpec.SetRegistry {
+		approx := ""
+		if def.Approximate {
+			approx = " [approx]"
+		}
+		var glyphStr string
+		if def.Generated == "sextant_2x3" {
+			glyphStr = "(64 generated sextants)"
+		} else if len(def.Glyphs) > 0 {
+			shapes := make([]rune, 0, len(def.Glyphs))
+			for _, g := range def.Glyphs {
+				r := []rune(g)
+				if len(r) > 0 {
+					shapes = append(shapes, r[0])
+				}
+			}
+			glyphStr = wrapGlyphs(shapes, 74, 30)
+		}
+		fmt.Fprintf(out, "  set %-3d %-10s (%dx%d)%s  %s\n", def.ID, def.Name, def.Geometry.W, def.Geometry.H, approx, glyphStr)
+	}
+	return nil
 }
 
 func runModesDemo(out io.Writer, width int, smart bool) error {
@@ -51,10 +169,15 @@ func runModesDemo(out io.Writer, width int, smart bool) error {
 }
 
 func listModes(out io.Writer, info bool, names []string) error {
+	return listModesFiltered(out, info, names, modesFilter{})
+}
+
+func listModesFiltered(out io.Writer, info bool, names []string, filter modesFilter) error {
 	entries, err := selectedRenderModes(names)
 	if err != nil {
 		return err
 	}
+	entries = applyModesFilter(entries, filter)
 	fmt.Fprintln(out, "Available render modes:")
 	modeSpec, err := spec.LoadRenderModes()
 	if err != nil {
@@ -67,6 +190,80 @@ func listModes(out io.Writer, info bool, names []string) error {
 		}
 	}
 	return nil
+}
+
+func applyModesFilter(entries []renderModeEntry, filter modesFilter) []renderModeEntry {
+	if !filter.composed && !filter.legacy && !filter.exact && !filter.approx && len(filter.setIDs) == 0 && filter.maxGeo == nil {
+		return entries
+	}
+	modeSpec, err := spec.LoadRenderModes()
+	if err != nil {
+		return entries
+	}
+	compOrderSet := make(map[string]bool, len(modeSpec.CompositionOrder))
+	for _, name := range modeSpec.CompositionOrder {
+		compOrderSet[name] = true
+	}
+
+	result := make([]renderModeEntry, 0, len(entries))
+	for _, entry := range entries {
+		res, resErr := spec.ResolveGlyphSetExpression(entry.name)
+		isComposed := compOrderSet[entry.name] || entry.registryOnly || entry.cfg.useGlyphs() || (resErr == nil && entry.definition.Renderer == "glyph_union")
+		if filter.composed && !isComposed {
+			continue
+		}
+		if filter.legacy && isComposed {
+			continue
+		}
+		if filter.exact {
+			if resErr == nil {
+				if res.Approximate {
+					continue
+				}
+			}
+		}
+		if filter.approx {
+			if resErr != nil || !res.Approximate {
+				continue
+			}
+		}
+		if len(filter.setIDs) > 0 {
+			if resErr != nil {
+				continue
+			}
+			hasAll := true
+			for _, wantID := range filter.setIDs {
+				found := false
+				for _, id := range res.IDs {
+					if id == wantID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					hasAll = false
+					break
+				}
+			}
+			if !hasAll {
+				continue
+			}
+		}
+		if filter.maxGeo != nil {
+			var gw, gh int
+			if resErr == nil {
+				gw, gh = res.Geometry.W, res.Geometry.H
+			} else {
+				spec := entry.cfg.viewSpec()
+				gw, gh = spec.CellW, spec.CellH
+			}
+			if gw > filter.maxGeo.W || gh > filter.maxGeo.H {
+				continue
+			}
+		}
+		result = append(result, entry)
+	}
+	return result
 }
 
 func listableRenderModes() ([]renderModeEntry, error) {
@@ -85,6 +282,10 @@ func listableRenderModes() ([]renderModeEntry, error) {
 }
 
 func runModesDemoSelected(out io.Writer, width int, smart, info bool, names []string) error {
+	return runModesDemoSelectedFiltered(out, width, smart, info, names, modesFilter{})
+}
+
+func runModesDemoSelectedFiltered(out io.Writer, width int, smart, info bool, names []string, filter modesFilter) error {
 	var entries []renderModeEntry
 	var err error
 	if len(names) == 0 {
@@ -95,6 +296,7 @@ func runModesDemoSelected(out io.Writer, width int, smart, info bool, names []st
 	if err != nil {
 		return err
 	}
+	entries = applyModesFilter(entries, filter)
 	cati, err := decodeEmbeddedLogo()
 	if err != nil {
 		return err

@@ -38,6 +38,7 @@ set 45: mbars*                   ␠ 🬋 🬇 🬃 ┃ ╻ ╹ ▪ ╏
 
 Ninelikes borders and the middle square set matches a 3x3 geometry and could be paired with quads or sextants.
 The mbars set tries to add the missing middle bars to the vbars and bars; incl. some limited splits. Also to be paired with quads and sextants.
+"<number>5" here means this is an extension of "<number>4".
 
 **More Set Ideas**
 
@@ -56,7 +57,7 @@ mode b:  bars     [0,1,2,4,44]          4x4 geometry (4x4 from reduced v/h bars,
 mode B:  bars+    [0,1,2,4,86]          8x8 geometry (8x8 from bars; excl. hairlines, others fit inside, high geometry cost)
 mode x:  six      [0,1,2,4,6]           2x6 geometry (2x2 quads and 2x3 sextants; excl. spark to keep geometry small)
 mode 1:  1x1      [0]                   1x1 geometry (same as full)
-mode 2:  1x2      [0,1]                 1x2 geometry (same as half)
+mode 2:  1x2      [0,2]                 1x2 geometry (same as half)
 mode 4:  2x2      [0,1,2,4]             2x2 geometry (same as quads)
 mode 6:  2x3      [0,1,6]               2x3 geometry (not mixed with 2x2 geometry)
 mode 9:  3x3      [0,1,6,9]             6x3 geometry (2x3 sextants and 3x3 ninelikes combined)
