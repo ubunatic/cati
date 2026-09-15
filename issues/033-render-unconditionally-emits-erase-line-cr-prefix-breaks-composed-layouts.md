@@ -1,6 +1,6 @@
 # 033 — Render() unconditionally emits erase-line+CR prefix, breaks composed layouts
 
-**Status**: Open
+**Status**: Closed — opt-out implemented and verified: NoLinePrefix on halfblock/quadblock/sextant Options; go vet/go test/make install green
 **Priority**: P3 (Low)
 **Severity**: Moderate
 **Category**: Bug

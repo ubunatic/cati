@@ -36,7 +36,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 030 | [030-website-asset-references-and-lfs.md](030-website-asset-references-and-lfs.md) | Website assets: out-of-dir references and LFS pointer pitfalls | ✅ Closed (2026-07-04) |
 | 031 | [031-remove-ansi-golden-goldens.md](031-remove-ansi-golden-goldens.md) | Remove `.ansi` golden tests (unverifiable byte diffs let a fix go stale) | ✅ Closed |
 | 032 | [032-jpeg-golden-toolchain-drift.md](032-jpeg-golden-toolchain-drift.md) | JPEG-sourced golden drift across Go toolchain patch versions | ✅ Closed |
-| 033 | [033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md](033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md) | Render() unconditionally emits erase-line+CR prefix, breaks composed layouts | Open |
+| 033 | [033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md](033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md) | Render() unconditionally emits erase-line+CR prefix, breaks composed layouts | Closed — opt-out implemented and verified: NoLinePrefix on halfblock/quadblock/sextant Options; go vet/go test/make install green |
 | 034 | [034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md](034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md) | quadblock and sextant have no image loader, must import halfblock.LoadImage | Open |
 | 035 | [035-make-png-golden-comparisons-ignore-non-rendering-metadata.md](035-make-png-golden-comparisons-ignore-non-rendering-metadata.md) | Make PNG golden comparisons ignore non-rendering metadata | Closed (Verified with metadata isolation and negative difference tests in `cmd/golden_render_test.go`) |
 | 036 | [036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md](036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md) | Add smart render mode that selects the best width by PSNR | Open |
@@ -53,9 +53,9 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 047 | [047-smart-render-search-timeout.md](047-smart-render-search-timeout.md) | Abort --smart Search After 1s (--smart-timeout Default) | Open |
 | 048 | [048-automatic-natural-aspect-ratio-for-custom-glyph-modes-and-safe-override-api.md](048-automatic-natural-aspect-ratio-for-custom-glyph-modes-and-safe-override-api.md) | Automatic Natural Aspect Ratio for Custom Glyph Modes and Safe Override API | Closed |
 | 049 | [049-modes-command-grid-output-layout-and-column-fitting.md](049-modes-command-grid-output-layout-and-column-fitting.md) | Modes Command Grid Output Layout and Column Fitting | Closed |
-| 050 | [050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md](050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md) | Zero-Allocation and LUT Acceleration for Sextant and Quad Block Renderers | 🔴 Open |
-| 051 | [051-fast-contiguous-luminance-buffer-for-ssim-scoring-pipeline.md](051-fast-contiguous-luminance-buffer-for-ssim-scoring-pipeline.md) | Fast Contiguous Luminance Buffer for SSIM Scoring Pipeline | 🔴 Open |
-| 052 | [052-unified-composite-quality-metric-and-efficiency-index.md](052-unified-composite-quality-metric-and-efficiency-index.md) | Unified Composite Quality Metric and Efficiency Index | 🔴 Open |
+| 050 | [050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md](050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md) | Zero-Allocation and LUT Acceleration for Sextant and Quad Block Renderers | Open |
+| 051 | [051-fast-contiguous-luminance-buffer-for-ssim-scoring-pipeline.md](051-fast-contiguous-luminance-buffer-for-ssim-scoring-pipeline.md) | Fast Contiguous Luminance Buffer for SSIM Scoring Pipeline | Open |
+| 052 | [052-unified-composite-quality-metric-and-efficiency-index.md](052-unified-composite-quality-metric-and-efficiency-index.md) | Unified Composite Quality Metric and Efficiency Index | Open |
 
 ## Archived
 
