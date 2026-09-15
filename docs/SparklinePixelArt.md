@@ -318,3 +318,19 @@ mode with one image per column. Single-image runs group by image with
 maximum render width and `-n` selects how many 80% downscale steps to show
 (default 2). Useful for a quick visual sanity check of all render modes after
 algorithm changes.
+
+---
+
+## 7. Quality Metrics: SSIM vs. Perceptual Sharpness
+
+When evaluating terminal pixel art algorithms, objective quality metrics (like luminance SSIM) exhibit specific mathematical properties when comparing exact lower-dimensional modes against higher-dimensional approximate composite modes (e.g. `six` vs `all`):
+
+1. **Exact Coverage vs. Large-Space Approximation**:
+   - **`six` (2×3)**: Has bit-exact candidate coverage for all $2^6 = 64$ sextant combinations. Every cell is mapped to its optimal exact glyph.
+   - **`all` (6×6)**: Decomposes each cell into a $6\times 6$ subpixel space (36 subpixels) comprising quads ($2\times 2$), sextants ($2\times 3$), and 3×3 blocks ($\approx 100$ candidate shapes out of $2^{36}$ combinations).
+   - In fast mode without `--smart` solver weighting, high-frequency diagonal textures select close approximations matching average cell luminance, resulting in very close luminance SSIM scores ($\approx 0.48$–$0.49$) despite `all` rendering with noticeably higher subpixel resolution. Full fractional bar solvers (`all+` / `z+`) elevate this to $0.50$–$0.51$.
+
+2. **Structural SSIM vs. Human Edge Perception**:
+   - Standard luminance SSIM averages over sliding $8\times 8$ pixel windows across luminance ($\mu$), contrast ($\sigma$), and structure ($\sigma_{xy}$).
+   - Subpixel cell thresholding in 2-color cells introduces localized micro-contrast boundaries on smooth gradients when compared to continuous bicubic downscaling.
+   - Consequently, mathematical SSIM scores can remain close even when human vision clearly perceives the sharper, higher-resolution edge boundaries produced by $6\times 6$ composite modes.

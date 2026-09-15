@@ -456,3 +456,104 @@ func TestRenderOptsSextantUsesSextantGlyphs(t *testing.T) {
 		t.Fatalf("RenderOpts(Sextant) = %q, want sextant glyph", output)
 	}
 }
+
+func TestCellGeometryAspectX(t *testing.T) {
+	tests := []struct {
+		name        string
+		opts        Options
+		wantCellW   int
+		wantCellH   int
+		wantAspectX int
+	}{
+		{
+			name:        "6x6 custom shape natural aspect",
+			opts:        Options{CellW: 6, CellH: 6},
+			wantCellW:   6,
+			wantCellH:   6,
+			wantAspectX: 2, // 2*6/6 = 2
+		},
+		{
+			name:        "2x2 custom shape natural aspect",
+			opts:        Options{CellW: 2, CellH: 2},
+			wantCellW:   2,
+			wantCellH:   2,
+			wantAspectX: 2, // 2*2/2 = 2
+		},
+		{
+			name:        "1x2 custom shape natural aspect",
+			opts:        Options{CellW: 1, CellH: 2},
+			wantCellW:   1,
+			wantCellH:   2,
+			wantAspectX: 1, // 2*1/2 = 1
+		},
+		{
+			name:        "4x8 custom shape natural aspect",
+			opts:        Options{CellW: 4, CellH: 8},
+			wantCellW:   4,
+			wantCellH:   8,
+			wantAspectX: 1, // 2*4/8 = 1
+		},
+		{
+			name:        "explicit AspectX override",
+			opts:        Options{CellW: 6, CellH: 6, AspectX: 3},
+			wantCellW:   6,
+			wantCellH:   6,
+			wantAspectX: 3,
+		},
+		{
+			name:        "explicit AspectX=1 override on square cells",
+			opts:        Options{CellW: 6, CellH: 6, AspectX: 1},
+			wantCellW:   6,
+			wantCellH:   6,
+			wantAspectX: 1,
+		},
+		{
+			name:        "mode default HalfSplit",
+			opts:        Options{Mode: HalfSplit},
+			wantCellW:   2,
+			wantCellH:   2,
+			wantAspectX: 2,
+		},
+		{
+			name:        "mode default SixHalf",
+			opts:        Options{Mode: SixHalf},
+			wantCellW:   2,
+			wantCellH:   6,
+			wantAspectX: 1,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotW, gotH, gotAspectX := tc.opts.cellGeometry()
+			if gotW != tc.wantCellW || gotH != tc.wantCellH || gotAspectX != tc.wantAspectX {
+				t.Errorf("cellGeometry() = (%d, %d, %d), want (%d, %d, %d)",
+					gotW, gotH, gotAspectX, tc.wantCellW, tc.wantCellH, tc.wantAspectX)
+			}
+		})
+	}
+}
+
+func TestRenderToGridHeightConstrainedGridWidth(t *testing.T) {
+	// 100x200 portrait image
+	img := image.NewRGBA(image.Rect(0, 0, 100, 200))
+	// Bounding box: 80 cols max, 10 rows max.
+	// For 6x6 cell geometry with natural AspectX=2, height-bound at 10 rows means
+	// the image should take ~5 columns, NOT 80 columns.
+	grid, err := RenderToGrid(img, 80, Options{
+		CellW: 6,
+		CellH: 6,
+		Rows:  10,
+	})
+	if err != nil {
+		t.Fatalf("RenderToGrid: %v", err)
+	}
+	if grid.Width > 20 {
+		t.Errorf("grid.Width = %d, want <= 20 for height-constrained portrait image in 80-col box", grid.Width)
+	}
+	if grid.Height != 10 {
+		t.Errorf("grid.Height = %d, want 10", grid.Height)
+	}
+}
+
+

@@ -25,6 +25,10 @@ type Options struct {
 	Jobs    int
 	CellW   int
 	CellH   int
+	// AspectX is an optional horizontal aspect compensation override.
+	// By default (0), the natural ratio (2 * CellW / CellH) is computed
+	// automatically for standard 1:2 terminal cells.
+	// Only set this to a positive value to force deliberate non-standard stretching.
 	AspectX int
 	// Shapes overrides Mode with an explicit, common-geometry glyph inventory.
 	Shapes []Shape
@@ -47,6 +51,8 @@ func (o Options) cellGeometry() (cellW, cellH, aspectX int) {
 	}
 	if o.AspectX > 0 {
 		aspectX = o.AspectX
+	} else if cellW > 0 && cellH > 0 {
+		aspectX = max(1, 2*cellW/cellH)
 	}
 	return cellW, cellH, aspectX
 }
@@ -125,7 +131,7 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 			if extH > 0 {
 				scaled = imgutil.AppendTransparentRows(scaled, extH)
 			}
-			outCols = cols
+			outCols = max(1, targetW/cellW)
 			outRows = (targetH + extH) / cellH
 		}
 	} else {

@@ -11,3 +11,4 @@ catibrowse
 # local Go workspace (untracked)
 /go.work
 /go.work.sum
+/imgbrowser

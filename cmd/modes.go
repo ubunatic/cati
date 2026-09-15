@@ -22,6 +22,7 @@ import (
 	"ubunatic.com/cati/v1/quadblock"
 	"ubunatic.com/cati/v1/sextant"
 	"ubunatic.com/cati/v1/sparkline"
+	catiterm "ubunatic.com/cati/v1/term"
 )
 
 // This is assets/cati_0001.png, kept inline so the command works from an
@@ -41,6 +42,7 @@ type modesFilter struct {
 	maxGeo      *spec.RenderModeGeometry
 	sort        string
 	bySSIM      bool
+	cols        int
 }
 
 func modesCommand() *cobra.Command {
@@ -66,6 +68,7 @@ func modesCommand() *cobra.Command {
 	var presetAliasFlag string
 	var benchmarkFlag bool
 	var suiteFlag bool
+	var colsFlag string
 
 	cmd := &cobra.Command{
 		Use:   "modes [modes/images...]",
@@ -100,6 +103,18 @@ func modesCommand() *cobra.Command {
 					return err
 				}
 				maxGeo = geo
+			}
+
+			var cols int
+			cleanCols := strings.TrimSpace(strings.ToLower(colsFlag))
+			if cleanCols == "" || cleanCols == "auto" || cleanCols == "0" {
+				cols = 0
+			} else {
+				n, err := strconv.Atoi(cleanCols)
+				if err != nil || n < 1 {
+					return fmt.Errorf("invalid --cols value %q: must be \"auto\" or a positive integer", colsFlag)
+				}
+				cols = n
 			}
 
 			// Separate mode filter names from image/preset arguments
@@ -150,6 +165,7 @@ func modesCommand() *cobra.Command {
 				maxGeo:      maxGeo,
 				sort:        sortOrder,
 				bySSIM:      bySSIM || byPSNR,
+				cols:        cols,
 			}
 
 			if filter.list {
@@ -209,6 +225,7 @@ func modesCommand() *cobra.Command {
 	cmd.Flags().StringVar(&presetAliasFlag, "preset", "", "alias for --sample")
 	cmd.Flags().BoolVar(&benchmarkFlag, "benchmark", false, "run dataset benchmark scorecard across test assets")
 	cmd.Flags().BoolVar(&suiteFlag, "suite", false, "alias for --benchmark")
+	cmd.Flags().StringVar(&colsFlag, "cols", "auto", "grid layout columns: auto (1-3 based on terminal width) or explicit number 1, 2, 3...")
 	return cmd
 }
 
@@ -591,6 +608,7 @@ func runModesDemoWithImages(out io.Writer, width int, smart, info bool, entries 
 		imgItem := inputImages[0]
 		fmt.Fprintf(out, "Available render modes for %s (standard | +smart):\n", imgItem.name)
 
+		var items []*renderedSingleDemoItem
 		if sortKey == "" || sortKey == "name" || sortKey == "-name" {
 			if sortKey == "name" {
 				sort.SliceStable(entries, func(i, j int) bool {
@@ -601,44 +619,47 @@ func runModesDemoWithImages(out io.Writer, width int, smart, info bool, entries 
 					return entries[i].name > entries[j].name
 				})
 			}
+			items = make([]*renderedSingleDemoItem, 0, len(entries))
 			for _, entry := range entries {
 				item, err := renderSingleImageItemRaw(imgItem.img, width, entry)
 				if err != nil {
 					return err
 				}
 				computeSingleImageItemMetrics(imgItem.img, item, width)
-				printSingleImageDemoItem(out, *item, info, modeSpec)
+				items = append(items, item)
 			}
-			return nil
-		}
+		} else {
+			// Phase 1: Isolated sequential rendering and latency measurement
+			items = make([]*renderedSingleDemoItem, 0, len(entries))
+			for _, entry := range entries {
+				item, err := renderSingleImageItemRaw(imgItem.img, width, entry)
+				if err != nil {
+					return err
+				}
+				items = append(items, item)
+			}
 
-		// Phase 1: Isolated sequential rendering and latency measurement
-		items := make([]*renderedSingleDemoItem, 0, len(entries))
-		for _, entry := range entries {
-			item, err := renderSingleImageItemRaw(imgItem.img, width, entry)
-			if err != nil {
+			// Phase 2: Parallel SSIM computation across all cores
+			var wg sync.WaitGroup
+			for _, it := range items {
+				wg.Add(1)
+				go func(item *renderedSingleDemoItem) {
+					defer wg.Done()
+					computeSingleImageItemMetrics(imgItem.img, item, width)
+				}(it)
+			}
+			wg.Wait()
+
+			if err := sortSingleImageDemoItems(items, sortKey); err != nil {
 				return err
 			}
-			items = append(items, item)
 		}
 
-		// Phase 2: Parallel SSIM computation across all cores
-		var wg sync.WaitGroup
-		for _, it := range items {
-			wg.Add(1)
-			go func(item *renderedSingleDemoItem) {
-				defer wg.Done()
-				computeSingleImageItemMetrics(imgItem.img, item, width)
-			}(it)
+		cards := make([][]string, len(items))
+		for idx, it := range items {
+			cards[idx] = singleImageCardLines(it, info, modeSpec)
 		}
-		wg.Wait()
-
-		if err := sortSingleImageDemoItems(items, sortKey); err != nil {
-			return err
-		}
-		for _, item := range items {
-			printSingleImageDemoItem(out, *item, info, modeSpec)
-		}
+		printCardsGrid(out, cards, filter.cols)
 		return nil
 	}
 
@@ -671,6 +692,7 @@ func runModesDemoWithImages(out io.Writer, width int, smart, info bool, entries 
 
 	fmt.Fprintf(out, "Available render modes (%s | %s):\n", leftName, rightName)
 
+	var items []*renderedDemoItem
 	if sortKey == "" || sortKey == "name" || sortKey == "-name" {
 		if sortKey == "name" {
 			sort.SliceStable(entries, func(i, j int) bool {
@@ -681,46 +703,48 @@ func runModesDemoWithImages(out io.Writer, width int, smart, info bool, entries 
 				return entries[i].name > entries[j].name
 			})
 		}
+		items = make([]*renderedDemoItem, 0, len(entries))
 		for _, entry := range entries {
 			item, err := renderSingleDemoItemRaw(leftImg, rightImg, width, smart, entry, termRows)
 			if err != nil {
 				return err
 			}
 			computeDemoItemMetrics(leftImg, rightImg, item, width, smart)
-			printDemoItem(out, *item, smart, info, modeSpec)
+			items = append(items, item)
 		}
-		return nil
-	}
+	} else {
+		// Metric sorting case:
+		// Phase 1: Isolated sequential rendering and latency measurement
+		items = make([]*renderedDemoItem, 0, len(entries))
+		for _, entry := range entries {
+			item, err := renderSingleDemoItemRaw(leftImg, rightImg, width, smart, entry, termRows)
+			if err != nil {
+				return err
+			}
+			items = append(items, item)
+		}
 
-	// Metric sorting case:
-	// Phase 1: Isolated sequential rendering and latency measurement
-	items := make([]*renderedDemoItem, 0, len(entries))
-	for _, entry := range entries {
-		item, err := renderSingleDemoItemRaw(leftImg, rightImg, width, smart, entry, termRows)
-		if err != nil {
+		// Phase 2: Parallel error and quality metric computation across all cores
+		var wg sync.WaitGroup
+		for _, it := range items {
+			wg.Add(1)
+			go func(item *renderedDemoItem) {
+				defer wg.Done()
+				computeDemoItemMetrics(leftImg, rightImg, item, width, smart)
+			}(it)
+		}
+		wg.Wait()
+
+		if err := sortRenderedDemoItems(items, sortKey, smart); err != nil {
 			return err
 		}
-		items = append(items, item)
 	}
 
-	// Phase 2: Parallel error and quality metric computation across all cores
-	var wg sync.WaitGroup
-	for _, it := range items {
-		wg.Add(1)
-		go func(item *renderedDemoItem) {
-			defer wg.Done()
-			computeDemoItemMetrics(leftImg, rightImg, item, width, smart)
-		}(it)
+	cards := make([][]string, len(items))
+	for idx, it := range items {
+		cards[idx] = pairDemoCardLines(it, smart, info, modeSpec)
 	}
-	wg.Wait()
-
-	if err := sortRenderedDemoItems(items, sortKey, smart); err != nil {
-		return err
-	}
-
-	for _, item := range items {
-		printDemoItem(out, *item, smart, info, modeSpec)
-	}
+	printCardsGrid(out, cards, filter.cols)
 	return nil
 }
 
@@ -793,23 +817,6 @@ func computeSingleImageItemMetrics(src image.Image, item *renderedSingleDemoItem
 		colW = len(item.leftTitle) + 4
 	}
 	item.colW = colW
-}
-
-func printSingleImageDemoItem(out io.Writer, item renderedSingleDemoItem, info bool, modeSpec spec.RenderModesSpec) {
-	fmt.Fprintf(out, "\n%-*s%s\n", item.colW, item.leftTitle, item.smartTitle)
-	for i := 0; i < max(len(item.normalLines), len(item.smartLines)); i++ {
-		var left, right string
-		if i < len(item.normalLines) {
-			left = item.normalLines[i]
-		}
-		if i < len(item.smartLines) {
-			right = item.smartLines[i]
-		}
-		fmt.Fprintf(out, "%s    %s\n", padANSILine(left, item.colW-4), right)
-	}
-	if info {
-		writeModeInfo(out, item.entry, modeSpec)
-	}
 }
 
 func sortSingleImageDemoItems(items []*renderedSingleDemoItem, sortKey string) error {
@@ -911,18 +918,9 @@ func computeDemoItemMetrics(leftImg, rightImg image.Image, item *renderedDemoIte
 	}
 }
 
-func printDemoItem(out io.Writer, item renderedDemoItem, smart, info bool, modeSpec spec.RenderModesSpec) {
-	if !smart {
-		fmt.Fprintf(out, "\n%s\n", item.leftTitle)
-		for _, line := range item.normalLines {
-			fmt.Fprintln(out, line)
-		}
-		if info {
-			writeModeInfo(out, item.entry, modeSpec)
-		}
-		return
-	}
-	fmt.Fprintf(out, "\n%-*s%s\n", item.colW, item.leftTitle, item.smartTitle)
+func singleImageCardLines(item *renderedSingleDemoItem, info bool, modeSpec spec.RenderModesSpec) []string {
+	lines := make([]string, 0, 1+max(len(item.normalLines), len(item.smartLines))+5)
+	lines = append(lines, fmt.Sprintf("%-*s%s", item.colW, item.leftTitle, item.smartTitle))
 	for i := 0; i < max(len(item.normalLines), len(item.smartLines)); i++ {
 		var left, right string
 		if i < len(item.normalLines) {
@@ -931,11 +929,151 @@ func printDemoItem(out io.Writer, item renderedDemoItem, smart, info bool, modeS
 		if i < len(item.smartLines) {
 			right = item.smartLines[i]
 		}
-		fmt.Fprintf(out, "%s    %s\n", padANSILine(left, item.colW-4), right)
+		lines = append(lines, fmt.Sprintf("%s    %s", padANSILine(left, item.colW-4), right))
 	}
 	if info {
-		writeModeInfo(out, item.entry, modeSpec)
+		lines = append(lines, modeInfoLines(item.entry, modeSpec)...)
 	}
+	return lines
+}
+
+func pairDemoCardLines(item *renderedDemoItem, smart, info bool, modeSpec spec.RenderModesSpec) []string {
+	lines := make([]string, 0, 1+max(len(item.normalLines), len(item.smartLines))+5)
+	if !smart {
+		lines = append(lines, item.leftTitle)
+		lines = append(lines, item.normalLines...)
+	} else {
+		lines = append(lines, fmt.Sprintf("%-*s%s", item.colW, item.leftTitle, item.smartTitle))
+		for i := 0; i < max(len(item.normalLines), len(item.smartLines)); i++ {
+			var left, right string
+			if i < len(item.normalLines) {
+				left = item.normalLines[i]
+			}
+			if i < len(item.smartLines) {
+				right = item.smartLines[i]
+			}
+			lines = append(lines, fmt.Sprintf("%s    %s", padANSILine(left, item.colW-4), right))
+		}
+	}
+	if info {
+		lines = append(lines, modeInfoLines(item.entry, modeSpec)...)
+	}
+	return lines
+}
+
+func modeInfoLines(entry renderModeEntry, modeSpec spec.RenderModesSpec) []string {
+	var buf bytes.Buffer
+	writeModeInfo(&buf, entry, modeSpec)
+	text := strings.TrimRight(buf.String(), "\n")
+	if text == "" {
+		return nil
+	}
+	return strings.Split(text, "\n")
+}
+
+func autoFitGridCols(cards [][]string, termWidth int) int {
+	if termWidth <= 0 || len(cards) == 0 {
+		return 1
+	}
+	maxCardW := 0
+	for _, card := range cards {
+		for _, line := range card {
+			if w := ansiLineWidth(line); w > maxCardW {
+				maxCardW = w
+			}
+		}
+	}
+	if maxCardW <= 0 {
+		return 1
+	}
+	const gutter = 4
+	for k := 3; k >= 1; k-- {
+		needed := k*maxCardW + (k-1)*gutter
+		if needed <= termWidth {
+			return k
+		}
+	}
+	return 1
+}
+
+func formatGridRowLines(rowCards [][]string) []string {
+	if len(rowCards) == 0 {
+		return nil
+	}
+	colWidths := make([]int, len(rowCards))
+	maxH := 0
+	for j, card := range rowCards {
+		w := 0
+		for _, line := range card {
+			if lw := ansiLineWidth(line); lw > w {
+				w = lw
+			}
+		}
+		colWidths[j] = w
+		if len(card) > maxH {
+			maxH = len(card)
+		}
+	}
+
+	lines := make([]string, 0, maxH+1)
+	lines = append(lines, "") // blank line before row
+	for r := 0; r < maxH; r++ {
+		var sb strings.Builder
+		for j, card := range rowCards {
+			var line string
+			if r < len(card) {
+				line = card[r]
+			}
+			if j < len(rowCards)-1 {
+				sb.WriteString(padANSILine(line, colWidths[j]))
+				sb.WriteString("    ")
+			} else {
+				sb.WriteString(line)
+			}
+		}
+		lines = append(lines, strings.TrimRight(sb.String(), " "))
+	}
+	return lines
+}
+
+func formatCardsGrid(cards [][]string, cols int, termWidth int) []string {
+	if len(cards) == 0 {
+		return nil
+	}
+	effectiveCols := cols
+	if effectiveCols <= 0 {
+		effectiveCols = autoFitGridCols(cards, termWidth)
+	}
+	if effectiveCols <= 0 {
+		effectiveCols = 1
+	}
+
+	var result []string
+	for i := 0; i < len(cards); i += effectiveCols {
+		end := i + effectiveCols
+		if end > len(cards) {
+			end = len(cards)
+		}
+		result = append(result, formatGridRowLines(cards[i:end])...)
+	}
+	return result
+}
+
+func printCardsGrid(out io.Writer, cards [][]string, cols int) {
+	lines := formatCardsGrid(cards, cols, catiterm.TermWidth())
+	for _, l := range lines {
+		fmt.Fprintln(out, l)
+	}
+}
+
+func printSingleImageDemoItem(out io.Writer, item renderedSingleDemoItem, info bool, modeSpec spec.RenderModesSpec) {
+	cards := [][]string{singleImageCardLines(&item, info, modeSpec)}
+	printCardsGrid(out, cards, 1)
+}
+
+func printDemoItem(out io.Writer, item renderedDemoItem, smart, info bool, modeSpec spec.RenderModesSpec) {
+	cards := [][]string{pairDemoCardLines(&item, smart, info, modeSpec)}
+	printCardsGrid(out, cards, 1)
 }
 
 type renderedDemoItem struct {

@@ -4,9 +4,11 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"codeberg.org/ubunatic/loom"
 )
@@ -30,7 +32,16 @@ func run() error {
 	pane.MaxCols = 0
 	pane.DisableDefaultQuit = true
 	pane.EnableMouseClicks()
-	return pane.Run(app)
+
+	// RunWatch drives redraws at a steady cadence (50ms) so background async
+	// renders immediately display when complete without waiting for key events.
+	cadence := loom.Cadence{
+		Collect: 50 * time.Millisecond,
+		Redraw:  50 * time.Millisecond,
+	}
+	return pane.RunWatch(context.Background(), app, cadence, func(time.Time) error {
+		return nil
+	})
 }
 
 func main() {

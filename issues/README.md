@@ -20,7 +20,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 014 | [014-more-boxdrawing-chars-unicode-v13.md](014-more-boxdrawing-chars-unicode-v13.md) | More Unicode goodness | In Progress |
 | 015 | [015-spark-bottom-row-halfcell-fit.md](015-spark-bottom-row-halfcell-fit.md) | Spark/quad garbled bottom row at mid-cell fit heights | ✅ Closed |
 | 016 | [016-worker-copy-consolidation.md](016-worker-copy-consolidation.md) | Worker-Copy Render Paths: Keep Clones for Tuning, Consolidate Later | 🔴 Open |
-| 017 | [017-gpu-glyph-mapping-spark-mode.md](017-gpu-glyph-mapping-spark-mode.md) | GPU Assistance for Glyph Mapping, Starting with Spark Mode | 🔄 In Progress |
+| 017 | [017-gpu-glyph-mapping-spark-mode.md](017-gpu-glyph-mapping-spark-mode.md) | GPU Assistance for Glyph Mapping, Starting with Spark Mode | 🟡 In Progress |
 | 018 | [018-sparkline-allocation-reduction.md](018-sparkline-allocation-reduction.md) | Reduce Allocation Pressure in Spark Mode | 🔴 Open |
 | 019 | [019-video-audio-drift-on-long-playback.md](019-video-audio-drift-on-long-playback.md) | Video audio drift on longer playback | 🔴 Open |
 | 020 | [020-sextant-column-mask-nul-glyph.md](020-sextant-column-mask-nul-glyph.md) | Sextant pure-column masks emit NUL glyph (garbled right edge) | ✅ Closed |
@@ -38,7 +38,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 032 | [032-jpeg-golden-toolchain-drift.md](032-jpeg-golden-toolchain-drift.md) | JPEG-sourced golden drift across Go toolchain patch versions | ✅ Closed |
 | 033 | [033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md](033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md) | Render() unconditionally emits erase-line+CR prefix, breaks composed layouts | Open |
 | 034 | [034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md](034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md) | quadblock and sextant have no image loader, must import halfblock.LoadImage | Open |
-| 035 | [035-make-png-golden-comparisons-ignore-non-rendering-metadata.md](035-make-png-golden-comparisons-ignore-non-rendering-metadata.md) | Make PNG golden comparisons ignore non-rendering metadata | ✅ Closed |
+| 035 | [035-make-png-golden-comparisons-ignore-non-rendering-metadata.md](035-make-png-golden-comparisons-ignore-non-rendering-metadata.md) | Make PNG golden comparisons ignore non-rendering metadata | Closed (Verified with metadata isolation and negative difference tests in `cmd/golden_render_test.go`) |
 | 036 | [036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md](036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md) | Add smart render mode that selects the best width by PSNR | Open |
 | 037 | [037-extend-smart-rendering-to-algorithm-native-sub-cell-steps.md](037-extend-smart-rendering-to-algorithm-native-sub-cell-steps.md) | Extend smart rendering to algorithm-native sub-cell steps | Closed — resolved in 322cca7 |
 | 038 | [038-investigate-blocky-sextant-rendering-at-small-widths.md](038-investigate-blocky-sextant-rendering-at-small-widths.md) | Investigate blocky sextant rendering at small widths | Closed |
@@ -47,10 +47,15 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 041 | [041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md](041-assess-sparkline-and-composite-rendering-quality-at-small-widths.md) | Assess sparkline and composite rendering quality at small widths | Closed |
 | 042 | [042-add-info-metadata-to-cati-modes-demos.md](042-add-info-metadata-to-cati-modes-demos.md) | Add `--info` metadata to `cati modes` demos | Closed |
 | 043 | [043-compose-named-and-debug-render-modes-from-glyph-set-ids.md](043-compose-named-and-debug-render-modes-from-glyph-set-ids.md) | Compose named and debug render modes from glyph set IDs | Closed |
-| 044 | [044-modes-command-custom-image-input-support.md](044-modes-command-custom-image-input-support.md) | Modes Command Custom Image Input Support | ✅ Closed |
-| 045 | [045-modes-command-test-asset-presets-and-sample-shortcuts.md](045-modes-command-test-asset-presets-and-sample-shortcuts.md) | Modes Command Test Asset Presets and Sample Shortcuts | ✅ Closed |
-| 046 | [046-modes-command-dataset-benchmark-scorecard.md](046-modes-command-dataset-benchmark-scorecard.md) | Modes Command Dataset Benchmark Scorecard | ✅ Closed |
-| 047 | [047-smart-render-search-timeout.md](047-smart-render-search-timeout.md) | Abort --smart search after 1s (--smart-timeout default) | 🔴 Open |
+| 044 | [044-modes-command-custom-image-input-support.md](044-modes-command-custom-image-input-support.md) | Modes Command Custom Image Input Support | Closed (Implemented `-i / --image` and positional path support in `cmd/modes.go`) |
+| 045 | [045-modes-command-test-asset-presets-and-sample-shortcuts.md](045-modes-command-test-asset-presets-and-sample-shortcuts.md) | Modes Command Test Asset Presets and Sample Shortcuts | Closed (Implemented in `cmd/modes_presets.go` and `cmd/modes.go`) |
+| 046 | [046-modes-command-dataset-benchmark-scorecard.md](046-modes-command-dataset-benchmark-scorecard.md) | Modes Command Dataset Benchmark Scorecard | Closed (Implemented in `cmd/modes_benchmark.go` and `cmd/modes.go`) |
+| 047 | [047-smart-render-search-timeout.md](047-smart-render-search-timeout.md) | Abort --smart Search After 1s (--smart-timeout Default) | Open |
+| 048 | [048-automatic-natural-aspect-ratio-for-custom-glyph-modes-and-safe-override-api.md](048-automatic-natural-aspect-ratio-for-custom-glyph-modes-and-safe-override-api.md) | Automatic Natural Aspect Ratio for Custom Glyph Modes and Safe Override API | Closed |
+| 049 | [049-modes-command-grid-output-layout-and-column-fitting.md](049-modes-command-grid-output-layout-and-column-fitting.md) | Modes Command Grid Output Layout and Column Fitting | Closed |
+| 050 | [050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md](050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md) | Zero-Allocation and LUT Acceleration for Sextant and Quad Block Renderers | 🔴 Open |
+| 051 | [051-fast-contiguous-luminance-buffer-for-ssim-scoring-pipeline.md](051-fast-contiguous-luminance-buffer-for-ssim-scoring-pipeline.md) | Fast Contiguous Luminance Buffer for SSIM Scoring Pipeline | 🔴 Open |
+| 052 | [052-unified-composite-quality-metric-and-efficiency-index.md](052-unified-composite-quality-metric-and-efficiency-index.md) | Unified Composite Quality Metric and Efficiency Index | 🔴 Open |
 
 ## Archived
 
