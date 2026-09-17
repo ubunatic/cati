@@ -3,7 +3,7 @@ module ubunatic.com/cati
 go 1.25.0
 
 require (
-	codeberg.org/ubunatic/loom v0.2.3
+	codeberg.org/ubunatic/loom v0.2.4
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.44.0

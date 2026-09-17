@@ -214,6 +214,39 @@ func computeSSIM(src, rec image.Image, cols, rows int) float64 {
 	return metrics.SSIMLuminance(ref, upscaled)
 }
 
+// renderFrame converts a single decoded image frame to *core.Grid without computing SSIM/stats.
+func renderFrame(img image.Image, cols, rows int, mode renderMode) (*core.Grid, error) {
+	jobs := runtime.NumCPU()
+	switch mode {
+	case modeHalf:
+		return halfblock.RenderToGrid(img, cols, halfblock.Options{Jobs: jobs, Rows: rows})
+	case modeSix:
+		return sextant.RenderToGrid(img, cols, sextant.Options{Jobs: jobs, Rows: rows})
+	case modeQuadP:
+		shapes, cw, ch, sErr := getModeShapes("quad+")
+		if sErr != nil {
+			return nil, sErr
+		}
+		opts := sparkline.Options{CellW: cw, CellH: ch, Shapes: shapes, Jobs: jobs, Rows: rows}
+		return sparkline.RenderToGrid(img, cols, opts)
+	case modeBars:
+		shapes, cw, ch, sErr := getModeShapes("bars")
+		if sErr != nil {
+			return nil, sErr
+		}
+		opts := sparkline.Options{CellW: cw, CellH: ch, Shapes: shapes, Jobs: jobs, Rows: rows}
+		return sparkline.RenderToGrid(img, cols, opts)
+	case modeAll:
+		shapes, cw, ch, sErr := getModeShapes("all")
+		if sErr != nil {
+			return nil, sErr
+		}
+		opts := sparkline.Options{CellW: cw, CellH: ch, Shapes: shapes, Jobs: jobs, Rows: rows}
+		return sparkline.RenderToGrid(img, cols, opts)
+	}
+	return halfblock.RenderToGrid(img, cols, halfblock.Options{Jobs: jobs, Rows: rows})
+}
+
 // doRender dispatches to the correct renderer package with multicore parallelism
 // and computes the reconstruction SSIM score against the source image.
 func doRender(path string, cols, rows int, mode renderMode) (*core.Grid, float64, renderStats, string) {

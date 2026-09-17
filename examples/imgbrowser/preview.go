@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"time"
 
 	"codeberg.org/ubunatic/loom"
 
+	"ubunatic.com/cati/internal/audio"
 	"ubunatic.com/cati/v1/core"
+	"ubunatic.com/cati/v1/halfblock"
 )
 
 // imagePreview is a loom.Widget that renders an image file via cati's block
@@ -22,6 +25,8 @@ import (
 //   - Arrow keys / scroll-wheel pan the image.
 //   - +/= zoom in, - zoom out, 0 resets zoom.
 //   - m cycles render mode forward, Shift-M backwards.
+//   - p / Shift-P toggles inline video playback (fast vs orig speed).
+//   - f toggles fullscreen mode.
 type imagePreview struct {
 	// desired state (set from the main goroutine via SetPath/SetMessage/SetMode)
 	wantPath string
@@ -29,12 +34,12 @@ type imagePreview struct {
 	message  string // shown when wantPath is empty (dirs, errors)
 
 	// cached render result — only updated in Draw (main goroutine), so no mutex needed
-	grid     *core.Grid
-	gridMsg  string
-	gridPath string
-	gridCols int
-	gridRows int
-	gridMode renderMode
+	grid      *core.Grid
+	gridMsg   string
+	gridPath  string
+	gridCols  int
+	gridRows  int
+	gridMode  renderMode
 	gridDur   time.Duration
 	gridSSIM  float64
 	gridStats renderStats
@@ -46,8 +51,19 @@ type imagePreview struct {
 	subRows int
 	subMode renderMode
 
-	// async worker
+	// async worker for static renders
 	rend *renderer
+
+	// inline video streaming state
+	playing      bool
+	origSpeed    bool
+	fullscreen   bool
+	playCancel   context.CancelFunc
+	playingCols  int
+	playingRows  int
+	playingMode  renderMode
+	videoGridC   chan *core.Grid
+	onFullscreen func()
 
 	focused    bool
 	panX, panY int
@@ -56,6 +72,144 @@ type imagePreview struct {
 	// saved for mouse hit-testing
 	lastH    int // height of preview rect last Draw
 	modeBtns []modeBtn
+	playBtn  btnBounds
+}
+
+type btnBounds struct {
+	x, w   int
+	active bool
+}
+
+func (p *imagePreview) StopVideo() {
+	if p.playCancel != nil {
+		p.playCancel()
+		p.playCancel = nil
+	}
+	p.playing = false
+	p.playingCols = 0
+	p.playingRows = 0
+}
+
+func (p *imagePreview) TogglePlay(origSpeed bool) {
+	if p.wantPath == "" || !halfblock.IsVideo(p.wantPath) {
+		return
+	}
+	if p.fullscreen {
+		origSpeed = true
+	}
+	if p.playing {
+		if p.origSpeed == origSpeed {
+			p.StopVideo()
+			return
+		}
+		p.StopVideo()
+	}
+	p.playing = true
+	p.origSpeed = origSpeed
+	p.playingCols = 0
+	p.playingRows = 0
+}
+
+func (p *imagePreview) SetFullscreen(fullscreen bool) {
+	if p.fullscreen == fullscreen {
+		return
+	}
+	p.fullscreen = fullscreen
+	if p.playing {
+		if p.fullscreen {
+			p.origSpeed = true
+		}
+		// Restart stream to update speed / audio settings
+		p.playingCols = 0
+		p.playingRows = 0
+	}
+}
+
+func (p *imagePreview) startVideoStream(path string, cols, rows int, mode renderMode, origSpeed, enableAudio bool) {
+	if p.playCancel != nil {
+		p.playCancel()
+		p.playCancel = nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	p.playCancel = cancel
+	p.playingCols = cols
+	p.playingRows = rows
+	p.playingMode = mode
+
+	go func(ctx context.Context, path string, cols, rows int, mode renderMode, origSpeed, enableAudio bool) {
+		fps := 24.0
+		if probedFPS, err := halfblock.ProbeVideoFPS(path); err == nil && probedFPS > 0 {
+			fps = probedFPS
+		}
+		frameDuration := time.Duration(float64(time.Second) / fps)
+
+		var audioPlayer *audio.Player
+		if enableAudio {
+			if hasAudio, err := audio.HasAudio(path); err == nil && hasAudio {
+				if ap, err := audio.Open(ctx, path, 0, 0); err == nil {
+					audioPlayer = ap
+				}
+			}
+		}
+		defer func() {
+			if audioPlayer != nil {
+				audioPlayer.Stop()
+			}
+		}()
+
+		for ctx.Err() == nil {
+			var displayFPS float64
+			if !origSpeed {
+				displayFPS = 20
+			}
+			frameCh, cleanup, err := halfblock.OpenVideoStream(ctx, path, displayFPS, 0, 0)
+			if err != nil {
+				return
+			}
+			lastFrameTime := time.Now()
+			for img := range frameCh {
+				if origSpeed {
+					elapsed := time.Since(lastFrameTime)
+					if elapsed < frameDuration {
+						select {
+						case <-time.After(frameDuration - elapsed):
+						case <-ctx.Done():
+							cleanup()
+							return
+						}
+					}
+					lastFrameTime = time.Now()
+				}
+				grid, err := renderFrame(img, cols, rows, mode)
+				if err == nil && grid != nil {
+					select {
+					case p.videoGridC <- grid:
+					default:
+						select {
+						case <-p.videoGridC:
+						default:
+						}
+						select {
+						case p.videoGridC <- grid:
+						default:
+						}
+					}
+				}
+			}
+			cleanup()
+			if enableAudio && ctx.Err() == nil {
+				if audioPlayer != nil {
+					audioPlayer.Stop()
+					audioPlayer = nil
+				}
+				if hasAudio, err := audio.HasAudio(path); err == nil && hasAudio {
+					if ap, err := audio.Open(ctx, path, 0, 0); err == nil {
+						audioPlayer = ap
+					}
+				}
+			}
+		}
+	}(ctx, path, cols, rows, mode, origSpeed, enableAudio)
 }
 
 func (p *imagePreview) ToggleInfo() {
@@ -74,7 +228,10 @@ const (
 )
 
 func newImagePreview() *imagePreview {
-	return &imagePreview{rend: newRenderer()}
+	return &imagePreview{
+		rend:       newRenderer(),
+		videoGridC: make(chan *core.Grid, 2),
+	}
 }
 
 func (p *imagePreview) zoomedCols(viewW int) int {
@@ -92,6 +249,7 @@ func (p *imagePreview) SetPath(path string) {
 	if path == p.wantPath && path != "" {
 		return
 	}
+	p.StopVideo()
 	p.wantPath = path
 	p.message = ""
 	p.panX, p.panY = 0, 0
@@ -101,6 +259,7 @@ func (p *imagePreview) SetPath(path string) {
 }
 
 func (p *imagePreview) SetMessage(msg string) {
+	p.StopVideo()
 	p.wantPath = ""
 	p.message = msg
 	p.panX, p.panY = 0, 0
@@ -149,11 +308,13 @@ func (p *imagePreview) clampPan(viewW, viewH int) {
 func (p *imagePreview) Draw(c *loom.Canvas, r loom.Rect) {
 	p.lastH = r.H
 
-	// Poll for a completed async render.
-	if res := p.rend.poll(); res != nil {
-		if res.path == p.wantPath && res.mode == p.wantMode {
-			p.grid, p.gridMsg, p.gridDur, p.gridSSIM, p.gridStats = res.grid, res.msg, res.dur, res.ssim, res.stats
-			p.gridPath, p.gridCols, p.gridRows, p.gridMode = res.path, res.cols, res.rows, res.mode
+	// Poll for a completed async static render if not playing video.
+	if !p.playing {
+		if res := p.rend.poll(); res != nil {
+			if res.path == p.wantPath && res.mode == p.wantMode {
+				p.grid, p.gridMsg, p.gridDur, p.gridSSIM, p.gridStats = res.grid, res.msg, res.dur, res.ssim, res.stats
+				p.gridPath, p.gridCols, p.gridRows, p.gridMode = res.path, res.cols, res.rows, res.mode
+			}
 		}
 	}
 
@@ -185,12 +346,35 @@ func (p *imagePreview) Draw(c *loom.Canvas, r loom.Rect) {
 		wantRows = 0
 	}
 
-	// Submit a render if the cached result is stale or missing.
-	needsRender := p.gridPath != p.wantPath || p.gridCols != wantCols || p.gridRows != wantRows || p.gridMode != p.wantMode
-	alreadyPending := p.subPath == p.wantPath && p.subCols == wantCols && p.subRows == wantRows && p.subMode == p.wantMode
-	if needsRender && !alreadyPending {
-		p.rend.submit(p.wantPath, wantCols, wantRows, p.wantMode)
-		p.subPath, p.subCols, p.subRows, p.subMode = p.wantPath, wantCols, wantRows, p.wantMode
+	if p.playing {
+		// Drain latest video frame from decoder stream.
+		for {
+			select {
+			case g := <-p.videoGridC:
+				if g != nil {
+					p.grid = g
+					p.gridPath = p.wantPath
+					p.gridCols = wantCols
+					p.gridRows = wantRows
+					p.gridMode = p.wantMode
+				}
+			default:
+				goto frameDrained
+			}
+		}
+	frameDrained:
+		// If video stream is not running yet or geometry/mode changed while playing, start/restart stream.
+		if p.playCancel == nil || p.playingCols != wantCols || p.playingRows != wantRows || p.playingMode != p.wantMode {
+			p.startVideoStream(p.wantPath, wantCols, wantRows, p.wantMode, p.origSpeed, p.fullscreen)
+		}
+	} else {
+		// Submit a static render if the cached result is stale or missing.
+		needsRender := p.gridPath != p.wantPath || p.gridCols != wantCols || p.gridRows != wantRows || p.gridMode != p.wantMode
+		alreadyPending := p.subPath == p.wantPath && p.subCols == wantCols && p.subRows == wantRows && p.subMode == p.wantMode
+		if needsRender && !alreadyPending {
+			p.rend.submit(p.wantPath, wantCols, wantRows, p.wantMode)
+			p.subPath, p.subCols, p.subRows, p.subMode = p.wantPath, wantCols, wantRows, p.wantMode
+		}
 	}
 
 	// If Info View is active, render stats table instead of the image pixels.
@@ -220,8 +404,8 @@ func (p *imagePreview) Draw(c *loom.Canvas, r loom.Rect) {
 		}
 	}
 
-	// Dim "…" in top-left while a new render is in-flight (stale image shown).
-	if needsRender {
+	// Dim "…" in top-left while a new static render is in-flight (stale image shown).
+	if !p.playing && (p.gridPath != p.wantPath || p.gridCols != wantCols || p.gridRows != wantRows || p.gridMode != p.wantMode) {
 		c.Write(r.X, r.Y, "…", loom.Style{Dim: true})
 	}
 
@@ -306,11 +490,30 @@ func (p *imagePreview) drawInfoView(c *loom.Canvas, x, y, w, h int) {
 }
 
 
-// drawModeBar renders the [six] [half] [quad] [all] button row along with render time and SSIM,
+// drawModeBar renders the [p] play/pause button (if video) and [six] [half] [quad] [all] mode buttons along with render time and SSIM,
 // and records button bounds for mouse hit-testing.
 func (p *imagePreview) drawModeBar(c *loom.Canvas, x, y, w int) {
 	p.modeBtns = p.modeBtns[:0]
+	p.playBtn = btnBounds{}
 	xOff := 0
+
+	if p.wantPath != "" && halfblock.IsVideo(p.wantPath) {
+		label := "[p] play"
+		if p.playing {
+			if p.origSpeed {
+				label = "[p] pause (1x)"
+			} else {
+				label = "[p] pause"
+			}
+		}
+		lw := len([]rune(label))
+		if xOff+lw <= w {
+			c.Write(x+xOff, y, label, loom.Style{Bold: true})
+			p.playBtn = btnBounds{x: xOff, w: lw, active: true}
+			xOff += lw + 1
+		}
+	}
+
 	for m := modeSix; m <= modeAll; m++ {
 		label := "[" + m.String() + "]"
 		lw := len([]rune(label))
@@ -370,6 +573,9 @@ func (p *imagePreview) applyZoomKey(text string) {
 //	Arrow keys — pan 1 cell/row     PgUp/PgDn — pan 10 rows
 //	Home       — reset pan          m/M       — cycle render mode forward/backward
 //	+/=        — zoom in            -         — zoom out      0 — reset zoom
+//	p          — toggle fast video playback
+//	Shift-P    — toggle original speed video playback
+//	f          — toggle fullscreen
 func (p *imagePreview) HandleKey(e loom.KeyEvent) bool {
 	if !p.focused {
 		return false
@@ -393,6 +599,9 @@ func (p *imagePreview) HandleKey(e loom.KeyEvent) bool {
 	case "shift-m", "shift-M":
 		p.CycleModePrev()
 		return false
+	case "shift-p", "shift-P", "S-p", "S-P":
+		p.TogglePlay(true)
+		return false
 	}
 	switch e.Text {
 	case "#":
@@ -401,6 +610,14 @@ func (p *imagePreview) HandleKey(e loom.KeyEvent) bool {
 		p.CycleMode()
 	case "M":
 		p.CycleModePrev()
+	case "p":
+		p.TogglePlay(false)
+	case "P":
+		p.TogglePlay(true)
+	case "f", "F":
+		if p.onFullscreen != nil {
+			p.onFullscreen()
+		}
 	default:
 		p.applyZoomKey(e.Text)
 	}
@@ -418,6 +635,10 @@ func (p *imagePreview) HandleMouse(e loom.MouseEvent) bool {
 		if e.Button == loom.MouseLeft && e.Y == p.lastH {
 			// Click in the mode bar (last row, 1-based coords from inner rect).
 			clickX := e.X - 1 // convert to 0-based
+			if p.playBtn.active && clickX >= p.playBtn.x && clickX < p.playBtn.x+p.playBtn.w {
+				p.TogglePlay(p.origSpeed || p.fullscreen)
+				return false
+			}
 			for _, btn := range p.modeBtns {
 				if clickX >= btn.x && clickX < btn.x+btn.w {
 					p.SetMode(btn.mode)

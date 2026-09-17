@@ -56,6 +56,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 050 | [050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md](050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md) | Zero-Allocation and LUT Acceleration for Sextant and Quad Block Renderers | Open |
 | 051 | [051-fast-contiguous-luminance-buffer-for-ssim-scoring-pipeline.md](051-fast-contiguous-luminance-buffer-for-ssim-scoring-pipeline.md) | Fast Contiguous Luminance Buffer for SSIM Scoring Pipeline | Open |
 | 052 | [052-unified-composite-quality-metric-and-efficiency-index.md](052-unified-composite-quality-metric-and-efficiency-index.md) | Unified Composite Quality Metric and Efficiency Index | Open |
+| 053 | [053-gate-loom-list-panel-search-behind-slash-option.md](053-gate-loom-list-panel-search-behind-slash-option.md) | Gate Loom List Panel Search Behind Option ("Type to Search" vs "[/] Search") | Closed (Implemented GatedSearch in loom Choice and integrated into cati imgbrowser) |
 
 ## Archived
 

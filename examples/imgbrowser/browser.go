@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"codeberg.org/ubunatic/loom"
+
+	"ubunatic.com/cati/v1/halfblock"
 )
 
 // imageExts is the set of file extensions recognised as images.
@@ -19,7 +21,7 @@ var imageExts = map[string]bool{
 }
 
 func isImageFile(name string) bool {
-	return imageExts[strings.ToLower(filepath.Ext(name))]
+	return imageExts[strings.ToLower(filepath.Ext(name))] || halfblock.IsVideo(name)
 }
 
 // openFile launches the system's default viewer for the target file.
@@ -63,11 +65,22 @@ type browser struct {
 	dir        string
 	paths      map[string]string
 	imagesOnly bool
-	filterLen  int // shadow of list.query length; 0 = filter is empty
+	fullscreen bool
 	boxHeight  int // height of the split boxes in terminal rows
 }
 
-func newBrowser(path string) (*browser, error) {
+func (b *browser) toggleFullscreen() {
+	b.fullscreen = !b.fullscreen
+	b.frame.Boxes[0].Hidden = b.fullscreen
+	b.preview.SetFullscreen(b.fullscreen)
+	if b.fullscreen {
+		b.frame.Status = "[f] split  [p/P] play  [m] mode  [+/-] zoom  [#] info  [Tab] pane"
+	} else {
+		b.frame.Status = "[Tab] pane  [↑↓] move  [↵] open  [/] search  [f] full  [p/P] play  [m] mode  [+/-] zoom  [i] images  [#] info"
+	}
+}
+
+func newBrowser(path string, initialHeight int) (*browser, error) {
 	dir, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
@@ -79,18 +92,22 @@ func newBrowser(path string) (*browser, error) {
 	if !info.IsDir() {
 		return nil, fmt.Errorf("%s is not a directory", dir)
 	}
+	if initialHeight < 10 {
+		initialHeight = 30
+	}
 	b := &browser{
 		preview:    newImagePreview(),
 		imagesOnly: true,
-		boxHeight:  20,
+		boxHeight:  initialHeight,
 	}
+	b.preview.onFullscreen = b.toggleFullscreen
 	border := loom.BoxBorder{
 		TopLeft: "┌", TopRight: "┐", BottomLeft: "└", BottomRight: "┘",
 		Horizontal: "─", Vertical: "│", TitlePrefix: " ", TitleSuffix: " ",
 	}
 	b.frame = &loom.Frame{
 		Gap: 1, Breakpoint: 65,
-		Status: "Tab pane  •  ↑↓ select  •  ⇧/⌃ ↑↓ rows  •  Enter open  •  m/⇧m mode  •  # info  •  +/- zoom  •  i img-only  •  F10 quit",
+		Status: "[Tab] pane  [↑↓] move  [↵] open  [/] search  [f] full  [m] mode  [+/-] zoom  [i] images  [#] info",
 		Boxes: []loom.Box{
 			{ID: "files", Dynamic: true, MinWidth: 24, Height: b.boxHeight, Border: border},
 			{ID: "preview", Dynamic: true, MinWidth: 30, Height: b.boxHeight, Border: border, Child: b.preview},
@@ -143,9 +160,10 @@ func (b *browser) open(dir string) error {
 		}
 	}
 	list := loom.NewChoice(items)
+	list.GatedSearch = true
 	list.SelectOnlyOnClick = true
 	list.Prompt = "filter> "
-	list.Placeholder = "type to filter"
+	list.Placeholder = "[/] search"
 	list.OnSelect = func(item loom.Item) {
 		p := paths[item.Name]
 		if info, err := os.Stat(p); err == nil {
@@ -158,6 +176,8 @@ func (b *browser) open(dir string) error {
 					// Navigated up — re-select the folder we came from.
 					b.selectByName(prevBase)
 				}
+			} else if halfblock.IsVideo(p) {
+				b.preview.TogglePlay(false)
 			} else {
 				// File: open using OS handler (xdg-open / open / start)
 				if err := openFile(p); err != nil {
@@ -167,7 +187,6 @@ func (b *browser) open(dir string) error {
 		}
 	}
 	b.dir, b.paths, b.list = dir, paths, list
-	b.filterLen = 0 // filter is always empty after navigating to a new dir
 	b.frame.Boxes[0].Child = list
 	b.updatePreview()
 	return nil
@@ -221,8 +240,13 @@ func (b *browser) Draw(c *loom.Canvas, r loom.Rect) {
 
 func (b *browser) HandleKey(k loom.KeyEvent) bool {
 	// Explicit quit keys — pane.DisableDefaultQuit suppresses pane-level handling.
-	if k.Key == "ctrl-c" || k.Key == "ctrl-d" || k.Key == "f10" || k.Key == "F10" {
+	if k.Key == "ctrl-c" || k.Key == "ctrl-d" || k.Key == "f10" || k.Key == "F10" || k.Key == "ctrl-q" {
 		return true
+	}
+	if b.list == nil || !b.list.Searching() {
+		if k.Text == "q" || k.Text == "Q" || k.Key == "q" || k.Key == "Q" {
+			return true
+		}
 	}
 
 	// Shift-Up / Shift-Down and Ctrl-Up / Ctrl-Down dynamically resize the pane rows.
@@ -241,56 +265,60 @@ func (b *browser) HandleKey(k loom.KeyEvent) bool {
 		return false
 	}
 
-	// Keys that apply when the files pane is focused.
-	if focused := b.frame.FocusedBox(); focused != nil && focused.ID == "files" {
-		// Toggle image-only mode with 'i' when filter is empty.
-		if k.Text == "i" && b.filterLen == 0 {
+	// Keys that apply when the files pane is focused and search is inactive.
+	filesFocused := true
+	if focused := b.frame.FocusedBox(); focused != nil {
+		filesFocused = (focused.ID == "files")
+	}
+
+	if filesFocused && (b.list == nil || !b.list.Searching()) {
+		// Toggle image-only mode with 'i'.
+		if k.Text == "i" {
 			b.imagesOnly = !b.imagesOnly
-			_ = b.open(b.dir) // resets filterLen
+			_ = b.open(b.dir)
 			return false
 		}
-		// Toggle info mode with '#' when filter is empty.
-		if k.Text == "#" && b.filterLen == 0 {
+		// Toggle info mode with '#'.
+		if k.Text == "#" {
 			b.preview.ToggleInfo()
 			return false
 		}
-		// Cycle mode with 'm' (forward) or 'M' / Shift-M (backward) when filter is empty.
-		if b.filterLen == 0 {
-			switch {
-			case k.Text == "m" && k.Key != "shift-m" && k.Key != "shift-M":
-				b.preview.CycleMode()
+		// Cycle mode with 'm' (forward) or 'M' / Shift-M (backward).
+		switch {
+		case k.Text == "m" && k.Key != "shift-m" && k.Key != "shift-M":
+			b.preview.CycleMode()
+			return false
+		case k.Text == "M" || k.Key == "shift-m" || k.Key == "shift-M":
+			b.preview.CycleModePrev()
+			return false
+		}
+		// Toggle fullscreen with 'f'.
+		if k.Text == "f" || k.Text == "F" {
+			b.toggleFullscreen()
+			return false
+		}
+		// Toggle video play/pause with 'p' (fast) or 'P'/Shift-P (orig speed) when a video is selected.
+		switch {
+		case k.Key == "shift-p" || k.Key == "shift-P" || k.Key == "S-p" || k.Key == "S-P" || k.Text == "P":
+			if b.preview.wantPath != "" && halfblock.IsVideo(b.preview.wantPath) {
+				b.preview.TogglePlay(true)
 				return false
-			case k.Text == "M" || k.Key == "shift-m" || k.Key == "shift-M":
-				b.preview.CycleModePrev()
+			}
+		case k.Text == "p":
+			if b.preview.wantPath != "" && halfblock.IsVideo(b.preview.wantPath) {
+				b.preview.TogglePlay(false)
 				return false
 			}
 		}
-		// +/-/=/0 when filter is empty: forward zoom to the preview pane
-		// rather than starting a filter search.
-		if b.filterLen == 0 {
-			switch k.Text {
-			case "+", "=", "-", "0":
-				b.preview.applyZoomKey(k.Text)
-				return false
-			}
+		// +/-/=/0: forward zoom to the preview pane rather than starting a filter search.
+		switch k.Text {
+		case "+", "=", "-", "0":
+			b.preview.applyZoomKey(k.Text)
+			return false
 		}
 	}
 
 	quit := b.frame.HandleKey(k)
-
-	// Keep filterLen in sync with Choice.query (which is unexported).
-	// Choice only returns quit=true on backspace when query is already empty,
-	// so that case is handled separately below.
-	switch {
-	case k.Key == "backspace" && !quit:
-		// Choice consumed a backspace from a non-empty filter.
-		if b.filterLen > 0 {
-			b.filterLen--
-		}
-	case k.Text != "":
-		// A printable character was appended to the filter.
-		b.filterLen++
-	}
 
 	// Backspace on an empty filter causes Choice to signal quit — navigate
 	// up to the parent directory instead of exiting the app.
@@ -298,7 +326,7 @@ func (b *browser) HandleKey(k loom.KeyEvent) bool {
 		parent := filepath.Dir(b.dir)
 		if parent != b.dir {
 			prev := filepath.Base(b.dir)
-			if err := b.open(parent); err != nil { // resets filterLen
+			if err := b.open(parent); err != nil {
 				b.preview.SetMessage("Error: " + err.Error())
 			} else {
 				b.selectByName(prev)

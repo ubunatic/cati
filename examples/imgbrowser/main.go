@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"codeberg.org/ubunatic/loom"
+
+	catiterm "ubunatic.com/cati/v1/term"
 )
 
 func run() error {
@@ -19,11 +21,25 @@ func run() error {
 	if flag.NArg() > 0 {
 		dir = flag.Arg(0)
 	}
-	app, err := newBrowser(dir)
+	termH := 32
+	if th := catiterm.TermHeight(); th > 12 {
+		if th > 36 {
+			termH = th - 4
+		} else if th > 24 {
+			termH = th - 2
+		} else {
+			termH = th
+		}
+	}
+	boxH := termH - 2
+	if boxH < 10 {
+		boxH = 10
+	}
+	app, err := newBrowser(dir, boxH)
 	if err != nil {
 		return err
 	}
-	pane, err := loom.New(20)
+	pane, err := loom.New(termH)
 	if err != nil {
 		return err
 	}
