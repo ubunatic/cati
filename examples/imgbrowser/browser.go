@@ -70,8 +70,8 @@ type browser struct {
 }
 
 func (b *browser) toggleFullscreen() {
-	b.fullscreen = !b.fullscreen
-	b.frame.Boxes[0].Hidden = b.fullscreen
+	b.frame.MaximizeBox("preview")
+	b.fullscreen = b.frame.IsMaximized("preview")
 	b.preview.SetFullscreen(b.fullscreen)
 	if b.fullscreen {
 		b.frame.Status = "[f] split  [p/P] play  [m] mode  [+/-] zoom  [#] info  [Tab] pane"
@@ -107,14 +107,16 @@ func newBrowser(path string, initialHeight int) (*browser, error) {
 	}
 	b.frame = &loom.Frame{
 		Gap: 1, Breakpoint: 65,
-		Status: "[Tab] pane  [↑↓] move  [↵] open  [/] search  [f] full  [m] mode  [+/-] zoom  [i] images  [#] info",
+		Status: "[Tab] pane  [↑↓] move  [↵] open  [/] search  [f] full  [p/P] play  [m] mode  [+/-] zoom  [i] images  [#] info",
 		Boxes: []loom.Box{
 			{ID: "files", Dynamic: true, MinWidth: 24, Height: b.boxHeight, Border: border},
 			{ID: "preview", Dynamic: true, MinWidth: 30, Height: b.boxHeight, Border: border, Child: b.preview},
 		},
 		Actions: []loom.FrameAction{
-			{ID: "quit", Action: "quit", Key: "ctrl-q"},
+			{ID: "quit-q", Action: "quit", Key: "q"},
+			{ID: "quit-ctrl-q", Action: "quit", Key: "ctrl-q"},
 			{ID: "quit-f10", Action: "quit", Key: "f10"},
+			{ID: "full", Action: "maximize", Target: "preview", Key: "f"},
 		},
 	}
 	if err := b.open(dir); err != nil {
@@ -239,16 +241,6 @@ func (b *browser) Draw(c *loom.Canvas, r loom.Rect) {
 }
 
 func (b *browser) HandleKey(k loom.KeyEvent) bool {
-	// Explicit quit keys — pane.DisableDefaultQuit suppresses pane-level handling.
-	if k.Key == "ctrl-c" || k.Key == "ctrl-d" || k.Key == "f10" || k.Key == "F10" || k.Key == "ctrl-q" {
-		return true
-	}
-	if b.list == nil || !b.list.Searching() {
-		if k.Text == "q" || k.Text == "Q" || k.Key == "q" || k.Key == "Q" {
-			return true
-		}
-	}
-
 	// Shift-Up / Shift-Down and Ctrl-Up / Ctrl-Down dynamically resize the pane rows.
 	switch k.Key {
 	case "shift-up", "shift_up", "S-up", "ctrl-up", "ctrl_up", "C-up":
@@ -292,11 +284,6 @@ func (b *browser) HandleKey(k loom.KeyEvent) bool {
 			b.preview.CycleModePrev()
 			return false
 		}
-		// Toggle fullscreen with 'f'.
-		if k.Text == "f" || k.Text == "F" {
-			b.toggleFullscreen()
-			return false
-		}
 		// Toggle video play/pause with 'p' (fast) or 'P'/Shift-P (orig speed) when a video is selected.
 		switch {
 		case k.Key == "shift-p" || k.Key == "shift-P" || k.Key == "S-p" || k.Key == "S-P" || k.Text == "P":
@@ -319,6 +306,10 @@ func (b *browser) HandleKey(k loom.KeyEvent) bool {
 	}
 
 	quit := b.frame.HandleKey(k)
+	if isMax := b.frame.IsMaximized("preview"); isMax != b.fullscreen {
+		b.fullscreen = isMax
+		b.preview.SetFullscreen(b.fullscreen)
+	}
 
 	// Backspace on an empty filter causes Choice to signal quit — navigate
 	// up to the parent directory instead of exiting the app.
