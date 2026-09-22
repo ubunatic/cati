@@ -93,6 +93,22 @@ const (
 	cgray = 1.0 / 255.0
 )
 
+var (
+	rLumaLUT [256]float64
+	gLumaLUT [256]float64
+	bLumaLUT [256]float64
+	grayLUT  [256]float64
+)
+
+func init() {
+	for i := 0; i < 256; i++ {
+		rLumaLUT[i] = cr709 * float64(i)
+		gLumaLUT[i] = cg709 * float64(i)
+		bLumaLUT[i] = cb709 * float64(i)
+		grayLUT[i] = cgray * float64(i)
+	}
+}
+
 // extractLumaFlat converts img to a contiguous 1-D slice of BT.709 luminance values [0,1]
 // in row-major order (y*w + x). Fast paths are provided for common image types.
 func extractLumaFlat(img image.Image, buf []float64) ([]float64, int, int) {
@@ -117,13 +133,13 @@ func extractLumaFlat(img image.Image, buf []float64) ([]float64, int, int) {
 			outRow := buf[y*w : (y+1)*w]
 			x, i := 0, 0
 			for ; x+3 < w; x, i = x+4, i+16 {
-				outRow[x] = cr709*float64(pix[i]) + cg709*float64(pix[i+1]) + cb709*float64(pix[i+2])
-				outRow[x+1] = cr709*float64(pix[i+4]) + cg709*float64(pix[i+5]) + cb709*float64(pix[i+6])
-				outRow[x+2] = cr709*float64(pix[i+8]) + cg709*float64(pix[i+9]) + cb709*float64(pix[i+10])
-				outRow[x+3] = cr709*float64(pix[i+12]) + cg709*float64(pix[i+13]) + cb709*float64(pix[i+14])
+				outRow[x] = rLumaLUT[pix[i]] + gLumaLUT[pix[i+1]] + bLumaLUT[pix[i+2]]
+				outRow[x+1] = rLumaLUT[pix[i+4]] + gLumaLUT[pix[i+5]] + bLumaLUT[pix[i+6]]
+				outRow[x+2] = rLumaLUT[pix[i+8]] + gLumaLUT[pix[i+9]] + bLumaLUT[pix[i+10]]
+				outRow[x+3] = rLumaLUT[pix[i+12]] + gLumaLUT[pix[i+13]] + bLumaLUT[pix[i+14]]
 			}
 			for ; x < w; x, i = x+1, i+4 {
-				outRow[x] = cr709*float64(pix[i]) + cg709*float64(pix[i+1]) + cb709*float64(pix[i+2])
+				outRow[x] = rLumaLUT[pix[i]] + gLumaLUT[pix[i+1]] + bLumaLUT[pix[i+2]]
 			}
 		}
 	case *image.NRGBA:
@@ -134,13 +150,13 @@ func extractLumaFlat(img image.Image, buf []float64) ([]float64, int, int) {
 			outRow := buf[y*w : (y+1)*w]
 			x, i := 0, 0
 			for ; x+3 < w; x, i = x+4, i+16 {
-				outRow[x] = cr709*float64(pix[i]) + cg709*float64(pix[i+1]) + cb709*float64(pix[i+2])
-				outRow[x+1] = cr709*float64(pix[i+4]) + cg709*float64(pix[i+5]) + cb709*float64(pix[i+6])
-				outRow[x+2] = cr709*float64(pix[i+8]) + cg709*float64(pix[i+9]) + cb709*float64(pix[i+10])
-				outRow[x+3] = cr709*float64(pix[i+12]) + cg709*float64(pix[i+13]) + cb709*float64(pix[i+14])
+				outRow[x] = rLumaLUT[pix[i]] + gLumaLUT[pix[i+1]] + bLumaLUT[pix[i+2]]
+				outRow[x+1] = rLumaLUT[pix[i+4]] + gLumaLUT[pix[i+5]] + bLumaLUT[pix[i+6]]
+				outRow[x+2] = rLumaLUT[pix[i+8]] + gLumaLUT[pix[i+9]] + bLumaLUT[pix[i+10]]
+				outRow[x+3] = rLumaLUT[pix[i+12]] + gLumaLUT[pix[i+13]] + bLumaLUT[pix[i+14]]
 			}
 			for ; x < w; x, i = x+1, i+4 {
-				outRow[x] = cr709*float64(pix[i]) + cg709*float64(pix[i+1]) + cb709*float64(pix[i+2])
+				outRow[x] = rLumaLUT[pix[i]] + gLumaLUT[pix[i+1]] + bLumaLUT[pix[i+2]]
 			}
 		}
 	case *image.Gray:
@@ -327,15 +343,16 @@ func SSIMLuminance(a, b image.Image) float64 {
 	var n int
 
 	for y := 0; y+winSize <= h; y += winSize {
+		rowOff := y * w
 		for x := 0; x+winSize <= w; x += winSize {
 			var sA, sB, sA2, sB2, sAB float64
-			off := y*w + x
-			for dy := 0; dy < winSize; dy++ {
-				rowA := bufA[off : off+winSize]
-				rowB := bufB[off : off+winSize]
+			off := rowOff + x
+			_ = bufA[off+7*w+7]
+			_ = bufB[off+7*w+7]
 
-				a0, a1, a2, a3, a4, a5, a6, a7 := rowA[0], rowA[1], rowA[2], rowA[3], rowA[4], rowA[5], rowA[6], rowA[7]
-				b0, b1, b2, b3, b4, b5, b6, b7 := rowB[0], rowB[1], rowB[2], rowB[3], rowB[4], rowB[5], rowB[6], rowB[7]
+			for dy := 0; dy < 8; dy++ {
+				a0, a1, a2, a3, a4, a5, a6, a7 := bufA[off], bufA[off+1], bufA[off+2], bufA[off+3], bufA[off+4], bufA[off+5], bufA[off+6], bufA[off+7]
+				b0, b1, b2, b3, b4, b5, b6, b7 := bufB[off], bufB[off+1], bufB[off+2], bufB[off+3], bufB[off+4], bufB[off+5], bufB[off+6], bufB[off+7]
 
 				sA += a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7
 				sB += b0 + b1 + b2 + b3 + b4 + b5 + b6 + b7
