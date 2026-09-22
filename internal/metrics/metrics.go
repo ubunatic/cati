@@ -9,7 +9,31 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"sync"
 )
+
+var lumaBufferPool = sync.Pool{
+	New: func() any {
+		b := make([]float64, 0, 1024*1024)
+		return &b
+	},
+}
+
+func getLumaBuffer(needed int) ([]float64, *[]float64) {
+	ptr := lumaBufferPool.Get().(*[]float64)
+	buf := *ptr
+	if cap(buf) < needed {
+		buf = make([]float64, needed)
+	} else {
+		buf = buf[:needed]
+	}
+	return buf, ptr
+}
+
+func putLumaBuffer(ptr *[]float64, buf []float64) {
+	*ptr = buf[:0]
+	lumaBufferPool.Put(ptr)
+}
 
 // GridK is the subdivision factor for the quality metric reference grid.
 // Each terminal cell is divided into GridK × GridK sub-pixels for SSIM,
@@ -62,17 +86,112 @@ func luma(c color.Color) float64 {
 	return (0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)) / 65535.0
 }
 
+const (
+	cr709 = 0.2126 / 255.0
+	cg709 = 0.7152 / 255.0
+	cb709 = 0.0722 / 255.0
+	cgray = 1.0 / 255.0
+)
+
+// extractLumaFlat converts img to a contiguous 1-D slice of BT.709 luminance values [0,1]
+// in row-major order (y*w + x). Fast paths are provided for common image types.
+func extractLumaFlat(img image.Image, buf []float64) ([]float64, int, int) {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if w <= 0 || h <= 0 {
+		return nil, 0, 0
+	}
+	needed := w * h
+	if cap(buf) >= needed {
+		buf = buf[:needed]
+	} else {
+		buf = make([]float64, needed)
+	}
+
+	switch m := img.(type) {
+	case *image.RGBA:
+		startOff := m.PixOffset(b.Min.X, b.Min.Y)
+		for y := 0; y < h; y++ {
+			rowOff := startOff + y*m.Stride
+			pix := m.Pix[rowOff : rowOff+w*4]
+			outRow := buf[y*w : (y+1)*w]
+			x, i := 0, 0
+			for ; x+3 < w; x, i = x+4, i+16 {
+				outRow[x] = cr709*float64(pix[i]) + cg709*float64(pix[i+1]) + cb709*float64(pix[i+2])
+				outRow[x+1] = cr709*float64(pix[i+4]) + cg709*float64(pix[i+5]) + cb709*float64(pix[i+6])
+				outRow[x+2] = cr709*float64(pix[i+8]) + cg709*float64(pix[i+9]) + cb709*float64(pix[i+10])
+				outRow[x+3] = cr709*float64(pix[i+12]) + cg709*float64(pix[i+13]) + cb709*float64(pix[i+14])
+			}
+			for ; x < w; x, i = x+1, i+4 {
+				outRow[x] = cr709*float64(pix[i]) + cg709*float64(pix[i+1]) + cb709*float64(pix[i+2])
+			}
+		}
+	case *image.NRGBA:
+		startOff := m.PixOffset(b.Min.X, b.Min.Y)
+		for y := 0; y < h; y++ {
+			rowOff := startOff + y*m.Stride
+			pix := m.Pix[rowOff : rowOff+w*4]
+			outRow := buf[y*w : (y+1)*w]
+			x, i := 0, 0
+			for ; x+3 < w; x, i = x+4, i+16 {
+				outRow[x] = cr709*float64(pix[i]) + cg709*float64(pix[i+1]) + cb709*float64(pix[i+2])
+				outRow[x+1] = cr709*float64(pix[i+4]) + cg709*float64(pix[i+5]) + cb709*float64(pix[i+6])
+				outRow[x+2] = cr709*float64(pix[i+8]) + cg709*float64(pix[i+9]) + cb709*float64(pix[i+10])
+				outRow[x+3] = cr709*float64(pix[i+12]) + cg709*float64(pix[i+13]) + cb709*float64(pix[i+14])
+			}
+			for ; x < w; x, i = x+1, i+4 {
+				outRow[x] = cr709*float64(pix[i]) + cg709*float64(pix[i+1]) + cb709*float64(pix[i+2])
+			}
+		}
+	case *image.Gray:
+		startOff := m.PixOffset(b.Min.X, b.Min.Y)
+		for y := 0; y < h; y++ {
+			rowOff := startOff + y*m.Stride
+			pix := m.Pix[rowOff : rowOff+w]
+			outRow := buf[y*w : (y+1)*w]
+			for x := 0; x < w; x++ {
+				outRow[x] = cgray * float64(pix[x])
+			}
+		}
+	case *image.YCbCr:
+		yStart := m.YOffset(b.Min.X, b.Min.Y)
+		cStart := m.COffset(b.Min.X, b.Min.Y)
+		for y := 0; y < h; y++ {
+			yOff := yStart + y*m.YStride
+			cOff := cStart + (y>>1)*m.CStride
+			outRow := buf[y*w : (y+1)*w]
+			for x := 0; x < w; x++ {
+				ci := x >> 1
+				r, g, b := color.YCbCrToRGB(m.Y[yOff+x], m.Cb[cOff+ci], m.Cr[cOff+ci])
+				outRow[x] = cr709*float64(r) + cg709*float64(g) + cb709*float64(b)
+			}
+		}
+	default:
+		const inv65535 = 1.0 / 65535.0
+		for y := 0; y < h; y++ {
+			outRow := buf[y*w : (y+1)*w]
+			for x := 0; x < w; x++ {
+				r, g, b, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
+				outRow[x] = (0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)) * inv65535
+			}
+		}
+	}
+	return buf, w, h
+}
+
 // LumaGrid converts img to a 2-D slice of BT.709 luminance values [0,1].
 // Indices are [row][col] relative to img.Bounds().Min.
 func LumaGrid(img image.Image) [][]float64 {
 	b := img.Bounds()
 	h, w := b.Dy(), b.Dx()
+	if h <= 0 || w <= 0 {
+		return make([][]float64, h)
+	}
+	flat, _, _ := extractLumaFlat(img, nil)
 	g := make([][]float64, h)
 	for y := range g {
 		g[y] = make([]float64, w)
-		for x := range g[y] {
-			g[y][x] = luma(img.At(b.Min.X+x, b.Min.Y+y))
-		}
+		copy(g[y], flat[y*w:(y+1)*w])
 	}
 	return g
 }
@@ -188,33 +307,47 @@ func SSIMLuminance(a, b image.Image) float64 {
 		winSize = 8
 		C1      = 0.01 * 0.01
 		C2      = 0.03 * 0.03
+		invK    = 1.0 / 64.0
 	)
-	ba := a.Bounds()
+	ba, bb := a.Bounds(), b.Bounds()
 	w, h := ba.Dx(), ba.Dy()
-	if w < winSize || h < winSize {
+	if w < winSize || h < winSize || bb.Dx() != w || bb.Dy() != h {
 		return 1.0
 	}
+
+	rawA, ptrA := getLumaBuffer(w * h)
+	defer putLumaBuffer(ptrA, rawA)
+	bufA, _, _ := extractLumaFlat(a, rawA)
+
+	rawB, ptrB := getLumaBuffer(w * h)
+	defer putLumaBuffer(ptrB, rawB)
+	bufB, _, _ := extractLumaFlat(b, rawB)
+
 	var total float64
 	var n int
+
 	for y := 0; y+winSize <= h; y += winSize {
 		for x := 0; x+winSize <= w; x += winSize {
 			var sA, sB, sA2, sB2, sAB float64
-			for dy := range winSize {
-				for dx := range winSize {
-					la := luma(a.At(ba.Min.X+x+dx, ba.Min.Y+y+dy))
-					lb := luma(b.At(ba.Min.X+x+dx, ba.Min.Y+y+dy))
-					sA += la
-					sB += lb
-					sA2 += la * la
-					sB2 += lb * lb
-					sAB += la * lb
-				}
+			off := y*w + x
+			for dy := 0; dy < winSize; dy++ {
+				rowA := bufA[off : off+winSize]
+				rowB := bufB[off : off+winSize]
+
+				a0, a1, a2, a3, a4, a5, a6, a7 := rowA[0], rowA[1], rowA[2], rowA[3], rowA[4], rowA[5], rowA[6], rowA[7]
+				b0, b1, b2, b3, b4, b5, b6, b7 := rowB[0], rowB[1], rowB[2], rowB[3], rowB[4], rowB[5], rowB[6], rowB[7]
+
+				sA += a0 + a1 + a2 + a3 + a4 + a5 + a6 + a7
+				sB += b0 + b1 + b2 + b3 + b4 + b5 + b6 + b7
+				sA2 += a0*a0 + a1*a1 + a2*a2 + a3*a3 + a4*a4 + a5*a5 + a6*a6 + a7*a7
+				sB2 += b0*b0 + b1*b1 + b2*b2 + b3*b3 + b4*b4 + b5*b5 + b6*b6 + b7*b7
+				sAB += a0*b0 + a1*b1 + a2*b2 + a3*b3 + a4*b4 + a5*b5 + a6*b6 + a7*b7
+				off += w
 			}
-			k := float64(winSize * winSize)
-			muA, muB := sA/k, sB/k
-			vA := sA2/k - muA*muA
-			vB := sB2/k - muB*muB
-			vAB := sAB/k - muA*muB
+			muA, muB := sA*invK, sB*invK
+			vA := sA2*invK - muA*muA
+			vB := sB2*invK - muB*muB
+			vAB := sAB*invK - muA*muB
 			l := (2*muA*muB + C1) / (muA*muA + muB*muB + C1)
 			cs := (2*vAB + C2) / (vA + vB + C2)
 			total += l * cs

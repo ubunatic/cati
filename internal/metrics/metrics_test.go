@@ -240,6 +240,96 @@ func TestSSIMLuminance_TooSmall(t *testing.T) {
 	}
 }
 
+func naiveSSIMLuminance(a, b image.Image) float64 {
+	const (
+		winSize = 8
+		C1      = 0.01 * 0.01
+		C2      = 0.03 * 0.03
+	)
+	ba := a.Bounds()
+	w, h := ba.Dx(), ba.Dy()
+	if w < winSize || h < winSize {
+		return 1.0
+	}
+	var total float64
+	var n int
+	for y := 0; y+winSize <= h; y += winSize {
+		for x := 0; x+winSize <= w; x += winSize {
+			var sA, sB, sA2, sB2, sAB float64
+			for dy := 0; dy < winSize; dy++ {
+				for dx := 0; dx < winSize; dx++ {
+					rA, gA, bA, _ := a.At(ba.Min.X+x+dx, ba.Min.Y+y+dy).RGBA()
+					la := (0.2126*float64(rA) + 0.7152*float64(gA) + 0.0722*float64(bA)) / 65535.0
+					rB, gB, bB, _ := b.At(ba.Min.X+x+dx, ba.Min.Y+y+dy).RGBA()
+					lb := (0.2126*float64(rB) + 0.7152*float64(gB) + 0.0722*float64(bB)) / 65535.0
+					sA += la
+					sB += lb
+					sA2 += la * la
+					sB2 += lb * lb
+					sAB += la * lb
+				}
+			}
+			k := float64(winSize * winSize)
+			muA, muB := sA/k, sB/k
+			vA := sA2/k - muA*muA
+			vB := sB2/k - muB*muB
+			vAB := sAB/k - muA*muB
+			l := (2*muA*muB + C1) / (muA*muA + muB*muB + C1)
+			cs := (2*vAB + C2) / (vA + vB + C2)
+			total += l * cs
+			n++
+		}
+	}
+	if n == 0 {
+		return 1.0
+	}
+	return math.Max(0, math.Min(1, total/float64(n)))
+}
+
+func TestSSIMLuminance_AccuracyEpsilon(t *testing.T) {
+	w, h := 64, 48
+	imgA := image.NewRGBA(image.Rect(0, 0, w, h))
+	imgB := image.NewRGBA(image.Rect(0, 0, w, h))
+
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			imgA.Set(x, y, color.RGBA{R: uint8((x * 13 + y * 7) % 256), G: uint8((y * 11) % 256), B: uint8((x * 19) % 256), A: 255})
+			imgB.Set(x, y, color.RGBA{R: uint8((x*13 + y*7 + 5) % 256), G: uint8((y*11 + 3) % 256), B: uint8((x * 19) % 256), A: 255})
+		}
+	}
+
+	want := naiveSSIMLuminance(imgA, imgB)
+	got := SSIMLuminance(imgA, imgB)
+
+	diff := math.Abs(got - want)
+	if diff > 1e-6 {
+		t.Errorf("SSIM accuracy mismatch: got %.8f, want %.8f (diff %.8e > 1e-6)", got, want, diff)
+	}
+}
+
+func TestSSIMLuminance_SubImage(t *testing.T) {
+	fullA := image.NewRGBA(image.Rect(0, 0, 100, 100))
+	fullB := image.NewRGBA(image.Rect(0, 0, 100, 100))
+
+	for y := 0; y < 100; y++ {
+		for x := 0; x < 100; x++ {
+			fullA.Set(x, y, color.RGBA{R: uint8((x*17 + y*19) % 256), G: uint8((y * 23) % 256), B: uint8((x * 31) % 256), A: 255})
+			fullB.Set(x, y, color.RGBA{R: uint8((x*17 + y*19 + 8) % 256), G: uint8((y * 23) % 256), B: uint8((x * 31) % 256), A: 255})
+		}
+	}
+
+	subA := fullA.SubImage(image.Rect(10, 15, 74, 63))
+	subB := fullB.SubImage(image.Rect(10, 15, 74, 63))
+
+	want := naiveSSIMLuminance(subA, subB)
+	got := SSIMLuminance(subA, subB)
+
+	diff := math.Abs(got - want)
+	if diff > 1e-6 {
+		t.Errorf("SubImage SSIM mismatch: got %.8f, want %.8f (diff %.8e > 1e-6)", got, want, diff)
+	}
+}
+
 // ── BoxDownscale ────────────────────────────────────────────────────────────────
 
 func TestBoxDownscale_Dims(t *testing.T) {
