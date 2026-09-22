@@ -858,14 +858,39 @@ func RenderOpts(w io.Writer, img image.Image, opts Options) error {
 // charToMask reverses quadChar: given the Unicode character chosen by
 // compileCell, return the 4-bit mask (UL=bit3, UR=bit2, LL=bit1, LR=bit0)
 // that says which quadrants are fg.
-var charToMask func(ch rune) uint8
-
-func init() {
-	m := make(map[rune]uint8, 16)
-	for mask, ch := range quadChar {
-		m[ch] = uint8(mask)
+func charToMask(ch rune) uint8 {
+	switch ch {
+	case ' ':
+		return 0
+	case '▗':
+		return 1
+	case '▖':
+		return 2
+	case '▄':
+		return 3
+	case '▝':
+		return 4
+	case '▞':
+		return 6
+	case '▟':
+		return 7 // or 5
+	case '▘':
+		return 8
+	case '▚':
+		return 9
+	case '▙':
+		return 11 // or 10
+	case '▀':
+		return 12
+	case '▜':
+		return 13
+	case '▛':
+		return 14
+	case '█':
+		return 15
+	default:
+		return 0
 	}
-	charToMask = func(ch rune) uint8 { return m[ch] }
 }
 
 // RenderToImage runs the same cell-compilation as RenderOpts but writes the

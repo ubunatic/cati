@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"math/bits"
 	"runtime"
 	"sort"
 	"strings"
@@ -89,6 +90,7 @@ func Glyphs() []rune {
 var (
 	sextantRuneByMask = map[uint8]rune{}
 	sextantMasks      []uint8
+	sextantRunes      [64]rune
 )
 
 func init() {
@@ -96,6 +98,7 @@ func init() {
 	for _, name := range sextantNames() {
 		mask := sextantBits(name)
 		sextantRuneByMask[mask] = next
+		sextantRunes[mask] = next
 		sextantMasks = append(sextantMasks, mask)
 		next++
 	}
@@ -106,12 +109,16 @@ func init() {
 	// 0b101010 / 0b010101 and the renderer emits rune(0) (a zero-width NUL),
 	// which shifts the rest of the row and leaves the right edge unfilled.
 	sextantRuneByMask[leftColumnMask] = '▌'
+	sextantRunes[leftColumnMask] = '▌'
 	sextantRuneByMask[rightColumnMask] = '▐'
+	sextantRunes[rightColumnMask] = '▐'
 	// Empty and full cells are emitted as spaces with an optional color escape;
 	// keeping them in the table makes the candidate set complete while
 	// scoreMask handles their special display semantics below.
 	sextantRuneByMask[0] = ' '
+	sextantRunes[0] = ' '
 	sextantRuneByMask[0b111111] = ' '
+	sextantRunes[0b111111] = ' '
 }
 
 // leftColumnMask / rightColumnMask are the two full-column patterns that map to
@@ -179,14 +186,7 @@ func sextantBit(digit int) uint8 {
 
 func displayMask(mask uint8) (uint8, bool) {
 	mask &= 0b111111
-	if _, ok := sextantRuneByMask[mask]; ok {
-		return mask, false
-	}
-	inverted := ^mask & 0b111111
-	if _, ok := sextantRuneByMask[inverted]; ok {
-		return inverted, true
-	}
-	return 0, false
+	return mask, false
 }
 
 func bitForIndex(idx int) uint8 {
@@ -340,25 +340,28 @@ func topNMask(pixels [6]color.RGBA, n int) uint8 {
 		idx  int
 		luma float64
 	}
-	items := make([]ranked, 0, len(pixels))
+	var items [6]ranked
+	numItems := 0
 	for i, p := range pixels {
 		if isTransparent(p) {
 			continue
 		}
-		items = append(items, ranked{idx: i, luma: luma(p)})
+		items[numItems] = ranked{idx: i, luma: luma(p)}
+		numItems++
 	}
-	if n <= 0 || len(items) == 0 {
+	if n <= 0 || numItems == 0 {
 		return 0
 	}
-	if n >= len(items) {
+	if n >= numItems {
 		return 0b111111
 	}
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].luma == items[j].luma {
-			return items[i].idx < items[j].idx
+	for i := 0; i < numItems-1; i++ {
+		for j := i + 1; j < numItems; j++ {
+			if items[i].luma < items[j].luma || (items[i].luma == items[j].luma && items[i].idx > items[j].idx) {
+				items[i], items[j] = items[j], items[i]
+			}
 		}
-		return items[i].luma > items[j].luma
-	})
+	}
 	var mask uint8
 	for i := 0; i < n; i++ {
 		mask |= bitForIndex(items[i].idx)
@@ -441,54 +444,79 @@ func colMask(pixels [6]color.RGBA) uint8 {
 }
 
 func heuristicMasks(pixels [6]color.RGBA) []uint8 {
-	candidates := make(map[uint8]struct{}, 16)
-	add := func(mask uint8) {
-		candidates[mask] = struct{}{}
-	}
-
 	direct := directMask(pixels)
-	add(direct)
-	add(^direct & 0b111111)
-	add(topNMask(pixels, popcount(direct)))
-	add(^topNMask(pixels, popcount(direct)) & 0b111111)
-	add(rowMask(pixels))
-	add(^rowMask(pixels) & 0b111111)
-	add(colMask(pixels))
-	add(^colMask(pixels) & 0b111111)
-	add(0)
-	add(0b111111)
+	topN := topNMask(pixels, popcount(direct))
+	rowM := rowMask(pixels)
+	colM := colMask(pixels)
 
-	out := make([]uint8, 0, len(candidates))
-	for m := range candidates {
-		out = append(out, m)
+	raw := [10]uint8{
+		direct,
+		^direct & 0b111111,
+		topN,
+		^topN & 0b111111,
+		rowM,
+		^rowM & 0b111111,
+		colM,
+		^colM & 0b111111,
+		0,
+		0b111111,
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+
+	var candidates [10]uint8
+	n := 0
+	for _, m := range raw {
+		m &= 0b111111
+		found := false
+		for i := 0; i < n; i++ {
+			if candidates[i] == m {
+				found = true
+				break
+			}
+		}
+		if !found {
+			candidates[n] = m
+			n++
+		}
+	}
+
+	for i := 0; i < n-1; i++ {
+		for j := i + 1; j < n; j++ {
+			if candidates[i] > candidates[j] {
+				candidates[i], candidates[j] = candidates[j], candidates[i]
+			}
+		}
+	}
+
+	out := make([]uint8, n)
+	copy(out, candidates[:n])
 	return out
 }
 
 func popcount(mask uint8) int {
-	n := 0
-	for mask > 0 {
-		n += int(mask & 1)
-		mask >>= 1
-	}
-	return n
+	return bits.OnesCount8(mask)
 }
 
 func scoreMask(pixels [6]color.RGBA, mask uint8) (cellResult, int) {
 	mask &= 0b111111
-	fgPixels := make([]color.RGBA, 0, 6)
-	bgPixels := make([]color.RGBA, 0, 6)
+	var fgR, fgG, fgB, fgN int
+	var bgR, bgG, bgB, bgN int
 	var opaque int
+
 	for i, p := range pixels {
 		if isTransparent(p) {
 			continue
 		}
 		opaque++
 		if maskContains(mask, i) {
-			fgPixels = append(fgPixels, p)
+			fgR += int(p.R)
+			fgG += int(p.G)
+			fgB += int(p.B)
+			fgN++
 		} else {
-			bgPixels = append(bgPixels, p)
+			bgR += int(p.R)
+			bgG += int(p.G)
+			bgB += int(p.B)
+			bgN++
 		}
 	}
 
@@ -496,18 +524,19 @@ func scoreMask(pixels [6]color.RGBA, mask uint8) (cellResult, int) {
 		return cellResult{ch: ' ', mask: 0, transparent: true}, 0
 	}
 
-	fg := avgRGBA(fgPixels...)
-	bg := avgRGBA(bgPixels...)
-	display, inverted := displayMask(mask)
-	displayFG, displayBG := fg, bg
-	if inverted {
-		displayFG, displayBG = bg, fg
+	var fg, bg color.RGBA
+	if fgN > 0 {
+		fg = color.RGBA{R: uint8(fgR / fgN), G: uint8(fgG / fgN), B: uint8(fgB / fgN), A: 255}
 	}
+	if bgN > 0 {
+		bg = color.RGBA{R: uint8(bgR / bgN), G: uint8(bgG / bgN), B: uint8(bgB / bgN), A: 255}
+	}
+
 	cell := cellResult{
-		ch:   sextantRuneByMask[display],
-		mask: display,
-		fg:   displayFG,
-		bg:   displayBG,
+		ch:   sextantRunes[mask],
+		mask: mask,
+		fg:   fg,
+		bg:   bg,
 	}
 	if cell.fg.A != 0 {
 		cell.hasFG = true
@@ -535,12 +564,16 @@ func scoreMask(pixels [6]color.RGBA, mask uint8) (cellResult, int) {
 		cell.ch = ' '
 		cell.mask = 0
 		if mask == 0 && cell.bg.A == 0 {
-			cell.bg = avgRGBA(bgPixels...)
-			cell.hasBG = cell.bg.A != 0
+			if bgN > 0 {
+				cell.bg = bg
+				cell.hasBG = true
+			}
 		}
 		if mask == 0b111111 && cell.bg.A == 0 {
-			cell.bg = avgRGBA(fgPixels...)
-			cell.hasBG = cell.bg.A != 0
+			if fgN > 0 {
+				cell.bg = fg
+				cell.hasBG = true
+			}
 		}
 	}
 	return cell, score
