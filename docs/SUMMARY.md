@@ -18,6 +18,7 @@
 - [Glossary & Metric Taxonomy](Glossary.md)
 - [Render Experiment Lessons](RenderExperimentLessons.md)
 - [Rendering Bug & Golden Playbook](RenderingBugPlaybook.md)
+- [Codespaces Workbench Color Study](studies/codespaces-color-rendering.md)
 - [Go Conventions](Go.md)
 - [Make Conventions](Make.md)
 <!-- TOC_END -->
