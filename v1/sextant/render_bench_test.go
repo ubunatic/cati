@@ -44,6 +44,38 @@ func benchmarkRenderToImage(b *testing.B, mode Mode) {
 	}
 }
 
+func BenchmarkScoreMask(b *testing.B) {
+	pixels := [6]color.RGBA{
+		{R: 255, G: 0, B: 0, A: 255},
+		{R: 200, G: 50, B: 10, A: 255},
+		{R: 0, G: 255, B: 0, A: 255},
+		{R: 10, G: 200, B: 50, A: 255},
+		{R: 0, G: 0, B: 255, A: 255},
+		{R: 50, G: 10, B: 200, A: 255},
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		scoreMask(pixels, uint8(i&63))
+	}
+}
+
+func BenchmarkChooseCell(b *testing.B) {
+	pixels := [6]color.RGBA{
+		{R: 255, G: 0, B: 0, A: 255},
+		{R: 200, G: 50, B: 10, A: 255},
+		{R: 0, G: 255, B: 0, A: 255},
+		{R: 10, G: 200, B: 50, A: 255},
+		{R: 0, G: 0, B: 255, A: 255},
+		{R: 50, G: 10, B: 200, A: 255},
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		chooseCell(pixels, ModeSextant)
+	}
+}
+
 func BenchmarkRenderSextant(b *testing.B) { benchmarkRender(b, ModeSextant) }
 
 func BenchmarkRenderToImageSextant(b *testing.B) { benchmarkRenderToImage(b, ModeSextant) }
