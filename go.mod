@@ -3,7 +3,7 @@ module ubunatic.com/cati
 go 1.25.0
 
 require (
-	codeberg.org/ubunatic/loom v0.2.4
+	codeberg.org/ubunatic/loom v0.2.5
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.44.0
@@ -14,5 +14,3 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 )
-
-replace codeberg.org/ubunatic/loom => ../loom

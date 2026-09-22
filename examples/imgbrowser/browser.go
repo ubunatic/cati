@@ -70,8 +70,10 @@ type browser struct {
 }
 
 func (b *browser) toggleFullscreen() {
-	b.frame.MaximizeBox("preview")
-	b.fullscreen = b.frame.IsMaximized("preview")
+	if box := b.frame.Box("files"); box != nil {
+		box.Hidden = !box.Hidden
+		b.fullscreen = box.Hidden
+	}
 	b.preview.SetFullscreen(b.fullscreen)
 	if b.fullscreen {
 		b.frame.Status = "[f] split  [p/P] play  [m] mode  [+/-] zoom  [#] info  [Tab] pane"
@@ -162,7 +164,6 @@ func (b *browser) open(dir string) error {
 		}
 	}
 	list := loom.NewChoice(items)
-	list.GatedSearch = true
 	list.SelectOnlyOnClick = true
 	list.Prompt = "filter> "
 	list.Placeholder = "[/] search"
@@ -263,7 +264,7 @@ func (b *browser) HandleKey(k loom.KeyEvent) bool {
 		filesFocused = (focused.ID == "files")
 	}
 
-	if filesFocused && (b.list == nil || !b.list.Searching()) {
+	if filesFocused {
 		// Toggle image-only mode with 'i'.
 		if k.Text == "i" {
 			b.imagesOnly = !b.imagesOnly
@@ -306,7 +307,8 @@ func (b *browser) HandleKey(k loom.KeyEvent) bool {
 	}
 
 	quit := b.frame.HandleKey(k)
-	if isMax := b.frame.IsMaximized("preview"); isMax != b.fullscreen {
+	filesBox := b.frame.Box("files")
+	if isMax := (filesBox != nil && filesBox.Hidden); isMax != b.fullscreen {
 		b.fullscreen = isMax
 		b.preview.SetFullscreen(b.fullscreen)
 	}
