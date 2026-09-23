@@ -1,6 +1,6 @@
 # 056 — `cati --bench <mediafile>`: Per-Asset Render Speed Benchmark
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
@@ -31,3 +31,11 @@ mode-vs-mode comparison readable at a glance.
   `--bench` purely about speed.
 - Where time goes (decode vs render) would be useful to report separately.
 - Re-check current CLI/spec layout before starting; this ticket may be stale.
+
+## Resolution
+
+Implemented `--bench` for image and video assets. Images are fitted per render
+mode and rendered repeatedly (20 times by default); video streams are decoded
+and rendered completely, once per mode, without playback pacing, terminal
+output, or audio. Output reports per-mode timing and throughput. The CLI flags
+are documented in `spec/cli.yaml` with a schema and a CLI/spec integrity test.

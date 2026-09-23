@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "cli.schema.json",
+  "title": "Cati CLI flags",
+  "type": "object",
+  "required": ["flags"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "flags": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["long", "description", "handler"],
+        "properties": {
+          "long": { "type": "string", "pattern": "^--[a-z][a-z-]*$" },
+          "description": { "type": "string", "minLength": 1 },
+          "handler": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

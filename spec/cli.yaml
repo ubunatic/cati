@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=./schemas/cli.schema.json
+# Top-level command-line interface flags.
+$schema: "./schemas/cli.schema.json"
+
+flags:
+  bench:
+    long: --bench
+    description: Benchmark render speed on one image or video file
+    handler: runMediaBenchmark
+  bench_iterations:
+    long: --bench-iterations
+    description: Image renders per mode for --bench
+    handler: runMediaBenchmark

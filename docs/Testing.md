@@ -33,6 +33,11 @@ Other checks:
 - `make docker-test` — runs the tests with the pinned Go toolchain, useful when
   validating PNG golden-image changes.
 
+For a real asset speed comparison, run `cati --bench <mediafile>`. Image
+renders repeat per mode (`--bench-iterations` controls the count); videos decode
+the complete first video stream without playback pacing or audio. Width and
+height default to the current terminal dimensions.
+
 JPEG-derived render goldens are stored per supported Go runtime because JPEG
 decoding can differ by a one-level rounding decision between toolchains. The
 current sets are suffixed `.go1.25-minus.png` and `.go1.26-plus.png`; the test

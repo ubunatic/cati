@@ -171,3 +171,15 @@ Both `playImages` and `playVideos` create a gate with `interval = time.Second`.
 `vc.skipQuality` is `true` while the video is playing. On pause, `setPaused(true)` immediately runs a single quality computation so the hint bar shows accurate SSIM/blockiness values. While playing the hint bar displays the last computed value (frozen), which is acceptable because quality metrics are not meaningful at video frame rates.
 
 `vc.skipQuality` is reset to `false` when the video ends or when the user toggles pause.
+
+## 8. Media Render Benchmark
+
+`cati --bench <mediafile>` benchmarks each registered render mode at the
+requested terminal size (`--width` and `--height`, or the detected terminal
+size). Image files are fitted once, then rendered repeatedly; use
+`--bench-iterations` to control the number of renders per mode. Video files
+are decoded through the entire first video stream once per mode with
+`OpenVideoStream` rate limiting disabled. The benchmark does not render to the
+terminal or open an audio stream. Its output includes frame count, total FPS,
+render time, and remaining stream overhead (total elapsed time minus measured
+render calls).

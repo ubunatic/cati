@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
 	"ubunatic.com/cati/internal/input"
 	spec "ubunatic.com/cati/spec"
 )
@@ -32,6 +33,34 @@ func TestSpecRenderModesLoad(t *testing.T) {
 	}
 	if rm.Smart.Metric != "psnr" || (rm.Smart.Step != "terminal-column" && rm.Smart.Step != "native") || rm.Smart.TieBreak != "widest" || rm.Smart.MaxReduction <= 0 || rm.Smart.MaxReduction > 1 {
 		t.Fatalf("invalid smart render policy: %+v", rm.Smart)
+	}
+}
+
+func TestSpecCLIBenchmarkFlags(t *testing.T) {
+	data, err := fs.ReadFile(spec.FS, "cli.yaml")
+	if err != nil {
+		t.Fatalf("read cli.yaml: %v", err)
+	}
+	var doc struct {
+		Flags map[string]struct {
+			Long    string `yaml:"long"`
+			Handler string `yaml:"handler"`
+		} `yaml:"flags"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse cli.yaml: %v", err)
+	}
+	for key, wantLong := range map[string]string{"bench": "--bench", "bench_iterations": "--bench-iterations"} {
+		flag, ok := doc.Flags[key]
+		if !ok || flag.Long != wantLong || flag.Handler != "runMediaBenchmark" {
+			t.Errorf("cli.yaml flag %q = %+v, want long %q with runMediaBenchmark", key, flag, wantLong)
+		}
+	}
+	root := New()
+	for _, name := range []string{"bench", "bench-iterations"} {
+		if root.Flags().Lookup(name) == nil {
+			t.Errorf("CLI flag --%s is missing", name)
+		}
 	}
 }
 
