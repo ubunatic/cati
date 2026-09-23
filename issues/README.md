@@ -53,10 +53,13 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 047 | [047-smart-render-search-timeout.md](047-smart-render-search-timeout.md) | Abort --smart Search After 1s (--smart-timeout Default) | Open |
 | 048 | [048-automatic-natural-aspect-ratio-for-custom-glyph-modes-and-safe-override-api.md](048-automatic-natural-aspect-ratio-for-custom-glyph-modes-and-safe-override-api.md) | Automatic Natural Aspect Ratio for Custom Glyph Modes and Safe Override API | Closed |
 | 049 | [049-modes-command-grid-output-layout-and-column-fitting.md](049-modes-command-grid-output-layout-and-column-fitting.md) | Modes Command Grid Output Layout and Column Fitting | Closed |
-| 050 | [050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md](050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md) | Zero-Allocation and LUT Acceleration for Sextant and Quad Block Renderers | ✅ Closed |
+| 050 | [050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md](050-zero-allocation-and-lut-acceleration-for-sextant-and-quad-block-renderers.md) | Zero-Allocation and LUT Acceleration for Sextant and Quad Block Renderers | Closed |
 | 051 | [051-fast-contiguous-luminance-buffer-for-ssim-scoring-pipeline.md](051-fast-contiguous-luminance-buffer-for-ssim-scoring-pipeline.md) | Fast Contiguous Luminance Buffer for SSIM Scoring Pipeline | Open |
 | 052 | [052-unified-composite-quality-metric-and-efficiency-index.md](052-unified-composite-quality-metric-and-efficiency-index.md) | Unified Composite Quality Metric and Efficiency Index | Open |
 | 053 | [053-gate-loom-list-panel-search-behind-slash-option.md](053-gate-loom-list-panel-search-behind-slash-option.md) | Gate Loom List Panel Search Behind Option ("Type to Search" vs "[/] Search") | Closed (Implemented GatedSearch in loom Choice and integrated into cati imgbrowser) |
+| 054 | [054-review-jules-bolt-perf-patches.md](054-review-jules-bolt-perf-patches.md) | Review of Jules "Bolt" Perf Patches (PR #8, #9) | Closed (post-factum: worker cap moved to Makefile env, all fast paths behind shared CATI_FASTPATH) |
+| 055 | [055-metrics-luma-fastpath-drift.md](055-metrics-luma-fastpath-drift.md) | Metrics Luma Fast Paths Diverge From Simple Path | Open |
+| 056 | [056-cati-bench-mediafile-per-asset-render-speed-benchmark.md](056-cati-bench-mediafile-per-asset-render-speed-benchmark.md) | `cati --bench <mediafile>`: Per-Asset Render Speed Benchmark | Open |
 
 ## Archived
 
