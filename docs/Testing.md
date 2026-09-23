@@ -33,13 +33,14 @@ Other checks:
 - `make docker-test` — runs the tests with the pinned Go toolchain, useful when
   validating PNG golden-image changes.
 
-For a real asset speed comparison, run `cati --bench <mediafile>`. Image
-renders repeat within a time budget (`--bench-budget`, default 1.5s total,
-split across modes), so results appear within about 2s; `--mode` limits the
-run to one mode. Each mode runs with fast paths on and off
-(`core.Fastpath`) and reports the speed-up. Videos decode the complete first video stream without
-playback pacing or audio. Width and height default to the terminal size, or
-80x24 when stdout is not a terminal.
+For a real asset speed comparison, run `cati --bench <mediafile>`. Each mode
+is measured with fast paths on and off (`core.Fastpath`) and the row shows the
+speed-up. Image renders repeat within `--bench-budget` (default 3s total,
+split across modes and paths); every mode renders at least once, so slow modes
+at large sizes can extend the run. `--mode` limits the run to one mode;
+otherwise the spec's `experimental` modes (`all+`, `z`, `z+`) are skipped. Videos decode
+the complete first video stream, without playback pacing or audio. Width and
+height default to the terminal size, or 80x24 when stdout is not a terminal.
 
 JPEG-derived render goldens are stored per supported Go runtime because JPEG
 decoding can differ by a one-level rounding decision between toolchains. The

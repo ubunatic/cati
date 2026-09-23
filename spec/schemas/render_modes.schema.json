@@ -87,6 +87,10 @@
       "type": "array",
       "items": { "type": "string", "minLength": 1 }
     },
+    "experimental": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
     "composition_info": {
       "type": "object",
       "additionalProperties": { "type": "string", "minLength": 1 }

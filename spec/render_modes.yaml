@@ -209,6 +209,9 @@ set_registry:
 
 # Exact, case-sensitive named unions. A name is resolved before '+' grammar.
 composition_order: [full, half, quad, quad+, bars, bars+, six, 2x3, 3x3, all, all+, z, z+]
+# Experimental compositions: listed and renderable, but skipped by
+# `cati --bench` unless selected with --mode.
+experimental: [all+, z, z+]
 composition_info:
   full: "Uses empty and full cells at 1x1 geometry."
   half: "Uses full cells and top/bottom halves at 1x2 geometry."

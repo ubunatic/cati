@@ -176,15 +176,13 @@ Both `playImages` and `playVideos` create a gate with `interval = time.Second`.
 
 `cati --bench <mediafile>` benchmarks each registered render mode at the
 requested terminal size (`--width` and `--height`, or the detected terminal
-size; 80x24 when stdout is not a terminal). `--mode` benchmarks only that mode.
-Image files are fitted once, then rendered repeatedly within
-`--bench-budget` (default 1.5s total, split evenly across modes; at least one
-render each). A mode whose first render exceeds its share is reported as
-`>budget`. Rows print as each mode finishes. Every mode is measured twice, with fast paths
-on and off (`core.Fastpath`), and the row shows both plus the speed-up; video
-therefore decodes the stream twice per mode. Video files
-are decoded through the entire first video stream once per mode with
-`OpenVideoStream` rate limiting disabled. The benchmark does not render to the
-terminal or open an audio stream. Its output includes frame count, total FPS,
-render time, and remaining stream overhead (total elapsed time minus measured
-render calls).
+size; 80x24 when stdout is not a terminal). `--mode` benchmarks only that mode;
+otherwise the spec's `experimental` compositions (`all+`, `z`, `z+`) are skipped. Every
+mode is measured twice, with fast paths on and off (`core.Fastpath`), and its
+row shows both results plus the speed-up; rows print as each mode finishes.
+Image files are fitted once, then rendered repeatedly within `--bench-budget`
+(default 3s total, split across modes and paths). Every mode renders at least
+once, so slow modes can extend the run; a single render longer than its share
+is marked `(slow)`. Video files are decoded through the entire first video
+stream, once per mode and path, with `OpenVideoStream` rate limiting disabled.
+The benchmark does not render to the terminal or open an audio stream.

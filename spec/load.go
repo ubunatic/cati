@@ -246,6 +246,7 @@ type RenderModesSpec struct {
 	Compositions     map[string][]int    `yaml:"compositions"`
 	CompositionInfo  map[string]string   `yaml:"composition_info"`
 	CompositionOrder []string            `yaml:"composition_order"`
+	Experimental     []string            `yaml:"experimental"`
 }
 
 func LoadRenderModes() (RenderModesSpec, error) {

@@ -9,5 +9,5 @@ flags:
     handler: runMediaBenchmark
   bench_budget:
     long: --bench-budget
-    description: Total time budget for an image --bench, split evenly across the benchmarked modes
+    description: Total time budget for an image --bench, split across modes and fast/simple paths; each mode renders at least once
     handler: runMediaBenchmark

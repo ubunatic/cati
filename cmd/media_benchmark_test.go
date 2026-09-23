@@ -8,9 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"ubunatic.com/cati/spec"
 )
 
 // makeTestPNG creates a small PNG in dir and returns its path.
@@ -110,7 +113,7 @@ func TestRunMediaBenchmarkTimeBudget(t *testing.T) {
 }
 
 // TestRunMediaBenchmarkSlowMode verifies that a mode whose single render
-// exceeds the budget is reported as ">budget" (timedOut) or "(slow)", not silently dropped.
+// exceeds the budget is still measured once and marked "(slow)".
 func TestRunMediaBenchmarkSlowMode(t *testing.T) {
 	path := makeTestPNG(t, t.TempDir())
 	var out bytes.Buffer
@@ -124,10 +127,8 @@ func TestRunMediaBenchmarkSlowMode(t *testing.T) {
 		t.Fatalf("runMediaBenchmarkWithRunner: %v", err)
 	}
 	got := out.String()
-	// Slow modes appear as ">budget" (timedOut: goroutine abandoned) or "(slow)"
-	// (render finished but exceeded budget). Both are acceptable.
-	if !strings.Contains(got, ">budget") && !strings.Contains(got, "(slow)") {
-		t.Fatalf("expected '>budget' or '(slow)' marker for over-budget modes, got:\n%s", got)
+	if !strings.Contains(got, "(slow)") {
+		t.Fatalf("expected '(slow)' marker for over-budget modes, got:\n%s", got)
 	}
 }
 
@@ -212,5 +213,36 @@ func TestRunMediaBenchmarkVideo(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Video benchmark: bench.mp4") || !strings.Contains(out.String(), "Frames") {
 		t.Fatalf("unexpected benchmark output:\n%s", out.String())
+	}
+}
+
+// TestRunMediaBenchmarkSkipsExperimental verifies that spec-listed
+// experimental compositions exist and are skipped unless selected.
+func TestRunMediaBenchmarkSkipsExperimental(t *testing.T) {
+	rm, err := spec.LoadRenderModes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rm.Experimental) == 0 {
+		t.Skip("no experimental modes in spec")
+	}
+	for _, name := range rm.Experimental {
+		if !slices.Contains(rm.CompositionOrder, name) {
+			t.Errorf("experimental mode %q is not in composition_order", name)
+		}
+	}
+	path := makeTestPNG(t, t.TempDir())
+	var out bytes.Buffer
+	if err := runMediaBenchmark(&out, path, 20, 8, 1, "", 50*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(out.String(), "\n")[2:] {
+		if f := strings.Fields(line); len(f) > 0 && slices.Contains(rm.Experimental, f[0]) {
+			t.Errorf("experimental mode %q was benchmarked by default", f[0])
+		}
+	}
+	out.Reset()
+	if err := runMediaBenchmark(&out, path, 20, 8, 1, rm.Experimental[0], 50*time.Millisecond); err != nil {
+		t.Fatalf("explicit --mode %s: %v", rm.Experimental[0], err)
 	}
 }

@@ -7,8 +7,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
+	"ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/core"
 	"ubunatic.com/cati/v1/halfblock"
 	catiterm "ubunatic.com/cati/v1/term"
@@ -22,12 +24,8 @@ type mediaBenchmarkModeResult struct {
 	total  time.Duration
 	// skipped is true when the first render returned an error.
 	skipped bool
-	// slow is true when the first render exceeded the budget.
-	// The single render's timing is still reported.
+	// slow is true when the single, mandatory render exceeded the budget.
 	slow bool
-	// timedOut is true when the first render was cancelled because it
-	// exceeded the budget (render ran in a goroutine and was abandoned).
-	timedOut bool
 }
 
 func runMediaBenchmark(out io.Writer, path string, width, height, jobs int, mode string, budget time.Duration) error {
@@ -63,7 +61,12 @@ func runMediaBenchmarkWithRunner(out io.Writer, path string, width, height, jobs
 	if err != nil {
 		return fmt.Errorf("load render modes: %w", err)
 	}
-	if mode != "" {
+	if mode == "" {
+		entries, err = withoutExperimentalModes(entries)
+		if err != nil {
+			return err
+		}
+	} else {
 		entries, err = selectedRenderModes([]string{mode})
 		if err != nil {
 			return fmt.Errorf("select render mode: %w", err)
@@ -135,10 +138,8 @@ func benchmarkCell(res mediaBenchmarkModeResult) (string, time.Duration) {
 	switch {
 	case res.skipped:
 		return "error", 0
-	case res.timedOut:
-		return ">budget", 0
 	}
-	avg := res.render / time.Duration(res.frames)
+	avg := (res.render / time.Duration(res.frames)).Round(time.Microsecond)
 	if res.slow {
 		return avg.String() + " (slow)", avg
 	}
@@ -153,63 +154,21 @@ func speedup(a, b float64) string {
 	return fmt.Sprintf("%.2fx", a/b)
 }
 
-// benchmarkImageMode runs as many renders as possible within the budget.
-// The first render is run in a goroutine so it can be abandoned if it
-// exceeds the budget, rather than blocking the whole benchmark.
-// At least one render is always attempted; if the first render finishes
-// within the budget the loop continues until the budget is exhausted.
+// benchmarkImageMode renders once unconditionally, so every mode gets a
+// measurement, then keeps rendering until the budget is used up.
 func benchmarkImageMode(img image.Image, cfg renderCfg, budget time.Duration, now func() time.Time, render func(image.Image, renderCfg) ([]string, error)) mediaBenchmarkModeResult {
-	type renderResult struct {
-		dur time.Duration
-		err error
-	}
-	runRender := func() (time.Duration, error) {
-		ch := make(chan renderResult, 1)
-		before := now()
-		go func() {
-			_, err := render(img, cfg)
-			ch <- renderResult{dur: now().Sub(before), err: err}
-		}()
-		select {
-		case r := <-ch:
-			return r.dur, r.err
-		case <-time.After(budget):
-			// Goroutine leaks but render has no cancellation; acceptable for
-			// a benchmark helper that runs once per mode.
-			return budget, context.DeadlineExceeded
-		}
-	}
-
 	var result mediaBenchmarkModeResult
 	start := now()
-
-	// First render — always run at least one.
-	dur, err := runRender()
-	if err == context.DeadlineExceeded {
-		result.timedOut = true
-		return result
-	}
-	if err != nil {
-		result.skipped = true
-		return result
-	}
-	result.render += dur
-	result.frames++
-	if dur > budget {
-		// Render completed but took longer than the budget; mark slow.
-		result.slow = true
-		return result
-	}
-
-	// Continue rendering until the budget is exhausted.
-	for now().Sub(start) < budget {
-		dur, err = runRender()
-		if err != nil {
+	for result.frames == 0 || now().Sub(start) < budget {
+		before := now()
+		if _, err := render(img, cfg); err != nil {
+			result.skipped = result.frames == 0
 			break
 		}
-		result.render += dur
+		result.render += now().Sub(before)
 		result.frames++
 	}
+	result.slow = result.frames == 1 && result.render > budget
 	return result
 }
 
@@ -240,4 +199,19 @@ func benchmarkVideoMode(path string, width, height int, cfg renderCfg, now func(
 	}
 	result.total = now().Sub(start)
 	return result, nil
+}
+
+// withoutExperimentalModes drops the spec's experimental compositions.
+func withoutExperimentalModes(entries []renderModeEntry) ([]renderModeEntry, error) {
+	rm, err := spec.LoadRenderModes()
+	if err != nil {
+		return nil, fmt.Errorf("load render modes: %w", err)
+	}
+	kept := entries[:0:0]
+	for _, e := range entries {
+		if !slices.Contains(rm.Experimental, e.name) {
+			kept = append(kept, e)
+		}
+	}
+	return kept, nil
 }

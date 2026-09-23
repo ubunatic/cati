@@ -138,7 +138,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.Flags().StringVar(&timeRange, "range", "", `playback window: "5s" plays first 5 s; "5s:7s" plays 5 s–7 s (supports s/m/h suffixes, bare seconds, mm:ss)`)
 	root.Flags().BoolVar(&inputTest, "input-test", false, "")
 	root.Flags().BoolVar(&bench, "bench", false, "benchmark render speed on one image or video file")
-	root.Flags().DurationVar(&benchBudget, "bench-budget", 1500*time.Millisecond, "total time budget for an image --bench, split across modes (each mode renders at least once; renders over its share are reported as >budget)")
+	root.Flags().DurationVar(&benchBudget, "bench-budget", 3*time.Second, "total time budget for an image --bench, split across modes and fast/simple paths (each mode always renders at least once)")
 	// Hide the debug flag from help output.
 	_ = root.Flags().MarkHidden("input-test")
 	_ = root.Flags().MarkHidden("play")
