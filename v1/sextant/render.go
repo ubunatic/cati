@@ -189,12 +189,17 @@ func displayMask(mask uint8) (uint8, bool) {
 	return mask, false
 }
 
+var bitForIdxTable = [6]uint8{1 << 5, 1 << 4, 1 << 3, 1 << 2, 1 << 1, 1 << 0}
+
 func bitForIndex(idx int) uint8 {
-	return sextantBit(idx + 1)
+	if uint(idx) < 6 {
+		return bitForIdxTable[idx]
+	}
+	return 0
 }
 
 func maskContains(mask uint8, idx int) bool {
-	return mask&bitForIndex(idx) != 0
+	return mask&bitForIdxTable[idx] != 0
 }
 
 func toRGBA(c color.Color) color.RGBA {
@@ -628,12 +633,16 @@ func maskOverlap(a, b uint8) int {
 	return popcount(a & b)
 }
 
-func allMasks() []uint8 {
+var staticAllMasks = func() []uint8 {
 	out := make([]uint8, 64)
 	for mask := range out {
 		out[mask] = uint8(mask)
 	}
 	return out
+}()
+
+func allMasks() []uint8 {
+	return staticAllMasks
 }
 
 func cellEscape(c cellResult) string {
@@ -731,8 +740,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 		if workerN > rowCount {
 			workerN = rowCount
 		}
-		if workerN > runtime.NumCPU() {
-			workerN = runtime.NumCPU()
+		maxCPUs := min(runtime.NumCPU(), 10)
+		if workerN > maxCPUs {
+			workerN = maxCPUs
 		}
 		for range workerN {
 			go func() {
@@ -819,8 +829,9 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 	if workerN > rowCount {
 		workerN = rowCount
 	}
-	if workerN > runtime.NumCPU() {
-		workerN = runtime.NumCPU()
+	maxCPUs := min(runtime.NumCPU(), 10)
+	if workerN > maxCPUs {
+		workerN = maxCPUs
 	}
 	for range workerN {
 		go func() {
