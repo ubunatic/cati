@@ -164,9 +164,15 @@ func compileCellEdgeSnap(pixels [4]color.RGBA) quadCell {
 			continue
 		}
 		if s > 0 {
-			fgR += float64(p.R); fgG += float64(p.G); fgB += float64(p.B); fgN++
+			fgR += float64(p.R)
+			fgG += float64(p.G)
+			fgB += float64(p.B)
+			fgN++
 		} else if s < 0 {
-			bgR += float64(p.R); bgG += float64(p.G); bgB += float64(p.B); bgN++
+			bgR += float64(p.R)
+			bgG += float64(p.G)
+			bgB += float64(p.B)
+			bgN++
 		}
 		// s == 0: exactly on the edge line; let twoColorCell decide by nearest-colour
 	}
@@ -190,9 +196,15 @@ func kmeansStep(pts []color.RGBA, ca, cb color.RGBA) (fg, bg color.RGBA) {
 	var nA, nB int
 	for _, p := range pts {
 		if colorDist2(p, ca) <= colorDist2(p, cb) {
-			rA += float64(p.R); gA += float64(p.G); bA += float64(p.B); nA++
+			rA += float64(p.R)
+			gA += float64(p.G)
+			bA += float64(p.B)
+			nA++
 		} else {
-			rB += float64(p.R); gB += float64(p.G); bB += float64(p.B); nB++
+			rB += float64(p.R)
+			gB += float64(p.G)
+			bB += float64(p.B)
+			nB++
 		}
 	}
 	if nA == 0 {

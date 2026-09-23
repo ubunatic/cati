@@ -15,9 +15,12 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"ubunatic.com/cati/v1/core"
 )
@@ -31,14 +34,73 @@ const (
 	ansiLinePrefix     = ansiEraseLine + ansiCarriageReturn
 )
 
+func fastpathEnabled() bool {
+	return os.Getenv("HALFBLOCK_FASTPATH") != "0"
+}
+
+func appendFgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[38;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
+func appendBgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[48;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
 // fgRGB returns an ANSI 24-bit foreground escape sequence.
 func fgRGB(c color.RGBA) string {
+	if fastpathEnabled() {
+		var buf [32]byte
+		b := appendFgRGB(buf[:0], c)
+		return string(b)
+	}
 	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
 }
 
 // bgRGB returns an ANSI 24-bit background escape sequence.
 func bgRGB(c color.RGBA) string {
+	if fastpathEnabled() {
+		var buf [32]byte
+		b := appendBgRGB(buf[:0], c)
+		return string(b)
+	}
 	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
+}
+
+func safePixel(img image.Image, x, y int) color.RGBA {
+	b := img.Bounds()
+	if x < b.Min.X || x >= b.Max.X || y < b.Min.Y || y >= b.Max.Y {
+		return color.RGBA{}
+	}
+	if fastpathEnabled() {
+		if rgba, ok := img.(*image.RGBA); ok {
+			off := (y-rgba.Rect.Min.Y)*rgba.Stride + (x-rgba.Rect.Min.X)*4
+			if off >= 0 && off+3 < len(rgba.Pix) {
+				a := rgba.Pix[off+3]
+				if a == 0 {
+					return color.RGBA{}
+				}
+				return color.RGBA{
+					R: rgba.Pix[off],
+					G: rgba.Pix[off+1],
+					B: rgba.Pix[off+2],
+					A: a,
+				}
+			}
+		}
+	}
+	return toRGBA(img.At(x, y))
 }
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
@@ -118,6 +180,22 @@ func ScaleToFit(img image.Image, cols, rows int) image.Image {
 	}
 
 	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
+	if fastpathEnabled() {
+		if srcRGBA, ok := img.(*image.RGBA); ok {
+			for y := 0; y < newH; y++ {
+				srcY := b.Min.Y + y*srcH/newH
+				dstRowOff := y * dst.Stride
+				srcRowOff := (srcY - srcRGBA.Rect.Min.Y) * srcRGBA.Stride
+				for x := 0; x < newW; x++ {
+					srcX := b.Min.X + x*srcW/newW
+					sOff := srcRowOff + (srcX-srcRGBA.Rect.Min.X)*4
+					dOff := dstRowOff + x*4
+					copy(dst.Pix[dOff:dOff+4], srcRGBA.Pix[sOff:sOff+4])
+				}
+			}
+			return dst
+		}
+	}
 	for y := 0; y < newH; y++ {
 		srcY := b.Min.Y + y*srcH/newH
 		for x := 0; x < newW; x++ {
@@ -149,6 +227,22 @@ func ScaleNN(img image.Image, w, h int) image.Image {
 		return img
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	if fastpathEnabled() {
+		if srcRGBA, ok := img.(*image.RGBA); ok {
+			for y := 0; y < h; y++ {
+				srcY := b.Min.Y + y*srcH/h
+				dstRowOff := y * dst.Stride
+				srcRowOff := (srcY - srcRGBA.Rect.Min.Y) * srcRGBA.Stride
+				for x := 0; x < w; x++ {
+					srcX := b.Min.X + x*srcW/w
+					sOff := srcRowOff + (srcX-srcRGBA.Rect.Min.X)*4
+					dOff := dstRowOff + x*4
+					copy(dst.Pix[dOff:dOff+4], srcRGBA.Pix[sOff:sOff+4])
+				}
+			}
+			return dst
+		}
+	}
 	for y := 0; y < h; y++ {
 		srcY := b.Min.Y + y*srcH/h
 		for x := 0; x < w; x++ {
@@ -237,10 +331,10 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 		botY := topY + 1
 		for x := 0; x < width; x++ {
 			srcX := b.Min.X + x
-			top := toRGBA(scaled.At(srcX, topY))
+			top := safePixel(scaled, srcX, topY)
 			var bot color.RGBA
 			if botY < b.Min.Y+height {
-				bot = toRGBA(scaled.At(srcX, botY))
+				bot = safePixel(scaled, srcX, botY)
 			}
 			c := pairToCell(top, bot)
 			cells[row][x] = core.Cell{
@@ -302,22 +396,54 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 		return err
 	}
 
+	if !fastpathEnabled() {
+		for y := 0; y < grid.Height; y++ {
+			var sb strings.Builder
+			if !opts.NoLinePrefix {
+				sb.WriteString(ansiLinePrefix)
+			}
+			for x := 0; x < grid.Width; x++ {
+				c := grid.Cells[y][x]
+				if c.Transparent {
+					sb.WriteRune(' ')
+				} else {
+					sb.WriteString(cellEscape(c))
+					sb.WriteRune(c.Ch)
+					sb.WriteString(ansiReset)
+				}
+			}
+			if _, err := fmt.Fprintln(w, sb.String()); err != nil {
+				return fmt.Errorf("halfblock render: %w", err)
+			}
+		}
+		return nil
+	}
+
+	var buf []byte
+	var runeBuf [utf8.UTFMax]byte
 	for y := 0; y < grid.Height; y++ {
-		var sb strings.Builder
+		buf = buf[:0]
 		if !opts.NoLinePrefix {
-			sb.WriteString(ansiLinePrefix)
+			buf = append(buf, ansiLinePrefix...)
 		}
 		for x := 0; x < grid.Width; x++ {
 			c := grid.Cells[y][x]
 			if c.Transparent {
-				sb.WriteRune(' ')
+				buf = append(buf, ' ')
 			} else {
-				sb.WriteString(cellEscape(c))
-				sb.WriteRune(c.Ch)
-				sb.WriteString(ansiReset)
+				if c.HasBg {
+					buf = appendBgRGB(buf, c.Bg)
+				}
+				if c.HasFg {
+					buf = appendFgRGB(buf, c.Fg)
+				}
+				n := utf8.EncodeRune(runeBuf[:], c.Ch)
+				buf = append(buf, runeBuf[:n]...)
+				buf = append(buf, ansiReset...)
 			}
 		}
-		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
+		buf = append(buf, '\n')
+		if _, err := w.Write(buf); err != nil {
 			return fmt.Errorf("halfblock render: %w", err)
 		}
 	}
@@ -355,18 +481,76 @@ func RenderToImageJ(img image.Image, jobs int) *image.RGBA {
 	grid, _ := RenderToGrid(img, b.Dx(), Options{Jobs: jobs})
 	dst := image.NewRGBA(b)
 
+	if !fastpathEnabled() {
+		for y := 0; y < grid.Height; y++ {
+			topY := b.Min.Y + y*2
+			botY := topY + 1
+			for x := 0; x < grid.Width; x++ {
+				c := grid.Cells[y][x]
+				var topColor color.RGBA
+				var botColor color.RGBA
+
+				if c.Transparent {
+					topColor = color.RGBA{}
+					botColor = color.RGBA{}
+				} else {
+					bg := c.Bg
+					if !c.HasBg {
+						bg = color.RGBA{}
+					}
+					fg := c.Fg
+					if !c.HasFg {
+						fg = bg
+					}
+					if c.HasBg {
+						bg = ansiColor(bg)
+					} else {
+						bg = color.RGBA{}
+					}
+					if c.HasFg {
+						fg = ansiColor(fg)
+					} else {
+						fg = color.RGBA{}
+					}
+
+					switch c.Ch {
+					case '▀':
+						topColor = fg
+						botColor = bg
+					case '▄':
+						topColor = bg
+						botColor = fg
+					case '█':
+						topColor = fg
+						botColor = fg
+					default:
+						topColor = bg
+						botColor = bg
+					}
+				}
+
+				dst.SetRGBA(b.Min.X+x, topY, topColor)
+				if botY < b.Max.Y {
+					dst.SetRGBA(b.Min.X+x, botY, botColor)
+				}
+			}
+		}
+		return dst
+	}
+
 	for y := 0; y < grid.Height; y++ {
 		topY := b.Min.Y + y*2
 		botY := topY + 1
+		topRowOff := (topY - dst.Rect.Min.Y) * dst.Stride
+		botRowOff := (botY - dst.Rect.Min.Y) * dst.Stride
+		hasBot := botY < b.Max.Y
+
 		for x := 0; x < grid.Width; x++ {
 			c := grid.Cells[y][x]
 			var topColor color.RGBA
 			var botColor color.RGBA
 
-			if c.Transparent {
-				topColor = color.RGBA{}
-				botColor = color.RGBA{}
-			} else {
+			if !c.Transparent {
 				bg := c.Bg
 				if !c.HasBg {
 					bg = color.RGBA{}
@@ -402,9 +586,19 @@ func RenderToImageJ(img image.Image, jobs int) *image.RGBA {
 				}
 			}
 
-			dst.SetRGBA(b.Min.X+x, topY, topColor)
-			if botY < b.Max.Y {
-				dst.SetRGBA(b.Min.X+x, botY, botColor)
+			dstX := b.Min.X + x - dst.Rect.Min.X
+			topOff := topRowOff + dstX*4
+			dst.Pix[topOff] = topColor.R
+			dst.Pix[topOff+1] = topColor.G
+			dst.Pix[topOff+2] = topColor.B
+			dst.Pix[topOff+3] = topColor.A
+
+			if hasBot {
+				botOff := botRowOff + dstX*4
+				dst.Pix[botOff] = botColor.R
+				dst.Pix[botOff+1] = botColor.G
+				dst.Pix[botOff+2] = botColor.B
+				dst.Pix[botOff+3] = botColor.A
 			}
 		}
 	}

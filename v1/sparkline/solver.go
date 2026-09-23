@@ -249,14 +249,14 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 				uFGG := uint32(fgAvgG)
 				uFGB := uint32(fgAvgB)
 				errInt -= int64(2 * (uFGR*fgSumR + uFGG*fgSumG + uFGB*fgSumB))
-				errInt += int64(fgN) * int64(uFGR*uFGR + uFGG*uFGG + uFGB*uFGB)
+				errInt += int64(fgN) * int64(uFGR*uFGR+uFGG*uFGG+uFGB*uFGB)
 			}
 			if bgN > 0 {
 				uBGR := uint32(bgAvgR)
 				uBGG := uint32(bgAvgG)
 				uBGB := uint32(bgAvgB)
 				errInt -= int64(2 * (uBGR*bgSumR + uBGG*bgSumG + uBGB*bgSumB))
-				errInt += int64(bgN) * int64(uBGR*uBGR + uBGG*uBGG + uBGB*uBGB)
+				errInt += int64(bgN) * int64(uBGR*uBGR+uBGG*uBGG+uBGB*uBGB)
 			}
 
 			if bgN > 0 {
@@ -351,14 +351,14 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 				uFGG := uint32(fgAvgG)
 				uFGB := uint32(fgAvgB)
 				errInt -= int64(2 * (uFGR*fgSumR + uFGG*fgSumG + uFGB*fgSumB))
-				errInt += int64(fgN) * int64(uFGR*uFGR + uFGG*uFGG + uFGB*uFGB)
+				errInt += int64(fgN) * int64(uFGR*uFGR+uFGG*uFGG+uFGB*uFGB)
 			}
 			if bgN > 0 {
 				uBGR := uint32(bgAvgR)
 				uBGG := uint32(bgAvgG)
 				uBGB := uint32(bgAvgB)
 				errInt -= int64(2 * (uBGR*bgSumR + uBGG*bgSumG + uBGB*bgSumB))
-				errInt += int64(bgN) * int64(uBGR*uBGR + uBGG*uBGG + uBGB*uBGB)
+				errInt += int64(bgN) * int64(uBGR*uBGR+uBGG*uBGG+uBGB*uBGB)
 			}
 
 			if bgN > 0 {

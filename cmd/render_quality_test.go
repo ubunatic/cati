@@ -7,8 +7,8 @@ import (
 	"sort"
 	"testing"
 
-	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/internal/metrics"
+	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
 )
 
