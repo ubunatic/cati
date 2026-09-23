@@ -89,3 +89,8 @@ CATI_FASTPATH=0 GOWORK=off GOTOOLCHAIN=go1.25.0 go test ./...
 
 Known exception: `metrics.extractLumaFlat` fast paths drift slightly
 (issue 055).
+
+Fast-path payoff, measured with `cati --bench` on one photo at 120x50
+(2026-09-23): quad 2.07x, bars+ 1.43x, bars 1.34x, other modes about 1x.
+Rerun `--bench` before and after fast-path work to confirm a real gain
+rather than relying on micro-benchmarks alone.
