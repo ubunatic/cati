@@ -14,6 +14,11 @@ VIDEO_AT   ?= 1s
 
 export GOCACHE ?= /tmp/cati-gocache
 
+# Ceiling for parallel render workers (read by v1/core.MaxWorkers).
+export CATI_MAX_WORKERS ?= 10
+# 1 = optimised fast paths, 0 = simple reference paths (read by v1/core.Fastpath).
+export CATI_FASTPATH ?= 1
+
 # Keep stdlib-decoder goldens reproducible and ignore any enclosing workspace.
 GO_TEST_ENV := GOWORK=off GOTOOLCHAIN=go1.25.0
 
@@ -42,20 +47,27 @@ logo: ⚙️ build ## animate the cati logo (q or Ctrl+C to stop)
 	./$(BINARY) play --fps 4 assets/
 
 install: ⚙️ build  ## install to ~/go/bin (user)
-	go install ./cmd/cati ./cmd/catiplay ./cmd/catibrowse
+	go install ./cmd/cati ./cmd/catiplay ./cmd/catibrowse ./examples/imgbrowser
 
+# Tests run twice: default CATI_FASTPATH=1, then 0 (simple reference paths).
+# core.Fastpath is read at package init, before go test records env lookups,
+# so the no-op fastpath0 tag keeps a separate test-cache entry for mode 0.
 test: ⚙️  ## run linter and tests
 	$(GO_TEST_ENV) go vet ./...
 	$(GO_TEST_ENV) go test ./...
+	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0 ./...
 
 test-player: ⚙️  ## run catiplay-specific tests
 	$(GO_TEST_ENV) go test -tags=catiplay ./cmd
+	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0,catiplay ./cmd
 
 test-browser: ⚙️  ## run catibrowse-specific tests
 	$(GO_TEST_ENV) go test -tags=catibrowse ./cmd
+	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0,catibrowse ./cmd
 
 test-integration: ⚙️ build  ## run terminal integration tests
 	$(GO_TEST_ENV) go test -tags=integration .
+	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0,integration .
 
 test-all: ⚙️ test test-player test-browser test-integration  ## run default and optional tests
 
