@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"ubunatic.com/cati/v1/core"
 	"ubunatic.com/cati/v1/halfblock"
 	catiterm "ubunatic.com/cati/v1/term"
 )
@@ -80,61 +81,76 @@ func runMediaBenchmarkWithRunner(out io.Writer, path string, width, height, jobs
 		}
 	}
 	if isVideo {
-		fmt.Fprintf(out, "Video benchmark: %s (%dx%d)\n", filepath.Base(path), width, height)
-		fmt.Fprintln(out, "Mode                 Frames   Stream overhead   Render time   Total fps")
+		fmt.Fprintf(out, "Video benchmark: %s (%dx%d), fast vs simple paths\n", filepath.Base(path), width, height)
+		fmt.Fprintln(out, "Mode                 Frames    Fast fps  Simple fps   Speedup")
 	} else {
-		budget = max(time.Millisecond, budget/time.Duration(len(entries)))
-		fmt.Fprintf(out, "Image benchmark: %s (%dx%d), budget %s per mode\n", filepath.Base(path), width, height, budget.Round(time.Millisecond))
-		fmt.Fprintln(out, "Mode                 Renders   Avg/render    Renders/sec")
+		budget = max(time.Millisecond, budget/time.Duration(2*len(entries)))
+		fmt.Fprintf(out, "Image benchmark: %s (%dx%d), budget %s per mode and path\n", filepath.Base(path), width, height, budget.Round(time.Millisecond))
+		fmt.Fprintln(out, "Mode                 Fast avg/render   Simple avg/render   Speedup")
 	}
+	defer func(prev bool) { core.Fastpath = prev }(core.Fastpath)
 	// Each mode row is printed immediately after its benchmark completes (streaming).
 	for _, entry := range entries {
 		cfg := entry.cfg
 		cfg.jobs = jobs
 		if isVideo {
-			res, err := benchmarkVideoMode(path, width, height, cfg, now, render)
-			if err != nil {
-				return fmt.Errorf("benchmark mode %s: %w", entry.name, err)
+			var fps [2]float64
+			var frames int
+			for i, fast := range []bool{true, false} {
+				core.Fastpath = fast
+				res, err := benchmarkVideoMode(path, width, height, cfg, now, render)
+				if err != nil {
+					return fmt.Errorf("benchmark mode %s: %w", entry.name, err)
+				}
+				frames = res.frames
+				if res.total > 0 {
+					fps[i] = float64(res.frames) / res.total.Seconds()
+				}
 			}
-			res.mode = entry.name
-			res.decode = res.total - res.render
-			fps := 0.0
-			if res.total > 0 {
-				fps = float64(res.frames) / res.total.Seconds()
-			}
-			fmt.Fprintf(out, "%-20s %6d   %15s   %11s   %9.1f\n", entry.name, res.frames, res.decode.Round(time.Millisecond), res.render.Round(time.Millisecond), fps)
+			fmt.Fprintf(out, "%-20s %6d   %9.1f   %9.1f   %s\n", entry.name, frames, fps[0], fps[1], speedup(fps[0], fps[1]))
 			continue
 		}
 		fitted, err := fitBenchmarkImage(img, width, height, cfg)
 		if err != nil {
 			return fmt.Errorf("fit image for mode %s: %w", entry.name, err)
 		}
-		res := benchmarkImageMode(fitted, cfg, budget, now, render)
-		switch {
-		case res.skipped:
-			// render returned an error
-			fmt.Fprintf(out, "%-20s %7s   %11s   %11s\n", entry.name, "skipped", "error", "—")
-		case res.timedOut:
-			// first render was abandoned because it exceeded the budget
-			fmt.Fprintf(out, "%-20s %7s   %11s   %11s\n", entry.name, "skipped", ">budget", "—")
-		case res.slow:
-			// first and only render exceeded the budget; report the measurement
-			avg := res.render / time.Duration(res.frames)
-			fps := 0.0
-			if avg > 0 {
-				fps = float64(time.Second) / float64(avg)
-			}
-			fmt.Fprintf(out, "%-20s %7d   %11s   %10.1f  (slow)\n", entry.name, res.frames, avg, fps)
-		default:
-			avg := res.render / time.Duration(res.frames)
-			fps := 0.0
-			if avg > 0 {
-				fps = float64(time.Second) / float64(avg)
-			}
-			fmt.Fprintf(out, "%-20s %7d   %11s   %11.1f\n", entry.name, res.frames, avg, fps)
+		var cells [2]string
+		var avgs [2]time.Duration
+		for i, fast := range []bool{true, false} {
+			core.Fastpath = fast
+			cells[i], avgs[i] = benchmarkCell(benchmarkImageMode(fitted, cfg, budget, now, render))
 		}
+		ratio := "—"
+		if avgs[0] > 0 && avgs[1] > 0 {
+			ratio = speedup(float64(avgs[1]), float64(avgs[0]))
+		}
+		fmt.Fprintf(out, "%-20s %15s   %17s   %s\n", entry.name, cells[0], cells[1], ratio)
 	}
 	return nil
+}
+
+// benchmarkCell formats one image benchmark result and returns its average
+// render time (0 when no usable measurement exists).
+func benchmarkCell(res mediaBenchmarkModeResult) (string, time.Duration) {
+	switch {
+	case res.skipped:
+		return "error", 0
+	case res.timedOut:
+		return ">budget", 0
+	}
+	avg := res.render / time.Duration(res.frames)
+	if res.slow {
+		return avg.String() + " (slow)", avg
+	}
+	return avg.String(), avg
+}
+
+// speedup formats how many times faster a is than b.
+func speedup(a, b float64) string {
+	if a <= 0 || b <= 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%.2fx", a/b)
 }
 
 // benchmarkImageMode runs as many renders as possible within the budget.

@@ -180,7 +180,9 @@ size; 80x24 when stdout is not a terminal). `--mode` benchmarks only that mode.
 Image files are fitted once, then rendered repeatedly within
 `--bench-budget` (default 1.5s total, split evenly across modes; at least one
 render each). A mode whose first render exceeds its share is reported as
-`>budget`. Rows print as each mode finishes. Video files
+`>budget`. Rows print as each mode finishes. Every mode is measured twice, with fast paths
+on and off (`core.Fastpath`), and the row shows both plus the speed-up; video
+therefore decodes the stream twice per mode. Video files
 are decoded through the entire first video stream once per mode with
 `OpenVideoStream` rate limiting disabled. The benchmark does not render to the
 terminal or open an audio stream. Its output includes frame count, total FPS,

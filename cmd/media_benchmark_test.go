@@ -44,7 +44,7 @@ func TestRunMediaBenchmarkImage(t *testing.T) {
 		t.Fatalf("runMediaBenchmark: %v", err)
 	}
 	got := out.String()
-	if !strings.Contains(got, "Image benchmark: bench.png") || !strings.Contains(got, "Avg/render") {
+	if !strings.Contains(got, "Image benchmark: bench.png") || !strings.Contains(got, "avg/render") || !strings.Contains(got, "Simple") || !strings.Contains(got, "Speedup") {
 		t.Fatalf("unexpected benchmark output:\n%s", got)
 	}
 }

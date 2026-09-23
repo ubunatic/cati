@@ -36,7 +36,8 @@ Other checks:
 For a real asset speed comparison, run `cati --bench <mediafile>`. Image
 renders repeat within a time budget (`--bench-budget`, default 1.5s total,
 split across modes), so results appear within about 2s; `--mode` limits the
-run to one mode. Videos decode the complete first video stream without
+run to one mode. Each mode runs with fast paths on and off
+(`core.Fastpath`) and reports the speed-up. Videos decode the complete first video stream without
 playback pacing or audio. Width and height default to the terminal size, or
 80x24 when stdout is not a terminal.
 
