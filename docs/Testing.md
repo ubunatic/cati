@@ -34,9 +34,11 @@ Other checks:
   validating PNG golden-image changes.
 
 For a real asset speed comparison, run `cati --bench <mediafile>`. Image
-renders repeat per mode (`--bench-iterations` controls the count); videos decode
-the complete first video stream without playback pacing or audio. Width and
-height default to the current terminal dimensions.
+renders repeat within a time budget (`--bench-budget`, default 1.5s total,
+split across modes), so results appear within about 2s; `--mode` limits the
+run to one mode. Videos decode the complete first video stream without
+playback pacing or audio. Width and height default to the terminal size, or
+80x24 when stdout is not a terminal.
 
 JPEG-derived render goldens are stored per supported Go runtime because JPEG
 decoding can differ by a one-level rounding decision between toolchains. The

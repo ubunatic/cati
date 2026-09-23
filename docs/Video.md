@@ -176,8 +176,11 @@ Both `playImages` and `playVideos` create a gate with `interval = time.Second`.
 
 `cati --bench <mediafile>` benchmarks each registered render mode at the
 requested terminal size (`--width` and `--height`, or the detected terminal
-size). Image files are fitted once, then rendered repeatedly; use
-`--bench-iterations` to control the number of renders per mode. Video files
+size; 80x24 when stdout is not a terminal). `--mode` benchmarks only that mode.
+Image files are fitted once, then rendered repeatedly within
+`--bench-budget` (default 1.5s total, split evenly across modes; at least one
+render each). A mode whose first render exceeds its share is reported as
+`>budget`. Rows print as each mode finishes. Video files
 are decoded through the entire first video stream once per mode with
 `OpenVideoStream` rate limiting disabled. The benchmark does not render to the
 terminal or open an audio stream. Its output includes frame count, total FPS,

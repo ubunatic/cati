@@ -50,14 +50,14 @@ func TestSpecCLIBenchmarkFlags(t *testing.T) {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		t.Fatalf("parse cli.yaml: %v", err)
 	}
-	for key, wantLong := range map[string]string{"bench": "--bench", "bench_iterations": "--bench-iterations"} {
+	for key, wantLong := range map[string]string{"bench": "--bench", "bench_budget": "--bench-budget"} {
 		flag, ok := doc.Flags[key]
 		if !ok || flag.Long != wantLong || flag.Handler != "runMediaBenchmark" {
 			t.Errorf("cli.yaml flag %q = %+v, want long %q with runMediaBenchmark", key, flag, wantLong)
 		}
 	}
 	root := New()
-	for _, name := range []string{"bench", "bench-iterations"} {
+	for _, name := range []string{"bench", "bench-budget"} {
 		if root.Flags().Lookup(name) == nil {
 			t.Errorf("CLI flag --%s is missing", name)
 		}

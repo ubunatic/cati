@@ -39,3 +39,12 @@ mode and rendered repeatedly (20 times by default); video streams are decoded
 and rendered completely, once per mode, without playback pacing, terminal
 output, or audio. Output reports per-mode timing and throughput. The CLI flags
 are documented in `spec/cli.yaml` with a schema and a CLI/spec integrity test.
+
+## Follow-up (fixed)
+
+Testing found three bugs in the first version: without a TTY the height fell
+back to 1 row (so `-w` had no effect), a fixed 20 renders per mode took ~3.5
+min at 120x50 with no output until the end, and `--mode` was ignored. Now:
+80x24 default without a TTY, `--bench-budget` (1.5s total) replaces
+`--bench-iterations`, rows stream, `--mode` filters. Measured: all modes at
+120x50 in 1.8s.

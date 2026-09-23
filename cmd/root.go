@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"ubunatic.com/cati/spec"
@@ -47,7 +48,7 @@ func New() *cobra.Command {
 	var timeRange string
 	var crop string
 	var bench bool
-	var benchIterations int
+	var benchBudget time.Duration
 
 	root := &cobra.Command{
 		Use:   "cati [flags] <image|dir> [image|dir ...]",
@@ -72,10 +73,10 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 				if jobs < 0 {
 					return fmt.Errorf("--jobs must be 0 or greater")
 				}
-				if benchIterations < 1 {
-					return fmt.Errorf("--bench-iterations must be at least 1")
+				if benchBudget <= 0 {
+					return fmt.Errorf("--bench-budget must be greater than 0")
 				}
-				return runMediaBenchmark(cmd.OutOrStdout(), args[0], width, height, jobs, benchIterations)
+				return runMediaBenchmark(cmd.OutOrStdout(), args[0], width, height, jobs, renderMode, benchBudget)
 			}
 			if inputTest {
 				return runInputTest()
@@ -137,7 +138,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.Flags().StringVar(&timeRange, "range", "", `playback window: "5s" plays first 5 s; "5s:7s" plays 5 s–7 s (supports s/m/h suffixes, bare seconds, mm:ss)`)
 	root.Flags().BoolVar(&inputTest, "input-test", false, "")
 	root.Flags().BoolVar(&bench, "bench", false, "benchmark render speed on one image or video file")
-	root.Flags().IntVar(&benchIterations, "bench-iterations", 20, "image renders per mode for --bench (minimum 1)")
+	root.Flags().DurationVar(&benchBudget, "bench-budget", 1500*time.Millisecond, "total time budget for an image --bench, split across modes (each mode renders at least once; renders over its share are reported as >budget)")
 	// Hide the debug flag from help output.
 	_ = root.Flags().MarkHidden("input-test")
 	_ = root.Flags().MarkHidden("play")
