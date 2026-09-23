@@ -16,9 +16,12 @@ import (
 	"image/color"
 	"io"
 	"math"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"ubunatic.com/cati/v1/core"
 	"ubunatic.com/cati/v1/halfblock"
@@ -33,11 +36,45 @@ const (
 	ansiLinePrefix     = ansiEraseLine + ansiCarriageReturn
 )
 
+func fastpathEnabled() bool {
+	return os.Getenv("QUADBLOCK_FASTPATH") != "0"
+}
+
+func appendFgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[38;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
+func appendBgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[48;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
 func fgRGB(c color.RGBA) string {
+	if fastpathEnabled() {
+		var buf [32]byte
+		b := appendFgRGB(buf[:0], c)
+		return string(b)
+	}
 	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
 }
 
 func bgRGB(c color.RGBA) string {
+	if fastpathEnabled() {
+		var buf [32]byte
+		b := appendBgRGB(buf[:0], c)
+		return string(b)
+	}
 	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
 }
 
@@ -715,6 +752,23 @@ func safePixel(img image.Image, x, y int, b image.Rectangle) color.RGBA {
 	if x < b.Min.X || x >= b.Max.X || y < b.Min.Y || y >= b.Max.Y {
 		return color.RGBA{}
 	}
+	if fastpathEnabled() {
+		if rgba, ok := img.(*image.RGBA); ok {
+			off := (y-rgba.Rect.Min.Y)*rgba.Stride + (x-rgba.Rect.Min.X)*4
+			if off >= 0 && off+3 < len(rgba.Pix) {
+				a := rgba.Pix[off+3]
+				if a == 0 {
+					return color.RGBA{}
+				}
+				return color.RGBA{
+					R: rgba.Pix[off],
+					G: rgba.Pix[off+1],
+					B: rgba.Pix[off+2],
+					A: a,
+				}
+			}
+		}
+	}
 	return toRGBA(img.At(x, y))
 }
 
@@ -823,25 +877,55 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 		return err
 	}
 
+	if !fastpathEnabled() {
+		for y := 0; y < grid.Height; y++ {
+			var sb strings.Builder
+			if !opts.NoLinePrefix {
+				sb.WriteString(ansiLinePrefix)
+			}
+			for x := 0; x < grid.Width; x++ {
+				c := grid.Cells[y][x]
+				if c.Transparent {
+					sb.WriteRune(' ')
+					continue
+				}
+				if c.HasBg {
+					sb.WriteString(bgRGB(c.Bg))
+				}
+				sb.WriteString(fgRGB(c.Fg))
+				sb.WriteRune(c.Ch)
+				sb.WriteString(ansiReset)
+			}
+			if _, err := fmt.Fprintln(w, sb.String()); err != nil {
+				return fmt.Errorf("quadblock render: %w", err)
+			}
+		}
+		return nil
+	}
+
+	var buf []byte
+	var runeBuf [utf8.UTFMax]byte
 	for y := 0; y < grid.Height; y++ {
-		var sb strings.Builder
+		buf = buf[:0]
 		if !opts.NoLinePrefix {
-			sb.WriteString(ansiLinePrefix)
+			buf = append(buf, ansiLinePrefix...)
 		}
 		for x := 0; x < grid.Width; x++ {
 			c := grid.Cells[y][x]
 			if c.Transparent {
-				sb.WriteRune(' ')
+				buf = append(buf, ' ')
 				continue
 			}
 			if c.HasBg {
-				sb.WriteString(bgRGB(c.Bg))
+				buf = appendBgRGB(buf, c.Bg)
 			}
-			sb.WriteString(fgRGB(c.Fg))
-			sb.WriteRune(c.Ch)
-			sb.WriteString(ansiReset)
+			buf = appendFgRGB(buf, c.Fg)
+			n := utf8.EncodeRune(runeBuf[:], c.Ch)
+			buf = append(buf, runeBuf[:n]...)
+			buf = append(buf, ansiReset...)
 		}
-		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
+		buf = append(buf, '\n')
+		if _, err := w.Write(buf); err != nil {
 			return fmt.Errorf("quadblock render: %w", err)
 		}
 	}
@@ -1123,37 +1207,39 @@ func computeQuadCellsJ(img image.Image, b image.Rectangle, opts Options, tcCols,
 		tc int
 	}
 
+	workerN := jobs
+	if workerN > runtime.NumCPU() {
+		workerN = runtime.NumCPU()
+	}
+	if workerN > 10 {
+		workerN = 10
+	}
+
+	tasks := make(chan diagTask, workerN*2)
+	var wg sync.WaitGroup
+
+	for range workerN {
+		go func() {
+			for task := range tasks {
+				cells[task.tr*tcCols+task.tc] = computeQuadCell(img, b, opts, cells, task.tr, task.tc, tcCols, trRows)
+				wg.Done()
+			}
+		}()
+	}
+
 	for diag := 0; diag < tcCols+trRows-1; diag++ {
 		firstTC := max(0, diag-(trRows-1))
 		lastTC := min(tcCols-1, diag)
 		if firstTC > lastTC {
 			continue
 		}
-		taskCount := lastTC - firstTC + 1
-		workerN := jobs
-		if workerN > taskCount {
-			workerN = taskCount
-		}
-		if workerN > runtime.NumCPU() {
-			workerN = runtime.NumCPU()
-		}
-		tasks := make(chan diagTask)
-		var wg sync.WaitGroup
-		for range workerN {
-			go func() {
-				for task := range tasks {
-					cells[task.tr*tcCols+task.tc] = computeQuadCell(img, b, opts, cells, task.tr, task.tc, tcCols, trRows)
-					wg.Done()
-				}
-			}()
-		}
 		for tc := firstTC; tc <= lastTC; tc++ {
 			wg.Add(1)
 			tasks <- diagTask{tr: diag - tc, tc: tc}
 		}
-		close(tasks)
 		wg.Wait()
 	}
+	close(tasks)
 	return cells, nil
 }
 
