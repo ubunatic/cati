@@ -6,6 +6,8 @@
 package metrics
 
 import (
+	"ubunatic.com/cati/v1/core"
+
 	"image"
 	"image/color"
 	"math"
@@ -124,6 +126,9 @@ func extractLumaFlat(img image.Image, buf []float64) ([]float64, int, int) {
 		buf = make([]float64, needed)
 	}
 
+	if !core.Fastpath {
+		return extractLumaSimple(img, buf, b), w, h
+	}
 	switch m := img.(type) {
 	case *image.RGBA:
 		startOff := m.PixOffset(b.Min.X, b.Min.Y)
@@ -183,16 +188,25 @@ func extractLumaFlat(img image.Image, buf []float64) ([]float64, int, int) {
 			}
 		}
 	default:
-		const inv65535 = 1.0 / 65535.0
-		for y := 0; y < h; y++ {
-			outRow := buf[y*w : (y+1)*w]
-			for x := 0; x < w; x++ {
-				r, g, b, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
-				outRow[x] = (0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)) * inv65535
-			}
-		}
+		extractLumaSimple(img, buf, b)
 	}
 	return buf, w, h
+}
+
+// extractLumaSimple is the reference luma extraction via img.At.
+// NOTE: the typed fast paths above differ slightly: NRGBA ignores alpha
+// (no premultiply) and Gray/YCbCr round differently (see issue 055).
+func extractLumaSimple(img image.Image, buf []float64, b image.Rectangle) []float64 {
+	const inv65535 = 1.0 / 65535.0
+	w := b.Dx()
+	for y := 0; y < b.Dy(); y++ {
+		outRow := buf[y*w : (y+1)*w]
+		for x := 0; x < w; x++ {
+			r, g, bl, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
+			outRow[x] = (0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(bl)) * inv65535
+		}
+	}
+	return buf
 }
 
 // LumaGrid converts img to a 2-D slice of BT.709 luminance values [0,1].

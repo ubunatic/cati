@@ -6,7 +6,6 @@ import (
 	"image/color"
 	"io"
 	"math/bits"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -740,7 +739,7 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 		if workerN > rowCount {
 			workerN = rowCount
 		}
-		maxCPUs := min(runtime.NumCPU(), 10)
+		maxCPUs := core.MaxWorkers()
 		if workerN > maxCPUs {
 			workerN = maxCPUs
 		}
@@ -829,7 +828,7 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 	if workerN > rowCount {
 		workerN = rowCount
 	}
-	maxCPUs := min(runtime.NumCPU(), 10)
+	maxCPUs := core.MaxWorkers()
 	if workerN > maxCPUs {
 		workerN = maxCPUs
 	}

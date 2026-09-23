@@ -1,6 +1,8 @@
 package sparkline
 
 import (
+	"ubunatic.com/cati/v1/core"
+
 	"image"
 	"image/color"
 	"math"
@@ -115,34 +117,13 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 	var totalSumR, totalSumG, totalSumB uint32
 	var totalSqSum int64
 
-	if rgba, ok := img.(*image.RGBA); ok {
-		pix := rgba.Pix
+	var pa [128]uint8
+	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
 		idx := 0
 		for y := y0; y <= y1; y++ {
-			rowOff := rgba.PixOffset(x0, y)
+			p := rgba.Pix[rgba.PixOffset(x0, y):]
 			for x := 0; x < blockW; x++ {
-				off := rowOff + (x << 2)
-				r := pix[off+0]
-				g := pix[off+1]
-				b := pix[off+2]
-				a := pix[off+3]
-				pr[idx] = r
-				pg[idx] = g
-				pb[idx] = b
-				if a != 0 {
-					if idx < 64 {
-						opaque0 |= uint64(1) << idx
-					} else {
-						opaque1 |= uint64(1) << (idx - 64)
-					}
-					ur := uint32(r)
-					ug := uint32(g)
-					ub := uint32(b)
-					totalSumR += ur
-					totalSumG += ug
-					totalSumB += ub
-					totalSqSum += int64(ur*ur + ug*ug + ub*ub)
-				}
+				pr[idx], pg[idx], pb[idx], pa[idx] = p[x*4], p[x*4+1], p[x*4+2], p[x*4+3]
 				idx++
 			}
 		}
@@ -151,26 +132,25 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 		for y := y0; y <= y1; y++ {
 			for x := x0; x <= x1; x++ {
 				c := rgbaAt(img, x, y)
-				pr[idx] = c.R
-				pg[idx] = c.G
-				pb[idx] = c.B
-				if c.A != 0 {
-					if idx < 64 {
-						opaque0 |= uint64(1) << idx
-					} else {
-						opaque1 |= uint64(1) << (idx - 64)
-					}
-					ur := uint32(c.R)
-					ug := uint32(c.G)
-					ub := uint32(c.B)
-					totalSumR += ur
-					totalSumG += ug
-					totalSumB += ub
-					totalSqSum += int64(ur*ur + ug*ug + ub*ub)
-				}
+				pr[idx], pg[idx], pb[idx], pa[idx] = c.R, c.G, c.B, c.A
 				idx++
 			}
 		}
+	}
+	for idx := range n {
+		if pa[idx] == 0 {
+			continue
+		}
+		if idx < 64 {
+			opaque0 |= uint64(1) << idx
+		} else {
+			opaque1 |= uint64(1) << (idx - 64)
+		}
+		ur, ug, ub := uint32(pr[idx]), uint32(pg[idx]), uint32(pb[idx])
+		totalSumR += ur
+		totalSumG += ug
+		totalSumB += ub
+		totalSqSum += int64(ur*ur + ug*ug + ub*ub)
 	}
 
 	var validMask0, validMask1 uint64
@@ -249,14 +229,14 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 				uFGG := uint32(fgAvgG)
 				uFGB := uint32(fgAvgB)
 				errInt -= int64(2 * (uFGR*fgSumR + uFGG*fgSumG + uFGB*fgSumB))
-				errInt += int64(fgN) * int64(uFGR*uFGR + uFGG*uFGG + uFGB*uFGB)
+				errInt += int64(fgN) * int64(uFGR*uFGR+uFGG*uFGG+uFGB*uFGB)
 			}
 			if bgN > 0 {
 				uBGR := uint32(bgAvgR)
 				uBGG := uint32(bgAvgG)
 				uBGB := uint32(bgAvgB)
 				errInt -= int64(2 * (uBGR*bgSumR + uBGG*bgSumG + uBGB*bgSumB))
-				errInt += int64(bgN) * int64(uBGR*uBGR + uBGG*uBGG + uBGB*uBGB)
+				errInt += int64(bgN) * int64(uBGR*uBGR+uBGG*uBGG+uBGB*uBGB)
 			}
 
 			if bgN > 0 {
@@ -351,14 +331,14 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 				uFGG := uint32(fgAvgG)
 				uFGB := uint32(fgAvgB)
 				errInt -= int64(2 * (uFGR*fgSumR + uFGG*fgSumG + uFGB*fgSumB))
-				errInt += int64(fgN) * int64(uFGR*uFGR + uFGG*uFGG + uFGB*uFGB)
+				errInt += int64(fgN) * int64(uFGR*uFGR+uFGG*uFGG+uFGB*uFGB)
 			}
 			if bgN > 0 {
 				uBGR := uint32(bgAvgR)
 				uBGG := uint32(bgAvgG)
 				uBGB := uint32(bgAvgB)
 				errInt -= int64(2 * (uBGR*bgSumR + uBGG*bgSumG + uBGB*bgSumB))
-				errInt += int64(bgN) * int64(uBGR*uBGR + uBGG*uBGG + uBGB*uBGB)
+				errInt += int64(bgN) * int64(uBGR*uBGR+uBGG*uBGG+uBGB*uBGB)
 			}
 
 			if bgN > 0 {

@@ -1052,7 +1052,7 @@ func toRGBA(c color.Color) color.RGBA {
 }
 
 func rgbaAt(img image.Image, x, y int) color.RGBA {
-	if rgba, ok := img.(*image.RGBA); ok {
+	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
 		i := rgba.PixOffset(x, y)
 		p := rgba.Pix[i : i+4]
 		return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}

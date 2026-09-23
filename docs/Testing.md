@@ -64,3 +64,19 @@ render-pixel step, which can try sub-cell widths; terminal-column modes retain
 whole-column search. The winner is scored with PSNR and centered in the
 requested canvas. It is intentionally not enabled for interactive/video frame
 loops yet.
+
+## Fast paths
+
+Optimised code paths (direct `Pix` access, append-based ANSI formatting) are
+gated by one shared flag, `core.Fastpath`, read once from `CATI_FASTPATH`
+(`0` = simple reference paths; default on). The simple path is the reference:
+change and reason about it first, then make the fast path follow. Fast paths
+must be output-identical; each split has a parity test that toggles
+`core.Fastpath`. Check the whole suite on the simple paths with:
+
+```bash
+CATI_FASTPATH=0 GOWORK=off GOTOOLCHAIN=go1.25.0 go test ./...
+```
+
+Known exception: `metrics.extractLumaFlat` fast paths drift slightly
+(issue 055).

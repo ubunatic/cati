@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"image"
 	"image/color"
-	"os"
 	"testing"
 
+	"ubunatic.com/cati/v1/core"
 	"ubunatic.com/cati/v1/quadblock"
 )
 
@@ -46,7 +46,7 @@ func TestFastpathDifferentialParity(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Fastpath output
-			os.Setenv("QUADBLOCK_FASTPATH", "1")
+			core.Fastpath = true
 			var bufFast bytes.Buffer
 			opts := quadblock.Options{SplitHalf: true}
 			if err := quadblock.Render(&bufFast, tc.img, 16, opts); err != nil {
@@ -55,15 +55,15 @@ func TestFastpathDifferentialParity(t *testing.T) {
 			imgFast := quadblock.RenderToImage(tc.img, opts)
 
 			// Fallback output
-			os.Setenv("QUADBLOCK_FASTPATH", "0")
+			core.Fastpath = false
 			var bufSimple bytes.Buffer
 			if err := quadblock.Render(&bufSimple, tc.img, 16, opts); err != nil {
 				t.Fatalf("Simple Render error: %v", err)
 			}
 			imgSimple := quadblock.RenderToImage(tc.img, opts)
 
-			// Reset envar
-			os.Setenv("QUADBLOCK_FASTPATH", "1")
+			// Reset
+			core.Fastpath = true
 
 			// Check ANSI string rendering parity
 			if !bytes.Equal(bufFast.Bytes(), bufSimple.Bytes()) {

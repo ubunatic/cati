@@ -16,10 +16,7 @@ import (
 	"image/color"
 	"io"
 	"math"
-	"os"
-	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 	"unicode/utf8"
 
@@ -35,10 +32,6 @@ const (
 	ansiCarriageReturn = "\r"
 	ansiLinePrefix     = ansiEraseLine + ansiCarriageReturn
 )
-
-func fastpathEnabled() bool {
-	return os.Getenv("QUADBLOCK_FASTPATH") != "0"
-}
 
 func appendFgRGB(b []byte, c color.RGBA) []byte {
 	b = append(b, "\x1b[38;2;"...)
@@ -61,20 +54,10 @@ func appendBgRGB(b []byte, c color.RGBA) []byte {
 }
 
 func fgRGB(c color.RGBA) string {
-	if fastpathEnabled() {
-		var buf [32]byte
-		b := appendFgRGB(buf[:0], c)
-		return string(b)
-	}
 	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
 }
 
 func bgRGB(c color.RGBA) string {
-	if fastpathEnabled() {
-		var buf [32]byte
-		b := appendBgRGB(buf[:0], c)
-		return string(b)
-	}
 	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
 }
 
@@ -752,22 +735,12 @@ func safePixel(img image.Image, x, y int, b image.Rectangle) color.RGBA {
 	if x < b.Min.X || x >= b.Max.X || y < b.Min.Y || y >= b.Max.Y {
 		return color.RGBA{}
 	}
-	if fastpathEnabled() {
-		if rgba, ok := img.(*image.RGBA); ok {
-			off := (y-rgba.Rect.Min.Y)*rgba.Stride + (x-rgba.Rect.Min.X)*4
-			if off >= 0 && off+3 < len(rgba.Pix) {
-				a := rgba.Pix[off+3]
-				if a == 0 {
-					return color.RGBA{}
-				}
-				return color.RGBA{
-					R: rgba.Pix[off],
-					G: rgba.Pix[off+1],
-					B: rgba.Pix[off+2],
-					A: a,
-				}
-			}
+	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
+		p := rgba.Pix[rgba.PixOffset(x, y):]
+		if p[3] == 0 {
+			return color.RGBA{}
 		}
+		return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
 	}
 	return toRGBA(img.At(x, y))
 }
@@ -877,34 +850,7 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 		return err
 	}
 
-	if !fastpathEnabled() {
-		for y := 0; y < grid.Height; y++ {
-			var sb strings.Builder
-			if !opts.NoLinePrefix {
-				sb.WriteString(ansiLinePrefix)
-			}
-			for x := 0; x < grid.Width; x++ {
-				c := grid.Cells[y][x]
-				if c.Transparent {
-					sb.WriteRune(' ')
-					continue
-				}
-				if c.HasBg {
-					sb.WriteString(bgRGB(c.Bg))
-				}
-				sb.WriteString(fgRGB(c.Fg))
-				sb.WriteRune(c.Ch)
-				sb.WriteString(ansiReset)
-			}
-			if _, err := fmt.Fprintln(w, sb.String()); err != nil {
-				return fmt.Errorf("quadblock render: %w", err)
-			}
-		}
-		return nil
-	}
-
 	var buf []byte
-	var runeBuf [utf8.UTFMax]byte
 	for y := 0; y < grid.Height; y++ {
 		buf = buf[:0]
 		if !opts.NoLinePrefix {
@@ -916,12 +862,18 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 				buf = append(buf, ' ')
 				continue
 			}
-			if c.HasBg {
-				buf = appendBgRGB(buf, c.Bg)
+			if core.Fastpath {
+				if c.HasBg {
+					buf = appendBgRGB(buf, c.Bg)
+				}
+				buf = appendFgRGB(buf, c.Fg)
+			} else {
+				if c.HasBg {
+					buf = append(buf, bgRGB(c.Bg)...)
+				}
+				buf = append(buf, fgRGB(c.Fg)...)
 			}
-			buf = appendFgRGB(buf, c.Fg)
-			n := utf8.EncodeRune(runeBuf[:], c.Ch)
-			buf = append(buf, runeBuf[:n]...)
+			buf = utf8.AppendRune(buf, c.Ch)
 			buf = append(buf, ansiReset...)
 		}
 		buf = append(buf, '\n')
@@ -1208,8 +1160,8 @@ func computeQuadCellsJ(img image.Image, b image.Rectangle, opts Options, tcCols,
 	}
 
 	workerN := jobs
-	if workerN > runtime.NumCPU() {
-		workerN = runtime.NumCPU()
+	if workerN > core.MaxWorkers() {
+		workerN = core.MaxWorkers()
 	}
 	if workerN > 10 {
 		workerN = 10
