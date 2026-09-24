@@ -1,6 +1,6 @@
 # 058 — cati --bench reports fast/simple output mismatches
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Testing
@@ -30,3 +30,7 @@ Done when:
   expected to differ.
 - Known drift (issue 055) should surface as a reported diff, not be hidden.
 - Re-verify the bench code against current `main` before starting.
+
+## Resolution
+
+Delivered in 6f329f7: `Output parity` column (ok / DIFF with byte count + first diff position), per-frame SHA-256 comparison for video, non-zero exit on mismatch, image identical/mismatch tests, docs/Testing.md. Verified live: photo at 120x50 and a 10-frame testsrc video, all modes `ok`. Gap: no forced-mismatch test for the video path (only image).
