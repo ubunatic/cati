@@ -52,6 +52,43 @@ func TestRunMediaBenchmarkImage(t *testing.T) {
 	}
 }
 
+func TestRunMediaBenchmarkImageOutputParity(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		mismatch   bool
+		wantStatus string
+	}{
+		{name: "identical", wantStatus: "ok"},
+		{name: "mismatch", mismatch: true, wantStatus: "DIFF"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := makeTestPNG(t, t.TempDir())
+			var out bytes.Buffer
+			calls := 0
+			render := func(img image.Image, cfg renderCfg) ([]string, error) {
+				calls++
+				if tc.mismatch && calls == 1 {
+					return []string{"fast output"}, nil
+				}
+				return []string{"simple output"}, nil
+			}
+			err := runMediaBenchmarkWithRunner(&out, path, 20, 8, 1, "h", 2*time.Millisecond, time.Now, render)
+			if tc.mismatch && err == nil {
+				t.Fatal("expected non-zero mismatch result")
+			}
+			if !tc.mismatch && err != nil {
+				t.Fatalf("identical output returned error: %v", err)
+			}
+			if !strings.Contains(out.String(), tc.wantStatus) {
+				t.Fatalf("output missing parity status %q:\n%s", tc.wantStatus, out.String())
+			}
+			if tc.mismatch && !strings.Contains(out.String(), "first diff") {
+				t.Fatalf("mismatch output missing first difference summary:\n%s", out.String())
+			}
+		})
+	}
+}
+
 // TestRunMediaBenchmarkValidation verifies error cases.
 func TestRunMediaBenchmarkValidation(t *testing.T) {
 	for _, tc := range []struct {
@@ -208,10 +245,13 @@ func TestRunMediaBenchmarkVideo(t *testing.T) {
 		t.Skipf("unable to create video fixture: %v (%s)", err, output)
 	}
 	var out bytes.Buffer
-	if err := runMediaBenchmark(&out, path, 12, 6, 1, "", 2*time.Second); err != nil {
+	stableRender := func(img image.Image, cfg renderCfg) ([]string, error) {
+		return []string{"same frame"}, nil
+	}
+	if err := runMediaBenchmarkWithRunner(&out, path, 12, 6, 1, "", 2*time.Second, time.Now, stableRender); err != nil {
 		t.Fatalf("runMediaBenchmark: %v", err)
 	}
-	if !strings.Contains(out.String(), "Video benchmark: bench.mp4") || !strings.Contains(out.String(), "Frames") {
+	if !strings.Contains(out.String(), "Video benchmark: bench.mp4") || !strings.Contains(out.String(), "Frames") || !strings.Contains(out.String(), "Output parity") || !strings.Contains(out.String(), "ok") {
 		t.Fatalf("unexpected benchmark output:\n%s", out.String())
 	}
 }
