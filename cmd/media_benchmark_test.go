@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"ubunatic.com/cati/spec"
+	"ubunatic.com/cati/v1/core"
 )
 
 // makeTestPNG creates a small PNG in dir and returns its path.
@@ -253,6 +255,35 @@ func TestRunMediaBenchmarkVideo(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Video benchmark: bench.mp4") || !strings.Contains(out.String(), "Frames") || !strings.Contains(out.String(), "Output parity") || !strings.Contains(out.String(), "ok") {
 		t.Fatalf("unexpected benchmark output:\n%s", out.String())
+	}
+}
+
+func TestRunMediaBenchmarkVideoOutputParityMismatch(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg unavailable")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe unavailable")
+	}
+	path := filepath.Join(t.TempDir(), "bench.mp4")
+	cmd := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=32x24:rate=4:duration=1", "-pix_fmt", "yuv420p", "-an", "-y", path)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("unable to create video fixture: %v (%s)", err, output)
+	}
+	var out bytes.Buffer
+	mismatchRender := func(img image.Image, cfg renderCfg) ([]string, error) {
+		return []string{fmt.Sprintf("fastpath=%t", core.Fastpath)}, nil
+	}
+	err := runMediaBenchmarkWithRunner(&out, path, 12, 6, 1, "h", 2*time.Second, time.Now, mismatchRender)
+	if err == nil {
+		t.Fatal("expected non-zero mismatch result")
+	}
+	got := out.String()
+	if !strings.Contains(got, "DIFF (4/4 frames)") {
+		t.Fatalf("mismatch output missing differing-frame count:\n%s", got)
+	}
+	if !strings.Contains(got, "Output parity: mismatches detected") {
+		t.Fatalf("mismatch output missing parity summary:\n%s", got)
 	}
 }
 
