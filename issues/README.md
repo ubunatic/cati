@@ -61,6 +61,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 055 | [055-metrics-luma-fastpath-drift.md](055-metrics-luma-fastpath-drift.md) | Metrics Luma Fast Paths Diverge From Simple Path | Open |
 | 056 | [056-cati-bench-mediafile-per-asset-render-speed-benchmark.md](056-cati-bench-mediafile-per-asset-render-speed-benchmark.md) | `cati --bench <mediafile>`: Per-Asset Render Speed Benchmark | Closed |
 | 057 | [057-honour-spec-experimental-render-modes-across-mode-consumers.md](057-honour-spec-experimental-render-modes-across-mode-consumers.md) | Honour spec experimental render modes across mode consumers | Open |
+| 058 | [058-cati-bench-reports-fast-simple-output-mismatches.md](058-cati-bench-reports-fast-simple-output-mismatches.md) | cati --bench reports fast/simple output mismatches | Open |
 
 ## Archived
 
