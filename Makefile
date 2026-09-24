@@ -113,6 +113,7 @@ tidy: ⚙️  ## tidy go modules
 
 clean: ⚙️  ## remove build artifacts
 	rm -f $(BINARIES)
+	rm -rf dist
 	rm -r website/book
 
 book: ⚙️  ## build the mdbook documentation
