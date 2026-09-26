@@ -375,4 +375,3 @@ func doRender(path string, cols, rows int, mode renderMode) (*core.Grid, float64
 	}
 	return grid, ssim, stats, ""
 }
-

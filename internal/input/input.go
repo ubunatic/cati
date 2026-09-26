@@ -93,32 +93,32 @@ type Spec struct {
 func DefaultSpec() *Spec {
 	s := &Spec{
 		keyAliases: map[string]string{
-			"esc":      "\x1b",
-			"escape":   "\x1b",
-			"bs":       "\x7f",
+			"esc":       "\x1b",
+			"escape":    "\x1b",
+			"bs":        "\x7f",
 			"backspace": "\x7f",
-			"cr":       "\x0d",
-			"enter":    "\x0d",
-			"return":   "\x0d",
-			"lf":       "\x0a",
-			"nl":       "\x0a",
-			"space":    " ",
-			"tab":      "\t",
-			"del":      "\x1b[3~",
-			"delete":   "\x1b[3~",
-			"up":       "\x1b[A",
-			"down":     "\x1b[B",
-			"right":    "\x1b[C",
-			"left":     "\x1b[D",
-			"pgup":     "\x1b[5~",
-			"pageup":   "\x1b[5~",
-			"pgdn":     "\x1b[6~",
-			"pagedown": "\x1b[6~",
-			"home":     "\x1b[H",
-			"end":      "\x1b[F",
-			"f1":  "\x1bOP", "f2": "\x1bOQ", "f3": "\x1bOR", "f4": "\x1bOS",
-			"f5":  "\x1b[15~", "f6": "\x1b[17~", "f7": "\x1b[18~", "f8": "\x1b[19~",
-			"f9":  "\x1b[20~", "f10": "\x1b[21~", "f11": "\x1b[23~", "f12": "\x1b[24~",
+			"cr":        "\x0d",
+			"enter":     "\x0d",
+			"return":    "\x0d",
+			"lf":        "\x0a",
+			"nl":        "\x0a",
+			"space":     " ",
+			"tab":       "\t",
+			"del":       "\x1b[3~",
+			"delete":    "\x1b[3~",
+			"up":        "\x1b[A",
+			"down":      "\x1b[B",
+			"right":     "\x1b[C",
+			"left":      "\x1b[D",
+			"pgup":      "\x1b[5~",
+			"pageup":    "\x1b[5~",
+			"pgdn":      "\x1b[6~",
+			"pagedown":  "\x1b[6~",
+			"home":      "\x1b[H",
+			"end":       "\x1b[F",
+			"f1":        "\x1bOP", "f2": "\x1bOQ", "f3": "\x1bOR", "f4": "\x1bOS",
+			"f5": "\x1b[15~", "f6": "\x1b[17~", "f7": "\x1b[18~", "f8": "\x1b[19~",
+			"f9": "\x1b[20~", "f10": "\x1b[21~", "f11": "\x1b[23~", "f12": "\x1b[24~",
 		},
 		ctrlPrefix:         "c-",
 		ctrlBaseChar:       'a',
@@ -206,8 +206,8 @@ func parse(data string) (*Spec, error) {
 
 	lines := strings.Split(data, "\n")
 
-	section := ""       // top-level key under "input:"
-	subSection := ""    // second-level key
+	section := ""    // top-level key under "input:"
+	subSection := "" // second-level key
 	inInput := false
 
 	// For list items in signals / terminal_sequences / tokenizer.rules
