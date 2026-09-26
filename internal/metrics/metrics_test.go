@@ -293,7 +293,7 @@ func TestSSIMLuminance_AccuracyEpsilon(t *testing.T) {
 
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			imgA.Set(x, y, color.RGBA{R: uint8((x * 13 + y * 7) % 256), G: uint8((y * 11) % 256), B: uint8((x * 19) % 256), A: 255})
+			imgA.Set(x, y, color.RGBA{R: uint8((x*13 + y*7) % 256), G: uint8((y * 11) % 256), B: uint8((x * 19) % 256), A: 255})
 			imgB.Set(x, y, color.RGBA{R: uint8((x*13 + y*7 + 5) % 256), G: uint8((y*11 + 3) % 256), B: uint8((x * 19) % 256), A: 255})
 		}
 	}

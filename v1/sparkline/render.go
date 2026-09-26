@@ -20,11 +20,11 @@ type Options struct {
 	// other content on the same terminal row.
 	NoLinePrefix bool
 
-	Mode    Mode
-	Rows    int
-	Jobs    int
-	CellW   int
-	CellH   int
+	Mode  Mode
+	Rows  int
+	Jobs  int
+	CellW int
+	CellH int
 	// AspectX is an optional horizontal aspect compensation override.
 	// By default (0), the natural ratio (2 * CellW / CellH) is computed
 	// automatically for standard 1:2 terminal cells.

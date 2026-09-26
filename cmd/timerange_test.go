@@ -33,10 +33,10 @@ func TestParseTimeRange(t *testing.T) {
 		{":7s", 0, 7, false},
 
 		// Errors
-		{"7s:5s", 0, 0, true},  // end before start
-		{"5s:5s", 0, 0, true},  // end == start
-		{"bad", 0, 0, true},    // unparseable
-		{"1x:2y", 0, 0, true},  // bad units
+		{"7s:5s", 0, 0, true}, // end before start
+		{"5s:5s", 0, 0, true}, // end == start
+		{"bad", 0, 0, true},   // unparseable
+		{"1x:2y", 0, 0, true}, // bad units
 	}
 
 	for _, tc := range tests {

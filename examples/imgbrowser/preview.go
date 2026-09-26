@@ -489,7 +489,6 @@ func (p *imagePreview) drawInfoView(c *loom.Canvas, x, y, w, h int) {
 	}
 }
 
-
 // drawModeBar renders the [p] play/pause button (if video) and [six] [half] [quad] [all] mode buttons along with render time and SSIM,
 // and records button bounds for mouse hit-testing.
 func (p *imagePreview) drawModeBar(c *loom.Canvas, x, y, w int) {

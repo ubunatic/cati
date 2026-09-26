@@ -197,7 +197,9 @@ func Sharpen(src image.Image, amount float64) image.Image {
 					bB += float64(c.B)
 				}
 			}
-			rB /= 9; gB /= 9; bB /= 9
+			rB /= 9
+			gB /= 9
+			bB /= 9
 
 			c := at(src, x, y)
 			rS := clamp(float64(c.R) + amount*(float64(c.R)-rB))
