@@ -62,6 +62,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 056 | [056-cati-bench-mediafile-per-asset-render-speed-benchmark.md](056-cati-bench-mediafile-per-asset-render-speed-benchmark.md) | `cati --bench <mediafile>`: Per-Asset Render Speed Benchmark | Closed |
 | 057 | [057-honour-spec-experimental-render-modes-across-mode-consumers.md](057-honour-spec-experimental-render-modes-across-mode-consumers.md) | Honour spec experimental render modes across mode consumers | Open |
 | 058 | [058-cati-bench-reports-fast-simple-output-mismatches.md](058-cati-bench-reports-fast-simple-output-mismatches.md) | cati --bench reports fast/simple output mismatches | Closed |
+| 059 | [059-openvideostream-reader-and-cleanup-both-call-cmd-wait-stop-hangs-unless-channel-is-drained.md](059-openvideostream-reader-and-cleanup-both-call-cmd-wait-stop-hangs-unless-channel-is-drained.md) | OpenVideoStream reader and cleanup both call cmd.Wait, stop hangs unless channel is drained | Open |
 
 ## Archived
 
