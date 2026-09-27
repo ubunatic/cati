@@ -150,7 +150,12 @@ func TestRealVideoPlaybackIntegration(t *testing.T) {
 	}
 	defer a.Close()
 
-	// Toggle play
+	// Initial selection shows paused or loading
+	if !strings.Contains(a.preview.Title(), "baby-60p-nn.webm") {
+		t.Fatalf("preview title = %q", a.preview.Title())
+	}
+
+	// 1. Toggle play
 	a.HandleKey(loom.KeyEvent{Text: "p"})
 	if !a.preview.playing {
 		t.Fatal("expected video to enter playing state")
@@ -167,4 +172,39 @@ func TestRealVideoPlaybackIntegration(t *testing.T) {
 	if title := a.preview.Title(); !strings.Contains(title, "playing") {
 		t.Fatalf("preview title = %q, want playing", title)
 	}
+	if interval := a.TickInterval(); interval <= 0 {
+		t.Fatalf("playing tick interval = %v, want > 0", interval)
+	}
+
+	// 2. Pause
+	a.HandleKey(loom.KeyEvent{Text: "P"})
+	if a.preview.playing {
+		t.Fatal("expected video to be paused")
+	}
+	if a.preview.loading {
+		t.Fatal("pause set preview loading to true")
+	}
+	if title := a.preview.Title(); !strings.Contains(title, "paused") {
+		t.Fatalf("paused preview title = %q, want paused", title)
+	}
+	if interval := a.TickInterval(); interval != 0 {
+		t.Fatalf("paused tick interval = %v, want 0", interval)
+	}
+
+	// 3. Resume
+	a.HandleKey(loom.KeyEvent{Text: "p"})
+	if !a.preview.playing {
+		t.Fatal("expected video to resume playing")
+	}
+	if a.preview.loading {
+		t.Fatal("resume set preview loading to true")
+	}
+	if title := a.preview.Title(); !strings.Contains(title, "playing") {
+		t.Fatalf("resumed preview title = %q, want playing", title)
+	}
+	for i := 0; i < 3; i++ {
+		time.Sleep(10 * time.Millisecond)
+		a.Tick(time.Now())
+	}
+	a.Draw(c, loom.Rect{W: 60, H: 20})
 }

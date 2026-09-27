@@ -306,11 +306,11 @@ func (a *app) HandleKey(k loom.KeyEvent) bool {
 		a.cycleTheme()
 		return false
 	}
-	if k.Is("f") {
+	if k.Is("f") || k.Is("F") {
 		a.toggleFullscreen()
 		return false
 	}
-	if k.Is("i") {
+	if k.Is("i") || k.Is("I") {
 		a.imagesOnly = !a.imagesOnly
 		if a.navigation != nil {
 			a.filterMediaItems()
@@ -322,11 +322,11 @@ func (a *app) HandleKey(k loom.KeyEvent) bool {
 		}
 		return false
 	}
-	if k.Is("m") {
+	if k.Is("m") || k.Is("M") {
 		a.preview.CycleMode()
 		return false
 	}
-	if k.Is("p") {
+	if k.Is("p") || k.Is("P") {
 		a.preview.TogglePlay()
 		return false
 	}

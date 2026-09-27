@@ -87,7 +87,7 @@ func TestPreviewPaneModeCycleAndImageDispatch(t *testing.T) {
 	}
 	p.Close()
 	p.Close()
-	if p.widget != nil {
+	if p.preview != nil || p.video != nil {
 		t.Fatal("Close left the widget set")
 	}
 }
@@ -254,7 +254,7 @@ func TestPreviewPaneVideoPlayDuringAsyncStillLoad(t *testing.T) {
 	if !p.playing {
 		t.Fatal("expected playing to be true after TogglePlay")
 	}
-	if p.widget != fakeVideoWidget {
+	if p.video != fakeVideoWidget {
 		t.Fatal("expected video widget to be set")
 	}
 
@@ -267,10 +267,88 @@ func TestPreviewPaneVideoPlayDuringAsyncStillLoad(t *testing.T) {
 	if !p.playing {
 		t.Fatal("playing was corrupted by background goroutine")
 	}
-	if p.widget != fakeVideoWidget {
+	if p.video != fakeVideoWidget {
 		t.Fatal("video widget was closed/replaced by background goroutine")
 	}
 	if p.message != "" {
 		t.Fatalf("unexpected message set: %q", p.message)
+	}
+}
+
+func TestPreviewPaneRepeatedPlayPauseDoesNotReloadPreview(t *testing.T) {
+	withWidgetFactories(t)
+	stillLoads := 0
+	videoLoads := 0
+
+	previewWidget, err := media.NewImage(image.NewRGBA(image.Rect(0, 0, 2, 2)), media.ModeHalfblock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fakeVideoWidget, err := media.NewImage(image.NewRGBA(image.Rect(0, 0, 2, 2)), media.ModeHalfblock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	loadImageWidget = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
+		stillLoads++
+		return previewWidget, nil
+	}
+	newVideoWidget = func(path string, mode media.Mode, fps float64) (*media.Widget, error) {
+		videoLoads++
+		return fakeVideoWidget, nil
+	}
+
+	p := newMediaPreviewPane(media.ModeHalfblock, 24)
+	p.SetPath("video.mp4")
+
+	waitForCondition(t, 200*time.Millisecond, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return !p.loading && stillLoads == 1
+	})
+
+	if p.Title() != "🎬 video.mp4 [halfblock, paused]" {
+		t.Fatalf("initial video title = %q, want paused", p.Title())
+	}
+
+	// 1. Play
+	p.HandleKey(loom.KeyEvent{Text: "p"})
+	if !p.playing || videoLoads != 1 || stillLoads != 1 {
+		t.Fatalf("after play: playing=%v, videoLoads=%d, stillLoads=%d", p.playing, videoLoads, stillLoads)
+	}
+	if p.Title() != "🎬 video.mp4 [halfblock, playing]" {
+		t.Fatalf("playing title = %q", p.Title())
+	}
+
+	// 2. Pause
+	p.HandleKey(loom.KeyEvent{Text: "p"})
+	if p.playing || videoLoads != 1 || stillLoads != 1 {
+		t.Fatalf("after pause: playing=%v, videoLoads=%d, stillLoads=%d", p.playing, videoLoads, stillLoads)
+	}
+	if p.loading {
+		t.Fatal("pausing set loading to true")
+	}
+	if p.Title() != "🎬 video.mp4 [halfblock, paused]" {
+		t.Fatalf("paused title = %q", p.Title())
+	}
+
+	// 3. Resume with uppercase 'P'
+	p.HandleKey(loom.KeyEvent{Text: "P"})
+	if !p.playing || videoLoads != 1 || stillLoads != 1 {
+		t.Fatalf("after resume: playing=%v, videoLoads=%d, stillLoads=%d", p.playing, videoLoads, stillLoads)
+	}
+	if p.Title() != "🎬 video.mp4 [halfblock, playing]" {
+		t.Fatalf("resumed title = %q", p.Title())
+	}
+
+	// 4. Mouse click toggles play/pause
+	p.HandleMouse(loom.MouseEvent{Action: loom.MousePress, Button: loom.MouseLeft})
+	if p.playing || videoLoads != 1 || stillLoads != 1 {
+		t.Fatalf("after mouse pause: playing=%v, videoLoads=%d, stillLoads=%d", p.playing, videoLoads, stillLoads)
+	}
+
+	p.HandleMouse(loom.MouseEvent{Action: loom.MousePress, Button: loom.MouseLeft})
+	if !p.playing || videoLoads != 1 || stillLoads != 1 {
+		t.Fatalf("after mouse resume: playing=%v, videoLoads=%d, stillLoads=%d", p.playing, videoLoads, stillLoads)
 	}
 }

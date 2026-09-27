@@ -22,9 +22,11 @@ type mediaPreviewPane struct {
 	message     string
 	loading     bool
 	loadingMsg  string
-	widget      *media.Widget
+	preview     *media.Widget
+	video       *media.Widget
 	fps         float64
 	playing     bool
+	videoEnded  bool
 	focused     bool
 	lastRect    loom.Rect
 	cancel      context.CancelFunc
@@ -56,7 +58,7 @@ func (p *mediaPreviewPane) Close() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.cancelLoadingLocked()
-	p.closeWidgetLocked()
+	p.closeMediaLocked()
 }
 
 func (p *mediaPreviewPane) cancelLoadingLocked() {
@@ -64,15 +66,21 @@ func (p *mediaPreviewPane) cancelLoadingLocked() {
 		p.cancel()
 		p.cancel = nil
 	}
+	p.generation++
 	p.loading = false
 	p.loadingMsg = ""
 }
 
-func (p *mediaPreviewPane) closeWidgetLocked() {
-	if p.widget != nil {
-		p.widget.Close()
-		p.widget = nil
+func (p *mediaPreviewPane) closeMediaLocked() {
+	if p.video != nil {
+		p.video.Close()
+		p.video = nil
 	}
+	if p.preview != nil {
+		p.preview.Close()
+		p.preview = nil
+	}
+	p.videoEnded = false
 }
 
 func (p *mediaPreviewPane) Title() string {
@@ -101,8 +109,7 @@ func (p *mediaPreviewPane) SetMessage(msg string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.cancelLoadingLocked()
-	p.closeWidgetLocked()
-	p.generation++
+	p.closeMediaLocked()
 	p.currentPath = ""
 	p.playing = false
 	p.message = msg
@@ -111,29 +118,20 @@ func (p *mediaPreviewPane) SetMessage(msg string) {
 func (p *mediaPreviewPane) SetPath(path string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if path == p.currentPath && (p.widget != nil || p.loading) {
+	if path == p.currentPath && (p.preview != nil || p.video != nil || p.loading) {
 		return
 	}
 	p.currentPath = path
 	p.playing = false
 	p.message = ""
-	p.loadWidgetLocked()
+	p.closeMediaLocked()
+	p.loadPreviewLocked()
 }
 
-func (p *mediaPreviewPane) loadWidgetLocked() {
+func (p *mediaPreviewPane) loadPreviewLocked() {
 	p.cancelLoadingLocked()
-	p.closeWidgetLocked()
 	p.generation++
 	if p.currentPath == "" {
-		return
-	}
-	if halfblock.IsVideo(p.currentPath) && p.playing {
-		w, err := newVideoWidget(p.currentPath, p.mode, p.fps)
-		if err != nil {
-			p.message = "Video error: " + err.Error()
-			return
-		}
-		p.widget = w
 		return
 	}
 
@@ -185,8 +183,10 @@ func (p *mediaPreviewPane) loadWidgetLocked() {
 			}
 			return
 		}
-		p.closeWidgetLocked()
-		p.widget = w
+		if p.preview != nil {
+			p.preview.Close()
+		}
+		p.preview = w
 	}(gen, path, mode)
 }
 
@@ -201,7 +201,32 @@ func (p *mediaPreviewPane) CycleMode() {
 	default:
 		p.mode = media.ModeHalfblock
 	}
-	p.loadWidgetLocked()
+	if p.currentPath == "" {
+		return
+	}
+	if halfblock.IsVideo(p.currentPath) {
+		if p.playing {
+			if p.video != nil {
+				p.video.Close()
+				p.video = nil
+			}
+			w, err := newVideoWidget(p.currentPath, p.mode, p.fps)
+			if err != nil {
+				p.message = "Video error: " + err.Error()
+				p.playing = false
+				return
+			}
+			p.video = w
+		} else {
+			if p.video != nil {
+				p.video.Close()
+				p.video = nil
+			}
+			p.loadPreviewLocked()
+		}
+	} else {
+		p.loadPreviewLocked()
+	}
 }
 
 func (p *mediaPreviewPane) TogglePlay() {
@@ -211,7 +236,23 @@ func (p *mediaPreviewPane) TogglePlay() {
 		return
 	}
 	p.playing = !p.playing
-	p.loadWidgetLocked()
+	if p.playing {
+		p.cancelLoadingLocked()
+		if p.video == nil || p.videoEnded {
+			if p.video != nil {
+				p.video.Close()
+				p.video = nil
+			}
+			p.videoEnded = false
+			w, err := newVideoWidget(p.currentPath, p.mode, p.fps)
+			if err != nil {
+				p.message = "Video error: " + err.Error()
+				p.playing = false
+				return
+			}
+			p.video = w
+		}
+	}
 }
 
 func (p *mediaPreviewPane) Draw(c *loom.Canvas, r loom.Rect) {
@@ -220,14 +261,17 @@ func (p *mediaPreviewPane) Draw(c *loom.Canvas, r loom.Rect) {
 	msg := p.message
 	loading := p.loading
 	loadingMsg := p.loadingMsg
-	w := p.widget
+	w := p.video
+	if w == nil {
+		w = p.preview
+	}
 	p.mu.Unlock()
 
 	if msg != "" {
 		c.Write(r.X, r.Y, msg, loom.Style{Dim: true})
 		return
 	}
-	if loading {
+	if loading && w == nil {
 		if loadingMsg == "" {
 			loadingMsg = "Loading..."
 		}
@@ -243,27 +287,35 @@ func (p *mediaPreviewPane) Draw(c *loom.Canvas, r loom.Rect) {
 
 func (p *mediaPreviewPane) Tick(now time.Time) {
 	p.mu.Lock()
-	w := p.widget
+	w := p.video
+	playing := p.playing
 	p.mu.Unlock()
-	if w != nil {
+	if w != nil && playing {
 		w.Tick(now)
+		if w.TickInterval() == 0 {
+			p.mu.Lock()
+			p.videoEnded = true
+			p.mu.Unlock()
+		}
 	}
 }
 
 func (p *mediaPreviewPane) TickInterval() time.Duration {
 	p.mu.Lock()
-	w := p.widget
+	video := p.video
 	loading := p.loading
 	fps := p.fps
 	playing := p.playing
 	p.mu.Unlock()
-	if w != nil {
-		if interval := w.TickInterval(); interval > 0 {
-			return interval
+	if playing {
+		if video != nil {
+			if interval := video.TickInterval(); interval > 0 {
+				return interval
+			}
 		}
-	}
-	if playing && fps > 0 {
-		return time.Duration(float64(time.Second) / fps)
+		if fps > 0 {
+			return time.Duration(float64(time.Second) / fps)
+		}
 	}
 	if loading {
 		return 50 * time.Millisecond
@@ -272,11 +324,11 @@ func (p *mediaPreviewPane) TickInterval() time.Duration {
 }
 
 func (p *mediaPreviewPane) HandleKey(k loom.KeyEvent) bool {
-	if k.Is("m") {
+	if k.Is("m") || k.Is("M") {
 		p.CycleMode()
 		return false
 	}
-	if k.Is("p") {
+	if k.Is("p") || k.Is("P") {
 		p.TogglePlay()
 		return false
 	}
