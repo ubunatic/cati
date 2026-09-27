@@ -47,7 +47,7 @@ logo: ⚙️ build ## animate the cati logo (q or Ctrl+C to stop)
 	./$(BINARY) play --fps 4 assets/
 
 install: ⚙️ build  ## install to ~/go/bin (user)
-	go install ./cmd/cati ./cmd/catiplay ./cmd/catibrowse ./examples/imgbrowser
+	go install ./cmd/cati ./cmd/catiplay ./cmd/catibrowse ./examples/imgbrowser ./examples/mediabrowse
 
 # Tests run twice: default CATI_FASTPATH=1, then 0 (simple reference paths).
 # core.Fastpath is read at package init, before go test records env lookups,
