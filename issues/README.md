@@ -69,6 +69,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 063 | [063-show-only-known-loom-themes-in-mediabrowse.md](063-show-only-known-loom-themes-in-mediabrowse.md) | Show only known Loom themes in mediabrowse | Closed |
 | 064 | [064-use-loom-s-standard-navigation-pane-in-mediabrowse.md](064-use-loom-s-standard-navigation-pane-in-mediabrowse.md) | Use Loom's standard navigation pane in mediabrowse | Closed |
 | 065 | [065-mediabrowse-video-playback-and-fullscreen-shortcuts-do-not-work.md](065-mediabrowse-video-playback-and-fullscreen-shortcuts-do-not-work.md) | Mediabrowse video playback and fullscreen shortcuts do not work | Closed |
+| 066 | [066-mediabrowse-play-pause-should-not-reload-the-video-preview.md](066-mediabrowse-play-pause-should-not-reload-the-video-preview.md) | Mediabrowse play/pause should not reload the video preview | Open |
 
 ## Archived
 
