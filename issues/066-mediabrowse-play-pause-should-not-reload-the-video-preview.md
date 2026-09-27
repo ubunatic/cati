@@ -1,6 +1,6 @@
 # 066 — Mediabrowse play/pause should not reload the video preview
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug
@@ -18,3 +18,6 @@ After selecting a video, mediabrowse loads and displays its preview. Pressing pl
 **Goal**: `/goal Make repeated play/pause actions control the selected video without reloading its preview; verify playback and pause/resume behavior, or stop and report if a required Loom capability is unavailable.`
 
 Separate playback control from file/preview loading, retaining the loaded preview and selected file across toggles. Add regression coverage for repeated play/pause and verify with a manual mediabrowse video playback check.
+
+## 4. Resolution
+Separated still preview thumbnail decoding (`p.preview`) from active video stream playback (`p.video`) in `examples/mediabrowse/preview_pane.go`. Repeated play/pause toggles now control video stream advancement and frame drawing directly without destroying or reloading the preview or resetting playback state. Added unit regression coverage and updated integration test assertions for repeated play/pause.
