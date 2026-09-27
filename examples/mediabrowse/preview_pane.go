@@ -254,9 +254,16 @@ func (p *mediaPreviewPane) TickInterval() time.Duration {
 	p.mu.Lock()
 	w := p.widget
 	loading := p.loading
+	fps := p.fps
+	playing := p.playing
 	p.mu.Unlock()
 	if w != nil {
-		return w.TickInterval()
+		if interval := w.TickInterval(); interval > 0 {
+			return interval
+		}
+	}
+	if playing && fps > 0 {
+		return time.Duration(float64(time.Second) / fps)
 	}
 	if loading {
 		return 50 * time.Millisecond

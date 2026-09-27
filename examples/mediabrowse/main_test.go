@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"codeberg.org/ubunatic/loom"
 	"codeberg.org/ubunatic/loom/media"
@@ -134,5 +135,36 @@ func TestRootCommandReportsInvalidDirectory(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "no such file") {
 		t.Fatalf("Execute() error = %v, want missing directory error", err)
+	}
+}
+
+func TestRealVideoPlaybackIntegration(t *testing.T) {
+	videoPath := filepath.Join("..", "..", "testdata", "baby-60p-nn.webm")
+	if _, err := os.Stat(videoPath); err != nil {
+		t.Skip("testdata/baby-60p-nn.webm not found, skipping real video test")
+	}
+
+	a, err := newApp(filepath.Dir(videoPath), "mc", media.ModeHalfblock, 24, false, 20, filepath.Base(videoPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+
+	// Toggle play
+	a.HandleKey(loom.KeyEvent{Text: "p"})
+	if !a.preview.playing {
+		t.Fatal("expected video to enter playing state")
+	}
+
+	// Tick multiple times and draw
+	for i := 0; i < 5; i++ {
+		time.Sleep(10 * time.Millisecond)
+		a.Tick(time.Now())
+	}
+
+	c := loom.NewCanvas(60, 20)
+	a.Draw(c, loom.Rect{W: 60, H: 20})
+	if title := a.preview.Title(); !strings.Contains(title, "playing") {
+		t.Fatalf("preview title = %q, want playing", title)
 	}
 }

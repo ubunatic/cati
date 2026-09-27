@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"codeberg.org/ubunatic/loom"
 	"codeberg.org/ubunatic/loom/examples/filebrowser/filebrowser"
@@ -339,4 +340,17 @@ func (a *app) HandleMouse(m loom.MouseEvent) bool {
 	quit := a.frame.HandleMouse(m)
 	a.updatePreview()
 	return quit
+}
+
+func (a *app) Tick(now time.Time) {
+	if a.preview != nil {
+		a.preview.Tick(now)
+	}
+}
+
+func (a *app) TickInterval() time.Duration {
+	if a.preview != nil {
+		return a.preview.TickInterval()
+	}
+	return 0
 }

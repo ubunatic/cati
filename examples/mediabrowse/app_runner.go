@@ -80,7 +80,8 @@ func runBrowser(targetPath string, opts options) error {
 		Redraw:  40 * time.Millisecond,
 	}
 
-	return pane.RunWatch(context.Background(), app, cadence, func(time.Time) error {
+	return pane.RunWatch(context.Background(), app, cadence, func(now time.Time) error {
+		app.Tick(now)
 		return nil
 	})
 }

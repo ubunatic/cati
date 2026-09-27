@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"codeberg.org/ubunatic/loom"
 	"codeberg.org/ubunatic/loom/media"
@@ -284,5 +285,45 @@ func TestCycleThemeVisitsEverySpeccedThemeAndWraps(t *testing.T) {
 		if a.themeName != want || a.theme != loom.SpeccedThemes[want] {
 			t.Fatalf("cycle %d = %q, want %q", i, a.themeName, want)
 		}
+	}
+}
+
+func TestAppTickerInterface(t *testing.T) {
+	withWidgetFactories(t)
+	loadImageWidget = func(_ context.Context, _ string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
+		return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
+	}
+	newVideoWidget = func(_ string, mode media.Mode, _ float64) (*media.Widget, error) {
+		return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
+	}
+
+	root := t.TempDir()
+	writeFixture(t, filepath.Join(root, "clip.mp4"))
+	a, err := newApp(root, "mc", media.ModeHalfblock, 24, false, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+
+	var ticker loom.Ticker = a
+	waitForCondition(t, 200*time.Millisecond, func() bool {
+		a.preview.mu.Lock()
+		defer a.preview.mu.Unlock()
+		return !a.preview.loading
+	})
+	if interval := ticker.TickInterval(); interval != 0 {
+		t.Fatalf("idle ticker interval = %v, want 0", interval)
+	}
+
+	// Toggle play on video
+	a.HandleKey(loom.KeyEvent{Text: "p"})
+	if !a.preview.playing {
+		t.Fatal("expected video to enter playing state")
+	}
+
+	// When playing, TickInterval should return non-zero interval and Tick should not panic
+	ticker.Tick(time.Now())
+	if interval := ticker.TickInterval(); interval <= 0 {
+		t.Fatalf("playing video ticker interval = %v, want > 0", interval)
 	}
 }
