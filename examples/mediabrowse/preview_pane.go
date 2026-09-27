@@ -1,30 +1,45 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"codeberg.org/ubunatic/loom"
 	"codeberg.org/ubunatic/loom/media"
 
+	"ubunatic.com/cati/v1/core"
 	"ubunatic.com/cati/v1/halfblock"
 )
 
 type mediaPreviewPane struct {
+	mu          sync.Mutex
 	mode        media.Mode
 	currentPath string
 	message     string
+	loading     bool
+	loadingMsg  string
 	widget      *media.Widget
 	fps         float64
 	playing     bool
 	focused     bool
 	lastRect    loom.Rect
+	cancel      context.CancelFunc
+	generation  uint64
 }
 
 var (
-	loadImageWidget = media.LoadImage
-	newVideoWidget  = media.NewVideo
+	loadImageWidget = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
+		img, err := halfblock.LoadImageContext(ctx, path, onProgress)
+		if err != nil {
+			return nil, err
+		}
+		return media.NewImage(img, mode)
+	}
+	newVideoWidget = media.NewVideo
 )
 
 func newMediaPreviewPane(mode media.Mode, fps float64) *mediaPreviewPane {
@@ -38,6 +53,22 @@ func newMediaPreviewPane(mode media.Mode, fps float64) *mediaPreviewPane {
 }
 
 func (p *mediaPreviewPane) Close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cancelLoadingLocked()
+	p.closeWidgetLocked()
+}
+
+func (p *mediaPreviewPane) cancelLoadingLocked() {
+	if p.cancel != nil {
+		p.cancel()
+		p.cancel = nil
+	}
+	p.loading = false
+	p.loadingMsg = ""
+}
+
+func (p *mediaPreviewPane) closeWidgetLocked() {
 	if p.widget != nil {
 		p.widget.Close()
 		p.widget = nil
@@ -45,6 +76,8 @@ func (p *mediaPreviewPane) Close() {
 }
 
 func (p *mediaPreviewPane) Title() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.currentPath == "" {
 		return "Preview"
 	}
@@ -53,60 +86,110 @@ func (p *mediaPreviewPane) Title() string {
 		status := "paused"
 		if p.playing {
 			status = "playing"
+		} else if p.loading {
+			status = "loading..."
 		}
 		return fmt.Sprintf("🎬 %s [%s, %s]", base, p.mode, status)
+	}
+	if p.loading {
+		return fmt.Sprintf("🖼️ %s [%s, loading...]", base, p.mode)
 	}
 	return fmt.Sprintf("🖼️ %s [%s]", base, p.mode)
 }
 
 func (p *mediaPreviewPane) SetMessage(msg string) {
-	p.Close()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cancelLoadingLocked()
+	p.closeWidgetLocked()
 	p.currentPath = ""
 	p.message = msg
 }
 
 func (p *mediaPreviewPane) SetPath(path string) {
-	if path == p.currentPath && p.widget != nil {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if path == p.currentPath && (p.widget != nil || p.loading) {
 		return
 	}
 	p.currentPath = path
 	p.message = ""
-	p.loadWidget()
+	p.loadWidgetLocked()
 }
 
-func (p *mediaPreviewPane) loadWidget() {
-	p.Close()
+func (p *mediaPreviewPane) loadWidgetLocked() {
+	p.cancelLoadingLocked()
+	p.closeWidgetLocked()
 	if p.currentPath == "" {
 		return
 	}
-	if halfblock.IsVideo(p.currentPath) {
-		if p.playing {
-			w, err := newVideoWidget(p.currentPath, p.mode, p.fps)
-			if err != nil {
-				p.message = "Video error: " + err.Error()
-				return
-			}
-			p.widget = w
-		} else {
-			w, err := loadImageWidget(p.currentPath, p.mode)
-			if err != nil {
-				p.message = "Preview error: " + err.Error()
-				return
-			}
-			p.widget = w
+	if halfblock.IsVideo(p.currentPath) && p.playing {
+		w, err := newVideoWidget(p.currentPath, p.mode, p.fps)
+		if err != nil {
+			p.message = "Video error: " + err.Error()
+			return
 		}
+		p.widget = w
 		return
 	}
 
-	w, err := loadImageWidget(p.currentPath, p.mode)
-	if err != nil {
-		p.message = "Load error: " + err.Error()
-		return
-	}
-	p.widget = w
+	p.loading = true
+	p.loadingMsg = "Loading..."
+	p.generation++
+	gen := p.generation
+	ctx, cancel := context.WithCancel(context.Background())
+	p.cancel = cancel
+	path := p.currentPath
+	mode := p.mode
+
+	go func(gen uint64, path string, mode media.Mode) {
+		w, err := loadImageWidget(ctx, path, mode, func(prog core.Progress) {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			if p.generation != gen || !p.loading {
+				return
+			}
+			if prog.Ratio > 0 {
+				if prog.Stage != "" {
+					p.loadingMsg = fmt.Sprintf("Loading %.0f%% (%s)", prog.Ratio*100, prog.Stage)
+				} else {
+					p.loadingMsg = fmt.Sprintf("Loading %.0f%%", prog.Ratio*100)
+				}
+			} else if prog.Stage != "" {
+				p.loadingMsg = fmt.Sprintf("Loading (%s)...", prog.Stage)
+			}
+		})
+
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if p.generation != gen {
+			if w != nil {
+				w.Close()
+			}
+			return
+		}
+		p.loading = false
+		p.loadingMsg = ""
+		p.cancel = nil
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return
+			}
+			if halfblock.IsVideo(path) {
+				p.message = "Preview error: " + err.Error()
+			} else {
+				p.message = "Load error: " + err.Error()
+			}
+			return
+		}
+		p.closeWidgetLocked()
+		p.widget = w
+	}(gen, path, mode)
 }
 
 func (p *mediaPreviewPane) CycleMode() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	switch p.mode {
 	case media.ModeHalfblock:
 		p.mode = media.ModeQuadblock
@@ -115,39 +198,65 @@ func (p *mediaPreviewPane) CycleMode() {
 	default:
 		p.mode = media.ModeHalfblock
 	}
-	p.loadWidget()
+	p.loadWidgetLocked()
 }
 
 func (p *mediaPreviewPane) TogglePlay() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.currentPath == "" || !halfblock.IsVideo(p.currentPath) {
 		return
 	}
 	p.playing = !p.playing
-	p.loadWidget()
+	p.loadWidgetLocked()
 }
 
 func (p *mediaPreviewPane) Draw(c *loom.Canvas, r loom.Rect) {
+	p.mu.Lock()
 	p.lastRect = r
-	if p.message != "" {
-		c.Write(r.X, r.Y, p.message, loom.Style{Dim: true})
+	msg := p.message
+	loading := p.loading
+	loadingMsg := p.loadingMsg
+	w := p.widget
+	p.mu.Unlock()
+
+	if msg != "" {
+		c.Write(r.X, r.Y, msg, loom.Style{Dim: true})
 		return
 	}
-	if p.widget != nil {
-		p.widget.Draw(c, r)
+	if loading {
+		if loadingMsg == "" {
+			loadingMsg = "Loading..."
+		}
+		c.Write(r.X, r.Y, loadingMsg, loom.Style{Dim: true})
+		return
+	}
+	if w != nil {
+		w.Draw(c, r)
 		return
 	}
 	c.Write(r.X, r.Y, "No media loaded", loom.Style{Dim: true})
 }
 
 func (p *mediaPreviewPane) Tick(now time.Time) {
-	if p.widget != nil {
-		p.widget.Tick(now)
+	p.mu.Lock()
+	w := p.widget
+	p.mu.Unlock()
+	if w != nil {
+		w.Tick(now)
 	}
 }
 
 func (p *mediaPreviewPane) TickInterval() time.Duration {
-	if p.widget != nil {
-		return p.widget.TickInterval()
+	p.mu.Lock()
+	w := p.widget
+	loading := p.loading
+	p.mu.Unlock()
+	if w != nil {
+		return w.TickInterval()
+	}
+	if loading {
+		return 50 * time.Millisecond
 	}
 	return 0
 }
@@ -171,5 +280,14 @@ func (p *mediaPreviewPane) HandleMouse(m loom.MouseEvent) bool {
 	return false
 }
 
-func (p *mediaPreviewPane) Focused() bool         { return p.focused }
-func (p *mediaPreviewPane) SetFocus(focused bool) { p.focused = focused }
+func (p *mediaPreviewPane) Focused() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.focused
+}
+
+func (p *mediaPreviewPane) SetFocus(focused bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.focused = focused
+}

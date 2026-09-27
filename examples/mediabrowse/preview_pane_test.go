@@ -1,18 +1,35 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"codeberg.org/ubunatic/loom"
 	"codeberg.org/ubunatic/loom/media"
+
+	"ubunatic.com/cati/v1/core"
 )
 
 func withWidgetFactories(t *testing.T) {
 	t.Helper()
 	oldImage, oldVideo := loadImageWidget, newVideoWidget
 	t.Cleanup(func() { loadImageWidget, newVideoWidget = oldImage, oldVideo })
+}
+
+func waitForCondition(t *testing.T, timeout time.Duration, cond func() bool) {
+	t.Helper()
+	start := time.Now()
+	for time.Since(start) < timeout {
+		if cond() {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for condition")
 }
 
 func TestPreviewPaneConstructionStateAndMessages(t *testing.T) {
@@ -37,7 +54,7 @@ func TestPreviewPaneConstructionStateAndMessages(t *testing.T) {
 func TestPreviewPaneModeCycleAndImageDispatch(t *testing.T) {
 	withWidgetFactories(t)
 	var modes []media.Mode
-	loadImageWidget = func(_ string, mode media.Mode) (*media.Widget, error) {
+	loadImageWidget = func(_ context.Context, _ string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
 		modes = append(modes, mode)
 		return nil, nil
 	}
@@ -47,11 +64,19 @@ func TestPreviewPaneModeCycleAndImageDispatch(t *testing.T) {
 	}
 	p := newMediaPreviewPane(media.ModeHalfblock, 30)
 	p.SetPath("still.png")
+	waitForCondition(t, 200*time.Millisecond, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return !p.loading && len(modes) == 1
+	})
+
 	for _, want := range []media.Mode{media.ModeQuadblock, media.ModeSextant, media.ModeHalfblock} {
 		p.CycleMode()
-		if p.mode != want {
-			t.Errorf("mode after cycle = %q, want %q", p.mode, want)
-		}
+		waitForCondition(t, 200*time.Millisecond, func() bool {
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			return !p.loading && p.mode == want
+		})
 	}
 	if len(modes) != 4 {
 		t.Fatalf("image loader called %d times, want initial load plus three mode changes", len(modes))
@@ -69,7 +94,7 @@ func TestPreviewPaneModeCycleAndImageDispatch(t *testing.T) {
 func TestPreviewPaneVideoDispatchAndErrors(t *testing.T) {
 	withWidgetFactories(t)
 	imageCalls, videoCalls := 0, 0
-	loadImageWidget = func(path string, mode media.Mode) (*media.Widget, error) {
+	loadImageWidget = func(_ context.Context, path string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
 		imageCalls++
 		if filepath.Ext(path) != ".mp4" || mode != media.ModeHalfblock {
 			t.Errorf("image loader args = %q, %q", path, mode)
@@ -85,9 +110,15 @@ func TestPreviewPaneVideoDispatchAndErrors(t *testing.T) {
 	}
 	p := newMediaPreviewPane(media.ModeHalfblock, 18)
 	p.SetPath("clip.mp4")
+	waitForCondition(t, 200*time.Millisecond, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return !p.loading && imageCalls == 1
+	})
 	if imageCalls != 1 || videoCalls != 0 || p.playing {
 		t.Fatalf("paused video dispatch: image=%d video=%d playing=%v", imageCalls, videoCalls, p.playing)
 	}
+
 	p.TogglePlay()
 	if imageCalls != 1 || videoCalls != 1 || !p.playing {
 		t.Fatalf("playing video dispatch: image=%d video=%d playing=%v", imageCalls, videoCalls, p.playing)
@@ -95,28 +126,93 @@ func TestPreviewPaneVideoDispatchAndErrors(t *testing.T) {
 	if title := p.Title(); title != "🎬 clip.mp4 [halfblock, playing]" {
 		t.Errorf("playing title = %q", title)
 	}
+
 	p.SetMessage("replaced")
 	if p.currentPath != "" || p.message != "replaced" || p.playing != true {
 		t.Errorf("SetMessage state: path=%q message=%q playing=%v", p.currentPath, p.message, p.playing)
 	}
 
-	loadImageWidget = func(string, media.Mode) (*media.Widget, error) { return nil, errors.New("bad image") }
-	p.SetPath("broken.jpg")
-	if p.message != "Load error: bad image" {
-		t.Errorf("image error message = %q", p.message)
+	loadImageWidget = func(_ context.Context, _ string, _ media.Mode, _ func(core.Progress)) (*media.Widget, error) {
+		return nil, errors.New("bad image")
 	}
+	p.SetPath("broken.jpg")
+	waitForCondition(t, 200*time.Millisecond, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return !p.loading && p.message == "Load error: bad image"
+	})
+}
+
+func TestPreviewPaneProgressAndCancellation(t *testing.T) {
+	withWidgetFactories(t)
+	unblock := make(chan struct{})
+	firstStarted := make(chan struct{})
+
+	loadImageWidget = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
+		if path == "slow.png" {
+			close(firstStarted)
+			onProgress(core.Progress{Stage: "decoding", Ratio: 0.42})
+			select {
+			case <-unblock:
+				return nil, nil
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return nil, nil
+	}
+
+	p := newMediaPreviewPane(media.ModeHalfblock, 24)
+	p.SetPath("slow.png")
+	<-firstStarted
+
+	waitForCondition(t, 200*time.Millisecond, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return p.loading && strings.Contains(p.loadingMsg, "42%")
+	})
+
+	c := loom.NewCanvas(40, 10)
+	p.Draw(c, loom.Rect{W: 40, H: 10})
+	if !strings.Contains(p.Title(), "loading...") {
+		t.Errorf("title during load = %q, want loading indicator", p.Title())
+	}
+	if p.TickInterval() != 50*time.Millisecond {
+		t.Errorf("loading tick interval = %v, want 50ms", p.TickInterval())
+	}
+
+	// Setting a new path cancels the previous slow load
+	p.SetPath("fast.png")
+	waitForCondition(t, 200*time.Millisecond, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return !p.loading && p.currentPath == "fast.png"
+	})
+	close(unblock)
 }
 
 func TestPreviewPaneKeyHandlingAndStillPlayNoop(t *testing.T) {
 	withWidgetFactories(t)
-	loadImageWidget = func(string, media.Mode) (*media.Widget, error) { return nil, nil }
+	loadImageWidget = func(_ context.Context, _ string, _ media.Mode, _ func(core.Progress)) (*media.Widget, error) {
+		return nil, nil
+	}
 	newVideoWidget = func(string, media.Mode, float64) (*media.Widget, error) {
 		t.Fatal("still image play toggle attempted video load")
 		return nil, nil
 	}
 	p := newMediaPreviewPane(media.ModeHalfblock, 24)
 	p.SetPath("still.png")
+	waitForCondition(t, 200*time.Millisecond, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return !p.loading
+	})
 	p.HandleKey(loom.KeyEvent{Text: "m"})
+	waitForCondition(t, 200*time.Millisecond, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return !p.loading && p.mode == media.ModeQuadblock
+	})
 	if p.mode != media.ModeQuadblock {
 		t.Fatalf("mode after key = %q", p.mode)
 	}
