@@ -1,6 +1,6 @@
 # 062 — Async Media Loading and Rendering with Progress
 
-**Status**: Open
+**Status**: In Progress
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Feature
@@ -14,10 +14,20 @@ Loading preview videos can take 1–2 seconds, and high-resolution images or vid
 
 ## 2. Technical Specification / Findings
 
-Add an optional API/protocol for asynchronous media loading and rendering that reports progress. It should cover both loading media and rendering it, while preserving the existing synchronous usage for callers that do not need progress. The exact progress representation and cancellation/error semantics should be settled during implementation.
+Add an optional API/protocol for asynchronous media loading and rendering that reports progress. It should cover both loading media and rendering it, while preserving the existing synchronous usage for callers that do not need progress.
 
-## 3. Implementation & Verification Plan
+## 3. Implementation Milestones
 
-**Goal**: Provide an optional Go API for asynchronous media loading and rendering with useful progress updates, retaining the existing synchronous path. Done when the API is documented and tests verify progress delivery and completion/error behavior; if a required protocol or behavior decision is blocked on user input or denied permission, stop and report the decision needed.
+### M1 (Progress Types & Async Image/Media Loader API)
+- Define typed progress events in `v1/core`: `Progress{ Stage string, Ratio float64, Current int, Total int, Message string }`.
+- Add progress-aware image/media loading in `v1/halfblock` (and `v1/core`): `LoadImageContext(ctx context.Context, path string, onProgress func(core.Progress)) (image.Image, error)` and `LoadImageAsync(...)`.
+- Add unit tests verifying progress callbacks, cancellation via `context.Context`, and zero-overhead synchronous paths.
 
-Verify with focused Go tests for both asynchronous stages and the existing synchronous behavior, plus `go vet ./...` and `make install`.
+### M2 (Progress-Aware Rendering Pipeline)
+- Add optional `Progress func(core.Progress)` / `OnProgress` to renderer options across algorithms (`halfblock.Options`, `quadblock.Options`, `sextant.Options`, `sparkline.Options`).
+- Emit progress updates during chunk/row processing in parallel render loops when the callback is set.
+- Add unit tests covering progress reporting and bounds clamping (`0.0 <= Ratio <= 1.0`).
+
+### M3 (Docs, Verification & Preflight)
+- Update `docs/GoLibrary.md` and `docs/Video.md` with async and progress usage patterns.
+- Run full test suite (`go test ./...`), `make preflight`, and `make install`.
