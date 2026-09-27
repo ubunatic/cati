@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 
 	"codeberg.org/ubunatic/loom"
@@ -100,25 +99,17 @@ func newApp(dir, themeName string, initialMode media.Mode, fps float64, imagesOn
 }
 
 func themeNames() []string {
-	names := make([]string, 0, len(loom.SpeccedThemes))
-	for name := range loom.SpeccedThemes {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	return loom.ThemeNames()
 }
 
 func resolveTheme(name string) (string, loom.ThemeColors) {
-	if theme, ok := loom.SpeccedThemes[name]; ok {
-		return name, theme
+	if loom.ThemeExists(name) {
+		return name, loom.Theme(name)
 	}
-	if theme, ok := loom.SpeccedThemes["mc"]; ok {
-		return "mc", theme
+	if loom.ThemeExists("mc") {
+		return "mc", loom.Theme("mc")
 	}
-	if theme, ok := loom.SpeccedThemes["plain"]; ok {
-		return "plain", theme
-	}
-	return "", loom.ThemeColors{}
+	return "plain", loom.Theme("plain")
 }
 
 func (a *app) Close() {
@@ -191,7 +182,6 @@ func (a *app) open(dir string, initialSelection ...string) error {
 	a.navigation = nav
 	a.dir = nav.Directory().Path
 	nav.List().ApplyTheme(a.theme)
-	nav.List().Placeholder = "type to filter"
 	a.frame.Boxes[0].Child = nav
 	if a.imagesOnly {
 		a.filterMediaItems()
