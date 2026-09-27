@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"codeberg.org/ubunatic/loom"
+	"codeberg.org/ubunatic/loom/examples/filebrowser/filebrowser"
 	"codeberg.org/ubunatic/loom/media"
 
 	"ubunatic.com/cati/v1/halfblock"
@@ -40,10 +41,9 @@ func openSystemViewer(path string) error {
 
 type app struct {
 	frame      *loom.Frame
-	list       *loom.Choice
+	navigation *filebrowser.NavigationPane
 	preview    *mediaPreviewPane
 	dir        string
-	paths      map[string]string
 	themeName  string
 	theme      loom.ThemeColors
 	imagesOnly bool
@@ -133,8 +133,8 @@ func (a *app) applyTheme(name string, theme loom.ThemeColors) {
 	for i := range a.frame.Boxes {
 		a.frame.Boxes[i].Style = theme.BoxStyle()
 	}
-	if a.list != nil {
-		a.list.ApplyTheme(theme)
+	if a.navigation != nil {
+		a.navigation.ApplyTheme(theme)
 	}
 }
 
@@ -167,79 +167,105 @@ func (a *app) toggleFullscreen() {
 }
 
 func (a *app) open(dir string, initialSelection ...string) error {
-	entries, err := os.ReadDir(dir)
+	selectName := ""
+	if len(initialSelection) > 0 {
+		selectName = initialSelection[0]
+	}
+	nav, err := filebrowser.NewNavigationPane(dir, filebrowser.NavigationPaneOptions{
+		OnSelection: func(entry loom.FileEntry) {
+			if a.navigation != nil {
+				a.showEntry(entry)
+			}
+		},
+		OnActivate: func(entry loom.FileEntry) { _ = openSystemViewer(entry.Path) },
+		OnOpen: func(directory loom.Directory) {
+			a.dir = directory.Path
+			if a.imagesOnly {
+				a.filterMediaItems()
+			}
+		},
+	})
 	if err != nil {
 		return err
 	}
-
-	items := make([]loom.Item, 0, len(entries)+1)
-	paths := make(map[string]string, len(entries)+1)
-
-	if parent := filepath.Dir(dir); parent != dir {
-		items = append(items, loom.Item{Name: "..", Desc: "parent directory"})
-		paths[".."] = parent
+	a.navigation = nav
+	a.dir = nav.Directory().Path
+	nav.List().ApplyTheme(a.theme)
+	nav.List().Placeholder = "type to filter"
+	a.frame.Boxes[0].Child = nav
+	if a.imagesOnly {
+		a.filterMediaItems()
 	}
-
-	for _, entry := range entries {
-		name := entry.Name()
-		fullPath := filepath.Join(dir, name)
-		if entry.IsDir() {
-			items = append(items, loom.Item{Name: name, Desc: "<dir>"})
-			paths[name] = fullPath
-		} else {
-			if a.imagesOnly && !isMediaFile(name) {
-				continue
-			}
-			desc := ""
-			if isMediaFile(name) {
-				if halfblock.IsVideo(name) {
-					desc = "video"
-				} else {
-					desc = "image"
-				}
-			}
-			items = append(items, loom.Item{Name: name, Desc: desc})
-			paths[name] = fullPath
-		}
+	if selectName != "" {
+		a.selectByName(selectName)
 	}
-
-	list := loom.NewChoice(items)
-	list.SelectOnlyOnClick = true
-	list.DoubleClickToActivate = true
-	list.Prompt = "filter> "
-	list.Placeholder = "[/] search"
-	list.ApplyTheme(a.theme)
-
-	list.OnSelect = func(item loom.Item) {
-		p := paths[item.Name]
-		if info, err := os.Stat(p); err == nil {
-			if info.IsDir() {
-				prevBase := filepath.Base(a.dir)
-				if err := a.open(p); err == nil && item.Name == ".." {
-					a.selectByName(prevBase)
-				}
-			} else {
-				_ = openSystemViewer(p)
-			}
-		}
-	}
-
-	a.dir, a.paths, a.list = dir, paths, list
-	a.frame.Boxes[0].Child = list
-
-	if len(initialSelection) > 0 && initialSelection[0] != "" {
-		a.selectByName(initialSelection[0])
-	}
-
 	a.updatePreview()
 	return nil
 }
 
+func (a *app) filterMediaItems() {
+	if a.navigation == nil {
+		return
+	}
+	directory := a.navigation.Directory()
+	selected, hadSelection := a.navigation.Selected()
+	items := make([]loom.Item, 0, len(directory.Entries))
+	for _, entry := range directory.Entries {
+		if a.imagesOnly && entry.Kind != loom.FileKindDirectory && !isMediaFile(entry.Name) {
+			continue
+		}
+		desc := ""
+		if entry.IsParent {
+			desc = "parent directory"
+		} else if entry.Kind == loom.FileKindDirectory {
+			desc = "<dir>"
+		} else if isMediaFile(entry.Name) && halfblock.IsVideo(entry.Name) {
+			desc = "video"
+		} else if isMediaFile(entry.Name) {
+			desc = "image"
+		}
+		items = append(items, loom.Item{Name: entry.DisplayName(), Desc: desc})
+	}
+	a.navigation.List().SetItems(items)
+	if hadSelection {
+		for i, item := range items {
+			if item.Name == selected.DisplayName() {
+				a.navigation.List().SelectIndex(i)
+				break
+			}
+		}
+	}
+}
+
+func (a *app) showEntry(entry loom.FileEntry) {
+	if a.navigation != nil {
+		a.dir = a.navigation.Directory().Path
+	}
+	if entry.Kind == loom.FileKindDirectory {
+		a.preview.SetMessage("<dir> " + entry.DisplayName())
+		return
+	}
+	if !isMediaFile(entry.Path) {
+		info, err := os.Stat(entry.Path)
+		if err != nil {
+			a.preview.SetMessage("Error: " + err.Error())
+			return
+		}
+		a.preview.SetMessage(fmt.Sprintf("%s (%d bytes)", entry.DisplayName(), info.Size()))
+		return
+	}
+	a.preview.SetPath(entry.Path)
+}
+
 func (a *app) selectByName(name string) {
-	for i, item := range a.list.Items {
+	if a.navigation == nil {
+		return
+	}
+	for i, item := range a.navigation.List().Items {
 		if item.Name == name {
-			for j := 0; j < i; j++ {
-				a.list.HandleKey(loom.KeyEvent{Key: "down"})
+			a.navigation.List().SelectIndex(i)
+			if entry, ok := a.navigation.Selected(); ok {
+				a.showEntry(entry)
 			}
 			return
 		}
@@ -247,26 +273,16 @@ func (a *app) selectByName(name string) {
 }
 
 func (a *app) updatePreview() {
-	item, ok := a.list.Selected()
+	if a.navigation == nil {
+		a.preview.SetMessage("No selection")
+		return
+	}
+	entry, ok := a.navigation.Selected()
 	if !ok {
 		a.preview.SetMessage("No selection")
 		return
 	}
-	path := a.paths[item.Name]
-	info, err := os.Stat(path)
-	if err != nil {
-		a.preview.SetMessage("Error: " + err.Error())
-		return
-	}
-	if info.IsDir() {
-		a.preview.SetMessage("<dir> " + item.Name)
-		return
-	}
-	if !isMediaFile(path) {
-		a.preview.SetMessage(fmt.Sprintf("%s (%d bytes)", item.Name, info.Size()))
-		return
-	}
-	a.preview.SetPath(path)
+	a.showEntry(entry)
 }
 
 func (a *app) Draw(c *loom.Canvas, r loom.Rect) {
@@ -307,7 +323,14 @@ func (a *app) HandleKey(k loom.KeyEvent) bool {
 		switch k.Text {
 		case "i":
 			a.imagesOnly = !a.imagesOnly
-			_ = a.open(a.dir)
+			if a.navigation != nil {
+				a.filterMediaItems()
+				if entry, ok := a.navigation.Selected(); ok {
+					a.showEntry(entry)
+				} else {
+					a.preview.SetMessage("No selection")
+				}
+			}
 			return false
 		case "m":
 			a.preview.CycleMode()
@@ -319,18 +342,6 @@ func (a *app) HandleKey(k loom.KeyEvent) bool {
 	}
 
 	quit := a.frame.HandleKey(k)
-	if quit && k.Key == "backspace" {
-		parent := filepath.Dir(a.dir)
-		if parent != a.dir {
-			prev := filepath.Base(a.dir)
-			if err := a.open(parent); err == nil {
-				a.selectByName(prev)
-			}
-			a.updatePreview()
-			return false
-		}
-	}
-
 	a.updatePreview()
 	return quit
 }

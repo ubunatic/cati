@@ -19,7 +19,7 @@ func writeFixture(t *testing.T, path string) {
 }
 
 func hasItem(a *app, name string) bool {
-	for _, item := range a.list.Items {
+	for _, item := range a.navigation.List().Items {
 		if item.Name == name {
 			return true
 		}
@@ -56,29 +56,75 @@ func TestAppDirectoryNavigationAndMediaFiltering(t *testing.T) {
 	}
 	defer a.Close()
 	if !hasItem(a, "child") || !hasItem(a, "photo.PNG") || !hasItem(a, "clip.mp4") || !hasItem(a, "notes.txt") {
-		t.Fatalf("unfiltered entries = %+v", a.list.Items)
+		t.Fatalf("unfiltered entries = %+v", a.navigation.List().Items)
 	}
-	if a.list.OnSelect == nil {
+	if a.navigation.List().OnSelect == nil {
 		t.Fatal("directory activation callback is missing")
 	}
-	a.list.OnSelect(loom.Item{Name: "child"})
+	a.navigation.List().OnSelect(loom.Item{Name: "child"})
 	if a.dir != child {
 		t.Fatalf("navigated directory = %q, want %q", a.dir, child)
 	}
 	if !hasItem(a, "..") {
 		t.Fatal("nested directory list does not contain parent entry")
 	}
-	a.list.OnSelect(loom.Item{Name: ".."})
+	a.navigation.List().OnSelect(loom.Item{Name: ".."})
 	if a.dir != root {
 		t.Fatalf("parent navigation directory = %q, want %q", a.dir, root)
 	}
 
 	a.imagesOnly = true
-	if err := a.open(root); err != nil {
+	a.filterMediaItems()
+	if !hasItem(a, "child") || !hasItem(a, "photo.PNG") || !hasItem(a, "clip.mp4") || hasItem(a, "notes.txt") {
+		t.Fatalf("media-filtered entries = %+v", a.navigation.List().Items)
+	}
+	a.imagesOnly = false
+	a.filterMediaItems()
+	if !hasItem(a, "notes.txt") {
+		t.Fatal("disabling media-only filter did not restore non-media entries")
+	}
+}
+
+func TestNavigationPaneUsesSlashGatedSearchAndDrivesPreview(t *testing.T) {
+	root := t.TempDir()
+	imagePath := filepath.Join(root, "photo.png")
+	writeFixture(t, imagePath)
+	writeFixture(t, filepath.Join(root, "notes.txt"))
+	a, err := newApp(root, "mc", media.ModeHalfblock, 24, false, 20)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if !hasItem(a, "child") || !hasItem(a, "photo.PNG") || !hasItem(a, "clip.mp4") || hasItem(a, "notes.txt") {
-		t.Fatalf("media-filtered entries = %+v", a.list.Items)
+	defer a.Close()
+	if a.navigation == nil || a.frame.Boxes[0].Child != a.navigation {
+		t.Fatal("frame is not hosting Loom NavigationPane")
+	}
+	if a.navigation.List().Query() != "" {
+		t.Fatalf("initial search query = %q", a.navigation.List().Query())
+	}
+	if a.navigation.List().OnSelect == nil {
+		t.Fatal("navigation pane is missing its file activation callback")
+	}
+	a.navigation.HandleKey(loom.KeyEvent{Text: "p"})
+	if a.navigation.List().Query() != "" {
+		t.Fatalf("typed app key started search: %q", a.navigation.List().Query())
+	}
+	a.navigation.HandleKey(loom.KeyEvent{Key: "/", Text: "/"})
+	if !a.navigation.Searching() {
+		t.Fatal("slash did not enter search mode")
+	}
+	a.navigation.HandleKey(loom.KeyEvent{Text: "photo"})
+	if a.navigation.List().Query() != "photo" {
+		t.Fatalf("search query = %q, want photo", a.navigation.List().Query())
+	}
+	a.navigation.HandleKey(loom.KeyEvent{Key: "esc"})
+	if a.navigation.Searching() || a.navigation.List().Query() != "" {
+		t.Fatal("escape did not clear and close gated search")
+	}
+
+	a.selectByName("notes.txt")
+	a.navigation.HandleKey(loom.KeyEvent{Key: "down"})
+	if a.preview.currentPath != imagePath {
+		t.Fatalf("preview path = %q, want %q", a.preview.currentPath, imagePath)
 	}
 }
 
@@ -122,12 +168,11 @@ func TestThemeResolutionCyclingAndFullscreenKeys(t *testing.T) {
 		t.Fatalf("split state not restored: fullscreen=%v hidden=%v status=%q", a.fullscreen, a.frame.Boxes[0].Hidden, a.frame.Status)
 	}
 
-	a.imagesOnly = true
 	if quit := a.HandleKey(loom.KeyEvent{Text: "i"}); quit {
 		t.Fatal("media-filter key unexpectedly quit")
 	}
-	if a.imagesOnly {
-		t.Fatal("i key should toggle media-only filtering off")
+	if !a.imagesOnly {
+		t.Fatal("i key should toggle media-only filtering on")
 	}
 }
 

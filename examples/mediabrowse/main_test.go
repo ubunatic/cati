@@ -82,9 +82,9 @@ func TestRunBrowserWithFilePath(t *testing.T) {
 	if a.dir != child {
 		t.Fatalf("app directory = %q, want %q", a.dir, child)
 	}
-	selected, ok := a.list.Selected()
-	if !ok || selected.Name != "target.png" {
-		t.Fatalf("selected item = %+v (ok=%v), want target.png", selected, ok)
+	selected, ok := a.navigation.Selected()
+	if !ok || filepath.Base(selected.Path) != "target.png" {
+		t.Fatalf("selected entry = %+v (ok=%v), want target.png", selected, ok)
 	}
 	if a.preview.currentPath != targetFile {
 		t.Fatalf("preview path = %q, want %q", a.preview.currentPath, targetFile)
