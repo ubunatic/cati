@@ -14,7 +14,19 @@
 ## 2. Goal
 `/goal Replace mediabrowse's custom directory-navigation implementation with Loom's NavigationPane while preserving media preview, media filtering, and images-only behavior; stop and report if the pinned Loom API cannot support these requirements.`
 
-## 3. Implementation & Verification Plan
-- Integrate `codeberg.org/ubunatic/loom/examples/filebrowser/filebrowser.NavigationPane` as the file pane and use its selection/open callbacks to drive the preview and directory state.
-- Preserve the existing media-only toggle and supported-media filtering without maintaining a parallel custom browser.
-- Add or update tests for `/`-gated filtering, directory navigation, media selection, and images-only mode; run the mediabrowse tests and required Go checks.
+## 3. Implementation Milestones
+
+### M1 (Integrate Loom NavigationPane)
+- Replace `os.ReadDir` loop, custom path map, and `loom.Choice` in `examples/mediabrowse/app.go` with `filebrowser.NewNavigationPane`.
+- Connect `NavigationPaneOptions` callbacks (`OnSelection`, `OnActivate`, `OnOpen`) to preview updates, system viewer launch, and app directory state.
+- Keep theme application wired to `navPane.ApplyTheme(theme)`.
+
+### M2 (Media Filtering & Images-Only Mode)
+- Support `--images-only` and `i` toggle with `NavigationPane`.
+- Ensure directory navigation (including parent `..`) is preserved when media filtering is active.
+- If Loom's `NavigationPane` requires specific options or reloading on filter toggle, implement cleanly or report limitations.
+
+### M3 (Tests, Verification & Preflight)
+- Update/add tests in `examples/mediabrowse/app_test.go` and `main_test.go` for `/`-gated search, directory navigation, selection, activation, and media filtering.
+- Run `go test ./...`, `go vet ./...`, plain `make install`, and `make preflight`.
+
