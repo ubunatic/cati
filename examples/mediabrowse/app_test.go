@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -87,19 +88,28 @@ func TestThemeResolutionCyclingAndFullscreenKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer a.Close()
-	if a.themeName != "mc" || a.theme == (loom.ThemeColors{}) {
+	if a.themeName != "mc" || a.theme != loom.SpeccedThemes["mc"] {
 		t.Fatalf("known theme was not resolved: name=%q theme=%+v", a.themeName, a.theme)
+	}
+	names := themeNames()
+	if !sort.StringsAreSorted(names) || len(names) != len(loom.SpeccedThemes) {
+		t.Fatalf("theme names are not a sorted list of Loom themes: %v", names)
 	}
 	if quit := a.HandleKey(loom.KeyEvent{Key: "f9"}); quit {
 		t.Fatal("F9 unexpectedly quit")
 	}
-	if a.themeName != "solarized-dark" {
-		t.Fatalf("theme after F9 = %q", a.themeName)
+	mcIndex := sort.SearchStrings(names, "mc")
+	wantAfterMC := names[(mcIndex+1)%len(names)]
+	if a.themeName != wantAfterMC || a.theme != loom.SpeccedThemes[wantAfterMC] {
+		t.Fatalf("theme after F9 = %q, want %q", a.themeName, wantAfterMC)
 	}
 	a.themeName = "not-a-theme"
 	a.cycleTheme()
 	if a.themeName != "mc" {
 		t.Fatalf("unknown theme cycle resolved to %q, want mc", a.themeName)
+	}
+	if a.theme != loom.SpeccedThemes["mc"] {
+		t.Fatalf("unknown theme cycle applied colors for %q", a.themeName)
 	}
 	if quit := a.HandleKey(loom.KeyEvent{Key: "f"}); quit {
 		t.Fatal("fullscreen key unexpectedly quit")
@@ -118,5 +128,34 @@ func TestThemeResolutionCyclingAndFullscreenKeys(t *testing.T) {
 	}
 	if a.imagesOnly {
 		t.Fatal("i key should toggle media-only filtering off")
+	}
+}
+
+func TestUnknownThemeFallsBackToKnownTheme(t *testing.T) {
+	name, theme := resolveTheme("not-a-theme")
+	if name != "mc" || theme != loom.SpeccedThemes["mc"] {
+		t.Fatalf("resolveTheme() = %q/%+v, want mc/%+v", name, theme, loom.SpeccedThemes["mc"])
+	}
+	if _, ok := loom.SpeccedThemes[name]; !ok {
+		t.Fatalf("fallback theme %q is not Loom-defined", name)
+	}
+}
+
+func TestCycleThemeVisitsEverySpeccedThemeAndWraps(t *testing.T) {
+	names := themeNames()
+	if len(names) == 0 {
+		t.Fatal("Loom has no specced themes")
+	}
+	a, err := newApp(t.TempDir(), names[0], media.ModeHalfblock, 24, false, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	for i := 1; i <= len(names); i++ {
+		a.cycleTheme()
+		want := names[i%len(names)]
+		if a.themeName != want || a.theme != loom.SpeccedThemes[want] {
+			t.Fatalf("cycle %d = %q, want %q", i, a.themeName, want)
+		}
 	}
 }

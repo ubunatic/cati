@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -44,7 +45,7 @@ immediately opens and selects the file in the preview pane.`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&flagTheme, "theme", "t", "mc", "color theme (mc, solarized-dark, monokai, etc.)")
+	cmd.Flags().StringVarP(&flagTheme, "theme", "t", "mc", fmt.Sprintf("color theme (%s)", strings.Join(themeNames(), ", ")))
 	cmd.Flags().StringVarP(&flagMode, "mode", "m", "halfblock", "initial media render mode (halfblock, quadblock, sextant)")
 	cmd.Flags().Float64Var(&flagFPS, "fps", 24.0, "playback frame rate for videos")
 	cmd.Flags().BoolVarP(&flagImagesOnly, "images-only", "i", false, "filter file list to media files only")

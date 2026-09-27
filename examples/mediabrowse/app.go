@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"codeberg.org/ubunatic/loom"
@@ -55,11 +56,7 @@ func newApp(dir, themeName string, initialMode media.Mode, fps float64, imagesOn
 	if initialHeight < 10 {
 		initialHeight = 30
 	}
-	theme := loom.Theme(themeName)
-	if theme == (loom.ThemeColors{}) {
-		themeName = "mc"
-		theme = loom.Theme(themeName)
-	}
+	themeName, theme := resolveTheme(themeName)
 
 	a := &app{
 		themeName:  themeName,
@@ -102,6 +99,28 @@ func newApp(dir, themeName string, initialMode media.Mode, fps float64, imagesOn
 	return a, nil
 }
 
+func themeNames() []string {
+	names := make([]string, 0, len(loom.SpeccedThemes))
+	for name := range loom.SpeccedThemes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func resolveTheme(name string) (string, loom.ThemeColors) {
+	if theme, ok := loom.SpeccedThemes[name]; ok {
+		return name, theme
+	}
+	if theme, ok := loom.SpeccedThemes["mc"]; ok {
+		return "mc", theme
+	}
+	if theme, ok := loom.SpeccedThemes["plain"]; ok {
+		return "plain", theme
+	}
+	return "", loom.ThemeColors{}
+}
+
 func (a *app) Close() {
 	if a.preview != nil {
 		a.preview.Close()
@@ -120,15 +139,19 @@ func (a *app) applyTheme(name string, theme loom.ThemeColors) {
 }
 
 func (a *app) cycleTheme() {
-	themes := []string{"mc", "solarized-dark", "solarized-light", "monokai", "dracula", "nord", "gruvbox"}
+	themes := themeNames()
+	if len(themes) == 0 {
+		return
+	}
 	for i, name := range themes {
 		if name == a.themeName {
 			next := themes[(i+1)%len(themes)]
-			a.applyTheme(next, loom.Theme(next))
+			a.applyTheme(next, loom.SpeccedThemes[next])
 			return
 		}
 	}
-	a.applyTheme("mc", loom.Theme("mc"))
+	name, theme := resolveTheme("")
+	a.applyTheme(name, theme)
 }
 
 func (a *app) toggleFullscreen() {

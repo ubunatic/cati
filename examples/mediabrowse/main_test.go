@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"codeberg.org/ubunatic/loom"
 	"codeberg.org/ubunatic/loom/media"
 )
 
@@ -25,7 +26,7 @@ func TestRootCommandFlagsAndForwarding(t *testing.T) {
 		gotDir, got = dir, opts
 		return nil
 	})
-	cmd.SetArgs([]string{"--theme", "nord", "--mode", "sextant", "--fps", "12.5", "--images-only", "./media"})
+	cmd.SetArgs([]string{"--theme", "mc-dark", "--mode", "sextant", "--fps", "12.5", "--images-only", "./media"})
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 	if err := cmd.Execute(); err != nil {
@@ -34,7 +35,7 @@ func TestRootCommandFlagsAndForwarding(t *testing.T) {
 	if gotDir != "./media" {
 		t.Fatalf("directory = %q, want ./media", gotDir)
 	}
-	if got != (options{themeName: "nord", modeStr: "sextant", fps: 12.5, imagesOnly: true}) {
+	if got != (options{themeName: "mc-dark", modeStr: "sextant", fps: 12.5, imagesOnly: true}) {
 		t.Fatalf("options = %+v", got)
 	}
 	if cmd.Use != "mediabrowse [path]" {
@@ -44,6 +45,20 @@ func TestRootCommandFlagsAndForwarding(t *testing.T) {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("missing --%s flag", name)
 		}
+	}
+}
+
+func TestThemeFlagHelpListsSpeccedThemes(t *testing.T) {
+	resetFlags()
+	cmd := newRootCmdWithRunner(func(string, options) error { return nil })
+	usage := cmd.Flags().Lookup("theme").Usage
+	for name := range loom.SpeccedThemes {
+		if !strings.Contains(usage, name) {
+			t.Errorf("--theme help %q does not list Loom theme %q", usage, name)
+		}
+	}
+	if strings.Contains(usage, "solarized") || strings.Contains(usage, "monokai") || strings.Contains(usage, "nord") {
+		t.Errorf("--theme help contains unsupported themes: %q", usage)
 	}
 }
 
