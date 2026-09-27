@@ -1,0 +1,91 @@
+package main
+
+import (
+	"bytes"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func resetFlags() {
+	flagTheme = ""
+	flagMode = ""
+	flagFPS = 0
+	flagImagesOnly = false
+}
+
+func TestRootCommandFlagsAndForwarding(t *testing.T) {
+	resetFlags()
+	var gotDir string
+	var got options
+	cmd := newRootCmdWithRunner(func(dir string, opts options) error {
+		gotDir, got = dir, opts
+		return nil
+	})
+	cmd.SetArgs([]string{"--theme", "nord", "--mode", "sextant", "--fps", "12.5", "--images-only", "./media"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if gotDir != "./media" {
+		t.Fatalf("directory = %q, want ./media", gotDir)
+	}
+	if got != (options{themeName: "nord", modeStr: "sextant", fps: 12.5, imagesOnly: true}) {
+		t.Fatalf("options = %+v", got)
+	}
+	if cmd.Use != "mediabrowse [directory]" {
+		t.Errorf("usage = %q", cmd.Use)
+	}
+	for _, name := range []string{"theme", "mode", "fps", "images-only"} {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("missing --%s flag", name)
+		}
+	}
+}
+
+func TestRootCommandDefaultsAndArgumentErrors(t *testing.T) {
+	resetFlags()
+	called := false
+	cmd := newRootCmdWithRunner(func(dir string, opts options) error {
+		called = true
+		if dir != "." || opts.themeName != "mc" || opts.modeStr != "halfblock" || opts.fps != 24 || opts.imagesOnly {
+			t.Errorf("default invocation = dir %q, options %+v", dir, opts)
+		}
+		return nil
+	})
+	cmd.SetArgs(nil)
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("runner was not called")
+	}
+
+	resetFlags()
+	called = false
+	cmd = newRootCmdWithRunner(func(string, options) error { called = true; return nil })
+	cmd.SetArgs([]string{"one", "two"})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("expected too-many-arguments error")
+	}
+	if called {
+		t.Fatal("runner called despite invalid arguments")
+	}
+}
+
+func TestRootCommandReportsInvalidDirectory(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing")
+	cmd := newRootCmd()
+	cmd.SetArgs([]string{missing})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "no such file") {
+		t.Fatalf("Execute() error = %v, want missing directory error", err)
+	}
+}
