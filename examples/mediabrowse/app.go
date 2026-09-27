@@ -51,7 +51,7 @@ type app struct {
 	fps        float64
 }
 
-func newApp(dir, themeName string, initialMode media.Mode, fps float64, imagesOnly bool, initialHeight int) (*app, error) {
+func newApp(dir, themeName string, initialMode media.Mode, fps float64, imagesOnly bool, initialHeight int, initialSelection ...string) (*app, error) {
 	if initialHeight < 10 {
 		initialHeight = 30
 	}
@@ -91,7 +91,12 @@ func newApp(dir, themeName string, initialMode media.Mode, fps float64, imagesOn
 
 	a.applyTheme(a.themeName, a.theme)
 
-	if err := a.open(dir); err != nil {
+	selectName := ""
+	if len(initialSelection) > 0 {
+		selectName = initialSelection[0]
+	}
+
+	if err := a.open(dir, selectName); err != nil {
 		return nil, err
 	}
 	return a, nil
@@ -138,7 +143,7 @@ func (a *app) toggleFullscreen() {
 	}
 }
 
-func (a *app) open(dir string) error {
+func (a *app) open(dir string, initialSelection ...string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
@@ -198,6 +203,11 @@ func (a *app) open(dir string) error {
 
 	a.dir, a.paths, a.list = dir, paths, list
 	a.frame.Boxes[0].Child = list
+
+	if len(initialSelection) > 0 && initialSelection[0] != "" {
+		a.selectByName(initialSelection[0])
+	}
+
 	a.updatePreview()
 	return nil
 }

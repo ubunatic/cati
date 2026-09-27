@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"codeberg.org/ubunatic/loom/media"
 )
 
 func resetFlags() {
@@ -34,13 +37,42 @@ func TestRootCommandFlagsAndForwarding(t *testing.T) {
 	if got != (options{themeName: "nord", modeStr: "sextant", fps: 12.5, imagesOnly: true}) {
 		t.Fatalf("options = %+v", got)
 	}
-	if cmd.Use != "mediabrowse [directory]" {
+	if cmd.Use != "mediabrowse [path]" {
 		t.Errorf("usage = %q", cmd.Use)
 	}
 	for _, name := range []string{"theme", "mode", "fps", "images-only"} {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("missing --%s flag", name)
 		}
+	}
+}
+
+func TestRunBrowserWithFilePath(t *testing.T) {
+	root := t.TempDir()
+	child := filepath.Join(root, "subdir")
+	if err := os.Mkdir(child, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	targetFile := filepath.Join(child, "target.png")
+	if err := os.WriteFile(targetFile, []byte("pngdata"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := newApp(child, "mc", media.ModeHalfblock, 24, false, 20, "target.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+
+	if a.dir != child {
+		t.Fatalf("app directory = %q, want %q", a.dir, child)
+	}
+	selected, ok := a.list.Selected()
+	if !ok || selected.Name != "target.png" {
+		t.Fatalf("selected item = %+v (ok=%v), want target.png", selected, ok)
+	}
+	if a.preview.currentPath != targetFile {
+		t.Fatalf("preview path = %q, want %q", a.preview.currentPath, targetFile)
 	}
 }
 

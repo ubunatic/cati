@@ -21,11 +21,14 @@ func newRootCmd() *cobra.Command {
 
 func newRootCmdWithRunner(run func(string, options) error) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "mediabrowse [directory]",
+		Use:   "mediabrowse [path]",
 		Short: "Explore directories and preview images/videos using loom & cati",
 		Long: `mediabrowse is a split-pane terminal file and media viewer.
 It integrates Loom's Frame/Box layout and navigation with Cati's halfblock,
-quadblock, and sextant renderers and video frame streaming.`,
+quadblock, and sextant renderers and video frame streaming.
+
+When given a file path, mediabrowse starts in that file's directory and
+immediately opens and selects the file in the preview pane.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "."

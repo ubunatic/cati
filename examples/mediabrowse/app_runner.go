@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,17 +20,21 @@ type options struct {
 	imagesOnly bool
 }
 
-func runBrowser(dir string, opts options) error {
-	absDir, err := filepath.Abs(dir)
+func runBrowser(targetPath string, opts options) error {
+	absPath, err := filepath.Abs(targetPath)
 	if err != nil {
 		return err
 	}
-	info, err := os.Stat(absDir)
+	info, err := os.Stat(absPath)
 	if err != nil {
 		return err
 	}
+
+	dir := absPath
+	selectedFile := ""
 	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", absDir)
+		dir = filepath.Dir(absPath)
+		selectedFile = filepath.Base(absPath)
 	}
 
 	mode := media.ModeHalfblock
@@ -55,7 +58,7 @@ func runBrowser(dir string, opts options) error {
 		}
 	}
 
-	app, err := newApp(absDir, opts.themeName, mode, opts.fps, opts.imagesOnly, termH-2)
+	app, err := newApp(dir, opts.themeName, mode, opts.fps, opts.imagesOnly, termH-2, selectedFile)
 	if err != nil {
 		return err
 	}

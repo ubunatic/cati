@@ -5,7 +5,7 @@ A split-pane file and media browser example combining **Cobra CLI**, **Loom** (`
 ## Features
 
 - **Cobra CLI flags**:
-  - `mediabrowse [directory]`
+  - `mediabrowse [path]` (directory or file; when a file is passed, it opens its directory and selects the file)
   - `--theme, -t`: Select color theme (`mc`, `solarized-dark`, `monokai`, `dracula`, `nord`, `gruvbox`, etc.)
   - `--mode, -m`: Initial render mode (`halfblock`, `quadblock`, `sextant`)
   - `--fps`: Configurable video playback frame rate
@@ -25,5 +25,5 @@ A split-pane file and media browser example combining **Cobra CLI**, **Loom** (`
 ## Running the Example
 
 ```sh
-go run ./examples/mediabrowse [directory]
+go run ./examples/mediabrowse [directory/file]
 ```
