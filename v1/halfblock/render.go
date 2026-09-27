@@ -16,8 +16,10 @@ import (
 	"image/color"
 	"io"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"ubunatic.com/cati/v1/core"
 )
@@ -30,6 +32,26 @@ const (
 	ansiCarriageReturn = "\r"      // explicit CR: go to col 0 (needed in raw tty mode)
 	ansiLinePrefix     = ansiEraseLine + ansiCarriageReturn
 )
+
+func appendFgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[38;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
+func appendBgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[48;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
 
 // fgRGB returns an ANSI 24-bit foreground escape sequence.
 func fgRGB(c color.RGBA) string {
@@ -117,15 +139,7 @@ func ScaleToFit(img image.Image, cols, rows int) image.Image {
 		return img
 	}
 
-	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
-	for y := 0; y < newH; y++ {
-		srcY := b.Min.Y + y*srcH/newH
-		for x := 0; x < newW; x++ {
-			srcX := b.Min.X + x*srcW/newW
-			dst.Set(x, y, img.At(srcX, srcY))
-		}
-	}
-	return dst
+	return ScaleNN(img, newW, newH)
 }
 
 // Scale returns the image unchanged when its pixel width already fits within
@@ -149,6 +163,19 @@ func ScaleNN(img image.Image, w, h int) image.Image {
 		return img
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
+		for y := 0; y < h; y++ {
+			srcY := b.Min.Y + y*srcH/h
+			dstRowOff := y * dst.Stride
+			for x := 0; x < w; x++ {
+				srcX := b.Min.X + x*srcW/w
+				srcOff := rgba.PixOffset(srcX, srcY)
+				dstOff := dstRowOff + x*4
+				copy(dst.Pix[dstOff:dstOff+4], rgba.Pix[srcOff:srcOff+4])
+			}
+		}
+		return dst
+	}
 	for y := 0; y < h; y++ {
 		srcY := b.Min.Y + y*srcH/h
 		for x := 0; x < w; x++ {
@@ -168,6 +195,22 @@ type cell struct {
 	hasFG       bool
 	hasBG       bool
 	transparent bool // both pixels transparent → plain space, no ANSI
+}
+
+// safePixel returns the RGBA color at (x, y) from image.
+func safePixel(img image.Image, x, y int, b image.Rectangle) color.RGBA {
+	if x < b.Min.X || x >= b.Max.X || y < b.Min.Y || y >= b.Max.Y {
+		return color.RGBA{}
+	}
+	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
+		off := rgba.PixOffset(x, y)
+		p := rgba.Pix[off : off+4 : off+4]
+		if p[3] == 0 {
+			return color.RGBA{}
+		}
+		return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
+	}
+	return toRGBA(img.At(x, y))
 }
 
 // pairToCell converts a (top, bottom) pixel pair into a terminal cell.
@@ -228,8 +271,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	}
 
 	cells := make([][]core.Cell, rowCount)
+	cellBuf := make([]core.Cell, rowCount*width)
 	for i := range cells {
-		cells[i] = make([]core.Cell, width)
+		cells[i] = cellBuf[i*width : (i+1)*width : (i+1)*width]
 	}
 
 	renderRowFunc := func(row int) {
@@ -237,10 +281,10 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 		botY := topY + 1
 		for x := 0; x < width; x++ {
 			srcX := b.Min.X + x
-			top := toRGBA(scaled.At(srcX, topY))
+			top := safePixel(scaled, srcX, topY, b)
 			var bot color.RGBA
 			if botY < b.Min.Y+height {
-				bot = toRGBA(scaled.At(srcX, botY))
+				bot = safePixel(scaled, srcX, botY, b)
 			}
 			c := pairToCell(top, bot)
 			cells[row][x] = core.Cell{
@@ -300,6 +344,36 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 	grid, err := RenderToGrid(img, cols, opts)
 	if err != nil {
 		return err
+	}
+
+	if core.Fastpath {
+		var buf []byte
+		for y := 0; y < grid.Height; y++ {
+			buf = buf[:0]
+			if !opts.NoLinePrefix {
+				buf = append(buf, ansiLinePrefix...)
+			}
+			for x := 0; x < grid.Width; x++ {
+				c := grid.Cells[y][x]
+				if c.Transparent {
+					buf = append(buf, ' ')
+					continue
+				}
+				if c.HasBg {
+					buf = appendBgRGB(buf, c.Bg)
+				}
+				if c.HasFg {
+					buf = appendFgRGB(buf, c.Fg)
+				}
+				buf = utf8.AppendRune(buf, c.Ch)
+				buf = append(buf, ansiReset...)
+			}
+			buf = append(buf, '\n')
+			if _, err := w.Write(buf); err != nil {
+				return fmt.Errorf("halfblock render: %w", err)
+			}
+		}
+		return nil
 	}
 
 	for y := 0; y < grid.Height; y++ {
