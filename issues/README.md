@@ -66,7 +66,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 060 | [060-polish-and-test-new-mediabrowse-example.md](060-polish-and-test-new-mediabrowse-example.md) | Polish and test new mediabrowse split-pane example | Closed |
 | 061 | [061-loom-view-truncates-ansi-files.md](061-loom-view-truncates-ansi-files.md) | Loom view truncates ANSI files | Closed |
 | 062 | [062-async-media-loading-and-rendering-with-progress.md](062-async-media-loading-and-rendering-with-progress.md) | Async Media Loading and Rendering with Progress | In Progress |
-| 063 | [063-show-only-known-loom-themes-in-mediabrowse.md](063-show-only-known-loom-themes-in-mediabrowse.md) | Show only known Loom themes in mediabrowse | Open |
+| 063 | [063-show-only-known-loom-themes-in-mediabrowse.md](063-show-only-known-loom-themes-in-mediabrowse.md) | Show only known Loom themes in mediabrowse | Closed |
 
 ## Archived
 

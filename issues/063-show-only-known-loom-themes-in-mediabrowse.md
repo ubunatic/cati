@@ -1,6 +1,6 @@
 # 063 — Show only known Loom themes in mediabrowse
 
-**Status**: In Progress
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
@@ -28,4 +28,14 @@ Loom exposes its embedded theme map as `loom.SpeccedThemes`. In the current depe
 - Update CLI `--theme` flag description in `examples/mediabrowse/main.go` and `examples/mediabrowse/README.md` to list valid Loom themes (`plain`, `mc`, `mc-classic`, `mc-dark`, `julia256`).
 - Update/add unit tests in `examples/mediabrowse/app_test.go` and `main_test.go` covering known theme selection, unknown theme fallback, deterministic cycling, and CLI flag defaults.
 - Run full test suite (`go test ./...`), `go vet ./...`, and `make preflight`.
+
+## 4. Outcome & Resolution
+- Delivered in commit `c877b70`:
+  - `themeNames()` dynamically queries and sorts keys from `loom.SpeccedThemes`.
+  - `resolveTheme(name)` validates against `loom.SpeccedThemes` with deterministic fallback to `mc` (or `plain`).
+  - `cycleTheme()` deterministically cycles through all specced themes.
+  - CLI `--theme` flag usage and README documentation updated to reflect available Loom themes.
+  - Comprehensive unit tests added covering theme resolution, fallback, deterministic cycling, and CLI flag usage.
+- All tests and `make preflight` passing cleanly.
+
 
