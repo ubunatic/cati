@@ -2,6 +2,7 @@ package halfblock
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"fmt"
 	"image"
@@ -51,6 +52,23 @@ func RasterizeSVGWithTarget(path string, maxWidth, maxHeight int) (image.Image, 
 		"-w", strconv.Itoa(w),
 		"-h", strconv.Itoa(h),
 		path)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("rsvg-convert %s: %w", path, err)
+	}
+	img, err := png.Decode(bytes.NewReader(out))
+	if err != nil {
+		return nil, fmt.Errorf("decode rasterized %s: %w", path, err)
+	}
+	return img, nil
+}
+
+func rasterizeSVGContext(ctx context.Context, path string) (image.Image, error) {
+	w, h, err := svgRasterTarget(path, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, "rsvg-convert", "--format=png", "-w", strconv.Itoa(w), "-h", strconv.Itoa(h), path)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("rsvg-convert %s: %w", path, err)
