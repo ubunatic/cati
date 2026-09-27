@@ -1,6 +1,6 @@
 # 063 — Show only known Loom themes in mediabrowse
 
-**Status**: Open
+**Status**: In Progress
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
