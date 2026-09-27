@@ -27,6 +27,7 @@ type mediaPreviewPane struct {
 	fps         float64
 	playing     bool
 	videoEnded  bool
+	videoReady  bool
 	focused     bool
 	lastRect    loom.Rect
 	cancel      context.CancelFunc
@@ -81,6 +82,7 @@ func (p *mediaPreviewPane) closeMediaLocked() {
 		p.preview = nil
 	}
 	p.videoEnded = false
+	p.videoReady = false
 }
 
 func (p *mediaPreviewPane) Title() string {
@@ -210,6 +212,8 @@ func (p *mediaPreviewPane) CycleMode() {
 				p.video.Close()
 				p.video = nil
 			}
+			p.videoEnded = false
+			p.videoReady = false
 			w, err := newVideoWidget(p.currentPath, p.mode, p.fps)
 			if err != nil {
 				p.message = "Video error: " + err.Error()
@@ -222,6 +226,8 @@ func (p *mediaPreviewPane) CycleMode() {
 				p.video.Close()
 				p.video = nil
 			}
+			p.videoEnded = false
+			p.videoReady = false
 			p.loadPreviewLocked()
 		}
 	} else {
@@ -244,6 +250,7 @@ func (p *mediaPreviewPane) TogglePlay() {
 				p.video = nil
 			}
 			p.videoEnded = false
+			p.videoReady = false
 			w, err := newVideoWidget(p.currentPath, p.mode, p.fps)
 			if err != nil {
 				p.message = "Video error: " + err.Error()
@@ -261,9 +268,9 @@ func (p *mediaPreviewPane) Draw(c *loom.Canvas, r loom.Rect) {
 	msg := p.message
 	loading := p.loading
 	loadingMsg := p.loadingMsg
-	w := p.video
-	if w == nil {
-		w = p.preview
+	w := p.preview
+	if p.video != nil && p.videoReady {
+		w = p.video
 	}
 	p.mu.Unlock()
 
@@ -292,12 +299,13 @@ func (p *mediaPreviewPane) Tick(now time.Time) {
 	p.mu.Unlock()
 	if w != nil && playing {
 		w.Tick(now)
+		p.mu.Lock()
+		p.videoReady = true
 		if w.TickInterval() == 0 {
-			p.mu.Lock()
 			p.playing = false
 			p.videoEnded = true
-			p.mu.Unlock()
 		}
+		p.mu.Unlock()
 	}
 }
 
