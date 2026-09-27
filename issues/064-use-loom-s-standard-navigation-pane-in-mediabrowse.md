@@ -1,6 +1,6 @@
 # 064 — Use Loom's standard navigation pane in mediabrowse
 
-**Status**: In Progress
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Refactoring
@@ -29,4 +29,13 @@
 ### M3 (Tests, Verification & Preflight)
 - Update/add tests in `examples/mediabrowse/app_test.go` and `main_test.go` for `/`-gated search, directory navigation, selection, activation, and media filtering.
 - Run `go test ./...`, `go vet ./...`, plain `make install`, and `make preflight`.
+
+## 4. Outcome & Resolution
+- Delivered in commit `410fe1f`:
+  - Replaced custom `os.ReadDir` / path mapping with Loom's `filebrowser.NavigationPane`.
+  - Wired `OnSelection`, `OnActivate`, `OnOpen`, and `ApplyTheme` callbacks to drive media previews, system file opening, directory state, and theme styling.
+  - Implemented `filterMediaItems()` preserving directory hierarchy and media-only entries under `i` toggle.
+  - Updated test suite covering `/`-gated search, navigation callbacks, media filtering, and initial file selection.
+- Verified with `go test ./...`, `go vet ./...`, plain `make install`, and `make preflight`.
+
 
