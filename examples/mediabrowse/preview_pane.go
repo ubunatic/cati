@@ -102,7 +102,9 @@ func (p *mediaPreviewPane) SetMessage(msg string) {
 	defer p.mu.Unlock()
 	p.cancelLoadingLocked()
 	p.closeWidgetLocked()
+	p.generation++
 	p.currentPath = ""
+	p.playing = false
 	p.message = msg
 }
 
@@ -113,6 +115,7 @@ func (p *mediaPreviewPane) SetPath(path string) {
 		return
 	}
 	p.currentPath = path
+	p.playing = false
 	p.message = ""
 	p.loadWidgetLocked()
 }
@@ -120,6 +123,7 @@ func (p *mediaPreviewPane) SetPath(path string) {
 func (p *mediaPreviewPane) loadWidgetLocked() {
 	p.cancelLoadingLocked()
 	p.closeWidgetLocked()
+	p.generation++
 	if p.currentPath == "" {
 		return
 	}
@@ -135,7 +139,6 @@ func (p *mediaPreviewPane) loadWidgetLocked() {
 
 	p.loading = true
 	p.loadingMsg = "Loading..."
-	p.generation++
 	gen := p.generation
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancel = cancel
@@ -172,7 +175,7 @@ func (p *mediaPreviewPane) loadWidgetLocked() {
 		p.loadingMsg = ""
 		p.cancel = nil
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
+			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 				return
 			}
 			if halfblock.IsVideo(path) {
@@ -262,11 +265,11 @@ func (p *mediaPreviewPane) TickInterval() time.Duration {
 }
 
 func (p *mediaPreviewPane) HandleKey(k loom.KeyEvent) bool {
-	switch k.Text {
-	case "m", "M":
+	if k.Is("m") {
 		p.CycleMode()
 		return false
-	case "p", "P":
+	}
+	if k.Is("p") {
 		p.TogglePlay()
 		return false
 	}

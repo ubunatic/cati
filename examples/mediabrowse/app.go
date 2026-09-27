@@ -295,40 +295,39 @@ func (a *app) Draw(c *loom.Canvas, r loom.Rect) {
 }
 
 func (a *app) HandleKey(k loom.KeyEvent) bool {
-	switch k.Key {
-	case "f9":
+	if a.navigation != nil && a.navigation.Searching() {
+		quit := a.frame.HandleKey(k)
+		a.updatePreview()
+		return quit
+	}
+
+	if k.Is("f9") {
 		a.cycleTheme()
 		return false
-	case "f", "F":
+	}
+	if k.Is("f") {
 		a.toggleFullscreen()
 		return false
 	}
-
-	filesFocused := true
-	if focused := a.frame.FocusedBox(); focused != nil {
-		filesFocused = (focused.ID == "files")
-	}
-
-	if filesFocused {
-		switch k.Text {
-		case "i":
-			a.imagesOnly = !a.imagesOnly
-			if a.navigation != nil {
-				a.filterMediaItems()
-				if entry, ok := a.navigation.Selected(); ok {
-					a.showEntry(entry)
-				} else {
-					a.preview.SetMessage("No selection")
-				}
+	if k.Is("i") {
+		a.imagesOnly = !a.imagesOnly
+		if a.navigation != nil {
+			a.filterMediaItems()
+			if entry, ok := a.navigation.Selected(); ok {
+				a.showEntry(entry)
+			} else {
+				a.preview.SetMessage("No selection")
 			}
-			return false
-		case "m":
-			a.preview.CycleMode()
-			return false
-		case "p", "P":
-			a.preview.TogglePlay()
-			return false
 		}
+		return false
+	}
+	if k.Is("m") {
+		a.preview.CycleMode()
+		return false
+	}
+	if k.Is("p") {
+		a.preview.TogglePlay()
+		return false
 	}
 
 	quit := a.frame.HandleKey(k)

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"image"
 	"os"
 	"path/filepath"
 	"sort"
@@ -9,6 +11,8 @@ import (
 
 	"codeberg.org/ubunatic/loom"
 	"codeberg.org/ubunatic/loom/media"
+
+	"ubunatic.com/cati/v1/core"
 )
 
 func writeFixture(t *testing.T, path string) {
@@ -157,13 +161,14 @@ func TestThemeResolutionCyclingAndFullscreenKeys(t *testing.T) {
 	if a.theme != loom.SpeccedThemes["mc"] {
 		t.Fatalf("unknown theme cycle applied colors for %q", a.themeName)
 	}
-	if quit := a.HandleKey(loom.KeyEvent{Key: "f"}); quit {
-		t.Fatal("fullscreen key unexpectedly quit")
+	// Test fullscreen with Text: "f" (standard terminal key event)
+	if quit := a.HandleKey(loom.KeyEvent{Text: "f"}); quit {
+		t.Fatal("fullscreen text key unexpectedly quit")
 	}
 	if !a.fullscreen || !a.frame.Boxes[0].Hidden || !strings.Contains(a.frame.Status, "[f] Split") {
 		t.Fatalf("fullscreen state not applied: fullscreen=%v hidden=%v status=%q", a.fullscreen, a.frame.Boxes[0].Hidden, a.frame.Status)
 	}
-	a.HandleKey(loom.KeyEvent{Key: "f"})
+	a.HandleKey(loom.KeyEvent{Text: "f"})
 	if a.fullscreen || a.frame.Boxes[0].Hidden || !strings.Contains(a.frame.Status, "[f] Full") {
 		t.Fatalf("split state not restored: fullscreen=%v hidden=%v status=%q", a.fullscreen, a.frame.Boxes[0].Hidden, a.frame.Status)
 	}
@@ -173,6 +178,83 @@ func TestThemeResolutionCyclingAndFullscreenKeys(t *testing.T) {
 	}
 	if !a.imagesOnly {
 		t.Fatal("i key should toggle media-only filtering on")
+	}
+}
+
+func TestAppKeyRoutingAcrossPanesAndSearch(t *testing.T) {
+	withWidgetFactories(t)
+	loadImageWidget = func(_ context.Context, _ string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
+		return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
+	}
+	newVideoWidget = func(_ string, mode media.Mode, _ float64) (*media.Widget, error) {
+		return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
+	}
+
+	root := t.TempDir()
+	writeFixture(t, filepath.Join(root, "clip.mp4"))
+	a, err := newApp(root, "mc", media.ModeHalfblock, 24, false, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+
+	// Initial mode is Halfblock
+	if a.preview.mode != media.ModeHalfblock {
+		t.Fatalf("initial mode = %q", a.preview.mode)
+	}
+
+	// 'm' toggles mode
+	a.HandleKey(loom.KeyEvent{Text: "m"})
+	if a.preview.mode != media.ModeQuadblock {
+		t.Fatalf("mode after 'm' = %q, want quadblock", a.preview.mode)
+	}
+
+	// 'p' toggles play on selected video
+	a.HandleKey(loom.KeyEvent{Text: "p"})
+	if !a.preview.playing {
+		t.Fatal("expected playing to be true after 'p'")
+	}
+	a.HandleKey(loom.KeyEvent{Text: "p"})
+	if a.preview.playing {
+		t.Fatal("expected playing to be false after second 'p'")
+	}
+
+	// Switch focus to preview pane (Tab)
+	a.frame.FocusNext()
+	if focused := a.frame.FocusedBox(); focused == nil || focused.ID != "preview" {
+		t.Fatalf("focused box = %v, want preview", focused)
+	}
+
+	// 'p' and 'm' and 'f' still work when preview is focused
+	a.HandleKey(loom.KeyEvent{Text: "p"})
+	if !a.preview.playing {
+		t.Fatal("expected playing to work while preview is focused")
+	}
+	a.HandleKey(loom.KeyEvent{Text: "f"})
+	if !a.fullscreen {
+		t.Fatal("expected fullscreen to toggle while preview is focused")
+	}
+	a.HandleKey(loom.KeyEvent{Text: "f"})
+	if a.fullscreen {
+		t.Fatal("expected fullscreen to restore while preview is focused")
+	}
+
+	// Enter search mode and verify 'p', 'm', 'f', 'i' go to search query instead of triggering actions
+	a.HandleKey(loom.KeyEvent{Key: "tab"})
+	if focused := a.frame.FocusedBox(); focused == nil || focused.ID != "files" {
+		t.Fatalf("focused box after tab = %v, want files", focused)
+	}
+	a.HandleKey(loom.KeyEvent{Text: "/"})
+	if !a.navigation.Searching() {
+		t.Fatal("expected navigation to be in search mode")
+	}
+	a.HandleKey(loom.KeyEvent{Text: "p"})
+	if a.navigation.List().Query() != "p" {
+		t.Fatalf("search query = %q, want p", a.navigation.List().Query())
+	}
+	// Play state should not have changed during search typing
+	if !a.preview.playing {
+		t.Fatal("search typing unexpectedly modified play state")
 	}
 }
 

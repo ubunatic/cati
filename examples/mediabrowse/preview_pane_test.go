@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"image"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -128,7 +129,7 @@ func TestPreviewPaneVideoDispatchAndErrors(t *testing.T) {
 	}
 
 	p.SetMessage("replaced")
-	if p.currentPath != "" || p.message != "replaced" || p.playing != true {
+	if p.currentPath != "" || p.message != "replaced" || p.playing {
 		t.Errorf("SetMessage state: path=%q message=%q playing=%v", p.currentPath, p.message, p.playing)
 	}
 
@@ -222,5 +223,54 @@ func TestPreviewPaneKeyHandlingAndStillPlayNoop(t *testing.T) {
 	}
 	if interval := p.TickInterval(); interval != 0 {
 		t.Fatalf("empty test widget tick interval = %v, want zero", interval)
+	}
+}
+
+func TestPreviewPaneVideoPlayDuringAsyncStillLoad(t *testing.T) {
+	withWidgetFactories(t)
+	stillStarted := make(chan struct{})
+	unblockStill := make(chan struct{})
+
+	loadImageWidget = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
+		close(stillStarted)
+		<-unblockStill
+		return nil, errors.New("simulated background failure after cancel")
+	}
+
+	fakeVideoWidget, err := media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), media.ModeHalfblock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newVideoWidget = func(path string, mode media.Mode, fps float64) (*media.Widget, error) {
+		return fakeVideoWidget, nil
+	}
+
+	p := newMediaPreviewPane(media.ModeHalfblock, 24)
+	p.SetPath("clip.mp4")
+	<-stillStarted
+
+	// Trigger play while still frame load is in-flight
+	p.TogglePlay()
+	if !p.playing {
+		t.Fatal("expected playing to be true after TogglePlay")
+	}
+	if p.widget != fakeVideoWidget {
+		t.Fatal("expected video widget to be set")
+	}
+
+	// Unblock the still frame goroutine and ensure it does not discard the video widget
+	close(unblockStill)
+	time.Sleep(20 * time.Millisecond)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.playing {
+		t.Fatal("playing was corrupted by background goroutine")
+	}
+	if p.widget != fakeVideoWidget {
+		t.Fatal("video widget was closed/replaced by background goroutine")
+	}
+	if p.message != "" {
+		t.Fatalf("unexpected message set: %q", p.message)
 	}
 }
