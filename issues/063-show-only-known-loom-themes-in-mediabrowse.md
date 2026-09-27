@@ -16,7 +16,16 @@ Loom exposes its embedded theme map as `loom.SpeccedThemes`. In the current depe
 ## 2. Goal
 `/goal Update mediabrowse so theme selection and cycling use only Loom-defined themes, with accurate user-facing theme help/docs and coverage; stop and report if the theme API cannot provide the available names.`
 
-## 3. Implementation & Verification Plan
-- Build the browser's cycle from Loom's available theme names and keep its displayed name aligned with the applied theme.
-- Ensure an unknown `--theme` value is handled clearly and update the CLI help and example README to reflect supported themes.
-- Add or update tests for valid cycling, unknown input, and theme listing; verify with the mediabrowse tests and required Go checks.
+## 3. Implementation Milestones
+
+### M1 (Theme Source & Deterministic Cycling)
+- Use `loom.SpeccedThemes` as the authoritative source of available themes and colors.
+- Resolve requested theme name: validate against `loom.SpeccedThemes`; fallback to `"mc"` (or `"plain"` if `"mc"` is missing) if unknown, ensuring `themeName` matches the colors actually applied.
+- Build deterministic sorted list of theme names from `loom.SpeccedThemes` for F9 cycling.
+- Ensure F9 cycle wraps around correctly and recovers cleanly from unknown/stale theme names.
+
+### M2 (CLI Help, Documentation & Verification)
+- Update CLI `--theme` flag description in `examples/mediabrowse/main.go` and `examples/mediabrowse/README.md` to list valid Loom themes (`plain`, `mc`, `mc-classic`, `mc-dark`, `julia256`).
+- Update/add unit tests in `examples/mediabrowse/app_test.go` and `main_test.go` covering known theme selection, unknown theme fallback, deterministic cycling, and CLI flag defaults.
+- Run full test suite (`go test ./...`), `go vet ./...`, and `make preflight`.
+
