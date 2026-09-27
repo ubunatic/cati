@@ -1,6 +1,6 @@
 # 064 — Use Loom's standard navigation pane in mediabrowse
 
-**Status**: Open
+**Status**: In Progress
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Refactoring
