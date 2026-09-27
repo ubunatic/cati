@@ -43,6 +43,9 @@ type Options struct {
 	Mode Mode
 	Rows int
 	Jobs int
+	// OnProgress is called as rendered rows complete. Parallel rendering may
+	// invoke it concurrently; callbacks should be quick and concurrency-safe.
+	OnProgress func(core.Progress)
 }
 
 // ScaleToFit scales img for sextant rendering within the given terminal dimensions.
@@ -698,6 +701,7 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	scaled := ScaleToFit(img, cols, opts.Rows)
 	b := scaled.Bounds()
 	rowCount := (b.Dy() + blockRows - 1) / blockRows
+	progress := core.NewProgressReporter(opts.OnProgress, rowCount)
 	if rowCount <= 0 {
 		return &core.Grid{Cells: [][]core.Cell{}}, nil
 	}
@@ -731,6 +735,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	if jobs <= 1 {
 		for row := 0; row < rowCount; row++ {
 			renderRow(row)
+			if opts.OnProgress != nil {
+				progress.Done()
+			}
 		}
 	} else {
 		var wg sync.WaitGroup
@@ -747,6 +754,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 			go func() {
 				for row := range jobsCh {
 					renderRow(row)
+					if opts.OnProgress != nil {
+						progress.Done()
+					}
 					wg.Done()
 				}
 			}()
@@ -821,7 +831,6 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 	if rowCount <= 0 {
 		return dst
 	}
-
 	jobsCh := make(chan int)
 	var wg sync.WaitGroup
 	workerN := jobs

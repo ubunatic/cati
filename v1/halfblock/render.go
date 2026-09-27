@@ -275,6 +275,9 @@ func pairToCell(top, bot color.RGBA) cell {
 type Options struct {
 	Rows int
 	Jobs int
+	// OnProgress is called as rendered rows complete. Parallel rendering may
+	// invoke it concurrently; callbacks should be quick and concurrency-safe.
+	OnProgress func(core.Progress)
 
 	// NoLinePrefix omits the erase-line and carriage-return prefix emitted
 	// before each rendered line. Set this when composing output alongside
@@ -297,6 +300,7 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 
 	// Process rows in pairs (top, bottom).
 	rowCount := (height + 1) / 2
+	progress := core.NewProgressReporter(opts.OnProgress, rowCount)
 	if rowCount <= 0 {
 		return &core.Grid{Cells: [][]core.Cell{}}, nil
 	}
@@ -332,6 +336,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	if jobs <= 1 {
 		for row := 0; row < rowCount; row++ {
 			renderRowFunc(row)
+			if opts.OnProgress != nil {
+				progress.Done()
+			}
 		}
 	} else {
 		var wg sync.WaitGroup
@@ -347,6 +354,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 			go func() {
 				for row := range jobsCh {
 					renderRowFunc(row)
+					if opts.OnProgress != nil {
+						progress.Done()
+					}
 					wg.Done()
 				}
 			}()

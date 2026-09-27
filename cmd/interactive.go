@@ -566,7 +566,21 @@ func sameRenderMode(a, b renderCfg) bool {
 		a.quadOpts.HalfblockThreshold = 0
 		b.quadOpts.HalfblockThreshold = 0
 	}
-	return a.quadOpts == b.quadOpts
+	// Progress reporting is an observer and does not change rendering mode.
+	a.quadOpts.OnProgress = nil
+	b.quadOpts.OnProgress = nil
+	return a.quadOpts.NoLinePrefix == b.quadOpts.NoLinePrefix &&
+		a.quadOpts.HalfblockThreshold == b.quadOpts.HalfblockThreshold &&
+		a.quadOpts.Blend == b.quadOpts.Blend &&
+		a.quadOpts.SplitHalf == b.quadOpts.SplitHalf &&
+		a.quadOpts.SplitHalfNeighbors == b.quadOpts.SplitHalfNeighbors &&
+		a.quadOpts.LumSplit == b.quadOpts.LumSplit &&
+		a.quadOpts.PCA2 == b.quadOpts.PCA2 &&
+		a.quadOpts.Diameter == b.quadOpts.Diameter &&
+		a.quadOpts.KMeans == b.quadOpts.KMeans &&
+		a.quadOpts.EdgeSnap == b.quadOpts.EdgeSnap &&
+		a.quadOpts.Rows == b.quadOpts.Rows &&
+		a.quadOpts.Jobs == b.quadOpts.Jobs
 }
 
 // cycleRenderCfg returns the next renderCfg in the cycle and its display name.

@@ -4,7 +4,10 @@ import (
 	"image"
 	"image/color"
 	"strings"
+	"sync"
 	"testing"
+
+	"ubunatic.com/cati/v1/core"
 )
 
 func TestRenderJMatchesSerial(t *testing.T) {
@@ -24,6 +27,34 @@ func TestRenderJMatchesSerial(t *testing.T) {
 	}
 	if serial.String() != parallel.String() {
 		t.Fatalf("RenderJ output differs\nserial:   %q\nparallel: %q", serial.String(), parallel.String())
+	}
+}
+
+func TestRenderProgress(t *testing.T) {
+	for _, jobs := range []int{1, 8} {
+		var mu sync.Mutex
+		var events []core.Progress
+		_, err := RenderToGrid(image.NewRGBA(image.Rect(0, 0, 64, 48)), 0, Options{Jobs: jobs, OnProgress: func(p core.Progress) {
+			mu.Lock()
+			events = append(events, p)
+			mu.Unlock()
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertProgressEvents(t, events, 32*24)
+	}
+}
+
+func assertProgressEvents(t *testing.T, events []core.Progress, total int) {
+	t.Helper()
+	if len(events) != total {
+		t.Fatalf("events = %d, want %d", len(events), total)
+	}
+	for _, p := range events {
+		if p.Stage != core.StageRendering || p.Current < 1 || p.Current > total || p.Total != total || p.Ratio < 0 || p.Ratio > 1 || p.Ratio != float64(p.Current)/float64(total) {
+			t.Errorf("invalid progress event: %+v", p)
+		}
 	}
 }
 

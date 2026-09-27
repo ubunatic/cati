@@ -74,6 +74,30 @@ func main() {
 	}
 }
 ```
+
+### Rendering progress
+
+All four renderers accept an optional `OnProgress` callback in their `Options`.
+The callback receives `core.Progress` events with `StageRendering`, completed
+work in `Current`, the total row or cell count in `Total`, and a clamped `Ratio`.
+Parallel rendering invokes callbacks from worker goroutines, so callbacks must
+be concurrency-safe and should return quickly. A TUI can forward events to its
+own event loop:
+
+```go
+updates := make(chan core.Progress, 1)
+opts := halfblock.Options{Jobs: 4, OnProgress: func(p core.Progress) {
+    select {
+    case updates <- p:
+    default: // drop stale display updates rather than block rendering
+    }
+}}
+grid, err := halfblock.RenderToGrid(img, 80, opts)
+```
+
+Use the same pattern with `quadblock.Options`, `sextant.Options`, or
+`sparkline.Options`. Leave `OnProgress` nil when updates are not needed; the
+renderers skip progress accounting in that case.
 <!-- GO_EXAMPLE_END -->
 
 ## Loading SVGs
