@@ -294,6 +294,7 @@ func (p *mediaPreviewPane) Tick(now time.Time) {
 		w.Tick(now)
 		if w.TickInterval() == 0 {
 			p.mu.Lock()
+			p.playing = false
 			p.videoEnded = true
 			p.mu.Unlock()
 		}

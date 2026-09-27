@@ -322,8 +322,8 @@ func TestAppTickerInterface(t *testing.T) {
 	}
 
 	// When playing, TickInterval should return non-zero interval and Tick should not panic
-	ticker.Tick(time.Now())
 	if interval := ticker.TickInterval(); interval <= 0 {
 		t.Fatalf("playing video ticker interval = %v, want > 0", interval)
 	}
+	ticker.Tick(time.Now())
 }

@@ -352,3 +352,63 @@ func TestPreviewPaneRepeatedPlayPauseDoesNotReloadPreview(t *testing.T) {
 		t.Fatalf("after mouse resume: playing=%v, videoLoads=%d, stillLoads=%d", p.playing, videoLoads, stillLoads)
 	}
 }
+
+func TestPreviewPaneAutoPauseOnVideoEOFAndRestart(t *testing.T) {
+	withWidgetFactories(t)
+	videoLoads := 0
+	fakeVideoWidget, err := media.NewImage(image.NewRGBA(image.Rect(0, 0, 2, 2)), media.ModeHalfblock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	loadImageWidget = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
+		return nil, nil
+	}
+	newVideoWidget = func(path string, mode media.Mode, fps float64) (*media.Widget, error) {
+		videoLoads++
+		return fakeVideoWidget, nil
+	}
+
+	p := newMediaPreviewPane(media.ModeHalfblock, 24)
+	p.SetPath("video.mp4")
+	waitForCondition(t, 200*time.Millisecond, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return !p.loading
+	})
+
+	// 1. Start playback
+	p.TogglePlay()
+	if !p.playing || videoLoads != 1 {
+		t.Fatalf("playback start: playing=%v, videoLoads=%d", p.playing, videoLoads)
+	}
+	if p.Title() != "🎬 video.mp4 [halfblock, playing]" {
+		t.Fatalf("playing title = %q", p.Title())
+	}
+
+	// 2. Tick reaches EOF (fakeVideoWidget has TickInterval == 0)
+	p.Tick(time.Now())
+
+	// Should automatically transition to paused
+	if p.playing {
+		t.Fatal("expected video to auto-pause on EOF")
+	}
+	if !p.videoEnded {
+		t.Fatal("expected videoEnded to be true")
+	}
+	if p.Title() != "🎬 video.mp4 [halfblock, paused]" {
+		t.Fatalf("auto-paused title = %q", p.Title())
+	}
+	if interval := p.TickInterval(); interval != 0 {
+		t.Fatalf("auto-paused tick interval = %v, want 0", interval)
+	}
+
+	// 3. Toggling play restarts video playback from beginning with a fresh widget
+	p.TogglePlay()
+	if !p.playing || videoLoads != 2 {
+		t.Fatalf("after restart: playing=%v, videoLoads=%d (want 2)", p.playing, videoLoads)
+	}
+	if p.Title() != "🎬 video.mp4 [halfblock, playing]" {
+		t.Fatalf("restarted title = %q", p.Title())
+	}
+}
