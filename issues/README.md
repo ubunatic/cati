@@ -63,8 +63,9 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 057 | [057-honour-spec-experimental-render-modes-across-mode-consumers.md](057-honour-spec-experimental-render-modes-across-mode-consumers.md) | Honour spec experimental render modes across mode consumers | Open |
 | 058 | [058-cati-bench-reports-fast-simple-output-mismatches.md](058-cati-bench-reports-fast-simple-output-mismatches.md) | cati --bench reports fast/simple output mismatches | Closed |
 | 059 | [059-openvideostream-reader-and-cleanup-both-call-cmd-wait-stop-hangs-unless-channel-is-drained.md](059-openvideostream-reader-and-cleanup-both-call-cmd-wait-stop-hangs-unless-channel-is-drained.md) | OpenVideoStream reader and cleanup both call cmd.Wait, stop hangs unless channel is drained | Open |
-| 060 | [060-polish-and-test-new-mediabrowse-example.md](060-polish-and-test-new-mediabrowse-example.md) | Polish and test new mediabrowse split-pane example | In Progress |
+| 060 | [060-polish-and-test-new-mediabrowse-example.md](060-polish-and-test-new-mediabrowse-example.md) | Polish and test new mediabrowse split-pane example | Closed |
 | 061 | [061-loom-view-truncates-ansi-files.md](061-loom-view-truncates-ansi-files.md) | Loom view truncates ANSI files | Open |
+| 062 | [062-async-media-loading-and-rendering-with-progress.md](062-async-media-loading-and-rendering-with-progress.md) | Async Media Loading and Rendering with Progress | Open |
 
 ## Archived
 
