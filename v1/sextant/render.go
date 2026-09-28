@@ -7,8 +7,10 @@ import (
 	"io"
 	"math/bits"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/internal/viewgeom"
@@ -214,12 +216,36 @@ func toRGBA(c color.Color) color.RGBA {
 
 func isTransparent(c color.RGBA) bool { return c.A == 0 }
 
+func appendFgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[38;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
+func appendBgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[48;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
 func fgRGB(c color.RGBA) string {
-	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
+	var b [32]byte
+	buf := appendFgRGB(b[:0], c)
+	return string(buf)
 }
 
 func bgRGB(c color.RGBA) string {
-	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
+	var b [32]byte
+	buf := appendBgRGB(b[:0], c)
+	return string(buf)
 }
 
 type cellResult struct {
@@ -298,16 +324,31 @@ func avgRegion(img image.Image, x0, x1, y0, y1 int) color.RGBA {
 		return color.RGBA{}
 	}
 	var r, g, b, n int
-	for y := y0; y < y1; y++ {
-		for x := x0; x < x1; x++ {
-			p := toRGBA(img.At(x, y))
-			if isTransparent(p) {
-				continue
+	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
+		for y := y0; y < y1; y++ {
+			off := rgba.PixOffset(x0, y)
+			for x := x0; x < x1; x++ {
+				if rgba.Pix[off+3] != 0 {
+					r += int(rgba.Pix[off])
+					g += int(rgba.Pix[off+1])
+					b += int(rgba.Pix[off+2])
+					n++
+				}
+				off += 4
 			}
-			r += int(p.R)
-			g += int(p.G)
-			b += int(p.B)
-			n++
+		}
+	} else {
+		for y := y0; y < y1; y++ {
+			for x := x0; x < x1; x++ {
+				p := toRGBA(img.At(x, y))
+				if isTransparent(p) {
+					continue
+				}
+				r += int(p.R)
+				g += int(p.G)
+				b += int(p.B)
+				n++
+			}
 		}
 	}
 	if n == 0 {
@@ -786,27 +827,29 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 		return err
 	}
 
+	var buf []byte
 	for y := 0; y < grid.Height; y++ {
-		var sb strings.Builder
+		buf = buf[:0]
 		if !opts.NoLinePrefix {
-			sb.WriteString(ansiLinePrefix)
+			buf = append(buf, ansiLinePrefix...)
 		}
 		for x := 0; x < grid.Width; x++ {
 			cell := grid.Cells[y][x]
 			if cell.Transparent {
-				sb.WriteRune(' ')
+				buf = append(buf, ' ')
 				continue
 			}
 			if cell.HasBg {
-				sb.WriteString(bgRGB(cell.Bg))
+				buf = appendBgRGB(buf, cell.Bg)
 			}
 			if cell.HasFg {
-				sb.WriteString(fgRGB(cell.Fg))
+				buf = appendFgRGB(buf, cell.Fg)
 			}
-			sb.WriteRune(cell.Ch)
-			sb.WriteString(ansiReset)
+			buf = utf8.AppendRune(buf, cell.Ch)
+			buf = append(buf, ansiReset...)
 		}
-		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
+		buf = append(buf, '\n')
+		if _, err := w.Write(buf); err != nil {
 			return fmt.Errorf("sextant render: %w", err)
 		}
 	}
