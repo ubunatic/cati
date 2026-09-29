@@ -555,5 +555,3 @@ func TestRenderToGridHeightConstrainedGridWidth(t *testing.T) {
 		t.Errorf("grid.Height = %d, want 10", grid.Height)
 	}
 }
-
-

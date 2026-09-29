@@ -7,8 +7,10 @@ import (
 	"io"
 	"math/bits"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/internal/viewgeom"
@@ -214,12 +216,52 @@ func toRGBA(c color.Color) color.RGBA {
 
 func isTransparent(c color.RGBA) bool { return c.A == 0 }
 
+func appendFgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[38;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
+func appendBgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[48;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
 func fgRGB(c color.RGBA) string {
 	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
 }
 
 func bgRGB(c color.RGBA) string {
 	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
+}
+
+func safePixel(img image.Image, x, y int) color.RGBA {
+	b := img.Bounds()
+	if x < b.Min.X || x >= b.Max.X || y < b.Min.Y || y >= b.Max.Y {
+		return color.RGBA{}
+	}
+	if core.Fastpath {
+		if rgba, ok := img.(*image.RGBA); ok {
+			off := (y-rgba.Rect.Min.Y)*rgba.Stride + (x-rgba.Rect.Min.X)*4
+			if off >= 0 && off+3 < len(rgba.Pix) {
+				a := rgba.Pix[off+3]
+				if a == 0 {
+					return color.RGBA{}
+				}
+				return color.RGBA{R: rgba.Pix[off], G: rgba.Pix[off+1], B: rgba.Pix[off+2], A: a}
+			}
+		}
+	}
+	return toRGBA(img.At(x, y))
 }
 
 type cellResult struct {
@@ -300,7 +342,7 @@ func avgRegion(img image.Image, x0, x1, y0, y1 int) color.RGBA {
 	var r, g, b, n int
 	for y := y0; y < y1; y++ {
 		for x := x0; x < x1; x++ {
-			p := toRGBA(img.At(x, y))
+			p := safePixel(img, x, y)
 			if isTransparent(p) {
 				continue
 			}
@@ -786,27 +828,59 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 		return err
 	}
 
+	if !core.Fastpath {
+		for y := 0; y < grid.Height; y++ {
+			var sb strings.Builder
+			if !opts.NoLinePrefix {
+				sb.WriteString(ansiLinePrefix)
+			}
+			for x := 0; x < grid.Width; x++ {
+				cell := grid.Cells[y][x]
+				if cell.Transparent {
+					sb.WriteRune(' ')
+					continue
+				}
+				if cell.HasBg {
+					sb.WriteString(bgRGB(cell.Bg))
+				}
+				if cell.HasFg {
+					sb.WriteString(fgRGB(cell.Fg))
+				}
+				sb.WriteRune(cell.Ch)
+				sb.WriteString(ansiReset)
+			}
+			if _, err := fmt.Fprintln(w, sb.String()); err != nil {
+				return fmt.Errorf("sextant render: %w", err)
+			}
+		}
+		return nil
+	}
+
+	var buf []byte
+	var runeBuf [utf8.UTFMax]byte
 	for y := 0; y < grid.Height; y++ {
-		var sb strings.Builder
+		buf = buf[:0]
 		if !opts.NoLinePrefix {
-			sb.WriteString(ansiLinePrefix)
+			buf = append(buf, ansiLinePrefix...)
 		}
 		for x := 0; x < grid.Width; x++ {
 			cell := grid.Cells[y][x]
 			if cell.Transparent {
-				sb.WriteRune(' ')
+				buf = append(buf, ' ')
 				continue
 			}
 			if cell.HasBg {
-				sb.WriteString(bgRGB(cell.Bg))
+				buf = appendBgRGB(buf, cell.Bg)
 			}
 			if cell.HasFg {
-				sb.WriteString(fgRGB(cell.Fg))
+				buf = appendFgRGB(buf, cell.Fg)
 			}
-			sb.WriteRune(cell.Ch)
-			sb.WriteString(ansiReset)
+			n := utf8.EncodeRune(runeBuf[:], cell.Ch)
+			buf = append(buf, runeBuf[:n]...)
+			buf = append(buf, ansiReset...)
 		}
-		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
+		buf = append(buf, '\n')
+		if _, err := w.Write(buf); err != nil {
 			return fmt.Errorf("sextant render: %w", err)
 		}
 	}
@@ -862,7 +936,15 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 						yy := y0 + idx/blockCols
 						xx := x0 + idx%blockCols
 						if xx < b.Max.X && yy < b.Max.Y {
-							dst.SetRGBA(xx, yy, target)
+							if core.Fastpath {
+								off := (yy-dst.Rect.Min.Y)*dst.Stride + (xx-dst.Rect.Min.X)*4
+								dst.Pix[off] = target.R
+								dst.Pix[off+1] = target.G
+								dst.Pix[off+2] = target.B
+								dst.Pix[off+3] = target.A
+							} else {
+								dst.SetRGBA(xx, yy, target)
+							}
 						}
 					}
 				}
