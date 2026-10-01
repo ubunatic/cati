@@ -86,18 +86,22 @@ func eqRGB(a, b color.RGBA) bool {
 	return a.R == b.R && a.G == b.G && a.B == b.B
 }
 
-// safePixel returns the RGBA value at (x,y), or transparent if out of bounds.
-func safePixel(img image.Image, x, y int, b image.Rectangle) color.RGBA {
+func safePixel(img image.Image, x, y int) color.RGBA {
+	b := img.Bounds()
 	if x < b.Min.X || x >= b.Max.X || y < b.Min.Y || y >= b.Max.Y {
 		return color.RGBA{}
 	}
-	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
-		off := rgba.PixOffset(x, y)
-		p := rgba.Pix[off : off+4 : off+4]
-		if p[3] == 0 {
-			return color.RGBA{}
+	if core.Fastpath {
+		if rgba, ok := img.(*image.RGBA); ok {
+			off := (y-rgba.Rect.Min.Y)*rgba.Stride + (x-rgba.Rect.Min.X)*4
+			if off >= 0 && off+3 < len(rgba.Pix) {
+				a := rgba.Pix[off+3]
+				if a == 0 {
+					return color.RGBA{}
+				}
+				return color.RGBA{R: rgba.Pix[off], G: rgba.Pix[off+1], B: rgba.Pix[off+2], A: a}
+			}
 		}
-		return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
 	}
 	return toRGBA(img.At(x, y))
 }
@@ -155,6 +159,22 @@ func ScaleToFit(img image.Image, cols, rows int) image.Image {
 	}
 
 	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
+	if core.Fastpath {
+		if srcRGBA, ok := img.(*image.RGBA); ok {
+			for y := 0; y < newH; y++ {
+				srcY := b.Min.Y + y*srcH/newH
+				dstRowOff := y * dst.Stride
+				srcRowOff := (srcY - srcRGBA.Rect.Min.Y) * srcRGBA.Stride
+				for x := 0; x < newW; x++ {
+					srcX := b.Min.X + x*srcW/newW
+					sOff := srcRowOff + (srcX-srcRGBA.Rect.Min.X)*4
+					dOff := dstRowOff + x*4
+					copy(dst.Pix[dOff:dOff+4], srcRGBA.Pix[sOff:sOff+4])
+				}
+			}
+			return dst
+		}
+	}
 	for y := 0; y < newH; y++ {
 		srcY := b.Min.Y + y*srcH/newH
 		for x := 0; x < newW; x++ {
@@ -186,23 +206,27 @@ func ScaleNN(img image.Image, w, h int) image.Image {
 		return img
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
-		for y := 0; y < h; y++ {
-			srcY := b.Min.Y + y*srcH/h
-			for x := 0; x < w; x++ {
-				srcX := b.Min.X + x*srcW/w
-				off := rgba.PixOffset(srcX, srcY)
-				p := rgba.Pix[off : off+4 : off+4]
-				dst.SetRGBA(x, y, color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]})
+	if core.Fastpath {
+		if srcRGBA, ok := img.(*image.RGBA); ok {
+			for y := 0; y < h; y++ {
+				srcY := b.Min.Y + y*srcH/h
+				dstRowOff := y * dst.Stride
+				srcRowOff := (srcY - srcRGBA.Rect.Min.Y) * srcRGBA.Stride
+				for x := 0; x < w; x++ {
+					srcX := b.Min.X + x*srcW/w
+					sOff := srcRowOff + (srcX-srcRGBA.Rect.Min.X)*4
+					dOff := dstRowOff + x*4
+					copy(dst.Pix[dOff:dOff+4], srcRGBA.Pix[sOff:sOff+4])
+				}
 			}
+			return dst
 		}
-	} else {
-		for y := 0; y < h; y++ {
-			srcY := b.Min.Y + y*srcH/h
-			for x := 0; x < w; x++ {
-				srcX := b.Min.X + x*srcW/w
-				dst.Set(x, y, img.At(srcX, srcY))
-			}
+	}
+	for y := 0; y < h; y++ {
+		srcY := b.Min.Y + y*srcH/h
+		for x := 0; x < w; x++ {
+			srcX := b.Min.X + x*srcW/w
+			dst.Set(x, y, img.At(srcX, srcY))
 		}
 	}
 	return dst
@@ -250,6 +274,9 @@ func pairToCell(top, bot color.RGBA) cell {
 type Options struct {
 	Rows int
 	Jobs int
+	// OnProgress is called as rendered rows complete. Parallel rendering may
+	// invoke it concurrently; callbacks should be quick and concurrency-safe.
+	OnProgress func(core.Progress)
 
 	// NoLinePrefix omits the erase-line and carriage-return prefix emitted
 	// before each rendered line. Set this when composing output alongside
@@ -272,6 +299,7 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 
 	// Process rows in pairs (top, bottom).
 	rowCount := (height + 1) / 2
+	progress := core.NewProgressReporter(opts.OnProgress, rowCount)
 	if rowCount <= 0 {
 		return &core.Grid{Cells: [][]core.Cell{}}, nil
 	}
@@ -286,10 +314,10 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 		botY := topY + 1
 		for x := 0; x < width; x++ {
 			srcX := b.Min.X + x
-			top := safePixel(scaled, srcX, topY, b)
+			top := safePixel(scaled, srcX, topY)
 			var bot color.RGBA
 			if botY < b.Min.Y+height {
-				bot = safePixel(scaled, srcX, botY, b)
+				bot = safePixel(scaled, srcX, botY)
 			}
 			c := pairToCell(top, bot)
 			cells[row][x] = core.Cell{
@@ -307,6 +335,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	if jobs <= 1 {
 		for row := 0; row < rowCount; row++ {
 			renderRowFunc(row)
+			if opts.OnProgress != nil {
+				progress.Done()
+			}
 		}
 	} else {
 		var wg sync.WaitGroup
@@ -326,6 +357,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 			go func() {
 				for row := range jobsCh {
 					renderRowFunc(row)
+					if opts.OnProgress != nil {
+						progress.Done()
+					}
 					wg.Done()
 				}
 			}()
@@ -355,33 +389,8 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 		return err
 	}
 
-	var buf []byte
-	for y := 0; y < grid.Height; y++ {
-		if core.Fastpath {
-			buf = buf[:0]
-			if !opts.NoLinePrefix {
-				buf = append(buf, ansiLinePrefix...)
-			}
-			for x := 0; x < grid.Width; x++ {
-				c := grid.Cells[y][x]
-				if c.Transparent {
-					buf = append(buf, ' ')
-				} else {
-					if c.HasBg {
-						buf = appendBgRGB(buf, c.Bg)
-					}
-					if c.HasFg {
-						buf = appendFgRGB(buf, c.Fg)
-					}
-					buf = utf8.AppendRune(buf, c.Ch)
-					buf = append(buf, ansiReset...)
-				}
-			}
-			buf = append(buf, '\n')
-			if _, err := w.Write(buf); err != nil {
-				return fmt.Errorf("halfblock render: %w", err)
-			}
-		} else {
+	if !core.Fastpath {
+		for y := 0; y < grid.Height; y++ {
 			var sb strings.Builder
 			if !opts.NoLinePrefix {
 				sb.WriteString(ansiLinePrefix)
@@ -399,6 +408,34 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 			if _, err := fmt.Fprintln(w, sb.String()); err != nil {
 				return fmt.Errorf("halfblock render: %w", err)
 			}
+		}
+		return nil
+	}
+
+	var buf []byte
+	for y := 0; y < grid.Height; y++ {
+		buf = buf[:0]
+		if !opts.NoLinePrefix {
+			buf = append(buf, ansiLinePrefix...)
+		}
+		for x := 0; x < grid.Width; x++ {
+			c := grid.Cells[y][x]
+			if c.Transparent {
+				buf = append(buf, ' ')
+			} else {
+				if c.HasBg {
+					buf = appendBgRGB(buf, c.Bg)
+				}
+				if c.HasFg {
+					buf = appendFgRGB(buf, c.Fg)
+				}
+				buf = utf8.AppendRune(buf, c.Ch)
+				buf = append(buf, ansiReset...)
+			}
+		}
+		buf = append(buf, '\n')
+		if _, err := w.Write(buf); err != nil {
+			return fmt.Errorf("halfblock render: %w", err)
 		}
 	}
 	return nil
@@ -435,9 +472,53 @@ func RenderToImageJ(img image.Image, jobs int) *image.RGBA {
 	grid, _ := RenderToGrid(img, b.Dx(), Options{Jobs: jobs})
 	dst := image.NewRGBA(b)
 
+	if !core.Fastpath {
+		for y := 0; y < grid.Height; y++ {
+			topY := b.Min.Y + y*2
+			botY := topY + 1
+			for x := 0; x < grid.Width; x++ {
+				c := grid.Cells[y][x]
+				var topColor, botColor color.RGBA
+				if !c.Transparent {
+					bg := c.Bg
+					if !c.HasBg {
+						bg = color.RGBA{}
+					}
+					fg := c.Fg
+					if !c.HasFg {
+						fg = bg
+					}
+					if c.HasBg {
+						bg = ansiColor(bg)
+					}
+					if c.HasFg {
+						fg = ansiColor(fg)
+					}
+					switch c.Ch {
+					case '▀':
+						topColor, botColor = fg, bg
+					case '▄':
+						topColor, botColor = bg, fg
+					case '█':
+						topColor, botColor = fg, fg
+					default:
+						topColor, botColor = bg, bg
+					}
+				}
+				dst.SetRGBA(b.Min.X+x, topY, topColor)
+				if botY < b.Max.Y {
+					dst.SetRGBA(b.Min.X+x, botY, botColor)
+				}
+			}
+		}
+		return dst
+	}
+
 	for y := 0; y < grid.Height; y++ {
 		topY := b.Min.Y + y*2
 		botY := topY + 1
+		topRowOff := (topY - dst.Rect.Min.Y) * dst.Stride
+		botRowOff := (botY - dst.Rect.Min.Y) * dst.Stride
 		for x := 0; x < grid.Width; x++ {
 			c := grid.Cells[y][x]
 			var topColor color.RGBA
@@ -482,9 +563,17 @@ func RenderToImageJ(img image.Image, jobs int) *image.RGBA {
 				}
 			}
 
-			dst.SetRGBA(b.Min.X+x, topY, topColor)
+			topOff := topRowOff + x*4
+			dst.Pix[topOff] = topColor.R
+			dst.Pix[topOff+1] = topColor.G
+			dst.Pix[topOff+2] = topColor.B
+			dst.Pix[topOff+3] = topColor.A
 			if botY < b.Max.Y {
-				dst.SetRGBA(b.Min.X+x, botY, botColor)
+				botOff := botRowOff + x*4
+				dst.Pix[botOff] = botColor.R
+				dst.Pix[botOff+1] = botColor.G
+				dst.Pix[botOff+2] = botColor.B
+				dst.Pix[botOff+3] = botColor.A
 			}
 		}
 	}

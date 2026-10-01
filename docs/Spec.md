@@ -3,6 +3,7 @@ title: Spec System Reference
 weight: 30
 ---
 
+<!-- harnez:bundled -->
 # Spec-Driven Architecture — Authoritative Reference
 
 The `spec/` directory is **application code**, not runtime user configuration. Treat spec files with the same rigour as source code: every change must be intentional, every object must be consumed, and specs must always be validated against formal schemas.
@@ -43,6 +44,11 @@ Every YAML file references its schema at the top:
 ```yaml
 # yaml-language-server: $schema=schemas/actions.schema.json
 ```
+
+`spec/telemetry.yaml` is a Harnez-specific non-UI example: it owns embedded SQL
+statements and DDL, while its JSON Schema validates the YAML structure rather
+than SQL syntax. In another project, substitute an existing spec file or omit
+this example when absent.
 
 ---
 
@@ -160,3 +166,5 @@ When modifying spec-driven features:
 - [ ] Validated schema: `make validate-spec` (or language test equivalent).
 - [ ] Verified integrity tests pass: `go test ./...` / `cargo test` / `pytest`.
 - [ ] Cleaned up obsolete definitions, orphaned actions, and schema enums.
+
+<!-- harnez:stop -->

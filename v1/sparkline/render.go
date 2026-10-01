@@ -20,11 +20,14 @@ type Options struct {
 	// other content on the same terminal row.
 	NoLinePrefix bool
 
-	Mode  Mode
-	Rows  int
-	Jobs  int
-	CellW int
-	CellH int
+	Mode Mode
+	Rows int
+	Jobs int
+	// OnProgress is called as rendered rows complete. Parallel rendering may
+	// invoke it concurrently; callbacks should be quick and concurrency-safe.
+	OnProgress func(core.Progress)
+	CellW      int
+	CellH      int
 	// AspectX is an optional horizontal aspect compensation override.
 	// By default (0), the natural ratio (2 * CellW / CellH) is computed
 	// automatically for standard 1:2 terminal cells.
@@ -151,6 +154,7 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	}
 
 	bitCandsCache := prepareBitCandidatesCache(opts.Mode, custom, pixW, pixH, outCols, outRows)
+	progress := core.NewProgressReporter(opts.OnProgress, outRows)
 
 	renderRow := func(tr int) {
 		for tc := 0; tc < outCols; tc++ {
@@ -185,6 +189,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	if jobs <= 1 {
 		for tr := 0; tr < outRows; tr++ {
 			renderRow(tr)
+			if opts.OnProgress != nil {
+				progress.Done()
+			}
 		}
 	} else {
 		var wg sync.WaitGroup
@@ -200,6 +207,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 			go func() {
 				for tr := range jobsCh {
 					renderRow(tr)
+					if opts.OnProgress != nil {
+						progress.Done()
+					}
 					wg.Done()
 				}
 			}()
@@ -282,6 +292,7 @@ func renderToImageWithOptions(img image.Image, outCols, outRows int, opts Option
 	dst := image.NewRGBA(b)
 
 	bitCandsCache := prepareBitCandidatesCache(opts.Mode, custom, pixW, pixH, outCols, outRows)
+	progress := core.NewProgressReporter(opts.OnProgress, outRows)
 
 	renderRow := func(tr int) {
 		for tc := 0; tc < outCols; tc++ {
@@ -312,9 +323,19 @@ func renderToImageWithOptions(img image.Image, outCols, outRows int, opts Option
 	if jobs <= 1 {
 		for tr := 0; tr < outRows; tr++ {
 			renderRow(tr)
+			if opts.OnProgress != nil {
+				progress.Done()
+			}
 		}
 	} else {
-		parallelRows(outRows, jobs, renderRow)
+		if progress == nil {
+			parallelRows(outRows, jobs, renderRow)
+		} else {
+			parallelRows(outRows, jobs, func(row int) {
+				renderRow(row)
+				progress.Done()
+			})
+		}
 	}
 	return dst, nil
 }

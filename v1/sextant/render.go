@@ -7,8 +7,10 @@ import (
 	"io"
 	"math/bits"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/internal/viewgeom"
@@ -43,6 +45,9 @@ type Options struct {
 	Mode Mode
 	Rows int
 	Jobs int
+	// OnProgress is called as rendered rows complete. Parallel rendering may
+	// invoke it concurrently; callbacks should be quick and concurrency-safe.
+	OnProgress func(core.Progress)
 }
 
 // ScaleToFit scales img for sextant rendering within the given terminal dimensions.
@@ -211,12 +216,60 @@ func toRGBA(c color.Color) color.RGBA {
 
 func isTransparent(c color.RGBA) bool { return c.A == 0 }
 
+func appendFgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[38;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
+func appendBgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[48;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
 func fgRGB(c color.RGBA) string {
 	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
 }
 
 func bgRGB(c color.RGBA) string {
 	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
+}
+
+func samplePixelFast(img image.Image, x, y int) color.RGBA {
+	if core.Fastpath {
+		if rgba, ok := img.(*image.RGBA); ok {
+			if !image.Pt(x, y).In(rgba.Rect) {
+				return color.RGBA{}
+			}
+			off := rgba.PixOffset(x, y)
+			p := rgba.Pix[off : off+4 : off+4]
+			if p[3] == 0 {
+				return color.RGBA{}
+			}
+			return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
+		}
+		if nrgba, ok := img.(*image.NRGBA); ok {
+			if !image.Pt(x, y).In(nrgba.Rect) {
+				return color.RGBA{}
+			}
+			off := nrgba.PixOffset(x, y)
+			p := nrgba.Pix[off : off+4 : off+4]
+			if p[3] == 0 {
+				return color.RGBA{}
+			}
+			return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
+		}
+	}
+	return toRGBA(img.At(x, y))
 }
 
 type cellResult struct {
@@ -297,7 +350,7 @@ func avgRegion(img image.Image, x0, x1, y0, y1 int) color.RGBA {
 	var r, g, b, n int
 	for y := y0; y < y1; y++ {
 		for x := x0; x < x1; x++ {
-			p := toRGBA(img.At(x, y))
+			p := samplePixelFast(img, x, y)
 			if isTransparent(p) {
 				continue
 			}
@@ -604,6 +657,18 @@ func emittedCoverage(cell cellResult, idx int) bool {
 }
 
 func chooseCell(pixels [6]color.RGBA, mode Mode) cellResult {
+	if core.Fastpath {
+		allTransparent := true
+		for i := 0; i < 6; i++ {
+			if pixels[i].A != 0 {
+				allTransparent = false
+				break
+			}
+		}
+		if allTransparent {
+			return cellResult{ch: ' ', transparent: true}
+		}
+	}
 	// Evaluate every representable mask. The direct luma threshold is a useful
 	// tie-break preference, but it is not generally the lowest-error encoding
 	// once a cell contains antialiasing or more than two colours.
@@ -698,6 +763,7 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	scaled := ScaleToFit(img, cols, opts.Rows)
 	b := scaled.Bounds()
 	rowCount := (b.Dy() + blockRows - 1) / blockRows
+	progress := core.NewProgressReporter(opts.OnProgress, rowCount)
 	if rowCount <= 0 {
 		return &core.Grid{Cells: [][]core.Cell{}}, nil
 	}
@@ -731,6 +797,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	if jobs <= 1 {
 		for row := 0; row < rowCount; row++ {
 			renderRow(row)
+			if opts.OnProgress != nil {
+				progress.Done()
+			}
 		}
 	} else {
 		var wg sync.WaitGroup
@@ -747,6 +816,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 			go func() {
 				for row := range jobsCh {
 					renderRow(row)
+					if opts.OnProgress != nil {
+						progress.Done()
+					}
 					wg.Done()
 				}
 			}()
@@ -776,27 +848,38 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 		return err
 	}
 
+	var buf []byte
 	for y := 0; y < grid.Height; y++ {
-		var sb strings.Builder
+		buf = buf[:0]
 		if !opts.NoLinePrefix {
-			sb.WriteString(ansiLinePrefix)
+			buf = append(buf, ansiLinePrefix...)
 		}
 		for x := 0; x < grid.Width; x++ {
 			cell := grid.Cells[y][x]
 			if cell.Transparent {
-				sb.WriteRune(' ')
+				buf = append(buf, ' ')
 				continue
 			}
-			if cell.HasBg {
-				sb.WriteString(bgRGB(cell.Bg))
+			if core.Fastpath {
+				if cell.HasBg {
+					buf = appendBgRGB(buf, cell.Bg)
+				}
+				if cell.HasFg {
+					buf = appendFgRGB(buf, cell.Fg)
+				}
+			} else {
+				if cell.HasBg {
+					buf = append(buf, bgRGB(cell.Bg)...)
+				}
+				if cell.HasFg {
+					buf = append(buf, fgRGB(cell.Fg)...)
+				}
 			}
-			if cell.HasFg {
-				sb.WriteString(fgRGB(cell.Fg))
-			}
-			sb.WriteRune(cell.Ch)
-			sb.WriteString(ansiReset)
+			buf = utf8.AppendRune(buf, cell.Ch)
+			buf = append(buf, ansiReset...)
 		}
-		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
+		buf = append(buf, '\n')
+		if _, err := w.Write(buf); err != nil {
 			return fmt.Errorf("sextant render: %w", err)
 		}
 	}
@@ -821,7 +904,6 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 	if rowCount <= 0 {
 		return dst
 	}
-
 	jobsCh := make(chan int)
 	var wg sync.WaitGroup
 	workerN := jobs

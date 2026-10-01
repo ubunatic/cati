@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"image"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"ubunatic.com/cati/spec"
@@ -25,7 +27,10 @@ type mediaBenchmarkModeResult struct {
 	// skipped is true when the first render returned an error.
 	skipped bool
 	// slow is true when the single, mandatory render exceeded the budget.
-	slow bool
+	slow            bool
+	output          []string
+	differingFrames int
+	comparedFrames  int
 }
 
 func runMediaBenchmark(out io.Writer, path string, width, height, jobs int, mode string, budget time.Duration) error {
@@ -85,13 +90,14 @@ func runMediaBenchmarkWithRunner(out io.Writer, path string, width, height, jobs
 	}
 	if isVideo {
 		fmt.Fprintf(out, "Video benchmark: %s (%dx%d), fast vs simple paths\n", filepath.Base(path), width, height)
-		fmt.Fprintln(out, "Mode                 Frames    Fast fps  Simple fps   Speedup")
+		fmt.Fprintln(out, "Mode                 Frames    Fast fps  Simple fps   Speedup   Output parity")
 	} else {
 		budget = max(time.Millisecond, budget/time.Duration(2*len(entries)))
 		fmt.Fprintf(out, "Image benchmark: %s (%dx%d), budget %s per mode and path\n", filepath.Base(path), width, height, budget.Round(time.Millisecond))
-		fmt.Fprintln(out, "Mode                 Fast avg/render   Simple avg/render   Speedup")
+		fmt.Fprintln(out, "Mode                 Fast avg/render   Simple avg/render   Speedup   Output parity")
 	}
 	defer func(prev bool) { core.Fastpath = prev }(core.Fastpath)
+	anyDiff := false
 	// Each mode row is printed immediately after its benchmark completes (streaming).
 	for _, entry := range entries {
 		cfg := entry.cfg
@@ -99,18 +105,30 @@ func runMediaBenchmarkWithRunner(out io.Writer, path string, width, height, jobs
 		if isVideo {
 			var fps [2]float64
 			var frames int
+			var parity [2]mediaBenchmarkModeResult
+			var fastHashes [][32]byte
 			for i, fast := range []bool{true, false} {
 				core.Fastpath = fast
-				res, err := benchmarkVideoMode(path, width, height, cfg, now, render)
+				res, hashes, err := benchmarkVideoMode(path, width, height, cfg, now, render, fastHashes)
 				if err != nil {
 					return fmt.Errorf("benchmark mode %s: %w", entry.name, err)
 				}
+				if fast {
+					fastHashes = hashes
+				}
+				parity[i] = res
 				frames = res.frames
 				if res.total > 0 {
 					fps[i] = float64(res.frames) / res.total.Seconds()
 				}
 			}
-			fmt.Fprintf(out, "%-20s %6d   %9.1f   %9.1f   %s\n", entry.name, frames, fps[0], fps[1], speedup(fps[0], fps[1]))
+			status := "ok"
+			diffFrames := parity[1].differingFrames
+			if diffFrames > 0 || parity[0].frames != parity[1].frames {
+				status = fmt.Sprintf("DIFF (%d/%d frames)", diffFrames, max(parity[0].frames, parity[1].frames))
+				anyDiff = true
+			}
+			fmt.Fprintf(out, "%-20s %6d   %9.1f   %9.1f   %-8s   %s\n", entry.name, frames, fps[0], fps[1], speedup(fps[0], fps[1]), status)
 			continue
 		}
 		fitted, err := fitBenchmarkImage(img, width, height, cfg)
@@ -119,17 +137,57 @@ func runMediaBenchmarkWithRunner(out io.Writer, path string, width, height, jobs
 		}
 		var cells [2]string
 		var avgs [2]time.Duration
+		var outputs [2][]string
 		for i, fast := range []bool{true, false} {
 			core.Fastpath = fast
-			cells[i], avgs[i] = benchmarkCell(benchmarkImageMode(fitted, cfg, budget, now, render))
+			res := benchmarkImageMode(fitted, cfg, budget, now, render)
+			cells[i], avgs[i] = benchmarkCell(res)
+			outputs[i] = res.output
 		}
 		ratio := "—"
 		if avgs[0] > 0 && avgs[1] > 0 {
 			ratio = speedup(float64(avgs[1]), float64(avgs[0]))
 		}
-		fmt.Fprintf(out, "%-20s %15s   %17s   %s\n", entry.name, cells[0], cells[1], ratio)
+		parity := compareRenderOutput(outputs[0], outputs[1])
+		status := "ok"
+		if !parity.identical {
+			status = fmt.Sprintf("DIFF (%s)", parity.summary)
+			anyDiff = true
+		}
+		fmt.Fprintf(out, "%-20s %15s   %17s   %-8s   %s\n", entry.name, cells[0], cells[1], ratio, status)
+	}
+	if anyDiff {
+		fmt.Fprintln(out, "Output parity: mismatches detected")
+		return fmt.Errorf("fast/simple render output mismatch")
 	}
 	return nil
+}
+
+type renderOutputComparison struct {
+	identical bool
+	summary   string
+}
+
+func compareRenderOutput(fast, simple []string) renderOutputComparison {
+	a, b := strings.Join(fast, "\n"), strings.Join(simple, "\n")
+	if a == b {
+		return renderOutputComparison{identical: true}
+	}
+	first := 0
+	for first < len(a) && first < len(b) && a[first] == b[first] {
+		first++
+	}
+	different := 0
+	for i := 0; i < max(len(a), len(b)); i++ {
+		if i >= len(a) || i >= len(b) || a[i] != b[i] {
+			different++
+		}
+	}
+	return renderOutputComparison{summary: fmt.Sprintf("%d bytes differ, first diff byte %d", different, first)}
+}
+
+func renderOutputHash(lines []string) [32]byte {
+	return sha256.Sum256([]byte(strings.Join(lines, "\n")))
 }
 
 // benchmarkCell formats one image benchmark result and returns its average
@@ -161,9 +219,13 @@ func benchmarkImageMode(img image.Image, cfg renderCfg, budget time.Duration, no
 	start := now()
 	for result.frames == 0 || now().Sub(start) < budget {
 		before := now()
-		if _, err := render(img, cfg); err != nil {
+		output, err := render(img, cfg)
+		if err != nil {
 			result.skipped = result.frames == 0
 			break
+		}
+		if result.frames == 0 {
+			result.output = output
 		}
 		result.render += now().Sub(before)
 		result.frames++
@@ -177,28 +239,45 @@ func fitBenchmarkImage(img image.Image, width, height int, cfg renderCfg) (image
 	return fitted, err
 }
 
-func benchmarkVideoMode(path string, width, height int, cfg renderCfg, now func() time.Time, render func(image.Image, renderCfg) ([]string, error)) (mediaBenchmarkModeResult, error) {
+func benchmarkVideoMode(path string, width, height int, cfg renderCfg, now func() time.Time, render func(image.Image, renderCfg) ([]string, error), fastHashes [][32]byte) (mediaBenchmarkModeResult, [][32]byte, error) {
 	start := now()
 	frames, cleanup, err := halfblock.OpenVideoStream(context.Background(), path, 0, 0, 0)
 	if err != nil {
-		return mediaBenchmarkModeResult{}, err
+		return mediaBenchmarkModeResult{}, nil, err
 	}
 	defer cleanup()
 	var result mediaBenchmarkModeResult
+	var hashes [][32]byte
 	for frame := range frames {
 		fitted, err := fitBenchmarkImage(frame, width, height, cfg)
 		if err != nil {
-			return result, err
+			return result, hashes, err
 		}
 		renderStart := now()
-		if _, err := render(fitted, cfg); err != nil {
-			return result, err
+		output, err := render(fitted, cfg)
+		if err != nil {
+			return result, hashes, err
+		}
+		hash := renderOutputHash(output)
+		if core.Fastpath {
+			hashes = append(hashes, hash)
+		} else {
+			result.comparedFrames++
+			if result.frames >= len(fastHashes) || fastHashes[result.frames] != hash {
+				result.differingFrames++
+			}
 		}
 		result.render += now().Sub(renderStart)
 		result.frames++
 	}
 	result.total = now().Sub(start)
-	return result, nil
+	if !core.Fastpath {
+		if result.frames < len(fastHashes) {
+			result.comparedFrames += len(fastHashes) - result.frames
+			result.differingFrames += len(fastHashes) - result.frames
+		}
+	}
+	return result, hashes, nil
 }
 
 // withoutExperimentalModes drops the spec's experimental compositions.

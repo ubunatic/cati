@@ -146,6 +146,42 @@ func LoadVideoFrame(path string) (image.Image, error) {
 	return img, nil
 }
 
+func loadVideoFrameContext(ctx context.Context, path string) (image.Image, error) {
+	dur, err := ProbeVideoDuration(path)
+	if err == nil && dur > 0 {
+		offset := 1.0
+		if dur <= 1.0 {
+			offset = dur * 0.1
+		}
+		if img, err := loadVideoFrameAtContext(ctx, path, offset); err == nil {
+			return img, nil
+		}
+	}
+	cmd := exec.CommandContext(ctx, "ffmpeg", "-v", "quiet", "-i", path, "-vframes", "1", "-f", "image2pipe", "-vcodec", "png", "pipe:1")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("ffmpeg %s: %w", path, err)
+	}
+	img, err := png.Decode(bytes.NewReader(out))
+	if err != nil {
+		return nil, fmt.Errorf("decode frame from %s: %w", path, err)
+	}
+	return img, nil
+}
+
+func loadVideoFrameAtContext(ctx context.Context, path string, offsetSec float64) (image.Image, error) {
+	cmd := exec.CommandContext(ctx, "ffmpeg", "-v", "quiet", "-ss", strconv.FormatFloat(offsetSec, 'f', 3, 64), "-i", path, "-vframes", "1", "-f", "image2pipe", "-vcodec", "png", "pipe:1")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("ffmpeg %s@%.3fs: %w", path, offsetSec, err)
+	}
+	img, err := png.Decode(bytes.NewReader(out))
+	if err != nil {
+		return nil, fmt.Errorf("decode frame from %s: %w", path, err)
+	}
+	return img, nil
+}
+
 // LoadVideoFrameAt extracts one frame at offsetSec seconds from path.
 // It requires ffmpeg to be on $PATH.
 func LoadVideoFrameAt(path string, offsetSec float64) (image.Image, error) {

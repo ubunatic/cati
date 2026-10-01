@@ -79,6 +79,12 @@ src (2x4 pixels)
     *   `█` (U+2588): Both pixels colored identically.
     *   ` ` (Space): Both pixels transparent.
 
+### Fast Path & Performance (`CATI_FASTPATH`)
+Half-block rendering implements dual-path execution gated by `core.Fastpath` (default enabled, disabled via `CATI_FASTPATH=0`):
+- **Direct RGBA Access**: Fast path directly indexes `*image.RGBA.Pix` slices during scaling and sampling, avoiding interface boxing from `img.At(x, y)`.
+- **Zero-Allocation ANSI Formatting**: Assembles ANSI 24-bit color escapes directly into a reusable line byte buffer via `strconv.AppendUint` instead of `fmt.Sprintf` / `strings.Builder`.
+- See [docs/perf/2026-09-24-halfblock-direct-rgba-fastpath.md](file:///home/uwe/projects/cati/docs/perf/2026-09-24-halfblock-direct-rgba-fastpath.md) for benchmark data and technical details.
+
 ---
 
 ## 3. Quad-block Pipeline (`quadblock`)

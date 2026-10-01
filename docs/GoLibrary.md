@@ -74,6 +74,30 @@ func main() {
 	}
 }
 ```
+
+### Rendering progress
+
+All four renderers accept an optional `OnProgress` callback in their `Options`.
+The callback receives `core.Progress` events with `StageRendering`, completed
+work in `Current`, the total row or cell count in `Total`, and a clamped `Ratio`.
+Parallel rendering invokes callbacks from worker goroutines, so callbacks must
+be concurrency-safe and should return quickly. A TUI can forward events to its
+own event loop:
+
+```go
+updates := make(chan core.Progress, 1)
+opts := halfblock.Options{Jobs: 4, OnProgress: func(p core.Progress) {
+    select {
+    case updates <- p:
+    default: // drop stale display updates rather than block rendering
+    }
+}}
+grid, err := halfblock.RenderToGrid(img, 80, opts)
+```
+
+Use the same pattern with `quadblock.Options`, `sextant.Options`, or
+`sparkline.Options`. Leave `OnProgress` nil when updates are not needed; the
+renderers skip progress accounting in that case.
 <!-- GO_EXAMPLE_END -->
 
 ## Loading SVGs
@@ -98,3 +122,29 @@ loading. SVGs are rasterized through `rsvg-convert`; callers that already know
 their render pixel budget should prefer `halfblock.LoadImageWithTarget(path,
 maxWidth, maxHeight)` so vector inputs are rasterized directly to the target
 box instead of through the default 2048px long-edge fallback.
+
+### Asynchronous & Progress-Aware Image Loading
+
+For responsive interactive TUIs and applications loading large media or remote streams, `v1/halfblock` provides context-aware and async loaders that report progress events:
+
+```go
+// Synchronous with Context and optional progress updates:
+img, err := halfblock.LoadImageContext(ctx, path, func(p core.Progress) {
+    fmt.Printf("[%s] %.1f%%: %s\n", p.Stage, p.Ratio*100, p.Message)
+})
+
+// Or asynchronous via a Progress channel:
+progCh, err := halfblock.LoadImageAsync(ctx, path)
+if err != nil {
+    return err
+}
+for p := range progCh {
+    if p.Err != nil {
+        return p.Err
+    }
+    if p.Done && p.Image != nil {
+        // Media ready for rendering
+        break
+    }
+}
+```

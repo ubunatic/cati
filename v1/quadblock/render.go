@@ -181,6 +181,9 @@ type Options struct {
 
 	// Jobs specifies the number of concurrent goroutines for rendering.
 	Jobs int
+	// OnProgress is called as rendered cells complete. Parallel rendering may
+	// invoke it concurrently; callbacks should be quick and concurrency-safe.
+	OnProgress func(core.Progress)
 }
 
 // ── Quadrant character lookup ─────────────────────────────────────────────────
@@ -812,7 +815,8 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 		jobs = 1
 	}
 
-	qCells, err := computeQuadCellsJ(scaled, b, opts, tcCols, trRows, jobs)
+	progress := core.NewProgressReporter(opts.OnProgress, tcCols*trRows)
+	qCells, err := computeQuadCellsJ(scaled, b, opts, tcCols, trRows, jobs, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -1064,7 +1068,8 @@ func RenderToImageJ(img image.Image, opts Options, jobs int) *image.RGBA {
 
 	tcCols := (pixW + 1) / 2
 	trRows := (pixH + 1) / 2
-	cells, err := computeQuadCellsJ(img, b, opts, tcCols, trRows, jobs)
+	progress := core.NewProgressReporter(opts.OnProgress, tcCols*trRows)
+	cells, err := computeQuadCellsJ(img, b, opts, tcCols, trRows, jobs, progress)
 	if err != nil {
 		return dst
 	}
@@ -1143,12 +1148,15 @@ func RenderToImageJ(img image.Image, opts Options, jobs int) *image.RGBA {
 	return dst
 }
 
-func computeQuadCellsJ(img image.Image, b image.Rectangle, opts Options, tcCols, trRows, jobs int) ([]quadCell, error) {
+func computeQuadCellsJ(img image.Image, b image.Rectangle, opts Options, tcCols, trRows, jobs int, progress *core.ProgressReporter) ([]quadCell, error) {
 	cells := make([]quadCell, tcCols*trRows)
 	if jobs <= 1 || tcCols == 0 || trRows == 0 {
 		for tr := 0; tr < trRows; tr++ {
 			for tc := 0; tc < tcCols; tc++ {
 				cells[tr*tcCols+tc] = computeQuadCell(img, b, opts, cells, tr, tc, tcCols, trRows)
+				if opts.OnProgress != nil {
+					progress.Done()
+				}
 			}
 		}
 		return cells, nil
@@ -1174,6 +1182,9 @@ func computeQuadCellsJ(img image.Image, b image.Rectangle, opts Options, tcCols,
 		go func() {
 			for task := range tasks {
 				cells[task.tr*tcCols+task.tc] = computeQuadCell(img, b, opts, cells, task.tr, task.tc, tcCols, trRows)
+				if opts.OnProgress != nil {
+					progress.Done()
+				}
 				wg.Done()
 			}
 		}()

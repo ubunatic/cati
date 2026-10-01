@@ -6,6 +6,10 @@
 **Learning:** Calling `image.Image.At(x, y)` inside quadblock cell compilation inner loops causes interface boxing allocations on every pixel access (`color.Color`), producing over 130k allocations per frame. In addition, using `fmt.Sprintf` for ANSI 24-bit RGB sequences (`\x1b[38;2;r;g;bm`) accounts for >25% of all heap allocation objects.
 **Action:** Type-assert `*image.RGBA` images in pixel sampling loops to compute direct pixel byte offsets (`img.Pix[off]`), and use `strconv.AppendUint` to format ANSI escape codes directly into reusable `[]byte` line buffers.
 
+## 2026-03-30 - Direct Slice Pixel Sampling and Reusable ANSI Line Buffering in Sextant Renderer
+**Learning:** Sextant rendering executed `image.Image.At(x, y)` per subpixel in `avgRegion`, creating over 33k-44k heap interface allocations per frame. Formatting ANSI escapes using `fmt.Sprintf` and `strings.Builder` per line added further allocation churn.
+**Action:** Fast-path pixel sampling in `avgRegion` via direct slice indexing (`Pix[off]`) on `*image.RGBA` and `*image.NRGBA`, gate behind `core.Fastpath`, format ANSI escapes directly into a reusable `[]byte` line buffer using `strconv.AppendUint`, and check all-transparent subpixels upfront.
+
 ## 2026-03-30 - Direct image.RGBA Fast-Path Indexing and Reusable Byte Buffer Formatting in Halfblock
 **Learning:** Calling `image.Image.At(x, y)` on `*image.RGBA` images in `halfblock` rendering loops boxes `color.RGBA` into `color.Color` interface objects, generating over 32k allocations per frame. Furthermore, using `fmt.Sprintf` and per-line `strings.Builder` for ANSI escape codes (`\x1b[38;2;r;g;bm` / `\x1b[48;2;r;g;bm`) adds 66k+ heap allocations per frame.
 **Action:** Fast-path `*image.RGBA` inputs via direct byte slice indexing (`rgba.Pix[off]`) in `safePixel` and format ANSI escapes directly with `strconv.AppendUint` into a single reusable row `[]byte` buffer gated by `core.Fastpath`.

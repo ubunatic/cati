@@ -163,6 +163,14 @@ func TestZoomFlagShorthand(t *testing.T) {
 	}
 }
 
+func quadOptionsZero(opts quadblock.Options) bool {
+	return opts.NoLinePrefix == (quadblock.Options{}).NoLinePrefix &&
+		opts.HalfblockThreshold == 0 && opts.Blend == (quadblock.Options{}).Blend &&
+		!opts.SplitHalf && !opts.SplitHalfNeighbors && !opts.LumSplit && !opts.PCA2 &&
+		!opts.Diameter && opts.KMeans == 0 && !opts.EdgeSnap && opts.Rows == 0 &&
+		opts.Jobs == 0 && opts.OnProgress == nil
+}
+
 func TestParseRenderMode(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -177,7 +185,7 @@ func TestParseRenderMode(t *testing.T) {
 		{"full short", "f", "full", nil},
 		{"full numeric", "1", "full", nil},
 		{"half split", "hs", "half/split", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
+			if !quadOptionsZero(opts) {
 				t.Fatalf("hs mode should not set quad options, got %#v", opts)
 			}
 		}},
@@ -191,22 +199,22 @@ func TestParseRenderMode(t *testing.T) {
 		{"bars", "b", "bars", nil},
 		{"bars plus", "B", "bars+", nil},
 		{"spark", "s", "spark", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
+			if !quadOptionsZero(opts) {
 				t.Fatalf("s mode should not set quad options, got %#v", opts)
 			}
 		}},
 		{"spark quad", "sq", "spark+quad", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
+			if !quadOptionsZero(opts) {
 				t.Fatalf("sq mode should not set quad options, got %#v", opts)
 			}
 		}},
 		{"spark six", "sx", "spark+six", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
+			if !quadOptionsZero(opts) {
 				t.Fatalf("sx mode should not set quad options, got %#v", opts)
 			}
 		}},
 		{"six", "x", "six", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
+			if !quadOptionsZero(opts) {
 				t.Fatalf("x mode should not set quad options, got %#v", opts)
 			}
 		}},
@@ -219,7 +227,7 @@ func TestParseRenderMode(t *testing.T) {
 		{"debug union", "d1,6,9,44", "d1,6,9,44", nil},
 		{"suffix union", "quad++six", "quad++six", nil},
 		{"six half", "xh", "six+half", func(t *testing.T, opts quadblock.Options) {
-			if opts != (quadblock.Options{}) {
+			if !quadOptionsZero(opts) {
 				t.Fatalf("xh mode should not set quad options, got %#v", opts)
 			}
 		}},
