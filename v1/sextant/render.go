@@ -237,13 +237,39 @@ func appendBgRGB(b []byte, c color.RGBA) []byte {
 }
 
 func fgRGB(c color.RGBA) string {
-	var buf [32]byte
-	return string(appendFgRGB(buf[:0], c))
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", c.R, c.G, c.B)
 }
 
 func bgRGB(c color.RGBA) string {
-	var buf [32]byte
-	return string(appendBgRGB(buf[:0], c))
+	return fmt.Sprintf("\x1b[48;2;%d;%d;%dm", c.R, c.G, c.B)
+}
+
+func samplePixelFast(img image.Image, x, y int) color.RGBA {
+	if core.Fastpath {
+		if rgba, ok := img.(*image.RGBA); ok {
+			if !image.Pt(x, y).In(rgba.Rect) {
+				return color.RGBA{}
+			}
+			off := rgba.PixOffset(x, y)
+			p := rgba.Pix[off : off+4 : off+4]
+			if p[3] == 0 {
+				return color.RGBA{}
+			}
+			return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
+		}
+		if nrgba, ok := img.(*image.NRGBA); ok {
+			if !image.Pt(x, y).In(nrgba.Rect) {
+				return color.RGBA{}
+			}
+			off := nrgba.PixOffset(x, y)
+			p := nrgba.Pix[off : off+4 : off+4]
+			if p[3] == 0 {
+				return color.RGBA{}
+			}
+			return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
+		}
+	}
+	return toRGBA(img.At(x, y))
 }
 
 type cellResult struct {
@@ -322,32 +348,16 @@ func avgRegion(img image.Image, x0, x1, y0, y1 int) color.RGBA {
 		return color.RGBA{}
 	}
 	var r, g, b, n int
-	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
-		for y := y0; y < y1; y++ {
-			for x := x0; x < x1; x++ {
-				off := rgba.PixOffset(x, y)
-				p := rgba.Pix[off : off+4 : off+4]
-				if p[3] == 0 {
-					continue
-				}
-				r += int(p[0])
-				g += int(p[1])
-				b += int(p[2])
-				n++
+	for y := y0; y < y1; y++ {
+		for x := x0; x < x1; x++ {
+			p := samplePixelFast(img, x, y)
+			if isTransparent(p) {
+				continue
 			}
-		}
-	} else {
-		for y := y0; y < y1; y++ {
-			for x := x0; x < x1; x++ {
-				p := toRGBA(img.At(x, y))
-				if isTransparent(p) {
-					continue
-				}
-				r += int(p.R)
-				g += int(p.G)
-				b += int(p.B)
-				n++
-			}
+			r += int(p.R)
+			g += int(p.G)
+			b += int(p.B)
+			n++
 		}
 	}
 	if n == 0 {
@@ -647,6 +657,18 @@ func emittedCoverage(cell cellResult, idx int) bool {
 }
 
 func chooseCell(pixels [6]color.RGBA, mode Mode) cellResult {
+	if core.Fastpath {
+		allTransparent := true
+		for i := 0; i < 6; i++ {
+			if pixels[i].A != 0 {
+				allTransparent = false
+				break
+			}
+		}
+		if allTransparent {
+			return cellResult{ch: ' ', transparent: true}
+		}
+	}
 	// Evaluate every representable mask. The direct luma threshold is a useful
 	// tie-break preference, but it is not generally the lowest-error encoding
 	// once a cell contains antialiasing or more than two colours.
@@ -826,29 +848,38 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 		return err
 	}
 
-	lineBuf := make([]byte, 0, grid.Width*32)
+	var buf []byte
 	for y := 0; y < grid.Height; y++ {
-		lineBuf = lineBuf[:0]
+		buf = buf[:0]
 		if !opts.NoLinePrefix {
-			lineBuf = append(lineBuf, ansiLinePrefix...)
+			buf = append(buf, ansiLinePrefix...)
 		}
 		for x := 0; x < grid.Width; x++ {
 			cell := grid.Cells[y][x]
 			if cell.Transparent {
-				lineBuf = append(lineBuf, ' ')
+				buf = append(buf, ' ')
 				continue
 			}
-			if cell.HasBg {
-				lineBuf = appendBgRGB(lineBuf, cell.Bg)
+			if core.Fastpath {
+				if cell.HasBg {
+					buf = appendBgRGB(buf, cell.Bg)
+				}
+				if cell.HasFg {
+					buf = appendFgRGB(buf, cell.Fg)
+				}
+			} else {
+				if cell.HasBg {
+					buf = append(buf, bgRGB(cell.Bg)...)
+				}
+				if cell.HasFg {
+					buf = append(buf, fgRGB(cell.Fg)...)
+				}
 			}
-			if cell.HasFg {
-				lineBuf = appendFgRGB(lineBuf, cell.Fg)
-			}
-			lineBuf = utf8.AppendRune(lineBuf, cell.Ch)
-			lineBuf = append(lineBuf, ansiReset...)
+			buf = utf8.AppendRune(buf, cell.Ch)
+			buf = append(buf, ansiReset...)
 		}
-		lineBuf = append(lineBuf, '\n')
-		if _, err := w.Write(lineBuf); err != nil {
+		buf = append(buf, '\n')
+		if _, err := w.Write(buf); err != nil {
 			return fmt.Errorf("sextant render: %w", err)
 		}
 	}

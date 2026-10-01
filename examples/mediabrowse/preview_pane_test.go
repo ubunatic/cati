@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"codeberg.org/ubunatic/loom"
-	"codeberg.org/ubunatic/loom/media"
+	"ubunatic.com/loom"
+	"ubunatic.com/loom/media"
 
 	"ubunatic.com/cati/v1/core"
 )
@@ -208,7 +208,7 @@ func TestPreviewPaneKeyHandlingAndStillPlayNoop(t *testing.T) {
 		defer p.mu.Unlock()
 		return !p.loading
 	})
-	p.HandleKey(loom.KeyEvent{Text: "m"})
+	p.ConsumeKey(loom.KeyEvent{Text: "m"})
 	waitForCondition(t, 200*time.Millisecond, func() bool {
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -217,7 +217,7 @@ func TestPreviewPaneKeyHandlingAndStillPlayNoop(t *testing.T) {
 	if p.mode != media.ModeQuadblock {
 		t.Fatalf("mode after key = %q", p.mode)
 	}
-	p.HandleKey(loom.KeyEvent{Text: "p"})
+	p.ConsumeKey(loom.KeyEvent{Text: "p"})
 	if p.playing {
 		t.Fatal("still image should not enter playing state")
 	}
@@ -312,7 +312,7 @@ func TestPreviewPaneRepeatedPlayPauseDoesNotReloadPreview(t *testing.T) {
 	}
 
 	// 1. Play
-	p.HandleKey(loom.KeyEvent{Text: "p"})
+	p.ConsumeKey(loom.KeyEvent{Text: "p"})
 	if !p.playing || videoLoads != 1 || stillLoads != 1 {
 		t.Fatalf("after play: playing=%v, videoLoads=%d, stillLoads=%d", p.playing, videoLoads, stillLoads)
 	}
@@ -321,7 +321,7 @@ func TestPreviewPaneRepeatedPlayPauseDoesNotReloadPreview(t *testing.T) {
 	}
 
 	// 2. Pause
-	p.HandleKey(loom.KeyEvent{Text: "p"})
+	p.ConsumeKey(loom.KeyEvent{Text: "p"})
 	if p.playing || videoLoads != 1 || stillLoads != 1 {
 		t.Fatalf("after pause: playing=%v, videoLoads=%d, stillLoads=%d", p.playing, videoLoads, stillLoads)
 	}
@@ -333,7 +333,7 @@ func TestPreviewPaneRepeatedPlayPauseDoesNotReloadPreview(t *testing.T) {
 	}
 
 	// 3. Resume with uppercase 'P'
-	p.HandleKey(loom.KeyEvent{Text: "P"})
+	p.ConsumeKey(loom.KeyEvent{Text: "P"})
 	if !p.playing || videoLoads != 1 || stillLoads != 1 {
 		t.Fatalf("after resume: playing=%v, videoLoads=%d, stillLoads=%d", p.playing, videoLoads, stillLoads)
 	}
@@ -342,12 +342,12 @@ func TestPreviewPaneRepeatedPlayPauseDoesNotReloadPreview(t *testing.T) {
 	}
 
 	// 4. Mouse click toggles play/pause
-	p.HandleMouse(loom.MouseEvent{Action: loom.MousePress, Button: loom.MouseLeft})
+	p.ConsumeMouse(loom.MouseEvent{Action: loom.MousePress, Button: loom.MouseLeft})
 	if p.playing || videoLoads != 1 || stillLoads != 1 {
 		t.Fatalf("after mouse pause: playing=%v, videoLoads=%d, stillLoads=%d", p.playing, videoLoads, stillLoads)
 	}
 
-	p.HandleMouse(loom.MouseEvent{Action: loom.MousePress, Button: loom.MouseLeft})
+	p.ConsumeMouse(loom.MouseEvent{Action: loom.MousePress, Button: loom.MouseLeft})
 	if !p.playing || videoLoads != 1 || stillLoads != 1 {
 		t.Fatalf("after mouse resume: playing=%v, videoLoads=%d, stillLoads=%d", p.playing, videoLoads, stillLoads)
 	}

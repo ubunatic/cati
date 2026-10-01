@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"codeberg.org/ubunatic/loom"
-	"codeberg.org/ubunatic/loom/examples/filebrowser/filebrowser"
-	"codeberg.org/ubunatic/loom/media"
+	"ubunatic.com/loom"
+	"ubunatic.com/loom/examples/filebrowser/filebrowser"
+	"ubunatic.com/loom/media"
 
 	"ubunatic.com/cati/v1/halfblock"
 )
@@ -295,20 +295,20 @@ func (a *app) Draw(c *loom.Canvas, r loom.Rect) {
 	a.frame.Draw(c, r)
 }
 
-func (a *app) HandleKey(k loom.KeyEvent) bool {
+func (a *app) ConsumeKey(k loom.KeyEvent) loom.EventResult {
 	if a.navigation != nil && a.navigation.Searching() {
-		quit := a.frame.HandleKey(k)
+		result := a.frame.ConsumeKey(k)
 		a.updatePreview()
-		return quit
+		return result
 	}
 
 	if k.Is("f9") {
 		a.cycleTheme()
-		return false
+		return loom.Handled()
 	}
 	if k.Is("f") || k.Is("F") {
 		a.toggleFullscreen()
-		return false
+		return loom.Handled()
 	}
 	if k.Is("i") || k.Is("I") {
 		a.imagesOnly = !a.imagesOnly
@@ -320,26 +320,32 @@ func (a *app) HandleKey(k loom.KeyEvent) bool {
 				a.preview.SetMessage("No selection")
 			}
 		}
-		return false
+		return loom.Handled()
 	}
 	if k.Is("m") || k.Is("M") {
 		a.preview.CycleMode()
-		return false
+		return loom.Handled()
 	}
 	if k.Is("p") || k.Is("P") {
 		a.preview.TogglePlay()
-		return false
+		return loom.Handled()
 	}
 
-	quit := a.frame.HandleKey(k)
+	result := a.frame.ConsumeKey(k)
 	a.updatePreview()
-	return quit
+	if result.Quit {
+		return result
+	}
+	return result
 }
 
-func (a *app) HandleMouse(m loom.MouseEvent) bool {
-	quit := a.frame.HandleMouse(m)
+func (a *app) ConsumeMouse(m loom.MouseEvent) loom.EventResult {
+	result := a.frame.ConsumeMouse(m)
 	a.updatePreview()
-	return quit
+	if result.Quit {
+		return result
+	}
+	return result
 }
 
 func (a *app) Tick(now time.Time) {
