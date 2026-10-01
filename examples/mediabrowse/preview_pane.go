@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"codeberg.org/ubunatic/loom"
-	"codeberg.org/ubunatic/loom/media"
+	"ubunatic.com/loom"
+	"ubunatic.com/loom/media"
 
 	"ubunatic.com/cati/v1/core"
 	"ubunatic.com/cati/v1/halfblock"
@@ -332,23 +332,24 @@ func (p *mediaPreviewPane) TickInterval() time.Duration {
 	return 0
 }
 
-func (p *mediaPreviewPane) HandleKey(k loom.KeyEvent) bool {
+func (p *mediaPreviewPane) ConsumeKey(k loom.KeyEvent) loom.EventResult {
 	if k.Is("m") || k.Is("M") {
 		p.CycleMode()
-		return false
+		return loom.Handled()
 	}
 	if k.Is("p") || k.Is("P") {
 		p.TogglePlay()
-		return false
+		return loom.Handled()
 	}
-	return false
+	return loom.Ignored()
 }
 
-func (p *mediaPreviewPane) HandleMouse(m loom.MouseEvent) bool {
+func (p *mediaPreviewPane) ConsumeMouse(m loom.MouseEvent) loom.EventResult {
 	if m.Action == loom.MousePress && m.Button == loom.MouseLeft {
 		p.TogglePlay()
+		return loom.Handled()
 	}
-	return false
+	return loom.Ignored()
 }
 
 func (p *mediaPreviewPane) Focused() bool {
