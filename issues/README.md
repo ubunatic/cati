@@ -71,6 +71,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 065 | [065-mediabrowse-video-playback-and-fullscreen-shortcuts-do-not-work.md](065-mediabrowse-video-playback-and-fullscreen-shortcuts-do-not-work.md) | Mediabrowse video playback and fullscreen shortcuts do not work | Closed |
 | 066 | [066-mediabrowse-play-pause-should-not-reload-the-video-preview.md](066-mediabrowse-play-pause-should-not-reload-the-video-preview.md) | Mediabrowse play/pause should not reload the video preview | Closed |
 | 067 | [067-make-test-fails-makefile-pins-gotoolchain-go1-25-0-but-go-mod-needs-1-26.md](067-make-test-fails-makefile-pins-gotoolchain-go1-25-0-but-go-mod-needs-1-26.md) | make test fails: Makefile pins GOTOOLCHAIN=go1.25.0 but go.mod needs 1.26 | Open |
+| 068 | [068-re-init-harnez-with-quota-1-add-test-q1-target-harnez-rules-and-update-docs.md](068-re-init-harnez-with-quota-1-add-test-q1-target-harnez-rules-and-update-docs.md) | Re-init harnez with --quota-1: add test-q1 target, harnez rules and update docs | Open |
 
 ## Archived
 
