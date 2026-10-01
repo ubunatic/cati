@@ -1,10 +1,13 @@
 package halfblock
 
 import (
+	"bytes"
 	"image"
 	"image/color"
 	"strings"
 	"testing"
+
+	"ubunatic.com/cati/v1/core"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -19,6 +22,66 @@ func solidImage(w, h int, c color.RGBA) image.Image {
 		}
 	}
 	return img
+}
+
+func TestFastpathParity(t *testing.T) {
+	previous := core.Fastpath
+	defer func() { core.Fastpath = previous }()
+
+	rect := image.Rect(-2, 3, 30, 22)
+	rgbaImg := image.NewRGBA(rect)
+	nrgbaImg := image.NewNRGBA(rect)
+	grayImg := image.NewGray(rect)
+	for y := rect.Min.Y; y < rect.Max.Y; y++ {
+		for x := rect.Min.X; x < rect.Max.X; x++ {
+			c := color.RGBA{R: uint8((x + 2) * 7), G: uint8((y - 3) * 11), B: uint8((x + y + 16) * 5), A: 255}
+			if (x+y)%7 == 0 {
+				c.A = 0
+			}
+			rgbaImg.SetRGBA(x, y, c)
+			nrgbaImg.SetNRGBA(x, y, color.NRGBA{R: c.R, G: c.G, B: c.B, A: c.A})
+			grayImg.SetGray(x, y, color.Gray{Y: uint8(x + y)})
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		img  image.Image
+	}{
+		{name: "RGBA", img: rgbaImg},
+		{name: "NRGBA", img: nrgbaImg},
+		{name: "Gray", img: grayImg},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			core.Fastpath = true
+			var fast bytes.Buffer
+			if err := Render(&fast, tc.img, 12, Options{Rows: 8, NoLinePrefix: true}); err != nil {
+				t.Fatalf("fast Render: %v", err)
+			}
+			fastImage := RenderToImage(tc.img)
+			fastScaled := ScaleNN(tc.img, 17, 11)
+
+			core.Fastpath = false
+			var simple bytes.Buffer
+			if err := Render(&simple, tc.img, 12, Options{Rows: 8, NoLinePrefix: true}); err != nil {
+				t.Fatalf("simple Render: %v", err)
+			}
+			simpleImage := RenderToImage(tc.img)
+			simpleScaled := ScaleNN(tc.img, 17, 11)
+
+			if !bytes.Equal(fast.Bytes(), simple.Bytes()) {
+				t.Fatal("ANSI output differs between fast and simple paths")
+			}
+			if fastImage.Bounds() != simpleImage.Bounds() || !bytes.Equal(fastImage.Pix, simpleImage.Pix) {
+				t.Fatal("RenderToImage output differs between fast and simple paths")
+			}
+			fastRGBA, fastOK := fastScaled.(*image.RGBA)
+			simpleRGBA, simpleOK := simpleScaled.(*image.RGBA)
+			if !fastOK || !simpleOK || fastRGBA.Bounds() != simpleRGBA.Bounds() || !bytes.Equal(fastRGBA.Pix, simpleRGBA.Pix) {
+				t.Fatal("ScaleNN output differs between fast and simple paths")
+			}
+		})
+	}
 }
 
 // ── pairToCell ────────────────────────────────────────────────────────────────

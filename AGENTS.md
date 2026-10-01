@@ -1,3 +1,5 @@
+**Before any work, read all Harnez rules in one call: `harnez read .harnez/rules/Tools.md .harnez/rules/Issues.md .harnez/rules/Quota.md .harnez/rules/Subagents.md .harnez/rules/Output.md .harnez/rules/Local.md`. This follows Index.md order; Local.md overrides the other rules.**
+
 Adhere to the following conventions.
 
 <!-- harnez:begin Project Summary -->
@@ -12,23 +14,28 @@ Adhere to the following conventions.
 
 Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
 
-- Go/Golang @docs/Go.md,
-  Modern Go, avoid deps but use Cobra, add tests
-- Make/Makefile @docs/Make.md,
-  ⚙️ phony sentinel, self-doc help, build dependency pattern
-- Markdown @docs/Markdown.md,
-  PascalCase for evergreens, kebab-case for ephemeral docs; ASCII art in chat, Mermaid only in docs/
-- Git @docs/Git.md,
-  conventional commits, work on the default branch, don't push unless asked
-- Canary-first development @docs/Canary.md,
-  probe external mechanisms before building features on them
-- Spec system @docs/Spec.md,
-  YAML spec files as single source of truth; Go code must not duplicate spec values
 - Agentic Loop Practices @docs/AgenticLoop.md,
   5-phase loop (Advisory -> Dev -> Review -> Hygiene -> Retro), zero zombie guarantee
+- Canary-first development @docs/Canary.md,
+  probe external mechanisms before building features on them
+- Git @docs/Git.md,
+  conventional commits, work on the default branch, don't push unless asked
+- Go/Golang @docs/Go.md,
+  Modern Go, avoid deps but use Cobra, add tests; use runes and display width for terminal layout
+- Release Pipeline @docs/GoRelease.md,
+  harnez release, version.yaml spec, GoReleaser v2, non-interactive minisign (-W), Forgejo has_releases, language-agnostic (Go/Python/Zig/Rust/scripted)
 - Issue Tracking Practices @docs/IssueTracking.md,
   P0-P3 priorities, metadata headers (Status, Priority, Severity, Category), tracker sync
-- Advanced test layers @docs/Testing.md — consult for player, browser, and terminal integration testing; basic library work usually only needs `make test`.
+- Make/Makefile @docs/Make.md,
+  ⚙️ phony sentinel, self-doc help, build dependency pattern
+- Man Pages for Go CLIs @docs/ManPages.md,
+  cobra/doc GenManTree; <cmd> man / man --install; XDG ~/.local/share/man/man1
+- Markdown @docs/Markdown.md,
+  PascalCase for evergreens, kebab-case for ephemeral docs; ASCII art in chat, Mermaid only in docs/
+- Search Practices @docs/Search.md,
+  harnez find code/docs, finder configuration, partial results, and rg fallback
+- Spec system @docs/Spec.md,
+  YAML spec files as single source of truth; Go code must not duplicate spec values
 <!-- harnez:end Language Conventions -->
 
 ## Asset Generation & Licensing

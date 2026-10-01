@@ -26,6 +26,11 @@ var imageExts = map[string]bool{
 	".jpg":  true,
 	".jpeg": true,
 	".svg":  true,
+	".webp": true,
+	".gif":  true,
+	".bmp":  true,
+	".tiff": true,
+	".tif":  true,
 }
 
 // New returns the root Cobra command for cati.

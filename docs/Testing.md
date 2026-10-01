@@ -35,7 +35,12 @@ Other checks:
 
 For a real asset speed comparison, run `cati --bench <mediafile>`. Each mode
 is measured with fast paths on and off (`core.Fastpath`) and the row shows the
-speed-up. Image renders repeat within `--bench-budget` (default 3s total,
+speed-up. The row also compares the first image render from each path and marks
+output parity as `ok` or `DIFF`, with the first differing byte and differing
+byte count. Video output is hashed per frame on the fast pass and compared with
+the corresponding simple-pass frame; a differing-frame count appears on the
+row. Any mismatch is summarized and makes the command exit non-zero. Image
+renders repeat within `--bench-budget` (default 3s total,
 split across modes and paths); every mode renders at least once, so slow modes
 at large sizes can extend the run. `--mode` limits the run to one mode;
 otherwise the spec's `experimental` modes (`all+`, `z`, `z+`) are skipped. Videos decode
@@ -90,7 +95,8 @@ CATI_FASTPATH=0 GOWORK=off GOTOOLCHAIN=go1.25.0 go test ./...
 Known exception: `metrics.extractLumaFlat` fast paths drift slightly
 (issue 055).
 
-Fast-path payoff, measured with `cati --bench` on one photo at 120x50
-(2026-09-23): quad 2.07x, bars+ 1.43x, bars 1.34x, other modes about 1x.
+Fast-path payoff, measured with `cati --bench` on one photo at 120x50:
+half 3.92x (2026-09-24); earlier measurements (2026-09-23) were quad 2.07x,
+bars+ 1.43x, bars 1.34x, and other modes about 1x.
 Rerun `--bench` before and after fast-path work to confirm a real gain
 rather than relying on micro-benchmarks alone.
