@@ -150,6 +150,27 @@ legacy `cati -i video.mp4`).
 
 ## 7. Render-Pipeline Optimizations for Playback
 
+Applications that render decoded frames through the `v1` library can report
+frame-render progress using renderer options. Loading and decoding events come
+from `halfblock.LoadImageContext` / `LoadImageAsync`; render events come from
+`OnProgress` and describe rows or cells completed for the current frame.
+When `Jobs` enables parallel work, callbacks may run concurrently and should
+send updates through a buffered channel or otherwise synchronize their state.
+Keep callbacks short so they do not delay frame processing.
+
+```go
+opts := halfblock.Options{Jobs: 4, OnProgress: func(p core.Progress) {
+    select {
+    case progressEvents <- p:
+    default:
+    }
+}}
+grid, err := halfblock.RenderToGrid(frame, cols, opts)
+```
+
+Progress is per render call; for video playback, treat each frame as a new
+operation rather than one cumulative percentage for the full stream.
+
 ### Throttled invariant checks (`renderCheckGate`)
 
 `renderChecked` validates every rendered frame by walking the full ANSI output string to count cell widths — an O(output-length) operation that is unnecessary after the first frame passes with stable dimensions.

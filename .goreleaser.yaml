@@ -1,0 +1,70 @@
+# SPDX-FileCopyrightText: 2026 Uwe Jugel
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+version: 2
+
+project_name: cati
+
+builds:
+  - id: cati
+    main: ./cmd/cati
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    binary: cati
+    ldflags:
+      - -s -w -X ubunatic.com/cati.Version={{.Version}}
+
+  - id: catiplay
+    main: ./cmd/catiplay
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    binary: catiplay
+    ldflags:
+      - -s -w -X ubunatic.com/cati.Version={{.Version}}
+
+  - id: catibrowse
+    main: ./cmd/catibrowse
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    binary: catibrowse
+    ldflags:
+      - -s -w -X ubunatic.com/cati.Version={{.Version}}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    name_template: "cati-{{ .Version }}-{{ if eq .Os \"darwin\" }}darwin{{ else }}linux{{ end }}-{{ if eq .Arch \"amd64\" }}x86_64{{ else if eq .Arch \"arm64\" }}aarch64{{ else }}{{ .Arch }}{{ end }}"
+    files:
+      - README.md
+      - LICENSES/*
+
+checksum:
+  name_template: SHA256SUMS
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

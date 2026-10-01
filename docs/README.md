@@ -22,6 +22,15 @@ Welcome to the Cati developer documentation. The following resources cover our p
 *   [Make Conventions](Make.md) — Standardized Makefile structures, target phony declarations using the sentinel `⚙️` trick, and self-documenting rules.
 *   [Testing](Testing.md) — Daily test command, opt-in player/browser/integration suites, benchmarks, preflight checks, and golden-image testing.
 
+## Studies
+
+**`docs/studies/`**
+
+| File | Topic |
+|------|-------|
+| [studies/2026-09-27-host-orchestrator-polling-and-concurrency-postmortem.md](studies/2026-09-27-host-orchestrator-polling-and-concurrency-postmortem.md) | Host Orchestrator Polling Storms and Concurrent Agent Spawning Post-Mortem |
+| [studies/codespaces-color-rendering.md](studies/codespaces-color-rendering.md) | GitHub Codespaces Workbench Color Rendering Artifacts |
+
 ---
 
 ## Issues
