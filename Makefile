@@ -20,7 +20,7 @@ export CATI_MAX_WORKERS ?= 10
 export CATI_FASTPATH ?= 1
 
 # Keep stdlib-decoder goldens reproducible and ignore any enclosing workspace.
-GO_TEST_ENV := GOWORK=off GOTOOLCHAIN=go1.25.0
+GO_TEST_ENV := GOWORK=off GOTOOLCHAIN=go1.26.0
 
 help: 🤖  # show this help
 	@grep -E '^[a-zA-Z_-]+:.*[⚙🤖].*#+' $(MAKEFILE_LIST) | \
