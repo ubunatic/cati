@@ -14,25 +14,27 @@ func TestFastpathDifferentialParity(t *testing.T) {
 	rect := image.Rect(0, 0, 32, 32)
 
 	rgbaImg := image.NewRGBA(rect)
-	for y := 0; y < 32; y++ {
-		for x := 0; x < 32; x++ {
+	for y := range 32 {
+		for x := range 32 {
 			rgbaImg.SetRGBA(x, y, color.RGBA{R: uint8(x * 7), G: uint8(y * 7), B: uint8((x + y) * 3), A: 255})
 		}
 	}
 
 	nrgbaImg := image.NewNRGBA(rect)
-	for y := 0; y < 32; y++ {
-		for x := 0; x < 32; x++ {
+	for y := range 32 {
+		for x := range 32 {
 			nrgbaImg.SetNRGBA(x, y, color.NRGBA{R: uint8(x * 5), G: uint8(y * 8), B: uint8((x + y) * 4), A: 255})
 		}
 	}
 
 	grayImg := image.NewGray(rect)
-	for y := 0; y < 32; y++ {
-		for x := 0; x < 32; x++ {
+	for y := range 32 {
+		for x := range 32 {
 			grayImg.SetGray(x, y, color.Gray{Y: uint8((x + y) * 4)})
 		}
 	}
+
+	subImg := rgbaImg.SubImage(image.Rect(5, 5, 25, 25))
 
 	testCases := []struct {
 		name string
@@ -41,6 +43,7 @@ func TestFastpathDifferentialParity(t *testing.T) {
 		{"RGBA Image", rgbaImg},
 		{"NRGBA Image", nrgbaImg},
 		{"Gray Image", grayImg},
+		{"RGBA SubImage", subImg},
 	}
 
 	prevFastpath := core.Fastpath
@@ -55,7 +58,7 @@ func TestFastpathDifferentialParity(t *testing.T) {
 			if err := sextant.Render(&bufFast, tc.img, 16, opts); err != nil {
 				t.Fatalf("Fastpath Render error: %v", err)
 			}
-			imgFast := sextant.RenderToImage(tc.img, sextant.ModeSextant)
+			imgFast := sextant.RenderToImage(tc.img, opts.Mode)
 
 			// Fallback output
 			core.Fastpath = false
@@ -63,7 +66,10 @@ func TestFastpathDifferentialParity(t *testing.T) {
 			if err := sextant.Render(&bufSimple, tc.img, 16, opts); err != nil {
 				t.Fatalf("Simple Render error: %v", err)
 			}
-			imgSimple := sextant.RenderToImage(tc.img, sextant.ModeSextant)
+			imgSimple := sextant.RenderToImage(tc.img, opts.Mode)
+
+			// Reset
+			core.Fastpath = true
 
 			// Check ANSI string rendering parity
 			if !bytes.Equal(bufFast.Bytes(), bufSimple.Bytes()) {

@@ -1,7 +1,7 @@
 # imgbrowser
 
 Split-pane image browser demo combining `ubunatic.com/cati` (rendering) with
-`codeberg.org/ubunatic/loom`'s `Frame`/`Box` split-pane focus routing.
+`ubunatic.com/loom`'s `Frame`/`Box` split-pane focus routing.
 
 - **Files** pane (left): a `loom.Choice` file list, borrowed from loom's own
   `examples/filebrowser`.

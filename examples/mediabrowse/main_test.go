@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"codeberg.org/ubunatic/loom"
-	"codeberg.org/ubunatic/loom/media"
+	"ubunatic.com/loom"
+	"ubunatic.com/loom/media"
 )
 
 func resetFlags() {
@@ -156,7 +156,7 @@ func TestRealVideoPlaybackIntegration(t *testing.T) {
 	}
 
 	// 1. Toggle play
-	a.HandleKey(loom.KeyEvent{Text: "p"})
+	a.ConsumeKey(loom.KeyEvent{Text: "p"})
 	if !a.preview.playing {
 		t.Fatal("expected video to enter playing state")
 	}
@@ -177,7 +177,7 @@ func TestRealVideoPlaybackIntegration(t *testing.T) {
 	}
 
 	// 2. Pause
-	a.HandleKey(loom.KeyEvent{Text: "P"})
+	a.ConsumeKey(loom.KeyEvent{Text: "P"})
 	if a.preview.playing {
 		t.Fatal("expected video to be paused")
 	}
@@ -192,7 +192,7 @@ func TestRealVideoPlaybackIntegration(t *testing.T) {
 	}
 
 	// 3. Resume
-	a.HandleKey(loom.KeyEvent{Text: "p"})
+	a.ConsumeKey(loom.KeyEvent{Text: "p"})
 	if !a.preview.playing {
 		t.Fatal("expected video to resume playing")
 	}

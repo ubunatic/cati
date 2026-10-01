@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"codeberg.org/ubunatic/loom"
+	"ubunatic.com/loom"
 
 	catiterm "ubunatic.com/cati/v1/term"
 )

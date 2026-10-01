@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"codeberg.org/ubunatic/loom"
-	"codeberg.org/ubunatic/loom/media"
+	"ubunatic.com/loom"
+	"ubunatic.com/loom/media"
 
 	"ubunatic.com/cati/v1/core"
 )
@@ -109,25 +109,25 @@ func TestNavigationPaneUsesSlashGatedSearchAndDrivesPreview(t *testing.T) {
 	if a.navigation.List().OnSelect == nil {
 		t.Fatal("navigation pane is missing its file activation callback")
 	}
-	a.navigation.HandleKey(loom.KeyEvent{Text: "p"})
+	a.navigation.ConsumeKey(loom.KeyEvent{Text: "p"})
 	if a.navigation.List().Query() != "" {
 		t.Fatalf("typed app key started search: %q", a.navigation.List().Query())
 	}
-	a.navigation.HandleKey(loom.KeyEvent{Key: "/", Text: "/"})
+	a.navigation.ConsumeKey(loom.KeyEvent{Key: "/", Text: "/"})
 	if !a.navigation.Searching() {
 		t.Fatal("slash did not enter search mode")
 	}
-	a.navigation.HandleKey(loom.KeyEvent{Text: "photo"})
+	a.navigation.ConsumeKey(loom.KeyEvent{Text: "photo"})
 	if a.navigation.List().Query() != "photo" {
 		t.Fatalf("search query = %q, want photo", a.navigation.List().Query())
 	}
-	a.navigation.HandleKey(loom.KeyEvent{Key: "esc"})
+	a.navigation.ConsumeKey(loom.KeyEvent{Key: "esc"})
 	if a.navigation.Searching() || a.navigation.List().Query() != "" {
 		t.Fatal("escape did not clear and close gated search")
 	}
 
 	a.selectByName("notes.txt")
-	a.navigation.HandleKey(loom.KeyEvent{Key: "down"})
+	a.navigation.ConsumeKey(loom.KeyEvent{Key: "down"})
 	if a.preview.currentPath != imagePath {
 		t.Fatalf("preview path = %q, want %q", a.preview.currentPath, imagePath)
 	}
@@ -146,7 +146,7 @@ func TestThemeResolutionCyclingAndFullscreenKeys(t *testing.T) {
 	if !sort.StringsAreSorted(names) || len(names) != len(loom.SpeccedThemes) {
 		t.Fatalf("theme names are not a sorted list of Loom themes: %v", names)
 	}
-	if quit := a.HandleKey(loom.KeyEvent{Key: "f9"}); quit {
+	if result := a.ConsumeKey(loom.KeyEvent{Key: "f9"}); result.Quit {
 		t.Fatal("F9 unexpectedly quit")
 	}
 	mcIndex := sort.SearchStrings(names, "mc")
@@ -163,18 +163,18 @@ func TestThemeResolutionCyclingAndFullscreenKeys(t *testing.T) {
 		t.Fatalf("unknown theme cycle applied colors for %q", a.themeName)
 	}
 	// Test fullscreen with Text: "f" (standard terminal key event)
-	if quit := a.HandleKey(loom.KeyEvent{Text: "f"}); quit {
+	if result := a.ConsumeKey(loom.KeyEvent{Text: "f"}); result.Quit {
 		t.Fatal("fullscreen text key unexpectedly quit")
 	}
 	if !a.fullscreen || !a.frame.Boxes[0].Hidden || !strings.Contains(a.frame.Status, "[f] Split") {
 		t.Fatalf("fullscreen state not applied: fullscreen=%v hidden=%v status=%q", a.fullscreen, a.frame.Boxes[0].Hidden, a.frame.Status)
 	}
-	a.HandleKey(loom.KeyEvent{Text: "f"})
+	a.ConsumeKey(loom.KeyEvent{Text: "f"})
 	if a.fullscreen || a.frame.Boxes[0].Hidden || !strings.Contains(a.frame.Status, "[f] Full") {
 		t.Fatalf("split state not restored: fullscreen=%v hidden=%v status=%q", a.fullscreen, a.frame.Boxes[0].Hidden, a.frame.Status)
 	}
 
-	if quit := a.HandleKey(loom.KeyEvent{Text: "i"}); quit {
+	if result := a.ConsumeKey(loom.KeyEvent{Text: "i"}); result.Quit {
 		t.Fatal("media-filter key unexpectedly quit")
 	}
 	if !a.imagesOnly {
@@ -205,17 +205,17 @@ func TestAppKeyRoutingAcrossPanesAndSearch(t *testing.T) {
 	}
 
 	// 'm' toggles mode
-	a.HandleKey(loom.KeyEvent{Text: "m"})
+	a.ConsumeKey(loom.KeyEvent{Text: "m"})
 	if a.preview.mode != media.ModeQuadblock {
 		t.Fatalf("mode after 'm' = %q, want quadblock", a.preview.mode)
 	}
 
 	// 'p' toggles play on selected video
-	a.HandleKey(loom.KeyEvent{Text: "p"})
+	a.ConsumeKey(loom.KeyEvent{Text: "p"})
 	if !a.preview.playing {
 		t.Fatal("expected playing to be true after 'p'")
 	}
-	a.HandleKey(loom.KeyEvent{Text: "p"})
+	a.ConsumeKey(loom.KeyEvent{Text: "p"})
 	if a.preview.playing {
 		t.Fatal("expected playing to be false after second 'p'")
 	}
@@ -227,29 +227,29 @@ func TestAppKeyRoutingAcrossPanesAndSearch(t *testing.T) {
 	}
 
 	// 'p' and 'm' and 'f' still work when preview is focused
-	a.HandleKey(loom.KeyEvent{Text: "p"})
+	a.ConsumeKey(loom.KeyEvent{Text: "p"})
 	if !a.preview.playing {
 		t.Fatal("expected playing to work while preview is focused")
 	}
-	a.HandleKey(loom.KeyEvent{Text: "f"})
+	a.ConsumeKey(loom.KeyEvent{Text: "f"})
 	if !a.fullscreen {
 		t.Fatal("expected fullscreen to toggle while preview is focused")
 	}
-	a.HandleKey(loom.KeyEvent{Text: "f"})
+	a.ConsumeKey(loom.KeyEvent{Text: "f"})
 	if a.fullscreen {
 		t.Fatal("expected fullscreen to restore while preview is focused")
 	}
 
 	// Enter search mode and verify 'p', 'm', 'f', 'i' go to search query instead of triggering actions
-	a.HandleKey(loom.KeyEvent{Key: "tab"})
+	a.ConsumeKey(loom.KeyEvent{Key: "tab"})
 	if focused := a.frame.FocusedBox(); focused == nil || focused.ID != "files" {
 		t.Fatalf("focused box after tab = %v, want files", focused)
 	}
-	a.HandleKey(loom.KeyEvent{Text: "/"})
+	a.ConsumeKey(loom.KeyEvent{Text: "/"})
 	if !a.navigation.Searching() {
 		t.Fatal("expected navigation to be in search mode")
 	}
-	a.HandleKey(loom.KeyEvent{Text: "p"})
+	a.ConsumeKey(loom.KeyEvent{Text: "p"})
 	if a.navigation.List().Query() != "p" {
 		t.Fatalf("search query = %q, want p", a.navigation.List().Query())
 	}
@@ -316,7 +316,7 @@ func TestAppTickerInterface(t *testing.T) {
 	}
 
 	// Toggle play on video
-	a.HandleKey(loom.KeyEvent{Text: "p"})
+	a.ConsumeKey(loom.KeyEvent{Text: "p"})
 	if !a.preview.playing {
 		t.Fatal("expected video to enter playing state")
 	}
