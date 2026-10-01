@@ -6,7 +6,7 @@ import (
 	"math"
 	"time"
 
-	"codeberg.org/ubunatic/loom"
+	"ubunatic.com/loom"
 
 	"ubunatic.com/cati/internal/audio"
 	"ubunatic.com/cati/v1/core"
@@ -489,7 +489,6 @@ func (p *imagePreview) drawInfoView(c *loom.Canvas, x, y, w, h int) {
 	}
 }
 
-
 // drawModeBar renders the [p] play/pause button (if video) and [six] [half] [quad] [all] mode buttons along with render time and SSIM,
 // and records button bounds for mouse hit-testing.
 func (p *imagePreview) drawModeBar(c *loom.Canvas, x, y, w int) {
@@ -576,78 +575,96 @@ func (p *imagePreview) applyZoomKey(text string) {
 //	p          — toggle fast video playback
 //	Shift-P    — toggle original speed video playback
 //	f          — toggle fullscreen
-func (p *imagePreview) HandleKey(e loom.KeyEvent) bool {
+func (p *imagePreview) ConsumeKey(e loom.KeyEvent) loom.EventResult {
 	if !p.focused {
-		return false
+		return loom.Ignored()
 	}
 	const pageStep = 10
 	switch e.Key {
 	case "up":
 		p.panY--
+		return loom.Handled()
 	case "down":
 		p.panY++
+		return loom.Handled()
 	case "left":
 		p.panX--
+		return loom.Handled()
 	case "right":
 		p.panX++
+		return loom.Handled()
 	case "pgup", "pageup":
 		p.panY -= pageStep
+		return loom.Handled()
 	case "pgdn", "pgdown", "pagedown":
 		p.panY += pageStep
+		return loom.Handled()
 	case "home":
 		p.panX, p.panY = 0, 0
+		return loom.Handled()
 	case "shift-m", "shift-M":
 		p.CycleModePrev()
-		return false
+		return loom.Handled()
 	case "shift-p", "shift-P", "S-p", "S-P":
 		p.TogglePlay(true)
-		return false
+		return loom.Handled()
 	}
 	switch e.Text {
 	case "#":
 		p.ToggleInfo()
+		return loom.Handled()
 	case "m":
 		p.CycleMode()
+		return loom.Handled()
 	case "M":
 		p.CycleModePrev()
+		return loom.Handled()
 	case "p":
 		p.TogglePlay(false)
+		return loom.Handled()
 	case "P":
 		p.TogglePlay(true)
+		return loom.Handled()
 	case "f", "F":
 		if p.onFullscreen != nil {
 			p.onFullscreen()
 		}
+		return loom.Handled()
 	default:
-		p.applyZoomKey(e.Text)
+		if e.Text == "+" || e.Text == "=" || e.Text == "-" || e.Text == "0" {
+			p.applyZoomKey(e.Text)
+			return loom.Handled()
+		}
 	}
-	return false
+	return loom.Ignored()
 }
 
 // HandleMouse pans with the scroll wheel and handles mode-bar clicks.
-func (p *imagePreview) HandleMouse(e loom.MouseEvent) bool {
+func (p *imagePreview) ConsumeMouse(e loom.MouseEvent) loom.EventResult {
 	switch e.Action {
 	case loom.MouseScrollUp:
 		p.panY--
+		return loom.Handled()
 	case loom.MouseScrollDown:
 		p.panY++
+		return loom.Handled()
 	case loom.MousePress:
 		if e.Button == loom.MouseLeft && e.Y == p.lastH {
 			// Click in the mode bar (last row, 1-based coords from inner rect).
 			clickX := e.X - 1 // convert to 0-based
 			if p.playBtn.active && clickX >= p.playBtn.x && clickX < p.playBtn.x+p.playBtn.w {
 				p.TogglePlay(p.origSpeed || p.fullscreen)
-				return false
+				return loom.Handled()
 			}
 			for _, btn := range p.modeBtns {
 				if clickX >= btn.x && clickX < btn.x+btn.w {
 					p.SetMode(btn.mode)
-					return false
+					return loom.Handled()
 				}
 			}
 		}
 	}
-	return false
+	return loom.Ignored()
 }
 
 func (p *imagePreview) ContentHeight() int {

@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"strings"
 
-	"codeberg.org/ubunatic/loom"
+	"ubunatic.com/loom"
 
 	"ubunatic.com/cati/v1/halfblock"
 )
@@ -241,7 +241,7 @@ func (b *browser) Draw(c *loom.Canvas, r loom.Rect) {
 	b.frame.Draw(c, r)
 }
 
-func (b *browser) HandleKey(k loom.KeyEvent) bool {
+func (b *browser) ConsumeKey(k loom.KeyEvent) loom.EventResult {
 	// Shift-Up / Shift-Down and Ctrl-Up / Ctrl-Down dynamically resize the pane rows.
 	switch k.Key {
 	case "shift-up", "shift_up", "S-up", "ctrl-up", "ctrl_up", "C-up":
@@ -250,12 +250,12 @@ func (b *browser) HandleKey(k loom.KeyEvent) bool {
 			b.frame.Boxes[0].Height = b.boxHeight
 			b.frame.Boxes[1].Height = b.boxHeight
 		}
-		return false
+		return loom.Handled()
 	case "shift-down", "shift_down", "S-down", "ctrl-down", "ctrl_down", "C-down":
 		b.boxHeight++
 		b.frame.Boxes[0].Height = b.boxHeight
 		b.frame.Boxes[1].Height = b.boxHeight
-		return false
+		return loom.Handled()
 	}
 
 	// Keys that apply when the files pane is focused and search is inactive.
@@ -269,44 +269,44 @@ func (b *browser) HandleKey(k loom.KeyEvent) bool {
 		if k.Text == "i" {
 			b.imagesOnly = !b.imagesOnly
 			_ = b.open(b.dir)
-			return false
+			return loom.Handled()
 		}
 		// Toggle info mode with '#'.
 		if k.Text == "#" {
 			b.preview.ToggleInfo()
-			return false
+			return loom.Handled()
 		}
 		// Cycle mode with 'm' (forward) or 'M' / Shift-M (backward).
 		switch {
 		case k.Text == "m" && k.Key != "shift-m" && k.Key != "shift-M":
 			b.preview.CycleMode()
-			return false
+			return loom.Handled()
 		case k.Text == "M" || k.Key == "shift-m" || k.Key == "shift-M":
 			b.preview.CycleModePrev()
-			return false
+			return loom.Handled()
 		}
 		// Toggle video play/pause with 'p' (fast) or 'P'/Shift-P (orig speed) when a video is selected.
 		switch {
 		case k.Key == "shift-p" || k.Key == "shift-P" || k.Key == "S-p" || k.Key == "S-P" || k.Text == "P":
 			if b.preview.wantPath != "" && halfblock.IsVideo(b.preview.wantPath) {
 				b.preview.TogglePlay(true)
-				return false
+				return loom.Handled()
 			}
 		case k.Text == "p":
 			if b.preview.wantPath != "" && halfblock.IsVideo(b.preview.wantPath) {
 				b.preview.TogglePlay(false)
-				return false
+				return loom.Handled()
 			}
 		}
 		// +/-/=/0: forward zoom to the preview pane rather than starting a filter search.
 		switch k.Text {
 		case "+", "=", "-", "0":
 			b.preview.applyZoomKey(k.Text)
-			return false
+			return loom.Handled()
 		}
 	}
 
-	quit := b.frame.HandleKey(k)
+	result := b.frame.ConsumeKey(k)
 	filesBox := b.frame.Box("files")
 	if isMax := (filesBox != nil && filesBox.Hidden); isMax != b.fullscreen {
 		b.fullscreen = isMax
@@ -315,7 +315,7 @@ func (b *browser) HandleKey(k loom.KeyEvent) bool {
 
 	// Backspace on an empty filter causes Choice to signal quit — navigate
 	// up to the parent directory instead of exiting the app.
-	if quit && k.Key == "backspace" {
+	if result.Quit && k.Key == "backspace" {
 		parent := filepath.Dir(b.dir)
 		if parent != b.dir {
 			prev := filepath.Base(b.dir)
@@ -325,13 +325,16 @@ func (b *browser) HandleKey(k loom.KeyEvent) bool {
 				b.selectByName(prev)
 			}
 			b.updatePreview()
-			return false
+			return loom.Handled()
 		}
 		// Already at filesystem root — let the quit propagate.
 	}
 
 	b.updatePreview()
-	return quit
+	if result.Quit {
+		return result
+	}
+	return result
 }
 
 // selectByName moves the list cursor to the item with the given name.
@@ -341,15 +344,18 @@ func (b *browser) selectByName(name string) {
 	for i, item := range b.list.Items {
 		if item.Name == name {
 			for j := 0; j < i; j++ {
-				b.list.HandleKey(loom.KeyEvent{Key: "down"})
+				b.list.ConsumeKey(loom.KeyEvent{Key: "down"})
 			}
 			return
 		}
 	}
 }
 
-func (b *browser) HandleMouse(k loom.MouseEvent) bool {
-	quit := b.frame.HandleMouse(k)
+func (b *browser) ConsumeMouse(k loom.MouseEvent) loom.EventResult {
+	result := b.frame.ConsumeMouse(k)
 	b.updatePreview()
-	return quit
+	if result.Quit {
+		return result
+	}
+	return result
 }

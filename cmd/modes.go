@@ -242,7 +242,7 @@ func isImageFileOrPreset(arg string) bool {
 		}
 	}
 	ext := strings.ToLower(filepath.Ext(clean))
-	if ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".svg" || ext == ".webp" || ext == ".gif" || ext == ".bmp" {
+	if imageExts[ext] || halfblock.IsVideo(clean) {
 		return true
 	}
 	if _, err := os.Stat(clean); err == nil {
