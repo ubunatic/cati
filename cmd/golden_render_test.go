@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
 	"ubunatic.com/cati/v1/sextant"
@@ -197,6 +198,108 @@ func TestGoldenRenders(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestCustomDoom1Goldens(t *testing.T) {
+	goldenDir := filepath.Join("testdata", "custom", "doom1")
+	// Native-resolution targets for the 320×200 Doom 1 title screen. Keep this
+	// table separate from the square-width corpus: it records exact cell grids,
+	// so more source-specific targets can be added without changing that corpus.
+	// The six-part 2×3 mode is named "2x3" in the render-mode spec; the "six"
+	// composite mode uses 2×6 cells and does not match this target geometry.
+	for _, target := range []struct {
+		mode       string
+		name       string
+		cols, rows int
+	}{
+		{mode: "2x3", name: "six", cols: 160, rows: 67},
+		{mode: "half", name: "half", cols: 320, rows: 100},
+	} {
+		rc, err := findRenderModeByName(target.mode)
+		if err != nil {
+			t.Fatalf("findRenderModeByName(%q): %v", target.mode, err)
+		}
+		const sourcePath = "assets/doom1.png"
+		orig := goldenSourceLoad(t, sourcePath)
+		if orig == nil {
+			continue
+		}
+		if err := os.MkdirAll(goldenDir, 0o755); err != nil {
+			t.Fatalf("create %s: %v", goldenDir, err)
+		}
+		renderName := fmt.Sprintf("render_%s_%dx%d.png", target.name, target.cols, target.rows)
+		renderPath := filepath.Join(goldenDir, renderName)
+		meta := map[string]string{
+			"Algorithm": target.mode,
+			"Target":    target.name,
+			"Source":    "320x200",
+			"Cols":      fmt.Sprintf("%d", target.cols),
+			"Rows":      fmt.Sprintf("%d", target.rows),
+		}
+		spec := rc.viewSpec()
+		targetW, targetH := target.cols*spec.CellW, target.rows*spec.CellH
+		bounds := orig.Bounds()
+		if bounds.Dx() != targetW || bounds.Dy() > targetH || bounds.Dy() <= targetH-spec.CellH {
+			t.Fatalf("%s native source is %dx%dpx, target grid is %dx%dpx", target.name, bounds.Dx(), bounds.Dy(), targetW, targetH)
+		}
+		// Keep the 320×200 source pixels untouched. The sextant grid has one
+		// transparent pixel below the source so its last 2×3 cell contains the
+		// final two source rows; the half-block grid divides the source exactly.
+		scaled := orig
+		if padding := targetH - bounds.Dy(); padding > 0 {
+			scaled = imgutil.AppendTransparentRows(orig, padding)
+		}
+		rendered := goldenNativeRenderToImage(scaled, rc)
+		if got := rendered.Bounds().Size(); got != image.Pt(targetW, targetH) {
+			t.Fatalf("%s native render size = %v, want %dx%d", target.name, got, targetW, targetH)
+		}
+		if target.mode == "half" && !imagesEqual(rendered, orig) {
+			t.Fatal("half-block native render differs from the 320×200 source image")
+		}
+		if target.mode == "2x3" {
+			const wantDifferentPixels = 24730
+			if got := countDifferentPixels(orig, rendered); got != wantDifferentPixels {
+				t.Errorf("six-mode differing pixels within source bounds = %d, want %d", got, wantDifferentPixels)
+			}
+		}
+		if *updateGolden {
+			if err := testhelper.SavePNG(renderPath, rendered, meta); err != nil {
+				t.Errorf("save golden %s: %v", renderPath, err)
+			}
+			continue
+		}
+		if _, err := os.Stat(renderPath); os.IsNotExist(err) {
+			t.Logf("creating golden %s", renderName)
+			if err := testhelper.SavePNG(renderPath, rendered, meta); err != nil {
+				t.Errorf("save golden %s: %v", renderPath, err)
+			}
+			continue
+		}
+		golden := goldenLoad(t, renderPath)
+		if golden != nil && !goldenEqual(rendered, golden) {
+			t.Errorf("custom/doom1/%s: rendered image differs from golden", renderName)
+		}
+	}
+}
+
+// countDifferentPixels counts unequal pixel locations in a, comparing the same
+// coordinates in b. b may have extra transparent padding below a.
+func countDifferentPixels(a, b image.Image) int {
+	ab, bb := a.Bounds(), b.Bounds()
+	if bb.Min.X > ab.Min.X || bb.Min.Y > ab.Min.Y || bb.Max.X < ab.Max.X || bb.Max.Y < ab.Max.Y {
+		return -1
+	}
+	different := 0
+	for y := ab.Min.Y; y < ab.Max.Y; y++ {
+		for x := ab.Min.X; x < ab.Max.X; x++ {
+			ar, ag, ab, aa := a.At(x, y).RGBA()
+			br, bg, bb, ba := b.At(x, y).RGBA()
+			if ar != br || ag != bg || ab != bb || aa != ba {
+				different++
+			}
+		}
+	}
+	return different
 }
 
 // goldenRenderPath selects a decoder-family-specific golden for JPEG sources.
@@ -416,22 +519,24 @@ func gcd(a, b int) int {
 // refW/refH are no longer used (all modes produce identical canvas dimensions)
 // and are kept only for call-site compatibility; pass 0 to make that explicit.
 func goldenRenderToImage(scaled image.Image, rc renderCfg, refW, refH int) image.Image {
+	return upscaleToCharRes(goldenNativeRenderToImage(scaled, rc), rc)
+}
+
+func goldenNativeRenderToImage(scaled image.Image, rc renderCfg) image.Image {
 	b := scaled.Bounds()
-	var rendered image.Image
 	switch rc.mode {
 	case modeSextant:
-		rendered = sextant.RenderToImage(scaled, rc.sextantMode)
+		return sextant.RenderToImage(scaled, rc.sextantMode)
 	case modeHalfSplit, modeSpark, modeSparkQuad, modeSixHalf, modeSparkSix:
 		spec := rc.mode.viewSpec()
 		outCols := max(1, b.Dx()/spec.CellW)
 		outRows := max(1, b.Dy()/spec.CellH)
-		rendered = sparkline.RenderToImage(scaled, outCols, outRows, rc.sparkMode)
+		return sparkline.RenderToImage(scaled, outCols, outRows, rc.sparkMode)
 	case modeQuad:
-		rendered = quadblock.RenderToImage(scaled, rc.quadOpts)
+		return quadblock.RenderToImage(scaled, rc.quadOpts)
 	default:
-		rendered = halfblock.RenderToImage(scaled)
+		return halfblock.RenderToImage(scaled)
 	}
-	return upscaleToCharRes(rendered, rc)
 }
 
 // upscaleToCharRes upscales rendered to the shared character-grid resolution so
