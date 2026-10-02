@@ -465,6 +465,8 @@ func loadLegacyRenderModeEntries() []renderModeEntry {
 }
 
 func loadRenderModeEntries() []renderModeEntry {
+	// The braille renderers are deliberately not mapped here: v1/braille is an
+	// experimental package and is not integrated into the cati CLI.
 	renderers := map[string]renderCfg{
 		"halfblock_exact":      {id: 0},
 		"sparkline_half_split": {id: 8, mode: modeHalfSplit, sparkMode: sparkline.HalfSplit},

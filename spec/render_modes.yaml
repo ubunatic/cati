@@ -78,6 +78,8 @@ modes:
     native_step: 1
     optimized: true
 
+  # These renderer definitions describe the experimental v1/braille package.
+  # They are intentionally not wired into the cati CLI.
   - name: braille/dots
     aliases: [bd, brailledots]
     description: "Chooses a 2x4 braille dot pattern with foreground-colored dots (dot-only)."
