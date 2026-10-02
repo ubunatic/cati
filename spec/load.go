@@ -404,6 +404,8 @@ func parseGlyphSetShapes(def GlyphSetDef) ([]GlyphShape, error) {
 		switch def.Generated {
 		case "sextant_2x3":
 			return generatedSextantShapes(), nil
+		case "braille_2x4":
+			return generatedBrailleShapes(), nil
 		case "unicode_bars":
 			return generatedBarShapes(def)
 		default:
@@ -567,6 +569,21 @@ func parseNamedUnion(expr string, offset int, names []string, operands map[strin
 		}
 	}
 	return nil, false
+}
+
+func generatedBrailleShapes() []GlyphShape {
+	shapes := make([]GlyphShape, 256)
+	dotBitTable := [8]uint8{0x01, 0x08, 0x02, 0x10, 0x04, 0x20, 0x40, 0x80}
+	for mask := 0; mask < 256; mask++ {
+		m := make([]bool, 8)
+		for idx := 0; idx < 8; idx++ {
+			if mask&int(dotBitTable[idx]) != 0 {
+				m[idx] = true
+			}
+		}
+		shapes[mask] = GlyphShape{Glyph: rune(0x2800 + mask), Mask: m}
+	}
+	return shapes
 }
 
 func generatedSextantShapes() []GlyphShape {
