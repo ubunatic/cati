@@ -10,10 +10,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"ubunatic.com/cati/v1/halfblock"
+	"golang.org/x/term"
 	"ubunatic.com/cati/internal/input"
 	spec "ubunatic.com/cati/spec"
-	"golang.org/x/term"
+	"ubunatic.com/cati/v1/halfblock"
 )
 
 func runInputTest() error {

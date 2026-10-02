@@ -230,25 +230,26 @@ type quadCell struct {
 
 // ── Colour quantisation ───────────────────────────────────────────────────────
 
-// collectUnique returns the distinct non-transparent colours found in pixels.
-func collectUnique(pixels [4]color.RGBA) []color.RGBA {
-	var out []color.RGBA
+// collectUnique returns the distinct non-transparent colours found in pixels
+// written into a fixed-size array along with the count.
+func collectUnique(pixels [4]color.RGBA) (out [4]color.RGBA, n int) {
 	for _, p := range pixels {
 		if isTransparent(p) {
 			continue
 		}
 		found := false
-		for _, u := range out {
-			if eqRGB(p, u) {
+		for i := 0; i < n; i++ {
+			if eqRGB(p, out[i]) {
 				found = true
 				break
 			}
 		}
 		if !found {
-			out = append(out, p)
+			out[n] = p
+			n++
 		}
 	}
-	return out
+	return out, n
 }
 
 // pickBestPair selects fg and bg from candidates, scoring each pair by:
@@ -282,14 +283,19 @@ func pickBestPair(pixels [4]color.RGBA, candidates []color.RGBA, left, above *qu
 			}
 
 			continuity := 0
-			for _, nb := range []*quadCell{left, above} {
-				if nb == nil || nb.transparent {
-					continue
-				}
-				if nb.hasFG && (eqRGB(nb.fg, ca) || eqRGB(nb.fg, cb)) {
+			if left != nil && !left.transparent {
+				if left.hasFG && (eqRGB(left.fg, ca) || eqRGB(left.fg, cb)) {
 					continuity++
 				}
-				if nb.hasBG && (eqRGB(nb.bg, ca) || eqRGB(nb.bg, cb)) {
+				if left.hasBG && (eqRGB(left.bg, ca) || eqRGB(left.bg, cb)) {
+					continuity++
+				}
+			}
+			if above != nil && !above.transparent {
+				if above.hasFG && (eqRGB(above.fg, ca) || eqRGB(above.fg, cb)) {
+					continuity++
+				}
+				if above.hasBG && (eqRGB(above.bg, ca) || eqRGB(above.bg, cb)) {
 					continuity++
 				}
 			}
@@ -383,23 +389,25 @@ func splitHalfCell(pixels [4]color.RGBA, left, above *quadCell, withNeighbors bo
 	if withNeighbors && hasBG {
 		best := bg
 		bestErr := quantError(pixels, fg, bg)
-		for _, nb := range []*quadCell{left, above} {
+		checkNB := func(nb *quadCell) {
 			if nb == nil || nb.transparent {
-				continue
+				return
 			}
-			for _, c := range []struct {
-				ok bool
-				c  color.RGBA
-			}{{nb.hasFG, nb.fg}, {nb.hasBG, nb.bg}} {
-				if !c.ok || eqRGB(c.c, fg) {
-					continue
+			if nb.hasFG && !eqRGB(nb.fg, fg) {
+				if e := quantError(pixels, fg, nb.fg); e < bestErr {
+					best = nb.fg
+					bestErr = e
 				}
-				if e := quantError(pixels, fg, c.c); e < bestErr {
-					best = c.c
+			}
+			if nb.hasBG && !eqRGB(nb.bg, fg) {
+				if e := quantError(pixels, fg, nb.bg); e < bestErr {
+					best = nb.bg
 					bestErr = e
 				}
 			}
 		}
+		checkNB(left)
+		checkNB(above)
 		bg = best
 	}
 
@@ -408,8 +416,11 @@ func splitHalfCell(pixels [4]color.RGBA, left, above *quadCell, withNeighbors bo
 	// mask to a poorly represented cell creates isolated noisy quadrants.  Let
 	// callers request the same conservative halfblock fallback used by the
 	// general quantiser; this was previously skipped by the SplitHalf fast path.
-	if hasBG && threshold > 0 && len(collectUnique(pixels)) > 2 && exactCoverage(pixels, fg, bg, true) < threshold {
-		return halfblockFallback(pixels)
+	if hasBG && threshold > 0 {
+		_, uniqueN := collectUnique(pixels)
+		if uniqueN > 2 && exactCoverage(pixels, fg, bg, true) < threshold {
+			return halfblockFallback(pixels)
+		}
 	}
 	if mask == 0 {
 		if !hasBG {
@@ -653,23 +664,24 @@ func compileCell(pixels [4]color.RGBA, left, above *quadCell, opts Options) quad
 		return cell
 	}
 
-	unique := collectUnique(pixels)
+	uniqueArr, numUnique := collectUnique(pixels)
 
-	if len(unique) == 0 {
+	if numUnique == 0 {
 		return quadCell{ch: ' ', transparent: true}
 	}
 
 	var fg, bg color.RGBA
 	hasBG := false
 
-	switch len(unique) {
+	switch numUnique {
 	case 1:
-		fg = unique[0]
+		fg = uniqueArr[0]
 	case 2:
-		fg, bg = unique[0], unique[1]
+		fg, bg = uniqueArr[0], uniqueArr[1]
 		hasBG = true
 	default:
-		fg, bg, hasBG = pickBestPair(pixels, unique, left, above)
+		uniqueSlice := uniqueArr[:numUnique]
+		fg, bg, hasBG = pickBestPair(pixels, uniqueSlice, left, above)
 		if opts.HalfblockThreshold > 0 {
 			if exactCoverage(pixels, fg, bg, hasBG) < opts.HalfblockThreshold {
 				return halfblockFallback(pixels)
@@ -854,7 +866,7 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 		return err
 	}
 
-	var buf []byte
+	buf := make([]byte, 0, grid.Width*32)
 	for y := 0; y < grid.Height; y++ {
 		buf = buf[:0]
 		if !opts.NoLinePrefix {
@@ -946,12 +958,6 @@ func RenderToImage(img image.Image, opts Options) *image.RGBA {
 	tcCols := (pixW + 1) / 2
 	trRows := (pixH + 1) / 2
 	cells := make([]quadCell, tcCols*trRows)
-	cellAt := func(tr, tc int) *quadCell {
-		if tr < 0 || tc < 0 || tr >= trRows || tc >= tcCols {
-			return nil
-		}
-		return &cells[tr*tcCols+tc]
-	}
 
 	// Quadrant pixel offsets within a 2×2 block: UL=0, UR=1, LL=2, LR=3.
 	// Maps to bit positions: UL=bit3, UR=bit2, LL=bit1, LR=bit0.
@@ -972,7 +978,7 @@ func RenderToImage(img image.Image, opts Options) *image.RGBA {
 			pixels[3] = samplePixel(img, px0+1, py0+1, b, opts)
 
 			if opts.Blend == BlendAmbiguous || opts.Blend == BlendAmbiguousWide {
-				if len(collectUnique(pixels)) >= 3 {
+				if _, n := collectUnique(pixels); n >= 3 {
 					radius := 1
 					if opts.Blend == BlendAmbiguousWide {
 						radius = 2
@@ -984,7 +990,15 @@ func RenderToImage(img image.Image, opts Options) *image.RGBA {
 				}
 			}
 
-			c := compileCell(pixels, cellAt(tr, tc-1), cellAt(tr-1, tc), opts)
+			var leftCell, aboveCell *quadCell
+			if tc > 0 {
+				leftCell = &cells[tr*tcCols+tc-1]
+			}
+			if tr > 0 {
+				aboveCell = &cells[(tr-1)*tcCols+tc]
+			}
+
+			c := compileCell(pixels, leftCell, aboveCell, opts)
 			cells[tr*tcCols+tc] = c
 
 			mask := charToMask(c.ch)
@@ -1211,13 +1225,6 @@ func computeQuadCellsJ(img image.Image, b image.Rectangle, opts Options, tcCols,
 // FIXME: copied from the Render/RenderToImage pixel-selection path; consider
 // consolidating once the worker path settles.
 func computeQuadCell(img image.Image, b image.Rectangle, opts Options, cells []quadCell, tr, tc, tcCols, trRows int) quadCell {
-	cellAt := func(row, col int) *quadCell {
-		if row < 0 || col < 0 || row >= trRows || col >= tcCols {
-			return nil
-		}
-		return &cells[row*tcCols+col]
-	}
-
 	py0 := b.Min.Y + tr*2
 	py1 := py0 + 1
 	px0 := b.Min.X + tc*2
@@ -1230,7 +1237,7 @@ func computeQuadCell(img image.Image, b image.Rectangle, opts Options, cells []q
 	pixels[3] = samplePixel(img, px1, py1, b, opts)
 
 	if opts.Blend == BlendAmbiguous || opts.Blend == BlendAmbiguousWide {
-		if len(collectUnique(pixels)) >= 3 {
+		if _, n := collectUnique(pixels); n >= 3 {
 			radius := 1
 			if opts.Blend == BlendAmbiguousWide {
 				radius = 2
@@ -1242,5 +1249,13 @@ func computeQuadCell(img image.Image, b image.Rectangle, opts Options, cells []q
 		}
 	}
 
-	return compileCell(pixels, cellAt(tr, tc-1), cellAt(tr-1, tc), opts)
+	var leftCell, aboveCell *quadCell
+	if tc > 0 {
+		leftCell = &cells[tr*tcCols+tc-1]
+	}
+	if tr > 0 {
+		aboveCell = &cells[(tr-1)*tcCols+tc]
+	}
+
+	return compileCell(pixels, leftCell, aboveCell, opts)
 }

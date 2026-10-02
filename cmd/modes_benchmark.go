@@ -11,12 +11,12 @@ import (
 )
 
 type benchmarkItemResult struct {
-	entry       renderModeEntry
-	geoSSIM     float64
-	photoSSIM   float64
-	totalSSIM   float64
-	avgLatency  time.Duration
-	efficiency  float64
+	entry      renderModeEntry
+	geoSSIM    float64
+	photoSSIM  float64
+	totalSSIM  float64
+	avgLatency time.Duration
+	efficiency float64
 }
 
 func runModesBenchmarkScorecard(out io.Writer, width int, smart bool, entries []renderModeEntry, sortKey string) error {

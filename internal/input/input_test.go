@@ -36,7 +36,7 @@ func TestResolveKeyAlias(t *testing.T) {
 		{"<c-c>", "\x03"},
 		{"<c-a>", "\x01"},
 		{"<c-z>", "\x1a"},
-		{"q", "q"},              // plain char passes through
+		{"q", "q"},                 // plain char passes through
 		{"<unknown>", "<unknown>"}, // unknown alias passes through
 	}
 	for _, tc := range cases {
@@ -107,14 +107,14 @@ func TestParseMouse(t *testing.T) {
 		motion  bool
 		button  int
 	}{
-		{"\x1b[<0;10;5M", true, 0, 10, 5, false, false, false, 0},    // left press
-		{"\x1b[<0;10;5m", true, 0, 10, 5, true, false, false, 0},     // left release
-		{"\x1b[<64;10;5M", true, 64, 10, 5, false, true, false, 0},   // scroll up
-		{"\x1b[<65;10;5M", true, 65, 10, 5, false, true, false, 1},   // scroll down
-		{"\x1b[<32;10;5M", true, 32, 10, 5, false, false, true, 0},   // left drag  (button=0 + motion)
-		{"\x1b[<35;10;5M", true, 35, 10, 5, false, false, true, 3},   // pure move  (button=3 + motion)
-		{"\x1b[<1;10;5M", true, 1, 10, 5, false, false, false, 1},    // middle press
-		{"q", false, 0, 0, 0, false, false, false, 0},                 // not mouse
+		{"\x1b[<0;10;5M", true, 0, 10, 5, false, false, false, 0},  // left press
+		{"\x1b[<0;10;5m", true, 0, 10, 5, true, false, false, 0},   // left release
+		{"\x1b[<64;10;5M", true, 64, 10, 5, false, true, false, 0}, // scroll up
+		{"\x1b[<65;10;5M", true, 65, 10, 5, false, true, false, 1}, // scroll down
+		{"\x1b[<32;10;5M", true, 32, 10, 5, false, false, true, 0}, // left drag  (button=0 + motion)
+		{"\x1b[<35;10;5M", true, 35, 10, 5, false, false, true, 3}, // pure move  (button=3 + motion)
+		{"\x1b[<1;10;5M", true, 1, 10, 5, false, false, false, 1},  // middle press
+		{"q", false, 0, 0, 0, false, false, false, 0},              // not mouse
 	}
 	for _, tc := range cases {
 		m, ok := s.ParseMouse(tc.tok)
@@ -189,7 +189,7 @@ func TestKeyNameAliasBeforeCtrl(t *testing.T) {
 func TestKeyNameUTF8(t *testing.T) {
 	s := input.DefaultSpec()
 	cases := []struct{ seq, want string }{
-		{"\xc3\xb6", "ö"},   // ö U+00F6
+		{"\xc3\xb6", "ö"},     // ö U+00F6
 		{"\xe2\x82\xac", "€"}, // € U+20AC
 		{"a", "a"},            // plain ASCII unchanged
 	}

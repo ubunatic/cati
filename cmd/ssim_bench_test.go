@@ -7,9 +7,9 @@ import (
 	"sort"
 	"testing"
 
-	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/internal/metrics"
 	"ubunatic.com/cati/internal/pixelart"
+	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
 	"ubunatic.com/cati/v1/sextant"
 	"ubunatic.com/cati/v1/sparkline"

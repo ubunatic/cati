@@ -158,27 +158,27 @@ func TestBuildMask(t *testing.T) {
 
 func TestCollectUnique(t *testing.T) {
 	t.Run("all same", func(t *testing.T) {
-		u := collectUnique([4]color.RGBA{red, red, red, red})
-		if len(u) != 1 || !eqRGB(u[0], red) {
-			t.Errorf("got %v", u)
+		u, n := collectUnique([4]color.RGBA{red, red, red, red})
+		if n != 1 || !eqRGB(u[0], red) {
+			t.Errorf("got %v, n=%d", u[:n], n)
 		}
 	})
 	t.Run("all transparent", func(t *testing.T) {
-		u := collectUnique([4]color.RGBA{transp, transp, transp, transp})
-		if len(u) != 0 {
-			t.Errorf("expected empty, got %v", u)
+		u, n := collectUnique([4]color.RGBA{transp, transp, transp, transp})
+		if n != 0 {
+			t.Errorf("expected empty, got %v, n=%d", u[:n], n)
 		}
 	})
 	t.Run("two colours", func(t *testing.T) {
-		u := collectUnique([4]color.RGBA{red, blue, red, blue})
-		if len(u) != 2 {
-			t.Errorf("expected 2 unique, got %d", len(u))
+		_, n := collectUnique([4]color.RGBA{red, blue, red, blue})
+		if n != 2 {
+			t.Errorf("expected 2 unique, got %d", n)
 		}
 	})
 	t.Run("transparent mixed in", func(t *testing.T) {
-		u := collectUnique([4]color.RGBA{transp, red, transp, red})
-		if len(u) != 1 {
-			t.Errorf("expected 1 unique, got %d", len(u))
+		_, n := collectUnique([4]color.RGBA{transp, red, transp, red})
+		if n != 1 {
+			t.Errorf("expected 1 unique, got %d", n)
 		}
 	})
 }
