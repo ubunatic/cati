@@ -75,6 +75,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 069 | [069-add-2x4-dot-only-braille-render-mode.md](069-add-2x4-dot-only-braille-render-mode.md) | Add 2x4 dot-only braille render mode | Open |
 | 070 | [070-add-2x4-braille-foreground-and-background-render-mode.md](070-add-2x4-braille-foreground-and-background-render-mode.md) | Add 2x4 braille foreground and background render mode | Open |
 | 071 | [071-respect-explicit-width-and-height-in-static-renders.md](071-respect-explicit-width-and-height-in-static-renders.md) | Respect explicit width and height in static renders | Open |
+| 072 | [072-add-aspect-modes-for-cli-source-mapping.md](072-add-aspect-modes-for-cli-source-mapping.md) | Add aspect modes for CLI source mapping | Open |
 
 ## Archived
 
