@@ -72,6 +72,8 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 066 | [066-mediabrowse-play-pause-should-not-reload-the-video-preview.md](066-mediabrowse-play-pause-should-not-reload-the-video-preview.md) | Mediabrowse play/pause should not reload the video preview | Closed |
 | 067 | [067-make-test-fails-makefile-pins-gotoolchain-go1-25-0-but-go-mod-needs-1-26.md](067-make-test-fails-makefile-pins-gotoolchain-go1-25-0-but-go-mod-needs-1-26.md) | make test fails: Makefile pins GOTOOLCHAIN=go1.25.0 but go.mod needs 1.26 | Open |
 | 068 | [068-re-init-harnez-with-quota-1-add-test-q1-target-harnez-rules-and-update-docs.md](068-re-init-harnez-with-quota-1-add-test-q1-target-harnez-rules-and-update-docs.md) | Re-init harnez with --quota-1: add test-q1 target, harnez rules and update docs | Open |
+| 069 | [069-add-2x4-dot-only-braille-render-mode.md](069-add-2x4-dot-only-braille-render-mode.md) | Add 2x4 dot-only braille render mode | Open |
+| 070 | [070-add-2x4-braille-foreground-and-background-render-mode.md](070-add-2x4-braille-foreground-and-background-render-mode.md) | Add 2x4 braille foreground and background render mode | Open |
 
 ## Archived
 
