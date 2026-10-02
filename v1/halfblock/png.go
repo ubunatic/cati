@@ -3,9 +3,9 @@ package halfblock
 import (
 	"fmt"
 	"image"
-	_ "image/gif"               // register GIF decoder
-	_ "image/jpeg"              // register JPEG decoder
-	_ "image/png"               // register PNG decoder
+	_ "image/gif"  // register GIF decoder
+	_ "image/jpeg" // register JPEG decoder
+	_ "image/png"  // register PNG decoder
 	"os"
 
 	_ "golang.org/x/image/bmp"  // register BMP decoder
