@@ -1,6 +1,6 @@
 # 069 — Add 2x4 dot-only braille render mode
 
-**Status**: Open
+**Status**: Resolved
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
@@ -16,3 +16,7 @@ Use the 2×4 braille dot geometry and braille pattern glyphs. Preserve the disti
 
 ## 3. Implementation & Verification Plan
 **Goal**: Implement and verify a selectable 2×4 dot-only braille render mode, or stop and report if blocked on a user decision or denied permission. The mode is done when it maps source pixels to braille dot patterns, integrates with the render-mode configuration and selection flow, and has focused tests and documented behavior.
+
+
+## Resolution
+Implemented `v1/braille` package and `braille/dots` (`bd`) 2x4 dot-only render mode registered in `spec/render_modes.yaml` as set ID 8 (`brailles`). Verified with unit tests and benchmarks.

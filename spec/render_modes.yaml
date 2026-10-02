@@ -1,4 +1,7 @@
 cycle:
+  - braille/dots
+  - braille
+  - 2x4
   - full
   - half
   - quad
@@ -75,6 +78,28 @@ modes:
     native_step: 1
     optimized: true
 
+  - name: braille/dots
+    aliases: [bd, brailledots]
+    description: "Chooses a 2x4 braille dot pattern with foreground-colored dots (dot-only)."
+    renderer: braille_dots
+    cell: { w: 2, h: 4 }
+    glyph_sets: [braille]
+    colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
+    optimized: true
+
+  - name: braille
+    aliases: [b8, 2x4]
+    description: "Chooses a 2x4 braille pattern with foreground dots and background fill."
+    renderer: braille_fg_bg
+    cell: { w: 2, h: 4 }
+    glyph_sets: [braille]
+    colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
+    optimized: true
+
   - name: 2x3
     aliases: ["6"]
     description: "Chooses one of 64 six-part masks for each 2x3 pixel block."
@@ -109,6 +134,7 @@ modes:
     optimized: true
 
 glyph_sets:
+  braille: ["generated:braille_2x4"]
   half: [" ", "▀", "▄", "█"]
   side: ["▌", "▐"]
   quad: ["▘", "▝", "▖", "▗", "▚", "▞", "▛", "▜", "▙", "▟"]
@@ -121,6 +147,8 @@ colorers:
   fg_bg_sse: two-color candidate search minimizing squared error
 
 renderers:
+  braille_dots: v1/braille ModeDots
+  braille_fg_bg: v1/braille ModeForegroundBackground
   halfblock_exact: v1/halfblock
   quad_split_half: v1/quadblock SplitHalf
   sextant_2x3: v1/sextant
@@ -160,6 +188,11 @@ set_registry:
     name: sextants
     geometry: { w: 2, h: 3 }
     generated: sextant_2x3
+    optimized: true
+  - id: 8
+    name: brailles
+    geometry: { w: 2, h: 4 }
+    generated: braille_2x4
     optimized: true
   - id: 9
     name: ninelikes
@@ -208,11 +241,12 @@ set_registry:
     optimized: true
 
 # Exact, case-sensitive named unions. A name is resolved before '+' grammar.
-composition_order: [full, half, quad, quad+, bars, bars+, six, 2x3, 3x3, all, all+, z, z+]
+composition_order: [full, half, quad, quad+, bars, bars+, six, 2x3, 2x4, 3x3, all, all+, z, z+]
 # Experimental compositions: listed and renderable, but skipped by
 # `cati --bench` unless selected with --mode.
 experimental: [all+, z, z+]
 composition_info:
+  2x4: "Uses full cells, sides and native 2x4 braille patterns at 2x4 geometry."
   full: "Uses empty and full cells at 1x1 geometry."
   half: "Uses full cells and top/bottom halves at 1x2 geometry."
   quad: "Combines full cells, sides, halves and quadrants at 2x2 geometry."
@@ -227,6 +261,7 @@ composition_info:
   z: "Adds non-hairline eighth bars to all at 24x24 geometry."
   z+: "Adds every eighth bar, including hairlines, to all at 24x24 geometry."
 compositions:
+  2x4: [0, 1, 8]
   f: [0]
   full: [0]
   "1": [0]
