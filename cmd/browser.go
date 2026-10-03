@@ -436,7 +436,7 @@ func styleConfigFromSpec(s spec.StyleSpec) *StyleConfig {
 		GridItemFg: s.Grid.ItemFg, GridItemBg: s.Grid.ItemBg,
 		GridSelectedFg: s.Grid.SelectedFg, GridSelectedBg: s.Grid.SelectedBg,
 		GridSelectedBold: s.Grid.SelectedBold, GridSelectedMarker: s.Grid.SelectedMarker,
-		ImageBorder: s.Grid.ImageBorder,
+		ImageBorder:     s.Grid.ImageBorder,
 		ScrollThumbChar: s.ScrollBar.ThumbChar, ScrollRailChar: s.ScrollBar.RailChar,
 		ScrollWidth: s.ScrollBar.Width, ScrollThumbFg: s.ScrollBar.ThumbFg,
 		ScrollRailFg: s.ScrollBar.RailFg, ScrollRailBg: s.ScrollBar.RailBg,

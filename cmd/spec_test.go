@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"gopkg.in/yaml.v3"
 	"ubunatic.com/cati/internal/input"
@@ -18,6 +19,17 @@ func TestMain(m *testing.M) {
 		panic("cannot chdir to project root: " + err.Error())
 	}
 	os.Exit(m.Run())
+}
+
+func TestEmptyInputSignalsAreNotSubscribed(t *testing.T) {
+	s, err := input.Load(fstest.MapFS{})
+	if err != nil {
+		t.Fatalf("Load empty input spec: %v", err)
+	}
+	ch := make(chan os.Signal, 1)
+	if notifySignals(ch, s.SignalsFor(input.EventQuit)) {
+		t.Fatal("empty signal list unexpectedly subscribed to process signals")
+	}
 }
 
 func TestSpecRenderModesLoad(t *testing.T) {

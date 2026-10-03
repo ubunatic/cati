@@ -68,6 +68,7 @@ type StylePageTitle struct {
 }
 
 type StyleSpec struct {
+	Schema     string          `yaml:"$schema"`
 	App        StyleApp        `yaml:"app"`
 	Buttons    StyleButtons    `yaml:"buttons"`
 	Preview    StylePreview    `yaml:"preview"`

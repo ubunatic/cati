@@ -162,3 +162,43 @@ func TestBrowser_ParseYaml(t *testing.T) {
 		t.Errorf("expected version text in content, got:\n%s", view.Content)
 	}
 }
+
+func TestStyleAndAboutFixturesDriveOutput(t *testing.T) {
+	styleDoc := "app:\n  border_style: box\nbuttons:\n  left_cap: '<'\n  right_cap: '>'\nscroll_bar:\n  width: 1\n"
+	styleSpec, err := spec.LoadStyleFrom(fstest.MapFS{"style.yaml": {Data: []byte(styleDoc)}})
+	if err != nil {
+		t.Fatalf("load style fixture: %v", err)
+	}
+	style := styleConfigFromSpec(styleSpec)
+	if got := loadButtons(style.BtnLeftCap, style.BtnRightCap)["prev"]; got != "<◀ Prev>" {
+		t.Fatalf("changed style caps produced button label %q", got)
+	}
+
+	aboutFS := fstest.MapFS{"about.yaml": {Data: []byte("type: view\nname: about\ntitle: Fixture Title\ncontent: Fixture content\n")}}
+	view, err := aboutViewFrom(aboutFS)
+	if err != nil {
+		t.Fatalf("load about fixture: %v", err)
+	}
+	var rendered bytes.Buffer
+	drawAboutPage(&rendered, 80, 24, &StyleConfig{}, view)
+	if !strings.Contains(rendered.String(), "Fixture Title") || !strings.Contains(rendered.String(), "Fixture content") {
+		t.Fatalf("changed about fixture did not drive rendered output: %q", rendered.String())
+	}
+}
+
+func TestMissingAndInvalidUIStyleSpecs(t *testing.T) {
+	style, err := loadStyleFrom(fstest.MapFS{})
+	if err != nil || style == nil || style.BtnLeftCap != "" || style.ScrollThumbChar != "" {
+		t.Fatalf("missing style should degrade without seeded content: %+v, %v", style, err)
+	}
+	if _, err := loadStyleFrom(fstest.MapFS{"style.yaml": {Data: []byte("app: [")}}); err == nil {
+		t.Fatal("invalid present style spec was silently accepted")
+	}
+	if _, err := aboutViewFrom(fstest.MapFS{"about.yaml": {Data: []byte("type: view\nname: about\ntitle: x\nunknown: y\n")}}); err == nil {
+		t.Fatal("invalid present about spec was silently accepted")
+	}
+	missing, err := aboutViewFrom(fstest.MapFS{})
+	if err != nil || missing == nil || missing.Title != "" || missing.Content != "" {
+		t.Fatalf("missing about spec should degrade without seeded content: %+v, %v", missing, err)
+	}
+}
