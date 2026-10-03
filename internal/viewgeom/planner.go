@@ -83,8 +83,8 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			}
 			if k >= 1 && k*srcW <= targetW {
 				baseRenderW = k * srcW
-				baseRenderH = k * srcH
 				padRight = targetW - baseRenderW
+				baseRenderH = max(1, int(math.Round(float64(baseRenderW*srcH*spec.AspectDen)/float64(srcW*spec.AspectNum))))
 				canvasRows = max(1, (baseRenderH+spec.CellH-1)/spec.CellH)
 				targetH := canvasRows * spec.CellH
 				padBottom = targetH - baseRenderH
@@ -106,9 +106,9 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 				k = targetH / srcH
 			}
 			if k >= 1 && k*srcH <= targetH {
-				baseRenderW = k * srcW
 				baseRenderH = k * srcH
 				padBottom = targetH - baseRenderH
+				baseRenderW = max(1, int(math.Round(float64(baseRenderH*srcW*spec.AspectNum)/float64(srcH*spec.AspectDen))))
 				canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
 				targetW := canvasCols * spec.CellW
 				padRight = targetW - baseRenderW
