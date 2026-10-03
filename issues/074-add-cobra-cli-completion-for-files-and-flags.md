@@ -1,6 +1,6 @@
 # 074 — Add Cobra CLI completion for files and flags
 
-**Status**: Open
+**Status**: Closed — implemented Cobra CLI completion for files and flags
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
