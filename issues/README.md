@@ -82,6 +82,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 076 | [076-audit-spec-driven-approach-violations-and-classify-candidates.md](076-audit-spec-driven-approach-violations-and-classify-candidates.md) | Spec ownership audit: confirmed gaps and policy candidates | Closed — audit complete; remaining ownership choices moved to a follow-up ticket |
 | 077 | [077-cover-3x3-and-all-composite-modes-in-geometry-planner-and-fix-line-count-padding-mismatches.md](077-cover-3x3-and-all-composite-modes-in-geometry-planner-and-fix-line-count-padding-mismatches.md) | Cover 3x3 and all composite modes in geometry planner and fix line count/padding mismatches | Closed — resolved by updating planner to fill explicit grid and aligning glyph grid bounds |
 | 078 | [078-pixel-and-aligned-aspect-edge-cases.md](078-pixel-and-aligned-aspect-edge-cases.md) | Pixel/aligned aspect edge cases: distortion cap and downscale fallback | Open |
+| 079 | [079-spec-policy-ownership-decisions-cli-zoom-options-playback-and-input-labels.md](079-spec-policy-ownership-decisions-cli-zoom-options-playback-and-input-labels.md) | Spec policy ownership decisions: CLI, zoom, options, playback, and input labels | Open |
 
 ## Archived
 
