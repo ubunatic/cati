@@ -60,7 +60,7 @@ func runInputTest() error {
 	}()
 
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, inputSpec.SignalsFor(input.EventResize)...)
+	notifySignals(sigs, inputSpec.SignalsFor(input.EventResize))
 	defer signal.Stop(sigs)
 
 	const maxLines = 20
