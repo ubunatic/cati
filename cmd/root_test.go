@@ -1008,7 +1008,9 @@ func TestCLIDoom1S2Render(t *testing.T) {
 				t.Fatalf("os.Pipe: %v", err)
 			}
 			oldStdout := os.Stdout
+			oldArgs := os.Args
 			os.Stdout = outW
+			os.Args = append([]string{"cati"}, tc.args...)
 
 			outChan := make(chan []byte)
 			go func() {
@@ -1020,6 +1022,7 @@ func TestCLIDoom1S2Render(t *testing.T) {
 
 			outW.Close()
 			os.Stdout = oldStdout
+			os.Args = oldArgs
 
 			if execErr != nil {
 				t.Fatalf("cmd.Execute error: %v", execErr)

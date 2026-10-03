@@ -170,6 +170,8 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.AddCommand(forwardSubcommand("browse", "catibrowse", "browse files with catibrowse"))
 	root.AddCommand(modesCommand())
 
+	registerRootCompletion(root)
+
 	return root
 }
 
