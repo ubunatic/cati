@@ -27,29 +27,32 @@ const (
 
 // MouseEvent holds decoded SGR 1006 mouse event data.
 type MouseEvent struct {
-	Btn      int
-	Col      int
-	Row      int
-	Release  bool
-	Button   int
-	NoButton int
-	Shift    bool
-	Meta     bool
-	Ctrl     bool
-	Motion   bool
-	Scroll   bool
+	Btn     int
+	Col     int
+	Row     int
+	Release bool
+	Button  int
+	Shift   bool
+	Meta    bool
+	Ctrl    bool
+	Motion  bool
+	Scroll  bool
 }
 
 func (m MouseEvent) IsScroll() bool { return m.Scroll }
 
-// IsDrag reports a button-held drag: motion flag set, scroll flag clear, and a
-// real button (0–2) held. Button==NoButton in SGR means no button held → that is a
-// pure move, not a drag.
-func (m MouseEvent) IsDrag() bool { return m.Motion && !m.Scroll && m.Button != m.NoButton }
+// IsDrag reports a motion event with a button held. ParseMouse normalizes the
+// spec's no-button value to the public SGR convention (button 3).
+func (m MouseEvent) IsDrag() bool {
+	return m.Motion && !m.Scroll && m.Button >= 0 && m.Button <= 2
+}
 
-// IsMove reports a pure mouse move with no button held (SGR button field == NoButton
-// with the motion flag set, emitted only in all-motion tracking mode).
-func (m MouseEvent) IsMove() bool { return m.Motion && !m.Scroll && m.Button == m.NoButton }
+// IsMove reports motion without a held button. ParseMouse normalizes the spec's
+// no-button value to the public SGR convention (button 3); struct literals keep
+// the same convention.
+func (m MouseEvent) IsMove() bool {
+	return m.Motion && !m.Scroll && m.Button == 3
+}
 
 func (m MouseEvent) ScrollDir() int {
 	if m.Btn&1 == 0 {
@@ -508,18 +511,21 @@ func (s *Spec) ParseMouse(tok string) (MouseEvent, bool) {
 	if err1 != nil || err2 != nil || err3 != nil {
 		return MouseEvent{}, false
 	}
+	button := btn & s.mouseBtnButtonMask
+	if button == s.mouseBtnNoButton {
+		button = 3 // Normalize the spec-declared no-button code to the public SGR convention.
+	}
 	m := MouseEvent{
-		Btn:      btn,
-		Col:      col,
-		Row:      row,
-		Release:  release,
-		Button:   btn & s.mouseBtnButtonMask,
-		Shift:    btn&s.mouseBtnShiftMask != 0,
-		Meta:     btn&s.mouseBtnMetaMask != 0,
-		Ctrl:     btn&s.mouseBtnCtrlMask != 0,
-		Motion:   btn&s.mouseBtnMotionFlag != 0,
-		Scroll:   btn&s.mouseBtnScrollFlag != 0,
-		NoButton: s.mouseBtnNoButton,
+		Btn:     btn,
+		Col:     col,
+		Row:     row,
+		Release: release,
+		Button:  button,
+		Shift:   btn&s.mouseBtnShiftMask != 0,
+		Meta:    btn&s.mouseBtnMetaMask != 0,
+		Ctrl:    btn&s.mouseBtnCtrlMask != 0,
+		Motion:  btn&s.mouseBtnMotionFlag != 0,
+		Scroll:  btn&s.mouseBtnScrollFlag != 0,
 	}
 	return m, true
 }

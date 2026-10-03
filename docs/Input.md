@@ -108,7 +108,9 @@ func (s *Spec) Tokenize(raw string) []string
 // Classify returns the EventType and structured data for a token.
 func (s *Spec) Classify(tok string) Event
 
-// ParseMouse extracts SGR 1006 mouse fields from a token.
+// ParseMouse extracts SGR 1006 mouse fields from a token. It normalizes the
+// spec's declared no-button code to Button==3, preserving helper behavior for
+// struct literals and the public SGR convention.
 func (s *Spec) ParseMouse(tok string) (MouseEvent, bool)
 
 // ResolveKeyAlias maps <esc>, <c-c>, <up>, etc. to terminal byte sequences.

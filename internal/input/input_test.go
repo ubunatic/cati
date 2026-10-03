@@ -255,6 +255,18 @@ func TestMouseMoveVsDrag(t *testing.T) {
 	}
 }
 
+func TestMouseEventLiteralDragAndMove(t *testing.T) {
+	drag := input.MouseEvent{Motion: true, Button: 0}
+	if !drag.IsDrag() || drag.IsMove() {
+		t.Errorf("literal left-button motion: IsDrag=%v IsMove=%v, want true/false", drag.IsDrag(), drag.IsMove())
+	}
+
+	move := input.MouseEvent{Motion: true, Button: 3}
+	if move.IsDrag() || !move.IsMove() {
+		t.Errorf("literal no-button motion: IsDrag=%v IsMove=%v, want false/true", move.IsDrag(), move.IsMove())
+	}
+}
+
 func TestScrollDir(t *testing.T) {
 	s := loadInputSpec(t)
 	up, okUp := s.ParseMouse("\x1b[<64;1;1M")
