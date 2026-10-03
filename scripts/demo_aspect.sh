@@ -23,19 +23,25 @@ for image in assets/doom1.png assets/samples/sample-002-summer-vacation.jpg; do
                 pixel) description='Nearest neighbor; up to 10% alignment padding; integer aspect tweaks limited to 10% and less than one cell.' ;;
             esac
             case_number=$((case_number + 1))
+            if (( case_number > 1 )); then
+                printf '%s\n' '------------------------'
+            fi
+            args=("$image" -W "$width" -m 3x3 --aspect "$aspect")
+            cati "${args[@]}"
             printf '\n[%d/24] %s | width %d | aspect %s\n' "$case_number" "${image##*/}" "$width" "$aspect"
             printf '%s\n' "$description"
             if [[ "$image" == assets/doom1.png && "$width" == 110 && "$aspect" == pixel ]]; then
                 printf 'Doom: 640x133 content subcells; right padding 20, bottom padding 2; canvas 110x45.\n'
             fi
-            args=("$image" -W "$width" -m 3x3 --aspect "$aspect")
             printf '  cati'; printf ' %q' "${args[@]}"; printf '\n'
-            printf 'Press Enter to render (q to quit): '
-            if ! IFS= read -r reply || [[ "$reply" == q || "$reply" == Q ]]; then
+            if (( case_number < 24 )); then
+                printf 'Press Enter for the next case (q to quit): '
+                if ! IFS= read -r reply || [[ "$reply" == q || "$reply" == Q ]]; then
+                    printf '\n'
+                    exit 0
+                fi
                 printf '\n'
-                exit 0
             fi
-            cati "${args[@]}"
         done
     done
 done
