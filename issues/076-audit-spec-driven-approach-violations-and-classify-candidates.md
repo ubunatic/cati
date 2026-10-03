@@ -42,6 +42,16 @@ The embedded YAML spec is application code and must own its declared content. Du
 | Input display vocabulary | `seqNames`, `MouseName`, and `EventName` hardcode canonical key, mouse, and event labels. `cmd/input_tester.go` displays event names; `input.yaml` has no display-label section. | **Moderate.** Specify stable names if useful to UI/help consistency. Keep enum IDs, Unicode/hex formatting, and generic unrecognized-state representation in Go; not every diagnostic needs YAML. | `internal/input/input.go`, `cmd/input_tester.go`, `spec/input.yaml` or `spec/labels.yaml` and corresponding schema/loader; input/spec tests. Assess library API implications: standalone `MouseName` currently receives no spec. |
 | SVG unconstrained raster default | `SVGMaxDim=2048` is used when **both target dimensions are unconstrained**, including the context loader. `RasterizeSVGWithTarget` accepts explicit targets; [022](022-svg-fixed-rasterization-size.md) is closed. It is **not a universal 2048px ceiling**. | **Weak to moderate.** Retain as a documented library/resource default unless product policy needs a declarative owner. Do not reopen the resolved target-scaling bug or force cmd configuration into a reusable loader. | `v1/halfblock/svg.go` (`svgRasterTarget`, `fitSVGTarget`, `RasterizeSVGWithTarget`), `v1/halfblock/image_async.go`, `cmd/thumbqueue.go`; SVG/async image tests. If accepted, first define owner, schema/loading, and constrained-versus-unconstrained behavior. |
 
+### B2. Re-check after audit (2026-10-03, HEAD `875f311`)
+
+Committed work since the audit (`4877f2c..875f311`, issue 075 M2–M4, 077, 078, aspect modes) changed these findings:
+
+- **075 is closed** (`8e1bc04`). Links to 075 above are historical; route semantics, crop mapping, and resize now need a new owner ticket (or 078 for aspect edge cases) if accepted.
+- **New Go-owned token table:** `cmd/completion.go` `aspectModes` (`354c8d0`) is the single list of `--aspect` values, descriptions, and aliases (`pixel`/`raw`/`1:1`, `contain`/`fit`) for validation, help, and completion. It removes duplication within Go but adds a **moderate-to-strong** candidate to the "Accepted option tokens" row: an aspect-mode spec owner. Flag help strings in `New`/`NewPlay`/`NewBrowse` still hardcode `default|aligned|pixel|contain` separately.
+- **CLI inventory row still holds:** flag declarations remain repeated across the three constructors; `cmd/root.go` grew further.
+- **Playback fallback rates unchanged:** `cmd/play.go` still uses 15 FPS fallbacks (refactored, same literals).
+- No commit touched `spec/`, `internal/input`, `cmd/browser.go`, or `ZoomSteps`; sections A and the other B rows are unchanged.
+
 ### C. Existing render-contract work and corrected historical claims
 
 - **Renderer registry omission is stale:** `spec/render_modes.yaml:renderers` now includes both `sparkline_six_half` and `sparkline_spark_six`; `TestSpecRenderModesIntegrity` recognizes them. Do not propose adding them again.
