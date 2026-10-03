@@ -46,6 +46,8 @@ func New() *cobra.Command {
 	var jobs int
 	var width int
 	var height int
+	var pad string
+	var aspect string
 	var renderMode string
 	var prescaler string
 	var fullComp bool
@@ -118,6 +120,8 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 				jobs:        jobs,
 				width:       width,
 				height:      height,
+				pad:         pad,
+				aspect:      aspect,
 				fullComp:    fullComp,
 				initialZoom: initialZoom,
 				timeRange:   timeRange,
@@ -133,8 +137,10 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.Flags().BoolVarP(&interactMode, "interactive", "i", false, "interactive viewer: +/- zoom, arrow keys pan, q quit")
 	root.Flags().IntVar(&fps, "fps", 0, "legacy playback frames per second")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
-	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
-	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
+	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -168,6 +174,8 @@ func NewPlay() *cobra.Command {
 	var jobs int
 	var width int
 	var height int
+	var pad string
+	var aspect string
 	var renderMode string
 	var prescaler string
 	var fullComp bool
@@ -237,8 +245,10 @@ func NewPlay() *cobra.Command {
 	root.Flags().BoolVarP(&legacyInteractive, "interactive", "i", false, "legacy compatibility: interactive mode is the default")
 	root.Flags().IntVar(&fps, "fps", 0, "frames per second (0 = auto: native fps for video, 15 for images)")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for async render work (0 = auto)")
-	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
-	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
+	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -257,6 +267,8 @@ func NewBrowse() *cobra.Command {
 	var jobs int
 	var width int
 	var height int
+	var pad string
+	var aspect string
 	var renderMode string
 	var prescaler string
 	var fullComp bool
@@ -299,8 +311,10 @@ func NewBrowse() *cobra.Command {
 	root.Flags().BoolVar(&ansiMode, "ansi", true, "render with 24-bit ANSI true-color (default)")
 	root.Flags().BoolVarP(&legacyInteractive, "interactive", "i", false, "legacy compatibility: browser mode is the default")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
-	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
-	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
+	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -390,6 +404,8 @@ type opts struct {
 	jobs        int
 	width       int    // terminal columns; 0 = auto
 	height      int    // image/render rows; 0 = auto
+	pad         string // transparent source padding: <cols>,<rows>
+	aspect      string // aspect mapping mode: default|aligned
 	fullComp    bool   // compare render quality against original source pixels
 	initialZoom string // zoom level: 0 → fit to viewport; 1, 1.0, 100%, 1:1 → pixel-perfect (k=1)
 	timeRange   string // raw --range value; parsed in run()
