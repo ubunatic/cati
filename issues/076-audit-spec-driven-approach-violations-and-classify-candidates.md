@@ -107,3 +107,11 @@ Then implement M3 as planned (`config.yaml` canonical for runtime defaults; test
 **M3 pre-work decisions:** Preserve `MouseEvent`'s exported struct shape and existing `Button==3` no-button API convention. `ParseMouse` interprets the spec-declared code and normalizes it at the loader boundary; helper behavior for external struct literals remains based on the 0–2 held-button range. A struct-literal regression test covers left drag and move. Dual parsing is deferred: replacing the legacy line parser is unrelated to settings defaults and would expand this bounded milestone.
 
 **M3 implementation:** `config.yaml` is the only owner of initial settings values; duplicate `default` values were removed from controls. The config loader validates required fields and ranges, returns invalid-spec errors to browser startup, and has tests proving a changed YAML default changes loaded settings while user overrides win. Verification passed: `go vet ./...`, `go test ./...` (no `--- FAIL` output), and `make install`.
+
+**M3 host review:** accepted. The mouse helpers now use the public SGR "no button = 3" convention, and `ParseMouse` maps the spec's value onto it, so struct literals behave as before. The effective defaults are unchanged (40/4/8): the old Go seeds were always overwritten by valid YAML values. `controls.yaml` no longer carries `default:`, so `config.yaml` is the single owner. Dual parsing in the input loader is deferred (recorded by the developer).
+
+### M4 — Controls fidelity
+
+**Pre-Work / Required Refinements (from M3 review):** none blocking. Keep `ControlDef.Set`/`.Get` either consumed (dispatch by declared binding) or removed together with their YAML/schema fields; do not leave them loaded-but-unused.
+
+Then implement M4 as planned: the control inventory, order, type and bounds come from `controls.yaml`; the 100 ms delay step is either declared in the spec or justified in a code comment as mechanics. Tests: adding/removing/reordering a control in a fixture changes the settings page; a control with no Go handler fails an integrity test.
