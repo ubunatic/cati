@@ -502,8 +502,20 @@ func run(o opts, rc renderCfg, args []string) error {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 
+		if o.pad != "" {
+			padCols, padRows, err := parsePadSpec(o.pad)
+			if err != nil {
+				return err
+			}
+			img = padSourceImage(img, padCols, padRows)
+		}
+
 		if o.initialZoom == "" {
-			img, err = smartPrepare(img, termCols, termRows, rc)
+			if (o.width > 0 && o.height > 0) || o.aspect == "aligned" {
+				img, err = prepareExplicitGridImage(img, termCols, termRows, rc, o.aspect)
+			} else {
+				img, err = smartPrepare(img, termCols, termRows, rc)
+			}
 		} else {
 			img, err = prepareRenderedImageChecked(img, nil, termCols, termRows, rc, o.initialZoom)
 		}
