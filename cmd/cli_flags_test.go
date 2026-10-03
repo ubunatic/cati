@@ -67,6 +67,18 @@ func TestValidateCommonFlags(t *testing.T) {
 			wantAspectNorm: "fit",
 		},
 		{
+			name:           "valid aspect pixel",
+			aspect:         "pixel",
+			wantErr:        false,
+			wantAspectNorm: "pixel",
+		},
+		{
+			name:           "valid aspect raw",
+			aspect:         "raw",
+			wantErr:        false,
+			wantAspectNorm: "raw",
+		},
+		{
 			name:          "invalid aspect",
 			aspect:        "bogus",
 			wantErr:       true,

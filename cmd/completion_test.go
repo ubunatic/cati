@@ -128,8 +128,14 @@ func TestCompletion_AspectFlag(t *testing.T) {
 		t.Fatalf("runComplete error: %v", err)
 	}
 
-	if !strings.Contains(out, "default\t") || !strings.Contains(out, "aligned\t") {
-		t.Errorf("expected aspect modes in completion output, got:\n%s", out)
+	for _, name := range aspectModeNames() {
+		if !strings.Contains(out, name+"\t") {
+			t.Errorf("expected aspect mode %q in completion output, got:\n%s", name, out)
+		}
+		a, z, p := name, "", ""
+		if err := validateCommonFlags(0, 0, &a, &z, &p); err != nil {
+			t.Errorf("completed aspect mode %q rejected by validation: %v", name, err)
+		}
 	}
 	if !strings.Contains(out, ":4") {
 		t.Errorf("expected directive :4 in --aspect completion output, got:\n%s", out)

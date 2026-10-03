@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"io"
 	"image"
 	"image/color"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1003,6 +1003,18 @@ func TestCLIDoom1S2Render(t *testing.T) {
 			args:      []string{"assets/doom1.png", "-H", "67", "-m", "s2", "--aspect", "aligned"},
 			wantLines: 67,
 			wantCols:  160,
+		},
+		{
+			name:      "aspect aligned width only 3x3",
+			args:      []string{"assets/doom1.png", "-W", "107", "-m", "3x3", "--aspect", "aligned"},
+			wantLines: 45,
+			wantCols:  107,
+		},
+		{
+			name:      "aspect pixel width only 3x3",
+			args:      []string{"assets/doom1.png", "-W", "107", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 67,
+			wantCols:  107,
 		},
 		{
 			name:      "aspect aligned width only halfblock",

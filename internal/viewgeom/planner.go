@@ -79,7 +79,7 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 	case c.ExplicitCols > 0 && c.ExplicitRows == 0:
 		// Width explicit: canvas rows derived from aspect
 		canvasCols = c.ExplicitCols
-		if c.AspectMode == "aligned" {
+		if c.AspectMode == "aligned" || c.AspectMode == "pixel" || c.AspectMode == "raw" || c.AspectMode == "1:1" {
 			targetW := canvasCols * spec.CellW
 			k := max(1, int(math.Round(float64(targetW)/float64(srcW))))
 			if k*srcW > targetW && k > 1 {
@@ -88,8 +88,12 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			if k >= 1 && k*srcW <= targetW {
 				baseRenderW = k * srcW
 				padRight = targetW - baseRenderW
-				floatH := float64(baseRenderW*spec.CellH*srcH*2) / float64(spec.CellW*srcW*3)
-				baseRenderH = max(1, int(math.Round(floatH)))
+				if c.AspectMode == "pixel" || c.AspectMode == "raw" || c.AspectMode == "1:1" {
+					baseRenderH = srcH
+				} else {
+					floatH := float64(baseRenderW*spec.CellH*srcH*2) / float64(spec.CellW*srcW*3)
+					baseRenderH = max(1, int(math.Round(floatH)))
+				}
 				canvasRows = max(1, (baseRenderH+spec.CellH-1)/spec.CellH)
 				targetH := canvasRows * spec.CellH
 				padBottom = targetH - baseRenderH
@@ -104,7 +108,7 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 	case c.ExplicitRows > 0 && c.ExplicitCols == 0:
 		// Height explicit: canvas cols derived from aspect
 		canvasRows = c.ExplicitRows
-		if c.AspectMode == "aligned" {
+		if c.AspectMode == "aligned" || c.AspectMode == "pixel" || c.AspectMode == "raw" || c.AspectMode == "1:1" {
 			targetH := canvasRows * spec.CellH
 			k := max(1, int(math.Round(float64(targetH)/float64(srcH))))
 			if k*srcH > targetH && k > 1 {
@@ -113,8 +117,12 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			if k >= 1 && k*srcH <= targetH {
 				baseRenderH = k * srcH
 				padBottom = targetH - baseRenderH
-				floatW := float64(baseRenderH*spec.CellW*srcW*3) / float64(spec.CellH*srcH*2)
-				baseRenderW = max(1, int(math.Round(floatW)))
+				if c.AspectMode == "pixel" || c.AspectMode == "raw" || c.AspectMode == "1:1" {
+					baseRenderW = srcW
+				} else {
+					floatW := float64(baseRenderH*spec.CellW*srcW*3) / float64(spec.CellH*srcH*2)
+					baseRenderW = max(1, int(math.Round(floatW)))
+				}
 				canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
 				targetW := canvasCols * spec.CellW
 				padRight = targetW - baseRenderW

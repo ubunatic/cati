@@ -30,11 +30,32 @@ func completePlayModes() []string {
 	}
 }
 
-func completeAspectModes() []string {
-	return []string{
-		"default\tAspect-preserving fit into target terminal grid",
-		"aligned\tPreserve source pixels and pad incomplete cells",
+// aspectModes is the canonical list of --aspect values (name, description).
+// Validation, help text, and shell completion all derive from it.
+var aspectModes = [][2]string{
+	{"default", "Square-pixel font correction (stretch to -W/-H box when both given)"},
+	{"aligned", "Continuous aspect snap onto the mode's subcell lattice"},
+	{"pixel", "Raw 1:1 pixel-art snap: integer subcells, no vertical resampling"},
+	{"raw", "Alias for pixel"},
+	{"1:1", "Alias for pixel"},
+	{"contain", "Square-pixel fit inside -W/-H box with letterbox padding"},
+	{"fit", "Alias for contain"},
+}
+
+func aspectModeNames() []string {
+	names := make([]string, len(aspectModes))
+	for i, m := range aspectModes {
+		names[i] = m[0]
 	}
+	return names
+}
+
+func completeAspectModes() []string {
+	out := make([]string, len(aspectModes))
+	for i, m := range aspectModes {
+		out[i] = m[0] + "\t" + m[1]
+	}
+	return out
 }
 
 func completePrescalerModes() []string {

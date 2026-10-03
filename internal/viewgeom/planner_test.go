@@ -167,6 +167,26 @@ func TestPlanRender_Doom3x3(t *testing.T) {
 		}
 	})
 
+	t.Run("width only -W 107 aspect pixel raw 1:1 height", func(t *testing.T) {
+		c := TargetConstraints{
+			ExplicitCols: 107,
+			AspectMode:   "pixel",
+		}
+		plan := PlanRender(320, 200, c, spec3x3)
+		if plan.CanvasCols != 107 {
+			t.Errorf("CanvasCols = %d, want 107", plan.CanvasCols)
+		}
+		if plan.CanvasRows != 67 {
+			t.Errorf("CanvasRows = %d, want 67", plan.CanvasRows)
+		}
+		if plan.RenderW != 640 || plan.RenderH != 200 {
+			t.Errorf("Render size = %dx%d, want 640x200 (raw 1:1 source height)", plan.RenderW, plan.RenderH)
+		}
+		if plan.PadRight != 2 || plan.PadBottom != 1 {
+			t.Errorf("Pad = R:%d B:%d, want R:2 B:1", plan.PadRight, plan.PadBottom)
+		}
+	})
+
 	t.Run("both -W 160 -H 67 subcell snapping", func(t *testing.T) {
 		c := TargetConstraints{
 			ExplicitCols: 160,

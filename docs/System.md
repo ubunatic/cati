@@ -296,9 +296,10 @@ The CLI render geometry pipeline uses a unified derivation model across static r
    - **Unconstrained**: Fits within available terminal bounds without padding the canvas.
 
 3. **Aspect Modes & Subcell Alignment (`--aspect`)**:
+   - **Continuous Aspect Snap (`aligned`)**: Preserves the image's physical display aspect ratio on screen while snapping to the mode's integer subcells and character cell lattice, scaling both dimensions proportionally (e.g. $107\times 45$ for Doom in `3x3` mode).
+   - **Raw 1:1 Pixel-Art Snap (`pixel`, `raw`, `1:1`)**: Maps source pixels directly to integer subcells without vertical downscaling or non-integer resampling (e.g. $107\times 67$ for Doom in `3x3` mode with unscaled $200\text{px}$ height).
    - **Square-Pixel Font Correction (`default`, `contain`, `fit`)**: Assumes source pixels are $1:1$ squares and applies terminal font aspect ratio correction ($1:2$ cell ratio) so physical geometry remains square on screen:
      $$\text{Display Height in Cells} = \max\left(1, \operatorname{round}\left(\frac{\text{Cols} \times \text{SrcH}}{2 \times \text{SrcW}}\right)\right)$$
-   - **Mode-Native Subcell Lattice (`aligned`)**: Assumes source pixels map directly to the active mode's discrete subcell lattice $(C_w, C_h)$. Preserves $1:1$ pixel art (such as DOS $320 \times 200$ VGA buffers) and integer multiples ($k_x, k_y$) without resampling blur, padding incomplete edge cells transparently.
    - **Explicit Dual Constraints (`-W <W> -H <H>`)**: Fills the exact requested $(W, H)$ cell grid, applying subcell snapping when content fits within subcell tolerance ($< C_w, < C_h$).
    - **`--pad <cols>,<rows>`**: Prepends/appends transparent pixel rows or columns before rendering.
 
