@@ -1203,6 +1203,50 @@ func TestCLIGeometryEdgeCases(t *testing.T) {
 			t.Fatalf("cells = %dx%d, want 8x8", cells.Cols, cells.Rows)
 		}
 	})
+
+	t.Run("mode_3x3_width_107_no_line_count_mismatch", func(t *testing.T) {
+		rc3x3, err := findRenderModeByName("3x3")
+		if err != nil {
+			t.Fatalf("findRenderModeByName(3x3): %v", err)
+		}
+		constraints := viewgeom.TargetConstraints{
+			ExplicitCols: 107,
+			ExplicitRows: 0,
+			TermCols:     80,
+			TermRows:     24,
+		}
+		prepared, err := prepareRenderPlanImage(src, constraints, rc3x3)
+		if err != nil {
+			t.Fatalf("prepareRenderPlanImage: %v", err)
+		}
+		if err := renderChecked(io.Discard, prepared, rc3x3); err != nil {
+			t.Fatalf("renderChecked: %v", err)
+		}
+	})
+
+	t.Run("mode_six_explicit_stretch_160x67", func(t *testing.T) {
+		rcSix, err := findRenderModeByName("six")
+		if err != nil {
+			t.Fatalf("findRenderModeByName(six): %v", err)
+		}
+		constraints := viewgeom.TargetConstraints{
+			ExplicitCols: 160,
+			ExplicitRows: 67,
+			TermCols:     80,
+			TermRows:     24,
+		}
+		prepared, err := prepareRenderPlanImage(src, constraints, rcSix)
+		if err != nil {
+			t.Fatalf("prepareRenderPlanImage: %v", err)
+		}
+		cells := renderedCellSize(prepared, rcSix)
+		if cells.Cols != 160 || cells.Rows != 67 {
+			t.Fatalf("cells = %dx%d, want 160x67", cells.Cols, cells.Rows)
+		}
+		if err := renderChecked(io.Discard, prepared, rcSix); err != nil {
+			t.Fatalf("renderChecked: %v", err)
+		}
+	})
 }
 
 func itoa(n int) string {

@@ -60,7 +60,12 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			}
 		}
 		if !hasAlignedPad {
-			baseRenderW, baseRenderH, baseExtH = fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, canvasCols, canvasRows)
+			if c.AspectMode == "contain" || c.AspectMode == "fit" {
+				baseRenderW, baseRenderH, baseExtH = fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, canvasCols, canvasRows)
+			} else {
+				baseRenderW = targetW
+				baseRenderH = targetH
+			}
 		}
 
 	case c.ExplicitCols > 0 && c.ExplicitRows == 0:
