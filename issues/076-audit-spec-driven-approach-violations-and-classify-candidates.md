@@ -149,3 +149,7 @@ Then implement M6 as planned: remove the second About page in `getAboutView` and
 4. Re-check the WIP diff in `cmd/browser.go`, `cmd/interactive.go`, `cmd/play.go`, `cmd/input_tester.go`, `cmd/linecap_test.go`, `cmd/browser_test.go` and `spec/load.go` before continuing: it was cut off mid-edit.
 
 **M6 implementation:** A shared signal helper avoids calling `signal.Notify` for empty declarations at all four call sites. The About view fallback and style caps/glyph seeds are removed; missing specs yield empty content/style, while malformed or invalid present specs return errors to browser/interactive callers. Strict style loading accepts `$schema` through `StyleSpec.Schema`. Tests cover the embedded style/about specs, fixture-driven button/about output, empty-signal non-subscription, graceful missing specs, and invalid present specs.
+
+**M6 host review:** accepted (`81139f5` + `7aa6fe3`). Full suite green on review. The installed `cati browse` starts and renders with no spec errors. Empty signal lists no longer subscribe to every signal (`notifySignals`). The About and style fallbacks are gone, and a missing spec degrades to empty content.
+
+**Sprint result:** all accepted §A gaps are done (M2–M6). Still open: §B deferred policy decisions (CLI inventory, zoom thresholds, option tokens, playback FPS 15/24, input display names) and the input loader's dual parsing (YAML validation plus the line parser).
