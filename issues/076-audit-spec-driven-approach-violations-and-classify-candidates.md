@@ -140,3 +140,10 @@ Then implement M5 as planned: consume or deliberately remove the declared-but-un
 2. Note only: `GOOS=windows go build ./...` already failed before M5 (`internal/audio` uses SIGSTOP/SIGCONT), and `syscall.SIGWINCH` adds one more failure. Windows is not a release target, so no action is needed.
 
 Then implement M6 as planned: remove the second About page in `getAboutView` and the seeded caps/glyph content in `loadStyle`; a missing spec degrades without mirrored content, and invalid present content is an error. Test that a changed `about.yaml`/`style.yaml` value changes the output.
+
+**M6 interrupted (host):** stopped mid-milestone on user request and committed as WIP `81139f5`. It was parked for release v0.2.9 (`0ca0e38`) and then restored (`f46d201`).
+
+**M6 Pre-Work / Required Refinements (added after interruption):**
+
+3. **Style spec no longer loads.** The new strict decoder (`KnownFields(true)`) rejects the `$schema:` line in `spec/style.yaml` (`field $schema not found in type spec.StyleSpec`). `TestHintBarAndBottomBarUseStyleNotHardcodedReverseVideo` fails, and the browser would fail at startup. Add a `Schema string \`yaml:"$schema"\`` field like the other spec structs, and add a test that loads the real embedded `style.yaml`/`about.yaml` without error.
+4. Re-check the WIP diff in `cmd/browser.go`, `cmd/interactive.go`, `cmd/play.go`, `cmd/input_tester.go`, `cmd/linecap_test.go`, `cmd/browser_test.go` and `spec/load.go` before continuing: it was cut off mid-edit.
