@@ -48,16 +48,20 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 		canvasRows = c.ExplicitRows
 		targetW := canvasCols * spec.CellW
 		targetH := canvasRows * spec.CellH
-		k := max(1, int(math.Round(float64(targetW)/float64(srcW))))
-		if k*srcW > targetW && k > 1 {
-			k = targetW / srcW
+		kx := max(1, int(math.Round(float64(targetW)/float64(srcW))))
+		if kx*srcW > targetW && kx > 1 {
+			kx = targetW / srcW
 		}
-		if k >= 1 && k*srcW <= targetW && k*srcH <= targetH {
-			diffW := targetW - k*srcW
-			diffH := targetH - k*srcH
+		ky := max(1, int(math.Round(float64(targetH)/float64(srcH))))
+		if ky*srcH > targetH && ky > 1 {
+			ky = targetH / srcH
+		}
+		if kx >= 1 && ky >= 1 && kx*srcW <= targetW && ky*srcH <= targetH {
+			diffW := targetW - kx*srcW
+			diffH := targetH - ky*srcH
 			if c.AspectMode == "aligned" || (diffW < spec.CellW && diffH < spec.CellH) {
-				baseRenderW = k * srcW
-				baseRenderH = k * srcH
+				baseRenderW = kx * srcW
+				baseRenderH = ky * srcH
 				padRight = diffW
 				padBottom = diffH
 				hasAlignedPad = true
@@ -84,7 +88,8 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			if k >= 1 && k*srcW <= targetW {
 				baseRenderW = k * srcW
 				padRight = targetW - baseRenderW
-				baseRenderH = max(1, int(math.Round(float64(baseRenderW*srcH*spec.AspectDen)/float64(srcW*spec.AspectNum))))
+				ky := max(1, int(math.Round(float64(k)*float64(spec.CellH)*2.0/(float64(spec.CellW)*3.0))))
+				baseRenderH = ky * srcH
 				canvasRows = max(1, (baseRenderH+spec.CellH-1)/spec.CellH)
 				targetH := canvasRows * spec.CellH
 				padBottom = targetH - baseRenderH
@@ -108,7 +113,8 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			if k >= 1 && k*srcH <= targetH {
 				baseRenderH = k * srcH
 				padBottom = targetH - baseRenderH
-				baseRenderW = max(1, int(math.Round(float64(baseRenderH*srcW*spec.AspectNum)/float64(srcH*spec.AspectDen))))
+				kx := max(1, int(math.Round(float64(k)*float64(spec.CellW)*3.0/(float64(spec.CellH)*2.0))))
+				baseRenderW = kx * srcW
 				canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
 				targetW := canvasCols * spec.CellW
 				padRight = targetW - baseRenderW

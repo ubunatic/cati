@@ -81,20 +81,23 @@ func TestPlanRender_DoomSextant(t *testing.T) {
 		}
 	})
 
-	t.Run("height only -H 50 aspect aligned", func(t *testing.T) {
+	t.Run("height only -H 67 aspect aligned", func(t *testing.T) {
 		c := TargetConstraints{
-			ExplicitRows: 50,
+			ExplicitRows: 67,
 			AspectMode:   "aligned",
 		}
 		plan := PlanRender(320, 200, c, s2Spec)
 		if plan.CanvasCols != 160 {
 			t.Errorf("CanvasCols = %d, want 160", plan.CanvasCols)
 		}
-		if plan.CanvasRows != 50 {
-			t.Errorf("CanvasRows = %d, want 50", plan.CanvasRows)
+		if plan.CanvasRows != 67 {
+			t.Errorf("CanvasRows = %d, want 67", plan.CanvasRows)
 		}
-		if plan.RenderW != 320 || plan.RenderH != 150 {
-			t.Errorf("Render size = %dx%d, want 320x150", plan.RenderW, plan.RenderH)
+		if plan.RenderW != 320 || plan.RenderH != 200 {
+			t.Errorf("Render size = %dx%d, want 320x200 (source 1:1)", plan.RenderW, plan.RenderH)
+		}
+		if plan.PadBottom != 1 || plan.PadRight != 0 {
+			t.Errorf("Pad = R:%d B:%d, want R:0 B:1", plan.PadRight, plan.PadBottom)
 		}
 	})
 
@@ -107,11 +110,14 @@ func TestPlanRender_DoomSextant(t *testing.T) {
 		if plan.CanvasCols != 160 {
 			t.Errorf("CanvasCols = %d, want 160", plan.CanvasCols)
 		}
-		if plan.CanvasRows != 50 {
-			t.Errorf("CanvasRows = %d, want 50", plan.CanvasRows)
+		if plan.CanvasRows != 67 {
+			t.Errorf("CanvasRows = %d, want 67", plan.CanvasRows)
 		}
-		if plan.RenderW != 320 || plan.RenderH != 150 {
-			t.Errorf("Render size = %dx%d, want 320x150", plan.RenderW, plan.RenderH)
+		if plan.RenderW != 320 || plan.RenderH != 200 {
+			t.Errorf("Render size = %dx%d, want 320x200 (source 1:1)", plan.RenderW, plan.RenderH)
+		}
+		if plan.PadBottom != 1 || plan.PadRight != 0 {
+			t.Errorf("Pad = R:%d B:%d, want R:0 B:1", plan.PadRight, plan.PadBottom)
 		}
 	})
 }
@@ -130,18 +136,18 @@ func TestPlanRender_Doom3x3(t *testing.T) {
 		if plan.CanvasCols != 160 {
 			t.Errorf("CanvasCols = %d, want 160", plan.CanvasCols)
 		}
-		if plan.CanvasRows != 50 {
-			t.Errorf("CanvasRows = %d, want 50", plan.CanvasRows)
+		if plan.CanvasRows != 67 {
+			t.Errorf("CanvasRows = %d, want 67", plan.CanvasRows)
 		}
-		if plan.RenderW != 960 || plan.RenderH != 150 {
-			t.Errorf("Render size = %dx%d, want 960x150 (3x integer scale with 4:1 aspect correction)", plan.RenderW, plan.RenderH)
+		if plan.RenderW != 960 || plan.RenderH != 200 {
+			t.Errorf("Render size = %dx%d, want 960x200 (3x integer scale)", plan.RenderW, plan.RenderH)
 		}
-		if plan.PadRight != 0 {
-			t.Errorf("PadRight = %d, want 0", plan.PadRight)
+		if plan.PadRight != 0 || plan.PadBottom != 1 {
+			t.Errorf("Pad = R:%d B:%d, want R:0 B:1", plan.PadRight, plan.PadBottom)
 		}
 	})
 
-	t.Run("both -W 160 -H 67 default stretch", func(t *testing.T) {
+	t.Run("both -W 160 -H 67 subcell snapping", func(t *testing.T) {
 		c := TargetConstraints{
 			ExplicitCols: 160,
 			ExplicitRows: 67,
@@ -151,8 +157,26 @@ func TestPlanRender_Doom3x3(t *testing.T) {
 		if plan.CanvasCols != 160 || plan.CanvasRows != 67 {
 			t.Errorf("Canvas = %dx%d, want 160x67", plan.CanvasCols, plan.CanvasRows)
 		}
-		if plan.RenderW != 160*6 || plan.RenderH != 67*3 {
-			t.Errorf("Render size = %dx%d, want %dx%d", plan.RenderW, plan.RenderH, 160*6, 67*3)
+		if plan.RenderW != 960 || plan.RenderH != 200 {
+			t.Errorf("Render size = %dx%d, want 960x200 (subcell snap)", plan.RenderW, plan.RenderH)
+		}
+		if plan.PadBottom != 1 {
+			t.Errorf("PadBottom = %d, want 1", plan.PadBottom)
+		}
+	})
+
+	t.Run("both -W 160 -H 80 default stretch", func(t *testing.T) {
+		c := TargetConstraints{
+			ExplicitCols: 160,
+			ExplicitRows: 80,
+			AspectMode:   "default",
+		}
+		plan := PlanRender(320, 200, c, spec3x3)
+		if plan.CanvasCols != 160 || plan.CanvasRows != 80 {
+			t.Errorf("Canvas = %dx%d, want 160x80", plan.CanvasCols, plan.CanvasRows)
+		}
+		if plan.RenderW != 160*6 || plan.RenderH != 80*3 {
+			t.Errorf("Render size = %dx%d, want %dx%d", plan.RenderW, plan.RenderH, 160*6, 80*3)
 		}
 	})
 }

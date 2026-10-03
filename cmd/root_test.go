@@ -995,13 +995,13 @@ func TestCLIDoom1S2Render(t *testing.T) {
 		{
 			name:      "aspect aligned width only s2",
 			args:      []string{"assets/doom1.png", "-W", "160", "-m", "s2", "--aspect", "aligned"},
-			wantLines: 50,
+			wantLines: 67,
 			wantCols:  160,
 		},
 		{
 			name:      "aspect aligned height only s2",
-			args:      []string{"assets/doom1.png", "-H", "50", "-m", "s2", "--aspect", "aligned"},
-			wantLines: 50,
+			args:      []string{"assets/doom1.png", "-H", "67", "-m", "s2", "--aspect", "aligned"},
+			wantLines: 67,
 			wantCols:  160,
 		},
 		{
