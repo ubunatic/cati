@@ -74,11 +74,11 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 068 | [068-re-init-harnez-with-quota-1-add-test-q1-target-harnez-rules-and-update-docs.md](068-re-init-harnez-with-quota-1-add-test-q1-target-harnez-rules-and-update-docs.md) | Re-init harnez with --quota-1: add test-q1 target, harnez rules and update docs | Open |
 | 069 | [069-add-2x4-dot-only-braille-render-mode.md](069-add-2x4-dot-only-braille-render-mode.md) | Add 2x4 dot-only braille render mode | Resolved |
 | 070 | [070-add-2x4-braille-foreground-and-background-render-mode.md](070-add-2x4-braille-foreground-and-background-render-mode.md) | Add 2x4 braille foreground and background render mode | Resolved |
-| 071 | [071-respect-explicit-width-and-height-in-static-renders.md](071-respect-explicit-width-and-height-in-static-renders.md) | Respect explicit width and height in static renders | Open |
-| 072 | [072-add-aspect-modes-for-cli-source-mapping.md](072-add-aspect-modes-for-cli-source-mapping.md) | Add aspect modes for CLI source mapping | Open |
+| 071 | [071-respect-explicit-width-and-height-in-static-renders.md](071-respect-explicit-width-and-height-in-static-renders.md) | Respect explicit width and height in static renders | Closed — unified in CLI geometry pipeline and pure planner |
+| 072 | [072-add-aspect-modes-for-cli-source-mapping.md](072-add-aspect-modes-for-cli-source-mapping.md) | Add aspect modes for CLI source mapping | Closed — unified in CLI geometry pipeline and pure planner |
 | 073 | [073-add-pixel-matched-s2-and-h2-render-paths.md](073-add-pixel-matched-s2-and-h2-render-paths.md) | Add pixel-matched s2 and h2 render paths | Open |
 | 074 | [074-add-cobra-cli-completion-for-files-and-flags.md](074-add-cobra-cli-completion-for-files-and-flags.md) | Add Cobra CLI completion for files and flags | Closed — implemented Cobra CLI completion for files and flags |
-| 075 | [075-unify-cli-render-geometry-contracts-and-validate-route-specific-options.md](075-unify-cli-render-geometry-contracts-and-validate-route-specific-options.md) | Unify CLI render geometry contracts and validate route-specific options | Open |
+| 075 | [075-unify-cli-render-geometry-contracts-and-validate-route-specific-options.md](075-unify-cli-render-geometry-contracts-and-validate-route-specific-options.md) | Unify CLI render geometry contracts and validate route-specific options | Closed — unified in CLI geometry pipeline and pure planner |
 | 076 | [076-audit-spec-driven-approach-violations-and-classify-candidates.md](076-audit-spec-driven-approach-violations-and-classify-candidates.md) | Spec ownership audit: confirmed gaps and policy candidates | Open |
 
 ## Archived

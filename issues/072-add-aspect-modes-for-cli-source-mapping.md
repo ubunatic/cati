@@ -1,6 +1,6 @@
 # 072 — Add aspect modes for CLI source mapping
 
-**Status**: Open
+**Status**: Closed — unified in CLI geometry pipeline and pure planner
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature

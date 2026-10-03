@@ -1,6 +1,6 @@
 # 075 — Unify CLI render geometry contracts and validate route-specific options
 
-**Status**: Open
+**Status**: Closed — unified in CLI geometry pipeline and pure planner
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Architecture

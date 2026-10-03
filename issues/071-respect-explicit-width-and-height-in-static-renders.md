@@ -1,6 +1,6 @@
 # 071 — Respect explicit width and height in static renders
 
-**Status**: Open
+**Status**: Closed — unified in CLI geometry pipeline and pure planner
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug
