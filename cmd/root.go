@@ -39,7 +39,7 @@ func New() *cobra.Command {
 	var ansiMode bool
 	var recursive bool
 	var noHeader bool
-	var playMode bool
+	var playVal string
 	var interactMode bool
 	var inputTest bool
 	var fps int
@@ -102,8 +102,15 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 			}
 			rc.jobs = jobs
 			rc.smart = smart
-			if playMode {
-				return forwardCommand("catiplay", os.Args[1:])
+			playMode, err := parsePlayMode(playVal, cmd.Flags().Changed("play"), &args)
+			if err != nil {
+				return err
+			}
+			if playMode != "" {
+				err := forwardCommand("catiplay", os.Args[1:])
+				if err == nil || !errors.Is(err, exec.ErrNotFound) {
+					return err
+				}
 			}
 			if interactMode {
 				target := "catiplay"
@@ -116,6 +123,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 				ansi:        ansiMode,
 				recursive:   recursive,
 				noHeader:    noHeader,
+				playMode:    playMode,
 				fps:         fps,
 				jobs:        jobs,
 				width:       width,
@@ -133,7 +141,8 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.Flags().BoolVar(&ansiMode, "ansi", true, "render with 24-bit ANSI true-color (default)")
 	root.Flags().BoolVarP(&recursive, "recursive", "r", false, "recurse into subdirectories")
 	root.Flags().BoolVar(&noHeader, "no-header", false, "suppress filename headers between images")
-	root.Flags().BoolVarP(&playMode, "play", "p", false, "animate frames in a loop (Ctrl+C to stop)")
+	root.Flags().StringVarP(&playVal, "play", "p", "", "playback mode: once|repeat|preview (default \"once\")")
+	root.Flags().Lookup("play").NoOptDefVal = "once"
 	root.Flags().BoolVarP(&interactMode, "interactive", "i", false, "interactive viewer: +/- zoom, arrow keys pan, q quit")
 	root.Flags().IntVar(&fps, "fps", 0, "legacy playback frames per second")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
@@ -168,7 +177,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 func NewPlay() *cobra.Command {
 	var ansiMode bool
 	var recursive bool
-	var legacyPlay bool
+	var playVal string
 	var legacyInteractive bool
 	var fps int
 	var jobs int
@@ -213,6 +222,14 @@ func NewPlay() *cobra.Command {
 			rc.jobs = jobs
 			rc.smart = smart
 			rc = canonicalRenderCfg(rc)
+			tr, err := parseTimeRange(timeRange)
+			if err != nil {
+				return err
+			}
+			playMode, err := parsePlayMode(playVal, cmd.Flags().Changed("play"), &args)
+			if err != nil {
+				return err
+			}
 			paths, err := expandArgs(args, recursive)
 			if err != nil {
 				return err
@@ -220,16 +237,15 @@ func NewPlay() *cobra.Command {
 			if len(paths) == 0 {
 				return fmt.Errorf("no supported images found")
 			}
-			tr, err := parseTimeRange(timeRange)
-			if err != nil {
-				return err
-			}
-			if legacyPlay || len(paths) > 1 || singleArgIsDir(args) {
+			if playMode != "" || len(paths) > 1 || singleArgIsDir(args) {
+				if playMode == "" {
+					playMode = "once"
+				}
 				cropSpec, err := parseCropSpec(crop)
 				if err != nil {
 					return err
 				}
-				return play(paths, fps, width, height, rc, tr, cropSpec)
+				return play(paths, fps, width, height, rc, tr, cropSpec, aspect, playMode)
 			}
 			if halfblock.IsVideo(paths[0]) {
 				return interactiveVideo(paths[0], width, height, rc, tr, nil, nil, nil, nil, nil, nil, fullComp, initialZoom)
@@ -241,7 +257,8 @@ func NewPlay() *cobra.Command {
 
 	root.Flags().BoolVar(&ansiMode, "ansi", true, "render with 24-bit ANSI true-color (default)")
 	root.Flags().BoolVarP(&recursive, "recursive", "r", false, "recurse into subdirectories")
-	root.Flags().BoolVarP(&legacyPlay, "play", "p", false, "legacy compatibility: play inputs as a frame sequence")
+	root.Flags().StringVarP(&playVal, "play", "p", "", "playback mode: once|repeat|preview (default \"once\")")
+	root.Flags().Lookup("play").NoOptDefVal = "once"
 	root.Flags().BoolVarP(&legacyInteractive, "interactive", "i", false, "legacy compatibility: interactive mode is the default")
 	root.Flags().IntVar(&fps, "fps", 0, "frames per second (0 = auto: native fps for video, 15 for images)")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for async render work (0 = auto)")
@@ -337,13 +354,17 @@ func forwardSubcommand(name, executable, short string) *cobra.Command {
 	}
 }
 
+func isNotFound(err error) bool {
+	return errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist)
+}
+
 func forwardCommand(executable string, args []string) error {
 	c := exec.Command(executable, args...)
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	err := c.Run()
-	if err == nil || !errors.Is(err, exec.ErrNotFound) {
+	if err == nil || !isNotFound(err) {
 		return err
 	}
 	self, selfErr := os.Executable()
@@ -354,7 +375,11 @@ func forwardCommand(executable string, args []string) error {
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
-	return c.Run()
+	err2 := c.Run()
+	if err2 != nil && isNotFound(err2) {
+		return exec.ErrNotFound
+	}
+	return err2
 }
 
 func singleArgIsDir(args []string) bool {
@@ -398,7 +423,7 @@ type opts struct {
 	ansi        bool
 	recursive   bool
 	noHeader    bool
-	playMode    bool
+	playMode    string
 	interactive bool
 	fps         int
 	jobs        int
@@ -434,7 +459,7 @@ func run(o opts, rc renderCfg, args []string) error {
 		return err
 	}
 
-	if o.playMode {
+	if o.playMode != "" {
 		if len(paths) == 0 {
 			return fmt.Errorf("no supported images found")
 		}
@@ -442,7 +467,7 @@ func run(o opts, rc renderCfg, args []string) error {
 		if err != nil {
 			return err
 		}
-		return play(paths, o.fps, o.width, o.height, rc, tr, cropSpec)
+		return play(paths, o.fps, o.width, o.height, rc, tr, cropSpec, o.aspect, o.playMode)
 	}
 
 	if o.interactive {
@@ -511,7 +536,7 @@ func run(o opts, rc renderCfg, args []string) error {
 		}
 
 		if o.initialZoom == "" {
-			if (o.width > 0 && o.height > 0) || o.aspect == "aligned" {
+			if o.height > 0 || (o.width > 0 && o.height > 0) || o.aspect == "aligned" {
 				img, err = prepareExplicitGridImage(img, termCols, termRows, rc, o.aspect)
 			} else {
 				img, err = smartPrepare(img, termCols, termRows, rc)
@@ -637,6 +662,33 @@ func expandArgs(args []string, recursive bool) ([]string, error) {
 // or video type.
 func isImageFile(path string) bool {
 	return imageExts[strings.ToLower(filepath.Ext(path))] || halfblock.IsVideo(path)
+}
+
+func parsePlayMode(playVal string, changed bool, args *[]string) (string, error) {
+	if !changed && playVal == "" {
+		return "", nil
+	}
+	mode := strings.ToLower(playVal)
+	if mode == "" {
+		mode = "once"
+	}
+
+	if args != nil {
+		origArgs := *args
+		for i, arg := range origArgs {
+			lower := strings.ToLower(arg)
+			if lower == "once" || lower == "repeat" || lower == "preview" {
+				mode = lower
+				*args = append(origArgs[:i], origArgs[i+1:]...)
+				break
+			}
+		}
+	}
+
+	if mode != "once" && mode != "repeat" && mode != "preview" {
+		return "", fmt.Errorf("invalid --play mode %q: expected once, repeat, or preview", mode)
+	}
+	return mode, nil
 }
 
 

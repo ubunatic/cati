@@ -16,20 +16,56 @@ import (
 )
 
 // play is the entry point for --play mode.
-// It dispatches to playImages (pre-load loop) or playVideos (streaming)
-// depending on whether any path is a video file.
+// It dispatches to playPreview, playImages (pre-load loop), or playVideos (streaming)
+// depending on playMode and whether any path is a video file.
 // width and height are in terminal characters (0 = auto-detect from terminal).
-func play(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec) error {
+func play(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string, playMode string) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("no images to play")
 	}
 
+	if playMode == "preview" {
+		return playPreview(paths[0], width, height, rc, tr, crop, aspect)
+	}
+
 	for _, p := range paths {
 		if halfblock.IsVideo(p) {
-			return playVideos(paths, fps, width, height, rc, tr, crop)
+			return playVideos(paths, fps, width, height, rc, tr, crop, aspect, playMode)
 		}
 	}
-	return playImages(paths, fps, width, height, rc, tr, crop)
+	return playImages(paths, fps, width, height, rc, tr, crop, aspect, playMode)
+}
+
+// playPreview renders a single frame for preview mode and exits.
+func playPreview(path string, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string) error {
+	cols, rows := width, height
+	if cols == 0 && rows == 0 {
+		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
+	}
+	autoCropCols, autoCropRows := catiterm.TermWidth(), catiterm.TermHeight()
+
+	var img image.Image
+	var err error
+	if halfblock.IsVideo(path) {
+		img, err = halfblock.LoadVideoFrameAt(path, tr.Start)
+	} else {
+		img, err = halfblock.LoadImage(path)
+	}
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+
+	if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
+		img, err = prepareExplicitGridImage(img, cols, rows, rc, aspect)
+	} else {
+		img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+	}
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+
+	img = applyCellCrop(img, rc, crop, autoCropCols, autoCropRows)
+	return renderChecked(os.Stdout, img, rc)
 }
 
 // ── shared terminal setup ─────────────────────────────────────────────────────
@@ -75,7 +111,7 @@ func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}) {
 // ── image sequence mode ───────────────────────────────────────────────────────
 
 // playImages pre-loads all frames and loops them at fps.
-func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec) error {
+func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string, playMode string) error {
 	if fps <= 0 {
 		fps = 15
 	}
@@ -110,7 +146,11 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
-		img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+		if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
+			img, err = prepareExplicitGridImage(img, cols, rows, rc, aspect)
+		} else {
+			img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
@@ -148,16 +188,22 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 				return err
 			}
 			halfblock.EraseDown(os.Stdout)
-			i = (i + 1) % len(frames)
+			i++
+			if i >= len(frames) {
+				if playMode == "once" {
+					return nil
+				}
+				i = 0
+			}
 		}
 	}
 }
 
 // ── video streaming mode ──────────────────────────────────────────────────────
 
-// playVideos streams one or more video files sequentially, playing each once.
+// playVideos streams one or more video files sequentially, playing each once or repeating.
 // All paths must be video files.
-func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec) error {
+func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string, playMode string) error {
 	// Validate: all paths must be video files.
 	for _, p := range paths {
 		if !halfblock.IsVideo(p) {
@@ -250,7 +296,12 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 					}
 					videoIdx++
 					if videoIdx >= len(paths) {
-						return nil // played every video once
+						if playMode == "repeat" {
+							videoIdx = 0
+							failedVideos = 0
+						} else {
+							return nil // played every video once
+						}
 					}
 					if failedVideos >= len(paths) {
 						return fmt.Errorf("failed to decode any frames from video stream(s)")
@@ -265,7 +316,11 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 					continue
 				}
 				currentVideoHadFrames = true
-				img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+				if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
+					img, err = prepareExplicitGridImage(img, cols, rows, rc, aspect)
+				} else {
+					img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+				}
 				if err != nil {
 					return err
 				}

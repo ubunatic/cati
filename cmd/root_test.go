@@ -973,16 +973,29 @@ func equalPixelRows(img image.Image, y0, y1 int) bool {
 
 func TestCLIDoom1S2Render(t *testing.T) {
 	tests := []struct {
-		name string
-		args []string
+		name      string
+		args      []string
+		wantLines int
 	}{
 		{
-			name: "pad 0,1",
-			args: []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--pad", "0,1"},
+			name:      "pad 0,1",
+			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--pad", "0,1"},
+			wantLines: 67,
 		},
 		{
-			name: "aspect aligned",
-			args: []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--aspect", "aligned"},
+			name:      "aspect aligned",
+			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--aspect", "aligned"},
+			wantLines: 67,
+		},
+		{
+			name:      "play preview -H 67",
+			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--play", "preview"},
+			wantLines: 67,
+		},
+		{
+			name:      "play preview space separated -H 67",
+			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--play", "preview"},
+			wantLines: 67,
 		},
 	}
 
@@ -1014,8 +1027,8 @@ func TestCLIDoom1S2Render(t *testing.T) {
 
 			outBytes := <-outChan
 			lines := strings.Split(strings.TrimSuffix(string(outBytes), "\n"), "\n")
-			if len(lines) != 67 {
-				t.Errorf("got %d lines, want 67 lines", len(lines))
+			if len(lines) != tc.wantLines {
+				t.Errorf("got %d lines, want %d lines", len(lines), tc.wantLines)
 			}
 		})
 	}
