@@ -1,6 +1,6 @@
 # 076 — Spec ownership audit: confirmed gaps and policy candidates
 
-**Status:** Open
+**Status:** Closed — audit complete; remaining ownership choices moved to a follow-up ticket
 **Priority:** P2 (Medium)
 **Severity:** Moderate
 **Category:** Architecture
