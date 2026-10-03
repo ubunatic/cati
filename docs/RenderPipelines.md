@@ -153,6 +153,12 @@ src (2x3 pixels)
 
 *   `▌` (U+258C) represents the left-half filled cell, which acts as the exact representation or closest Hamming-1 approximation for this 6-bit mask.
 
+### Planned pixel-matched CLI modes (#073)
+
+The existing `six` and `half` paths above include image fitting or scaling before cell composition. Issues [#071](../issues/071-respect-explicit-width-and-height-in-static-renders.md) and [#072](../issues/072-add-aspect-modes-for-cli-source-mapping.md) define the CLI-side target sizing, transparent source padding, and aspect mapping needed before rendering. The follow-on [#073](../issues/073-add-pixel-matched-s2-and-h2-render-paths.md) proposes separate `s2` and `h2` CLI modes that bypass render-path prescaling when source pixels already match renderer subcells.
+
+For `s2`, a 320×200 Doom 1 image with one transparent row added by `--pad 0,1` maps directly to a 320×201 subcell grid, grouped as 160×67 cells with 2×3 subcells each. For `h2`, a 320×200 image maps directly to 320×100 cells with 1×2 subcells each. These modes are planned; they are not part of the current pipeline until #073 is implemented and the Doom goldens verify the output. Further speed optimizations are intentionally deferred until that correct direct-mapping baseline is stable.
+
 ---
 
 ## 5. Sparkline Pipeline (`sparkline`)
