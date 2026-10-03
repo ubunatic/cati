@@ -47,6 +47,12 @@ All of these files are loaded through typed helpers in `spec/load.go`. The `cmd/
 
 `config.yaml` is the canonical source for all six initial settings values. `controls.yaml` declares editable control metadata and does not repeat runtime defaults. The user's `~/.config/cati/config` values override these spec defaults.
 
+**Loader contract (issue 076):**
+- A **missing** spec file degrades to empty content, such as raw key names or a blank About page, never to a Go copy of the spec.
+- A **present but invalid** file is a load error that the caller returns; it is never silently replaced.
+- Loaders decode strictly (`KnownFields(true)`), so every spec struct needs a `Schema string \`yaml:"$schema"\`` field. Without it, the file's `$schema:` line fails loading at startup. This shipped in an M6 work-in-progress commit, but it was not in a release, and `go vet` did not catch it, only `go test`.
+- Empty signal lists must not reach `signal.Notify`, because Notify with no signals subscribes to every signal; use `notifySignals`.
+
 ### 3.2 Color values
 
 All color fields accept:
