@@ -129,3 +129,14 @@ Then implement M4 as planned: the control inventory, order, type and bounds come
 Then implement M5 as planned: consume or deliberately remove the declared-but-unused input fields (`signals` and any others still unread after M2). For signals, resolve OS signals by portable names (`os.Interrupt`, `syscall.SIGWINCH`, ...), not by YAML signal numbers; if the YAML block stays, test that every declared signal is supported. Tests must fail when a spec value changes or is removed.
 
 **M5 implementation:** The pre-work registry now contains only explicit `set_<key>` and `get_<key>` binding names. Input signals are parsed by portable names and exposed by event; browser and interactive/play paths register declared quit signals, while the input tester registers declared resize signals. Numeric signal values were removed from the input YAML/schema. Tests check all embedded declarations, changed signal behavior, unsupported names, and rejection of bare-key control bindings.
+
+**M5 host review:** accepted with one required fix. Signals are now resolved by portable name and registered from the spec; bare-key control bindings are rejected.
+
+### M6 — UI content/style shadows
+
+**Pre-Work / Required Refinements (from M5 review):**
+
+1. **Empty signal list relays every signal.** With a missing `input.yaml`, `Load` returns an empty spec, `SignalsFor(EventQuit)` returns nil, and `signal.Notify(sigs)` with no signals subscribes to *all* signals, including the Go runtime's SIGURG preemption signal, so playback and the viewer would quit at random. Guard all four call sites (`cmd/browser.go`, `cmd/interactive.go`, `cmd/play.go`, `cmd/input_tester.go`), ideally through one helper: register nothing when the list is empty (Ctrl-C still arrives as byte `\x03` in raw mode). Add a test that an empty spec yields no subscription.
+2. Note only: `GOOS=windows go build ./...` already failed before M5 (`internal/audio` uses SIGSTOP/SIGCONT), and `syscall.SIGWINCH` adds one more failure. Windows is not a release target, so no action is needed.
+
+Then implement M6 as planned: remove the second About page in `getAboutView` and the seeded caps/glyph content in `loadStyle`; a missing spec degrades without mirrored content, and invalid present content is an error. Test that a changed `about.yaml`/`style.yaml` value changes the output.
