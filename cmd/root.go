@@ -591,14 +591,27 @@ func run(o opts, rc renderCfg, args []string) error {
 			img = padSourceImage(img, padCols, padRows)
 		}
 
-		if o.initialZoom == "" {
-			if o.height > 0 || (o.width > 0 && o.height > 0) || o.aspect == "aligned" {
-				img, err = prepareExplicitGridImage(img, termCols, termRows, rc, o.aspect)
-			} else {
-				img, err = smartPrepare(img, termCols, termRows, rc)
+		if rc.smart {
+			img, err = smartPrepare(img, termCols, termRows, rc)
+			if err == nil && o.width > 0 && o.height > 0 {
+				cellW, cellH := rc.renderCellSize()
+				targetW := o.width * cellW
+				targetH := o.height * cellH
+				curW, curH := img.Bounds().Dx(), img.Bounds().Dy()
+				if curW < targetW || curH < targetH {
+					img = padSourceImage(img, max(0, targetW-curW), max(0, targetH-curH))
+				}
 			}
 		} else {
-			img, err = prepareRenderedImageChecked(img, nil, termCols, termRows, rc, o.initialZoom)
+			constraints := viewgeom.TargetConstraints{
+				ExplicitCols: o.width,
+				ExplicitRows: o.height,
+				TermCols:     termCols,
+				TermRows:     termRows,
+				AspectMode:   o.aspect,
+				InitialZoom:  o.initialZoom,
+			}
+			img, err = prepareRenderPlanImage(img, constraints, rc)
 		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)
@@ -792,7 +805,7 @@ func padSourceImage(img image.Image, padCols, padRows int) image.Image {
 	return out
 }
 
-func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, rc renderCfg, aspectMode string) (image.Image, error) {
+func prepareRenderPlanImage(orig image.Image, constraints viewgeom.TargetConstraints, rc renderCfg) (image.Image, error) {
 	if rc.gray {
 		orig = quadblock.ReduceColors(orig, rc.grayColors)
 	}
@@ -805,11 +818,6 @@ func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, 
 	cellW, cellH := rc.renderCellSize()
 	aspectNum, aspectDen := rc.renderAspectCorrection()
 	spec := viewgeom.NewV2CellRatio(cellW, cellH, aspectNum, aspectDen)
-	constraints := viewgeom.TargetConstraints{
-		ExplicitCols: explicitCols,
-		ExplicitRows: explicitRows,
-		AspectMode:   aspectMode,
-	}
 	plan := viewgeom.PlanRender(srcW, srcH, constraints, spec)
 
 	result := orig
@@ -823,9 +831,9 @@ func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, 
 		result = imgutil.AppendTransparentRows(result, plan.ExtH)
 	}
 
-	if explicitCols > 0 && explicitRows > 0 {
-		targetW := explicitCols * cellW
-		targetH := explicitRows * cellH
+	if constraints.ExplicitCols > 0 && constraints.ExplicitRows > 0 {
+		targetW := constraints.ExplicitCols * cellW
+		targetH := constraints.ExplicitRows * cellH
 		curW := result.Bounds().Dx()
 		curH := result.Bounds().Dy()
 		if curW < targetW || curH < targetH {
@@ -833,4 +841,12 @@ func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, 
 		}
 	}
 	return result, nil
+}
+
+func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, rc renderCfg, aspectMode string) (image.Image, error) {
+	return prepareRenderPlanImage(orig, viewgeom.TargetConstraints{
+		ExplicitCols: explicitCols,
+		ExplicitRows: explicitRows,
+		AspectMode:   aspectMode,
+	}, rc)
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"golang.org/x/term"
+	"ubunatic.com/cati/internal/viewgeom"
 	"ubunatic.com/cati/v1/halfblock"
 
 	catiterm "ubunatic.com/cati/v1/term"
@@ -38,9 +39,9 @@ func play(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, cr
 
 // playPreview renders a single frame for preview mode and exits.
 func playPreview(path string, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect, pad string) error {
-	cols, rows := width, height
-	if cols == 0 && rows == 0 {
-		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
+	termCols, termRows := width, height
+	if termCols == 0 && termRows == 0 {
+		termCols, termRows = catiterm.TermWidth(), catiterm.TermHeight()
 	}
 	autoCropCols, autoCropRows := catiterm.TermWidth(), catiterm.TermHeight()
 
@@ -63,11 +64,14 @@ func playPreview(path string, width, height int, rc renderCfg, tr TimeRange, cro
 		img = padSourceImage(img, padCols, padRows)
 	}
 
-	if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
-		img, err = prepareExplicitGridImage(img, cols, rows, rc, aspect)
-	} else {
-		img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+	constraints := viewgeom.TargetConstraints{
+		ExplicitCols: width,
+		ExplicitRows: height,
+		TermCols:     termCols,
+		TermRows:     termRows,
+		AspectMode:   aspect,
 	}
+	img, err = prepareRenderPlanImage(img, constraints, rc)
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
@@ -124,9 +128,9 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		fps = 15
 	}
 
-	cols, rows := width, height
-	if cols == 0 && rows == 0 {
-		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
+	termCols, termRows := width, height
+	if termCols == 0 && termRows == 0 {
+		termCols, termRows = catiterm.TermWidth(), catiterm.TermHeight()
 	}
 	autoCropCols, autoCropRows := catiterm.TermWidth(), catiterm.TermHeight()
 
@@ -161,11 +165,14 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 			}
 			img = padSourceImage(img, padCols, padRows)
 		}
-		if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
-			img, err = prepareExplicitGridImage(img, cols, rows, rc, aspect)
-		} else {
-			img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+		constraints := viewgeom.TargetConstraints{
+			ExplicitCols: width,
+			ExplicitRows: height,
+			TermCols:     termCols,
+			TermRows:     termRows,
+			AspectMode:   aspect,
 		}
+		img, err = prepareRenderPlanImage(img, constraints, rc)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
@@ -240,9 +247,9 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		displayFPS = 15
 	}
 
-	cols, rows := width, height
-	if cols == 0 && rows == 0 {
-		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
+	termCols, termRows := width, height
+	if termCols == 0 && termRows == 0 {
+		termCols, termRows = catiterm.TermWidth(), catiterm.TermHeight()
 	}
 	autoCropCols, autoCropRows := catiterm.TermWidth(), catiterm.TermHeight()
 
@@ -338,11 +345,14 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 					}
 					img = padSourceImage(img, padCols, padRows)
 				}
-				if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
-					img, err = prepareExplicitGridImage(img, cols, rows, rc, aspect)
-				} else {
-					img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+				constraints := viewgeom.TargetConstraints{
+					ExplicitCols: width,
+					ExplicitRows: height,
+					TermCols:     termCols,
+					TermRows:     termRows,
+					AspectMode:   aspect,
 				}
+				img, err = prepareRenderPlanImage(img, constraints, rc)
 				if err != nil {
 					return err
 				}

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"ubunatic.com/cati/internal/viewgeom"
 	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
 	"ubunatic.com/cati/v1/sextant"
@@ -1133,6 +1134,75 @@ func TestDoom1CustomS2RenderGolden(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCLIGeometryEdgeCases(t *testing.T) {
+	src := goldenSourceLoad(t, "assets/doom1.png")
+	if src == nil {
+		t.Skip("assets/doom1.png missing")
+	}
+	rcHalf, err := findRenderModeByName("half")
+	if err != nil {
+		t.Fatalf("findRenderModeByName(half): %v", err)
+	}
+
+	t.Run("explicit_box_with_zoom_0", func(t *testing.T) {
+		constraints := viewgeom.TargetConstraints{
+			ExplicitCols: 8,
+			ExplicitRows: 8,
+			TermCols:     80,
+			TermRows:     24,
+			InitialZoom:  "0",
+		}
+		prepared, err := prepareRenderPlanImage(src, constraints, rcHalf)
+		if err != nil {
+			t.Fatalf("prepareRenderPlanImage: %v", err)
+		}
+		cells := renderedCellSize(prepared, rcHalf)
+		if cells.Cols != 8 || cells.Rows != 8 {
+			t.Fatalf("cells = %dx%d, want 8x8", cells.Cols, cells.Rows)
+		}
+	})
+
+	t.Run("unconstrained_terminal_fitting", func(t *testing.T) {
+		constraints := viewgeom.TargetConstraints{
+			ExplicitCols: 0,
+			ExplicitRows: 0,
+			TermCols:     120,
+			TermRows:     40,
+		}
+		prepared, err := prepareRenderPlanImage(src, constraints, rcHalf)
+		if err != nil {
+			t.Fatalf("prepareRenderPlanImage: %v", err)
+		}
+		cells := renderedCellSize(prepared, rcHalf)
+		if cells.Cols > 120 || cells.Rows > 40 {
+			t.Fatalf("cells = %dx%d exceeds terminal bounds 120x40", cells.Cols, cells.Rows)
+		}
+		if cells.Rows == 40 {
+			t.Fatalf("unconstrained fit incorrectly padded to full terminal height 40")
+		}
+	})
+
+	t.Run("smart_explicit_box", func(t *testing.T) {
+		rcSmart := rcHalf
+		rcSmart.smart = true
+		prepared, err := smartPrepare(src, 8, 8, rcSmart)
+		if err != nil {
+			t.Fatalf("smartPrepare: %v", err)
+		}
+		cellW, cellH := rcSmart.renderCellSize()
+		targetW := 8 * cellW
+		targetH := 8 * cellH
+		curW, curH := prepared.Bounds().Dx(), prepared.Bounds().Dy()
+		if curW < targetW || curH < targetH {
+			prepared = padSourceImage(prepared, max(0, targetW-curW), max(0, targetH-curH))
+		}
+		cells := renderedCellSize(prepared, rcSmart)
+		if cells.Cols != 8 || cells.Rows != 8 {
+			t.Fatalf("cells = %dx%d, want 8x8", cells.Cols, cells.Rows)
+		}
+	})
 }
 
 func itoa(n int) string {
