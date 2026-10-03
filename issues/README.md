@@ -79,6 +79,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 073 | [073-add-pixel-matched-s2-and-h2-render-paths.md](073-add-pixel-matched-s2-and-h2-render-paths.md) | Add pixel-matched s2 and h2 render paths | Open |
 | 074 | [074-add-cobra-cli-completion-for-files-and-flags.md](074-add-cobra-cli-completion-for-files-and-flags.md) | Add Cobra CLI completion for files and flags | Closed — implemented Cobra CLI completion for files and flags |
 | 075 | [075-unify-cli-render-geometry-contracts-and-validate-route-specific-options.md](075-unify-cli-render-geometry-contracts-and-validate-route-specific-options.md) | Unify CLI render geometry contracts and validate route-specific options | Open |
+| 076 | [076-audit-spec-driven-approach-violations-and-classify-candidates.md](076-audit-spec-driven-approach-violations-and-classify-candidates.md) | Audit spec-driven approach violations and classify candidates | Open |
 
 ## Archived
 
