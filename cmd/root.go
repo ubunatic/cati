@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/halfblock"
+	"ubunatic.com/cati/v1/quadblock"
 
 	catiterm "ubunatic.com/cati/v1/term"
 )
@@ -45,6 +46,8 @@ func New() *cobra.Command {
 	var jobs int
 	var width int
 	var height int
+	var pad string
+	var aspect string
 	var renderMode string
 	var prescaler string
 	var fullComp bool
@@ -117,6 +120,8 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 				jobs:        jobs,
 				width:       width,
 				height:      height,
+				pad:         pad,
+				aspect:      aspect,
 				fullComp:    fullComp,
 				initialZoom: initialZoom,
 				timeRange:   timeRange,
@@ -132,8 +137,10 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.Flags().BoolVarP(&interactMode, "interactive", "i", false, "interactive viewer: +/- zoom, arrow keys pan, q quit")
 	root.Flags().IntVar(&fps, "fps", 0, "legacy playback frames per second")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
-	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
-	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
+	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -167,6 +174,8 @@ func NewPlay() *cobra.Command {
 	var jobs int
 	var width int
 	var height int
+	var pad string
+	var aspect string
 	var renderMode string
 	var prescaler string
 	var fullComp bool
@@ -236,8 +245,10 @@ func NewPlay() *cobra.Command {
 	root.Flags().BoolVarP(&legacyInteractive, "interactive", "i", false, "legacy compatibility: interactive mode is the default")
 	root.Flags().IntVar(&fps, "fps", 0, "frames per second (0 = auto: native fps for video, 15 for images)")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for async render work (0 = auto)")
-	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
-	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
+	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -256,6 +267,8 @@ func NewBrowse() *cobra.Command {
 	var jobs int
 	var width int
 	var height int
+	var pad string
+	var aspect string
 	var renderMode string
 	var prescaler string
 	var fullComp bool
@@ -298,8 +311,10 @@ func NewBrowse() *cobra.Command {
 	root.Flags().BoolVar(&ansiMode, "ansi", true, "render with 24-bit ANSI true-color (default)")
 	root.Flags().BoolVarP(&legacyInteractive, "interactive", "i", false, "legacy compatibility: browser mode is the default")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
-	root.Flags().IntVarP(&width, "width", "w", 0, "target image width in terminal columns (0 = auto)")
-	root.Flags().IntVar(&height, "height", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
+	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
+	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -389,6 +404,8 @@ type opts struct {
 	jobs        int
 	width       int    // terminal columns; 0 = auto
 	height      int    // image/render rows; 0 = auto
+	pad         string // transparent source padding: <cols>,<rows>
+	aspect      string // aspect mapping mode: default|aligned
 	fullComp    bool   // compare render quality against original source pixels
 	initialZoom string // zoom level: 0 → fit to viewport; 1, 1.0, 100%, 1:1 → pixel-perfect (k=1)
 	timeRange   string // raw --range value; parsed in run()
@@ -608,4 +625,91 @@ func expandArgs(args []string, recursive bool) ([]string, error) {
 // or video type.
 func isImageFile(path string) bool {
 	return imageExts[strings.ToLower(filepath.Ext(path))] || halfblock.IsVideo(path)
+}
+
+
+func parsePadSpec(raw string) (int, int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, 0, nil
+	}
+	parts := strings.Split(raw, ",")
+	if len(parts) == 1 {
+		v, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+		if err != nil || v < 0 {
+			return 0, 0, fmt.Errorf("invalid --pad value %q: expected <cols>,<rows> or single non-negative integer", raw)
+		}
+		return v, v, nil
+	}
+	if len(parts) == 2 {
+		cols, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+		rows, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err1 != nil || err2 != nil || cols < 0 || rows < 0 {
+			return 0, 0, fmt.Errorf("invalid --pad value %q: expected <cols>,<rows> as non-negative integers", raw)
+		}
+		return cols, rows, nil
+	}
+	return 0, 0, fmt.Errorf("invalid --pad value %q: expected <cols>,<rows>", raw)
+}
+
+func padSourceImage(img image.Image, padCols, padRows int) image.Image {
+	if padCols <= 0 && padRows <= 0 {
+		return img
+	}
+	b := img.Bounds()
+	srcW, srcH := b.Dx(), b.Dy()
+	if srcW <= 0 || srcH <= 0 {
+		return img
+	}
+	newW := srcW + padCols
+	newH := srcH + padRows
+	out := image.NewNRGBA(image.Rect(0, 0, newW, newH))
+	for y := 0; y < srcH; y++ {
+		for x := 0; x < srcW; x++ {
+			out.Set(x, y, img.At(b.Min.X+x, b.Min.Y+y))
+		}
+	}
+	return out
+}
+
+func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, rc renderCfg, aspectMode string) (image.Image, error) {
+	if rc.gray {
+		orig = quadblock.ReduceColors(orig, rc.grayColors)
+	}
+	b := orig.Bounds()
+	srcW, srcH := b.Dx(), b.Dy()
+	if srcW == 0 || srcH == 0 {
+		return orig, nil
+	}
+
+	cellW, cellH := rc.renderCellSize()
+	targetW := explicitCols * cellW
+	targetH := explicitRows * cellH
+
+	if aspectMode == "aligned" {
+		if srcW <= targetW && srcH <= targetH {
+			extraW := targetW - srcW
+			extraH := targetH - srcH
+			if extraW > 0 || extraH > 0 {
+				return padSourceImage(orig, extraW, extraH), nil
+			}
+			return orig, nil
+		}
+	}
+
+	if srcW <= targetW && srcH <= targetH {
+		diffW := targetW - srcW
+		diffH := targetH - srcH
+		if diffW < cellW && diffH < cellH {
+			if diffW > 0 || diffH > 0 {
+				return padSourceImage(orig, diffW, diffH), nil
+			}
+			return orig, nil
+		}
+	}
+
+	if srcW == targetW && srcH == targetH {
+		return orig, nil
+	}
+	return resizeRenderedImage(orig, targetW, targetH, rc), nil
 }
