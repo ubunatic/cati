@@ -13,7 +13,10 @@ import (
 
 func TestBrowser_DrawBottomMenu(t *testing.T) {
 	var buf bytes.Buffer
-	style := loadStyle()
+	style, err := loadStyle()
+	if err != nil {
+		t.Fatal(err)
+	}
 	labels := loadLabels()
 	for k, v := range loadButtons(style.BtnLeftCap, style.BtnRightCap) {
 		labels[k] = v

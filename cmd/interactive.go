@@ -834,7 +834,10 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	}
 
 	if style == nil {
-		style = loadStyle()
+		style, err = loadStyle()
+		if err != nil {
+			return err
+		}
 	}
 	if labels == nil {
 		labels = loadLabels()
@@ -862,7 +865,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	}()
 
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, inputSpec.SignalsFor(input.EventQuit)...)
+	notifySignals(sigs, inputSpec.SignalsFor(input.EventQuit))
 	defer signal.Stop(sigs)
 
 	inputs := sharedInputs
@@ -1172,7 +1175,10 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, tr T
 		inputSpec = loadedInputSpec
 	}
 	if style == nil {
-		style = loadStyle()
+		style, err = loadStyle()
+		if err != nil {
+			return err
+		}
 	}
 	if labels == nil {
 		labels = loadLabels()
@@ -1262,7 +1268,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, tr T
 	defer ticker.Stop()
 
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, inputSpec.SignalsFor(input.EventQuit)...)
+	notifySignals(sigs, inputSpec.SignalsFor(input.EventQuit))
 	defer signal.Stop(sigs)
 
 	frames, cleanup, err := halfblock.OpenVideoStream(ctx, path, displayFPS, tr.Start, tr.End)
