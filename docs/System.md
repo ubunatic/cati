@@ -255,6 +255,29 @@ The naive `steps[len-1-i]` reversed-index pattern is wrong — it produces ascen
 
 **Renderer reconstruction for quality metrics.** SSIM, blockiness, and edge continuity compare the ideal source crop against a reconstruction of what the terminal renderer actually emits. Halfblock is represented by the viewport image itself, quad uses `quadblock.RenderToImage`, and spark uses `sparkline.RenderToImage`. The rendered reconstruction is normalized to the common `metrics.GridK × metrics.GridK` per-terminal-cell quality grid: smaller outputs are nearest-neighbour upscaled, while denser outputs are pyramid-downscaled. Never compare spark quality against the raw NN viewport; that scores the sampler, not the glyph renderer.
 
+### CLI Autocompletion Architecture & Cobra Shell Conventions
+
+Autocompletion across shells (Bash, Zsh, Fish, PowerShell) is handled in `cmd/completion.go` using Cobra's completion hooks:
+
+1. **Positional Image File Filtering (`cati <file>`)**:
+   - Cobra root commands with subcommands (`play`, `browse`, `modes`) default to `ShellCompDirectiveNoFileComp`, blocking shell file completion on positional arguments.
+   - Assigning `root.ValidArgsFunction` with `cobra.ShellCompDirectiveFilterFileExt` instructs the shell to complete files matching supported image extensions (`.png`, `.jpg`, `.jpeg`, `.svg`, `.webp`, `.gif`, `.bmp`, `.tiff`, `.tif`, both lowercase and uppercase) and directories, while allowing Cobra's engine to complete subcommand prefixes (`play`, `browse`, `modes`).
+
+2. **Optional Flag Argument Transitions (`--play [mode]`)**:
+   - The `--play` / `-p` flag defines `NoOptDefVal = "once"` to support standalone invocation without arguments.
+   - When `--play` is passed as a space-separated argument without a mode (e.g. `cati --play <TAB>`), pflag treats the next token as positional. `ValidArgsFunction` inspects whether a mode (`once`, `repeat`, `preview`) has already been specified in `args`:
+     - If missing: returns play modes with `cobra.ShellCompDirectiveNoFileComp`.
+     - Once provided: transitions to `supportedImageExtensions()` with `cobra.ShellCompDirectiveFilterFileExt`.
+   - Direct flag assignment (e.g. `--play=`) is handled by `RegisterFlagCompletionFunc("play", ...)`.
+
+3. **Dynamic Mode and Flag Value Completions**:
+   - **`--mode`, `-m`**: dynamically enumerates all canonical render modes and aliases from `renderModes` and `legacyRenderModes` (loaded via `spec.LoadRenderModes()`), associating each with its description.
+   - **`--aspect`**: `default` (aspect-preserving fit), `aligned` (preserve source pixels and pad incomplete cells).
+   - **`--prescaler`, `-S`**: `nearest-neighbor` / `nn`, `pyramid`.
+   - **`--crop`, `-c`**: presets (`auto`, `center`, `l,t`, `c,m`, `r,b`, `W:H`, `W:H:X:Y`).
+   - **`--zoom`, `-z`**: presets (`0`, `1`, `1:1`, `100%`, `w`, `h`).
+   - **`--range`**: time ranges (`5s`, `5s:7s`).
+
 ### Quality Benchmarking & Two-Phase Execution (`cati modes`)
 
 The `cati modes` CLI command provides side-by-side visual and metric analysis across all registered render modes and dynamic candidate solvers (`--smart`).
