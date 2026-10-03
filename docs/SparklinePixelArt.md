@@ -185,8 +185,10 @@ Run `scripts/demo_aspect.sh` to compare the current `default`, `aligned` and
 `pixel` behaviors on Doom at widths 12, 54, 107, 110 and 160, and the vacation
 photo at widths 12, 54 and 110 (24 cases total).
 Each case renders first, then prints its caption and command below the image.
-Enter advances to the next case; `q` quits. A dashed line separates cases, and
-output remains in scrollback for comparison.
+Up/Down arrows (or `k`/`j`) move to the previous/next case; Enter also advances,
+and `q` quits immediately without Enter. Navigation stops at the first/last case
+so the final example remains available for backward navigation. A dashed line
+separates renders, and output remains in scrollback for comparison.
 - `--aspect default / fit / contain`: Square-Pixel Font Correction. Treats source pixels as standard $1:1$ square pixels and applies terminal font aspect ratio correction ($1:2$ cell ratio), scaling to continuous display height $\text{Rows} = \operatorname{round}\left(\frac{\text{Cols} \cdot \text{SrcH}}{2 \cdot \text{SrcW}}\right)$ (yielding 50 rows for $320 \times 200$ at 160 columns, 34 rows at 107 columns).
 
 ---
