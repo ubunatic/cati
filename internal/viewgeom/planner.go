@@ -6,12 +6,20 @@ import (
 
 // TargetConstraints holds the requested dimensions from CLI and terminal.
 type TargetConstraints struct {
-	ExplicitCols int    // From -W (0 = unconstrained)
-	ExplicitRows int    // From -H (0 = unconstrained)
-	TermCols     int    // From terminal width
-	TermRows     int    // From terminal height
-	AspectMode   string // Source mapping mode, including "aligned" and "pixel"
-	InitialZoom  string // "0", "1", "w", "h", etc.
+	ExplicitCols int               // From -W (0 = unconstrained)
+	ExplicitRows int               // From -H (0 = unconstrained)
+	TermCols     int               // From terminal width
+	TermRows     int               // From terminal height
+	AspectMode   string            // Source mapping mode, including "aligned" and "pixel"
+	InitialZoom  string            // "0", "1", "w", "h", etc.
+	PixelPolicy  PixelAspectPolicy // Fractional snapping limits from the spec
+}
+
+// PixelAspectPolicy bounds the aspect distortion and constrained-axis padding
+// allowed for integer repeats. Zero limits allow only exact integer matches.
+type PixelAspectPolicy struct {
+	MaxDistortion float64
+	MaxPadding    float64
 }
 
 // Plan describes the resolved terminal canvas, content layout, scaling, and padding.
@@ -45,9 +53,9 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 	case IsPixelAspect(c.AspectMode) && c.ExplicitCols > 0 && c.ExplicitRows == 0:
 		canvasCols = c.ExplicitCols
 		targetW := canvasCols * spec.CellW
-		baseRenderW = pixelConstrainedSize(srcW, targetW, spec.CellW)
+		baseRenderW = pixelConstrainedSize(srcW, targetW, c.PixelPolicy.MaxPadding)
 		idealH := float64(baseRenderW) * float64(spec.CellH) * float64(srcH) * 2 / (float64(spec.CellW) * float64(srcW) * 3)
-		baseRenderH = pixelDerivedSize(srcH, idealH, spec.CellH)
+		baseRenderH = pixelDerivedSize(srcH, idealH, spec.CellH, c.PixelPolicy.MaxDistortion)
 		canvasRows = max(1, (baseRenderH+spec.CellH-1)/spec.CellH)
 		padRight = targetW - baseRenderW
 		padBottom = canvasRows*spec.CellH - baseRenderH
@@ -56,9 +64,9 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 	case IsPixelAspect(c.AspectMode) && c.ExplicitRows > 0 && c.ExplicitCols == 0:
 		canvasRows = c.ExplicitRows
 		targetH := canvasRows * spec.CellH
-		baseRenderH = pixelConstrainedSize(srcH, targetH, spec.CellH)
+		baseRenderH = pixelConstrainedSize(srcH, targetH, c.PixelPolicy.MaxPadding)
 		idealW := float64(baseRenderH) * float64(spec.CellW) * float64(srcW) * 3 / (float64(spec.CellH) * float64(srcH) * 2)
-		baseRenderW = pixelDerivedSize(srcW, idealW, spec.CellW)
+		baseRenderW = pixelDerivedSize(srcW, idealW, spec.CellW, c.PixelPolicy.MaxDistortion)
 		canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
 		padBottom = targetH - baseRenderH
 		padRight = canvasCols*spec.CellW - baseRenderW
@@ -204,21 +212,22 @@ func IsPixelAspect(mode string) bool {
 	return mode == "pixel" || mode == "raw" || mode == "1:1"
 }
 
-// Keep a whole-pixel repeat only when its padding fits inside one terminal cell.
+// Keep a whole-pixel repeat only when its padding fits the fractional budget.
 // Otherwise use the requested extent, including when the source must shrink.
-func pixelConstrainedSize(source, target, cell int) int {
+func pixelConstrainedSize(source, target int, maxPadding float64) int {
 	repeated := (target / source) * source
-	if repeated > 0 && target-repeated < cell {
+	if repeated > 0 && float64(target-repeated) <= float64(target)*maxPadding {
 		return repeated
 	}
 	return target
 }
 
-// Integer repeats may tweak the derived aspect by less than one cell. Larger
-// deviations use the continuous aspect rounded to a pixel, sampled with NN.
-func pixelDerivedSize(source int, ideal float64, cell int) int {
+// Integer repeats must satisfy both the one-cell and relative distortion bounds.
+// Otherwise use the continuous aspect rounded to a pixel, sampled with NN.
+func pixelDerivedSize(source int, ideal float64, cell int, maxDistortion float64) int {
 	repeated := max(1, int(math.Round(ideal/float64(source)))) * source
-	if math.Abs(float64(repeated)-ideal) < float64(cell) {
+	error := math.Abs(float64(repeated) - ideal)
+	if error < float64(cell) && error <= ideal*maxDistortion {
 		return repeated
 	}
 	return max(1, int(math.Round(ideal)))

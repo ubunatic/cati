@@ -61,3 +61,39 @@ Validation: `HTO=0 make test` passed with both fast and reference paths, includi
 all existing goldens unchanged. `make preflight` passed and installed the updated
 CLI/player/browser binaries. Live CLI and forwarded playback preview both emit
 23 rows for the width-54 reproduction.
+
+## 5. Small-image protection and padding preference
+
+User accepted two follow-ups: protect small pixel extents against excessive
+relative stretch and allow more padding for uniform integer pixel repeats.
+The policy now lives in `spec/aspect.yaml`: `pixel.max_distortion: 0.10` and
+`pixel.max_padding: 0.10`, with a matching schema and strict loader.
+The CLI passes policy into the pure planner; missing spec disables optional
+snapping, while malformed existing spec produces an error. There are no Go
+copies of the defaults.
+
+Before/after proofs:
+
+- 12×12 source, 3x3 width 5: ideal 30×10; old repeat forced 30×12 (20% stretch).
+  New content is 30×10 plus two transparent bottom subcells, still a 5×4 canvas.
+- Doom width 110: old content 660×138 (uneven column repeats), canvas 110×46.
+  New content 640×133 (uniform 2× columns), right padding 20/660 = 3.03%,
+  bottom padding 2, canvas 110×45.
+- Doom height 70: 210 available subcell rows; 200 source rows plus 10 padding
+  use 4.76% padding. New content 960×200, canvas 160×70.
+- Doom width 54 stays 320×67 plus right 4/bottom 2, canvas 54×23.
+
+Existing goldens should remain unchanged: the old 12×12 width-3 pixel fixture
+needs 33.33% padding to use an integer horizontal repeat, so it still uses 18×6
+content. Add separate annotated small/padded pixel goldens; no renderer or glyph
+selection algorithm changes. The aligned downscale decision remains open.
+
+Validation: `HTO=0 make test` passed in both fast and reference modes; all existing
+goldens remained unchanged. New small/padded goldens include algorithm, source,
+canvas/content dimensions, sampling and policy limits in PNG tEXt metadata.
+Planner tests cover both axes, aliases, padding/distortion limits, inclusive
+percentage boundaries and zero-policy behavior. Spec tests verify schema bounds,
+loader fidelity, missing-file behavior, and invalid/unknown/non-finite input.
+`make preflight` passed, installed updated binaries, and verified demo renders.
+Live checks: widths 54/107/110/119/160 emit 23/45/45/50/67 rows; height 70 emits
+70 rows with 160 columns.

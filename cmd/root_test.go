@@ -1035,6 +1035,18 @@ func TestCLIDoom1S2Render(t *testing.T) {
 			wantCols:  160,
 		},
 		{
+			name:      "aspect pixel width 110 3x3 keeps uniform columns",
+			args:      []string{"assets/doom1.png", "-W", "110", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 45,
+			wantCols:  110,
+		},
+		{
+			name:      "aspect pixel height 70 3x3 keeps uniform rows",
+			args:      []string{"assets/doom1.png", "-H", "70", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 70,
+			wantCols:  160,
+		},
+		{
 			name:      "aspect pixel width 160 quad distortion",
 			args:      []string{"assets/doom1.png", "-W", "160", "-m", "quad", "--aspect", "pixel"},
 			wantLines: 67,

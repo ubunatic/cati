@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=./schemas/aspect.schema.json
+$schema: "./schemas/aspect.schema.json"
+
+pixel:
+  # Integer repeats must satisfy this limit AND the existing one-cell limit.
+  max_distortion: 0.10
+  # Fraction of the constrained pixel extent that can be transparent padding.
+  max_padding: 0.10

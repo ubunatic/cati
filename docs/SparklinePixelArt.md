@@ -161,7 +161,25 @@ and combined modes. See `TestAllRenderModesZoomOneSmallSquareUseCompleteCells`.
 
 **Aspect Modes: Subcell Lattice vs. Square-Pixel Correction.**
 - `--aspect aligned`: Continuous Aspect Snap. Treats source pixels as discrete subcells and derives aspect-preserved height snapping to mode cell boundaries ($W=107 \to 45\text{ rows}$ in `3x3`, $W=160 \to 67\text{ rows}$ in `2x3`/`3x3`).
-- `--aspect pixel / raw / 1:1`: Pixel-Art Aspect Snap. Keeps whole-pixel repeats only when they differ from the intended extent by less than one mode cell. Otherwise it samples the aspect-preserving size with nearest neighbor, including downscaling. Prescaling never blends source colors, even with `--prescaler pyramid`; fractional scales can repeat or skip source pixels unevenly. For Doom in `3x3`, widths 54, 107 and 160 yield 23, 45 and 67 rows. `six` at width 160 still repeats rows 2× and yields 67 rows. Width-only geometry uses `RenderH = RenderW·CellH·SrcH·2/(CellW·SrcW·3)` before snapping; height-only geometry uses its inverse. The constrained axis can leave less than one cell of transparent padding, and the derived axis is padded to complete its final cell. Narrow widths use the same aspect formula rather than switching to square-pixel correction. Explicit width and height still define a hard box; unconstrained renders still fit the terminal.
+- `--aspect pixel / raw / 1:1`: Pixel-Art Aspect Snap. Prefers whole-pixel repeats with bounded padding and aspect distortion, using `spec/aspect.yaml` as the policy source. Prescaling always uses nearest neighbor, even with `--prescaler pyramid`; fractional scales may repeat or skip pixels unevenly. Explicit width and height still define a hard box; unconstrained renders still fit the terminal.
+
+For a single explicit dimension, pixel sizing follows these steps:
+
+1. Convert the requested terminal extent into subcells. Choose the largest integer pixel repeat that fits, but accept it only when the unused extent is at most `pixel.max_padding` of the requested extent (currently **10%**). Otherwise fill that extent using nearest neighbor. Width/height remains the hard outer canvas constraint; padding is transparent at the right/bottom.
+2. Derive the other content dimension from the chosen content extent. Width-only uses `RenderH = RenderW·CellH·SrcH·2/(CellW·SrcW·3)`; height-only uses its inverse. This retains the existing 2:3 reference-lattice convention, rather than calibrating physical terminal-cell proportions.
+3. Try the nearest integer repeat on the derived axis. Accept it only when its absolute difference is **less than one mode cell** and its difference divided by the ideal extent is at most `pixel.max_distortion` (currently **10%**). Otherwise round the ideal extent to a subcell and use nearest neighbor. Pixel rounding/minimum size can exceed the percentage at extremely small extents; the percentage limits optional integer-repeat snapping, not unavoidable raster rounding.
+4. Pad the derived axis to complete its final terminal cell. This final cell padding is separate from the constrained-axis percentage budget.
+
+Concrete `3x3` examples (6×3 internal grid per terminal cell):
+
+| Source / request | Content subcells | Transparent padding | Canvas cells | Reason |
+|---|---|---|---|---|
+| 12×12, width 5 | 30×10 | bottom 2 | 5×4 | A 12-row repeat would stretch ideal height 10 by 20%; reject it. |
+| Doom 320×200, width 54 | 320×67 | right 4, bottom 2 | 54×23 | 1× horizontal repeat fits; vertical repeat would be 3× too tall. |
+| Doom, width 110 | 640×133 | right 20, bottom 2 | 110×45 | 2× horizontal repeats use 96.97% of the requested width; allow the 3.03% padding. |
+| Doom, height 70 | 960×200 | bottom 10 | 160×70 | 1× source rows fit with 4.76% padding; columns repeat 3×. |
+
+Doom at widths 107 and 160 still yields 45 and 67 rows. `six` at width 160 still repeats rows 2× and yields 67 rows. Too-small widths/heights retain the same aspect formula and shrink with nearest neighbor. `TargetConstraints.PixelPolicy` receives the loaded fractional limits from the CLI; the planner stays pure. Zero limits (including a missing policy file) allow only exact integer-repeat matches, without hardcoded spec fallbacks. A malformed existing policy returns a descriptive loader error.
 - `--aspect default / fit / contain`: Square-Pixel Font Correction. Treats source pixels as standard $1:1$ square pixels and applies terminal font aspect ratio correction ($1:2$ cell ratio), scaling to continuous display height $\text{Rows} = \operatorname{round}\left(\frac{\text{Cols} \cdot \text{SrcH}}{2 \cdot \text{SrcW}}\right)$ (yielding 50 rows for $320 \times 200$ at 160 columns, 34 rows at 107 columns).
 
 ---

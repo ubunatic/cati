@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cati aspect snapping policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["pixel"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "pixel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_distortion", "max_padding"],
+      "properties": {
+        "max_distortion": { "type": "number", "minimum": 0, "maximum": 1 },
+        "max_padding": { "type": "number", "minimum": 0, "exclusiveMaximum": 1 }
+      }
+    }
+  }
+}
