@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -976,26 +977,55 @@ func TestCLIDoom1S2Render(t *testing.T) {
 		name      string
 		args      []string
 		wantLines int
+		wantCols  int
 	}{
 		{
 			name:      "pad 0,1",
 			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--pad", "0,1"},
 			wantLines: 67,
+			wantCols:  160,
 		},
 		{
-			name:      "aspect aligned",
+			name:      "aspect aligned both dimensions",
 			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--aspect", "aligned"},
 			wantLines: 67,
+			wantCols:  160,
 		},
 		{
-			name:      "play preview -H 67",
-			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--play", "preview"},
+			name:      "aspect aligned width only s2",
+			args:      []string{"assets/doom1.png", "-W", "160", "-m", "s2", "--aspect", "aligned"},
 			wantLines: 67,
+			wantCols:  160,
 		},
 		{
-			name:      "play preview space separated -H 67",
+			name:      "aspect aligned height only s2",
+			args:      []string{"assets/doom1.png", "-H", "67", "-m", "s2", "--aspect", "aligned"},
+			wantLines: 67,
+			wantCols:  160,
+		},
+		{
+			name:      "aspect aligned width only halfblock",
+			args:      []string{"assets/doom1.png", "-W", "160", "--aspect", "aligned"},
+			wantLines: 50,
+			wantCols:  160,
+		},
+		{
+			name:      "halfblock exact box 160x100",
+			args:      []string{"assets/doom1.png", "-W", "160", "-H", "100"},
+			wantLines: 100,
+			wantCols:  160,
+		},
+		{
+			name:      "play preview -H 67 s2",
 			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--play", "preview"},
 			wantLines: 67,
+			wantCols:  160,
+		},
+		{
+			name:      "play preview width only aspect aligned halfblock",
+			args:      []string{"assets/doom1.png", "-W", "160", "--aspect", "aligned", "--play", "preview"},
+			wantLines: 50,
+			wantCols:  160,
 		},
 	}
 
@@ -1033,8 +1063,23 @@ func TestCLIDoom1S2Render(t *testing.T) {
 			if len(lines) != tc.wantLines {
 				t.Errorf("got %d lines, want %d lines", len(lines), tc.wantLines)
 			}
+			if len(lines) > 0 && tc.wantCols > 0 {
+				plain := stripAnsi(lines[0])
+				cols := utf8.RuneCountInString(plain)
+				if cols != tc.wantCols {
+					t.Errorf("got %d cols in first line (%q), want %d cols", cols, plain, tc.wantCols)
+				}
+			}
 		})
 	}
+}
+
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func stripAnsi(s string) string {
+	cleaned := ansiRegex.ReplaceAllString(s, "")
+	cleaned = strings.Trim(cleaned, "\r\n")
+	return cleaned
 }
 
 func TestDoom1CustomS2RenderGolden(t *testing.T) {

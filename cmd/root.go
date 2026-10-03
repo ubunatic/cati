@@ -822,5 +822,15 @@ func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, 
 	if plan.ExtH > 0 {
 		result = imgutil.AppendTransparentRows(result, plan.ExtH)
 	}
+
+	if explicitCols > 0 && explicitRows > 0 {
+		targetW := explicitCols * cellW
+		targetH := explicitRows * cellH
+		curW := result.Bounds().Dx()
+		curH := result.Bounds().Dy()
+		if curW < targetW || curH < targetH {
+			result = padSourceImage(result, max(0, targetW-curW), max(0, targetH-curH))
+		}
+	}
 	return result, nil
 }

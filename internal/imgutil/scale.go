@@ -77,14 +77,14 @@ func FillTransparentRows(img image.Image) image.Image {
 	if lastOpaque < 0 || lastOpaque == b.Max.Y-1 {
 		return img
 	}
-	out := image.NewRGBA(b)
+	out := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		srcY := y
 		if y > lastOpaque {
 			srcY = lastOpaque
 		}
 		for x := b.Min.X; x < b.Max.X; x++ {
-			out.Set(x, y-b.Min.Y, img.At(x, srcY))
+			out.Set(x-b.Min.X, y-b.Min.Y, img.At(x, srcY))
 		}
 	}
 	return out
@@ -98,7 +98,7 @@ func AppendTransparentRows(img image.Image, addH int) image.Image {
 	out := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()+addH))
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
-			out.Set(x, y-b.Min.Y, img.At(x, y))
+			out.Set(x-b.Min.X, y-b.Min.Y, img.At(x, y))
 		}
 	}
 	// Rows [b.Dy()..b.Dy()+addH-1] remain zero-initialized (transparent).
