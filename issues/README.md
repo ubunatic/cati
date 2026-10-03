@@ -81,6 +81,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 075 | [075-unify-cli-render-geometry-contracts-and-validate-route-specific-options.md](075-unify-cli-render-geometry-contracts-and-validate-route-specific-options.md) | Unify CLI render geometry contracts and validate route-specific options | Closed — unified in CLI geometry pipeline and pure planner |
 | 076 | [076-audit-spec-driven-approach-violations-and-classify-candidates.md](076-audit-spec-driven-approach-violations-and-classify-candidates.md) | Spec ownership audit: confirmed gaps and policy candidates | Open |
 | 077 | [077-cover-3x3-and-all-composite-modes-in-geometry-planner-and-fix-line-count-padding-mismatches.md](077-cover-3x3-and-all-composite-modes-in-geometry-planner-and-fix-line-count-padding-mismatches.md) | Cover 3x3 and all composite modes in geometry planner and fix line count/padding mismatches | Closed — resolved by updating planner to fill explicit grid and aligning glyph grid bounds |
+| 078 | [078-pixel-and-aligned-aspect-edge-cases.md](078-pixel-and-aligned-aspect-edge-cases.md) | Pixel/aligned aspect edge cases: distortion cap and downscale fallback | Open |
 
 ## Archived
 
