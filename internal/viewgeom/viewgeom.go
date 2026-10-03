@@ -422,7 +422,7 @@ func ParseZoomK(s string) float64 {
 	switch {
 	case strings.HasSuffix(s, "%"):
 		pct, err := strconv.ParseFloat(strings.TrimSuffix(s, "%"), 64)
-		if err == nil && pct >= 0 {
+		if err == nil && pct >= 0 && !math.IsNaN(pct) && !math.IsInf(pct, 0) {
 			if pct == 0 {
 				k = 0
 			} else {
@@ -433,14 +433,17 @@ func ParseZoomK(s string) float64 {
 		parts := strings.SplitN(s, ":", 2)
 		a, errA := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
 		b, errB := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
-		if errA == nil && errB == nil && a >= 0 && b > 0 {
+		if errA == nil && errB == nil && a >= 0 && b > 0 && !math.IsNaN(a) && !math.IsInf(a, 0) && !math.IsNaN(b) && !math.IsInf(b, 0) {
 			k = a / b
 		}
 	default:
 		v, err := strconv.ParseFloat(s, 64)
-		if err == nil && v >= 0 {
+		if err == nil && v >= 0 && !math.IsNaN(v) && !math.IsInf(v, 0) {
 			k = v
 		}
+	}
+	if math.IsNaN(k) || math.IsInf(k, 0) || k < 0 {
+		return -1
 	}
 	return k
 }

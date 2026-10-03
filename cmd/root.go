@@ -75,6 +75,12 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 		Args:         cobra.ArbitraryArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("requires at least 1 arg(s), only received 0")
+			}
+			if err := validateCommonFlags(width, height, &aspect, &initialZoom, &pad); err != nil {
+				return err
+			}
 			if bench {
 				if len(args) != 1 {
 					return fmt.Errorf("--bench requires exactly one media file")
@@ -89,12 +95,6 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 			}
 			if inputTest {
 				return runInputTest()
-			}
-			if len(args) == 0 {
-				return fmt.Errorf("requires at least 1 arg(s), only received 0")
-			}
-			if err := validateCommonFlags(width, height, aspect, initialZoom, pad); err != nil {
-				return err
 			}
 			rc, err := parseRenderMode(renderMode)
 			if err != nil {
@@ -208,7 +208,7 @@ func NewPlay() *cobra.Command {
 			if len(args) == 0 {
 				return fmt.Errorf("requires at least 1 arg(s), only received 0")
 			}
-			if err := validateCommonFlags(width, height, aspect, initialZoom, pad); err != nil {
+			if err := validateCommonFlags(width, height, &aspect, &initialZoom, &pad); err != nil {
 				return err
 			}
 			if smart {
@@ -310,7 +310,7 @@ func NewBrowse() *cobra.Command {
 			if len(args) == 0 {
 				return fmt.Errorf("requires at least 1 arg(s), only received 0")
 			}
-			if err := validateCommonFlags(width, height, aspect, initialZoom, pad); err != nil {
+			if err := validateCommonFlags(width, height, &aspect, &initialZoom, &pad); err != nil {
 				return err
 			}
 			if smart {
@@ -432,26 +432,29 @@ func forwardToPlayer(path string, width, height int, rc renderCfg, fullComp bool
 	return forwardCommand("catiplay", args)
 }
 
-func validateCommonFlags(width, height int, aspect, initialZoom, pad string) error {
+func validateCommonFlags(width, height int, aspect, initialZoom, pad *string) error {
 	if width < 0 {
 		return fmt.Errorf("--width must be 0 or greater, got %d", width)
 	}
 	if height < 0 {
 		return fmt.Errorf("--height must be 0 or greater, got %d", height)
 	}
-	switch strings.ToLower(strings.TrimSpace(aspect)) {
+	normAspect := strings.ToLower(strings.TrimSpace(*aspect))
+	switch normAspect {
 	case "", "default", "aligned":
-		// valid
+		*aspect = normAspect
 	default:
-		return fmt.Errorf("unknown --aspect %q; valid: default, aligned", aspect)
+		return fmt.Errorf("unknown --aspect %q; valid: default, aligned", *aspect)
 	}
-	if initialZoom != "" {
-		if err := validateZoom(initialZoom); err != nil {
+	if *initialZoom != "" {
+		normZoom := strings.ToLower(strings.TrimSpace(*initialZoom))
+		if err := validateZoom(normZoom); err != nil {
 			return err
 		}
+		*initialZoom = normZoom
 	}
-	if pad != "" {
-		if _, _, err := parsePadSpec(pad); err != nil {
+	if *pad != "" {
+		if _, _, err := parsePadSpec(*pad); err != nil {
 			return err
 		}
 	}
@@ -459,11 +462,10 @@ func validateCommonFlags(width, height int, aspect, initialZoom, pad string) err
 }
 
 func validateZoom(s string) error {
-	trimmed := strings.ToLower(strings.TrimSpace(s))
-	if trimmed == "" || trimmed == "w" || trimmed == "h" {
+	if s == "" || s == "w" || s == "h" {
 		return nil
 	}
-	k := viewgeom.ParseZoomK(trimmed)
+	k := viewgeom.ParseZoomK(s)
 	if k < 0 {
 		return fmt.Errorf("invalid --zoom %q; valid: \"0\", \"1\", \"w\", \"h\", \"100%%\", \"1:1\"", s)
 	}
