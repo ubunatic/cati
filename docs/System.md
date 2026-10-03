@@ -278,6 +278,27 @@ Autocompletion across shells (Bash, Zsh, Fish, PowerShell) is handled in `cmd/co
    - **`--zoom`, `-z`**: presets (`0`, `1`, `1:1`, `100%`, `w`, `h`).
    - **`--range`**: time ranges (`5s`, `5s:7s`).
 
+### CLI Render Geometry Pipeline (`internal/viewgeom.PlanRender`)
+
+The CLI render geometry pipeline uses a unified derivation model across static renders, playback previews, image sequences, and video streaming:
+
+1. **Option Hierarchy & Priority**:
+   - **`-W` (`--width`) and `-H` (`--height`)** are highest-priority canvas constraints defining the hard outer terminal grid boundaries.
+   - **Secondary Options**: `--pad`, `--aspect`, `--zoom`, `--crop`, `--smart`, and `--prescaler` are applied within or onto that canvas.
+   - **Provenance Preservation**: Explicit dimensions (`ExplicitCols`, `ExplicitRows`) are distinguished from auto-detected terminal dimensions (`TermCols`, `TermRows`), preventing unconstrained renders from being padded to the full terminal box.
+
+2. **Algorithm-Dependent Dimension Derivation**:
+   - **Width-Only (`-W`)**: Derives rows using mode cell geometry and aspect ratio correction:
+     $$\text{Rows} = \max\left(1, \operatorname{round}\left(W \times \frac{C_w \times \text{SrcH}}{a \times \text{SrcW} \times C_h}\right)\right)$$
+   - **Height-Only (`-H`)**: Derives columns using mode cell geometry and aspect ratio correction:
+     $$\text{Cols} = \max\left(1, \operatorname{round}\left(H \times \frac{C_h \times a \times \text{SrcW}}{\text{SrcH} \times C_w}\right)\right)$$
+   - **Both `-W` and `-H`**: Establishes a fixed bounding box $(W, H)$ and pads content to fill the requested canvas.
+   - **Unconstrained**: Fits within available terminal bounds without padding the canvas.
+
+3. **Subcell Alignment & Source Padding (`--aspect aligned`, `--pad`)**:
+   - `--pad <cols>,<rows>` prepends/appends transparent pixel rows or columns before rendering.
+   - `--aspect aligned` retains 1:1 source pixels when the source matches within subcell tolerance ($< C_w, < C_h$) of the target grid and transparently pads incomplete mode cells without downsampling blur.
+
 ### Quality Benchmarking & Two-Phase Execution (`cati modes`)
 
 The `cati modes` CLI command provides side-by-side visual and metric analysis across all registered render modes and dynamic candidate solvers (`--smart`).
