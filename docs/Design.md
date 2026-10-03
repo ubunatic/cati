@@ -211,10 +211,16 @@ tplResolve(key, vars) string     — resolves key: quoted literal, vars map, or 
 
 ### 3.9 `spec/controls.yaml` — runtime controls
 
-Loaded by `loadControls()` → `[]ControlSpec`. Drives the settings form:
+Loaded by `loadControls()` → `[]ControlSpec` in YAML declaration order. The spec owns the
+editable inventory, type, integer bounds, enum values, and getter/setter binding names.
+`loadControls` validates every binding against a Go handler before the browser starts.
+Missing controls spec leaves the settings inventory empty; malformed specs or missing
+handlers are reported to the caller. The settings form is driven by:
 - Field labels come from `settingsFieldLabel(key)` (snake_case → Title Case)
 - Tab cycles through `len(controls)` fields
-- `↑`/`↓` call `applySettingsDelta(c, ±1, &tempCfg)` which uses `c.Min`/`c.Max` for int fields and `c.Values` for enum fields
+- `↑`/`↓` call the setter named by `c.Set`; integer handlers use `c.Min`/`c.Max` and enum handlers use `c.Values`
+- displayed values come from the getter named by `c.Get`
+- delay adjustment uses 100 ms input steps as UI mechanics; allowed bounds remain spec-owned
 
 ```yaml
 controls:
@@ -222,11 +228,12 @@ controls:
     type: int
     min: 10
     max: 200
-    set: set_preview_height    # not yet wired — action name for future use
+    set: set_preview_height
     get: get_preview_height
 ```
 
-Adding a new control to `controls.yaml` with a known `key` (one handled in `applySettingsDelta`) is enough to add it to the settings form.
+Adding, removing, or reordering controls in `controls.yaml` changes the settings form directly.
+Every declared getter and setter must have a registered Go handler; unknown bindings fail startup.
 
 ---
 

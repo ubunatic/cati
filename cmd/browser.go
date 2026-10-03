@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -73,7 +74,49 @@ type ControlSpec struct {
 	Min    int
 	Max    int
 	Values []string // for enum type
+	Set    string
+	Get    string
 }
+
+type controlHandler struct {
+	typeName string
+	get      func(Settings) string
+	set      func(ControlSpec, int, *Settings)
+}
+
+var controlHandlers = func() map[string]controlHandler {
+	handlers := map[string]controlHandler{
+		"preview_height": {typeName: "int", get: func(s Settings) string { return fmt.Sprintf("%d rows", s.MaxPreviewHeight) }, set: func(c ControlSpec, d int, s *Settings) {
+			s.MaxPreviewHeight = max(c.Min, min(c.Max, s.MaxPreviewHeight+d))
+		}},
+		"view_mode": {typeName: "enum", get: func(s Settings) string { return s.ViewMode }, set: func(c ControlSpec, d int, s *Settings) {
+			if len(c.Values) == 0 {
+				return
+			}
+			i := 0
+			for n, v := range c.Values {
+				if v == s.ViewMode {
+					i = n
+					break
+				}
+			}
+			i = ((i+d)%len(c.Values) + len(c.Values)) % len(c.Values)
+			s.ViewMode = c.Values[i]
+		}},
+		"preview_videos": {typeName: "bool", get: func(s Settings) string { return strconv.FormatBool(s.PreviewVideos) }, set: func(_ ControlSpec, d int, s *Settings) { s.PreviewVideos = d > 0 }},
+		"max_jobs":       {typeName: "int", get: func(s Settings) string { return strconv.Itoa(s.MaxJobs) }, set: func(c ControlSpec, d int, s *Settings) { s.MaxJobs = max(c.Min, min(c.Max, s.MaxJobs+d)) }},
+		"video_frames":   {typeName: "int", get: func(s Settings) string { return strconv.Itoa(s.VideoFrames) }, set: func(c ControlSpec, d int, s *Settings) { s.VideoFrames = max(c.Min, min(c.Max, s.VideoFrames+d)) }},
+		"video_preview_delay": {typeName: "int", get: func(s Settings) string { return strconv.Itoa(s.VideoPreviewDelay) }, set: func(c ControlSpec, d int, s *Settings) {
+			// Settings navigation uses 100 ms input steps; allowed bounds come from controls.yaml.
+			s.VideoPreviewDelay = max(c.Min, min(c.Max, s.VideoPreviewDelay+d*100))
+		}},
+	}
+	for key, handler := range handlers {
+		handlers["set_"+key] = handler
+		handlers["get_"+key] = handler
+	}
+	return handlers
+}()
 
 // settingsFieldLabel converts a snake_case control key to a Title Case display label.
 func settingsFieldLabel(key string) string {
@@ -88,30 +131,26 @@ func settingsFieldLabel(key string) string {
 
 // applySettingsDelta increments or decrements the field matched by c.Key inside s.
 func applySettingsDelta(c ControlSpec, delta int, s *Settings) {
-	switch c.Key {
-	case "preview_height":
-		s.MaxPreviewHeight = max(c.Min, min(c.Max, s.MaxPreviewHeight+delta))
-	case "view_mode":
-		if len(c.Values) > 0 {
-			idx := 0
-			for i, v := range c.Values {
-				if v == s.ViewMode {
-					idx = i
-					break
-				}
-			}
-			idx = ((idx+delta)%len(c.Values) + len(c.Values)) % len(c.Values)
-			s.ViewMode = c.Values[idx]
-		}
-	case "preview_videos":
-		s.PreviewVideos = delta > 0
-	case "max_jobs":
-		s.MaxJobs = max(c.Min, min(c.Max, s.MaxJobs+delta))
-	case "video_frames":
-		s.VideoFrames = max(c.Min, min(c.Max, s.VideoFrames+delta))
-	case "video_preview_delay":
-		s.VideoPreviewDelay = max(c.Min, min(c.Max, s.VideoPreviewDelay+delta*100))
+	if h, ok := controlHandlers[c.Set]; ok && h.set != nil {
+		h.set(c, delta, s)
 	}
+}
+
+func validateControlHandlers(controls []ControlSpec, handlers map[string]controlHandler) error {
+	for _, c := range controls {
+		h, ok := handlers[c.Set]
+		if !ok || h.set == nil {
+			return fmt.Errorf("control %s has no Go setter handler %q", c.Key, c.Set)
+		}
+		if h.typeName != c.Type {
+			return fmt.Errorf("control %s type %q does not match setter handler type %q", c.Key, c.Type, h.typeName)
+		}
+		h, ok = handlers[c.Get]
+		if !ok || h.get == nil {
+			return fmt.Errorf("control %s has no Go getter handler %q", c.Key, c.Get)
+		}
+	}
+	return nil
 }
 
 type StyleConfig struct {
@@ -806,31 +845,28 @@ func saveConfig(cfg Settings) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
-func loadControls() []ControlSpec {
-	specs := []ControlSpec{
-		{Key: "preview_height", Type: "int", Min: 10, Max: 200},
-		{Key: "view_mode", Type: "enum", Values: []string{"grid", "preview"}},
-		{Key: "preview_videos", Type: "bool"},
-		{Key: "max_jobs", Type: "int", Min: 1, Max: 32},
-		{Key: "video_frames", Type: "int", Min: 1, Max: 60},
-		{Key: "video_preview_delay", Type: "int", Min: 0, Max: 5000},
-	}
+func loadControls() ([]ControlSpec, error) {
 	cSpec, err := spec.LoadControls()
 	if err != nil {
-		return specs
-	}
-	for i, s := range specs {
-		if def, ok := cSpec.Controls[s.Key]; ok {
-			if def.Min != 0 || def.Max != 0 {
-				specs[i].Min = def.Min
-				specs[i].Max = def.Max
-			}
-			if len(def.Values) > 0 {
-				specs[i].Values = def.Values
-			}
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
 		}
+		return nil, fmt.Errorf("load controls spec: %w", err)
 	}
-	return specs
+	controls := controlsFromSpec(cSpec)
+	if err := validateControlHandlers(controls, controlHandlers); err != nil {
+		return nil, err
+	}
+	return controls, nil
+}
+
+func controlsFromSpec(cSpec spec.ControlsSpec) []ControlSpec {
+	controls := make([]ControlSpec, 0, len(cSpec.Order))
+	for _, key := range cSpec.Order {
+		def := cSpec.Controls[key]
+		controls = append(controls, ControlSpec{Key: key, Type: def.Type, Min: def.Min, Max: def.Max, Values: def.Values, Set: def.Set, Get: def.Get})
+	}
+	return controls
 }
 
 // ── Dynamic Directory Loading ───────────────────────────────────────────────
@@ -905,7 +941,10 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 	}
 	viewBtnRows := loadViewButtonRows()
 	viewKeyRows := loadViewKeyRows()
-	controls := loadControls()
+	controls, err := loadControls()
+	if err != nil {
+		return err
+	}
 	btnActions := loadButtonActions()
 	// altBtnActions := loadAltButtonActions()
 	viewKeyMaps := buildViewKeyMaps(viewKeyRows, loadButtonKeyDefs(inputSpec))
@@ -2132,24 +2171,9 @@ func drawSettingsPage(w io.Writer, termCols, termRows int, controls []ControlSpe
 	type field struct{ label, value string }
 	fields := make([]field, len(controls))
 	for i, c := range controls {
-		var value string
-		switch c.Key {
-		case "preview_height":
-			value = fmt.Sprintf("%d rows", temp.MaxPreviewHeight)
-		case "view_mode":
-			value = temp.ViewMode
-		case "preview_videos":
-			if temp.PreviewVideos {
-				value = "true"
-			} else {
-				value = "false"
-			}
-		case "max_jobs":
-			value = fmt.Sprintf("%d", temp.MaxJobs)
-		case "video_frames":
-			value = fmt.Sprintf("%d", temp.VideoFrames)
-		default:
-			value = "?"
+		value := "?"
+		if h, ok := controlHandlers[c.Get]; ok && h.get != nil {
+			value = h.get(temp)
 		}
 		fields[i] = field{settingsFieldLabel(c.Key), value}
 	}

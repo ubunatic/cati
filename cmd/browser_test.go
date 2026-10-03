@@ -6,6 +6,9 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	spec "ubunatic.com/cati/spec"
 )
 
 func TestBrowser_DrawBottomMenu(t *testing.T) {
@@ -40,6 +43,59 @@ func TestBrowser_DrawBottomMenu(t *testing.T) {
 				t.Errorf("view %q btn[%d] action = %q, want %q", tc.view, i, b.action, tc.actions[i])
 			}
 		}
+	}
+}
+
+func TestControlsFixtureDrivesSettingsPage(t *testing.T) {
+	makeControls := func(entries string) spec.ControlsSpec {
+		t.Helper()
+		loaded, err := spec.LoadControlsFrom(fstest.MapFS{"controls.yaml": &fstest.MapFile{Data: []byte("controls:\n" + entries)}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return loaded
+	}
+	render := func(loaded spec.ControlsSpec) string {
+		var out bytes.Buffer
+		drawSettingsPage(&out, 100, 40, controlsFromSpec(loaded), Settings{}, -1, nil)
+		return out.String()
+	}
+	first := makeControls("  view_mode:\n    type: enum\n    values: [tiles, preview]\n    set: set_view_mode\n    get: get_view_mode\n  preview_height:\n    type: int\n    min: 7\n    max: 90\n    set: set_preview_height\n    get: get_preview_height\n")
+	second := makeControls("  preview_height:\n    type: int\n    min: 7\n    max: 90\n    set: set_preview_height\n    get: get_preview_height\n")
+	reordered := makeControls("  preview_height:\n    type: int\n    min: 7\n    max: 90\n    set: set_preview_height\n    get: get_preview_height\n  view_mode:\n    type: enum\n    values: [tiles, preview]\n    set: set_view_mode\n    get: get_view_mode\n")
+	firstPage, secondPage, reorderedPage := render(first), render(second), render(reordered)
+	if strings.Index(firstPage, "View Mode:") > strings.Index(firstPage, "Preview Height:") {
+		t.Fatal("settings page did not preserve fixture control order")
+	}
+	if !strings.Contains(firstPage, "View Mode:") || strings.Contains(secondPage, "View Mode:") {
+		t.Fatal("adding/removing a fixture control did not change settings page inventory")
+	}
+	if strings.Index(reorderedPage, "Preview Height:") > strings.Index(reorderedPage, "View Mode:") || reorderedPage == firstPage {
+		t.Fatal("reordering fixture controls did not change settings page order")
+	}
+	if controlsFromSpec(first)[1].Min != 7 || controlsFromSpec(first)[1].Max != 90 {
+		t.Fatal("fixture bounds were not loaded")
+	}
+	if controlsFromSpec(first)[0].Type != "enum" {
+		t.Fatalf("fixture type = %q, want enum", controlsFromSpec(first)[0].Type)
+	}
+	settings := Settings{ViewMode: "tiles"}
+	control := controlsFromSpec(first)[0]
+	applySettingsDelta(control, 1, &settings)
+	if settings.ViewMode != "preview" {
+		t.Fatalf("fixture enum values did not drive behavior: %q", settings.ViewMode)
+	}
+	settings.MaxPreviewHeight = 7
+	applySettingsDelta(controlsFromSpec(first)[1], -1, &settings)
+	if settings.MaxPreviewHeight != 7 {
+		t.Fatalf("fixture minimum bound not enforced: %d", settings.MaxPreviewHeight)
+	}
+}
+
+func TestControlWithoutGoHandlerFailsIntegrity(t *testing.T) {
+	controls := []ControlSpec{{Key: "extension", Set: "missing_set", Get: "missing_get"}}
+	if err := validateControlHandlers(controls, controlHandlers); err == nil || !strings.Contains(err.Error(), "no Go setter handler") {
+		t.Fatalf("missing handler integrity error = %v", err)
 	}
 }
 

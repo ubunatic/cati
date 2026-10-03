@@ -4,11 +4,12 @@
   "title": "Cati Controls",
   "description": "Tunable application controls with get/set action bindings",
   "type": "object",
+  "required": ["controls"],
   "additionalProperties": false,
   "definitions": {
     "int_control": {
       "type": "object",
-      "required": ["type", "set", "get"],
+      "required": ["type", "min", "max", "set", "get"],
       "additionalProperties": false,
       "properties": {
         "type":    { "type": "string", "enum": ["int"] },

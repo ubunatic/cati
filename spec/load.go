@@ -631,17 +631,67 @@ type ControlDef struct {
 }
 
 type ControlsSpec struct {
+	Schema   string                `yaml:"$schema"`
 	Controls map[string]ControlDef `yaml:"controls"`
+	Order    []string              `yaml:"-"`
 }
 
 func LoadControls() (ControlsSpec, error) {
-	var spec ControlsSpec
-	data, err := fs.ReadFile(FS, "controls.yaml")
+	return LoadControlsFrom(FS)
+}
+
+func LoadControlsFrom(fsys fs.FS) (ControlsSpec, error) {
+	var result ControlsSpec
+	data, err := fs.ReadFile(fsys, "controls.yaml")
 	if err != nil {
-		return spec, err
+		return result, err
 	}
-	err = yaml.Unmarshal(data, &spec)
-	return spec, err
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&result); err != nil {
+		return result, err
+	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return result, err
+	}
+	if len(root.Content) != 1 || root.Content[0].Kind != yaml.MappingNode {
+		return result, fmt.Errorf("controls.yaml must contain a mapping")
+	}
+	for i := 0; i+1 < len(root.Content[0].Content); i += 2 {
+		if root.Content[0].Content[i].Value == "controls" {
+			node := root.Content[0].Content[i+1]
+			if node.Kind != yaml.MappingNode {
+				return result, fmt.Errorf("controls must be a mapping")
+			}
+			for j := 0; j+1 < len(node.Content); j += 2 {
+				result.Order = append(result.Order, node.Content[j].Value)
+			}
+		}
+	}
+	if len(result.Order) == 0 || len(result.Controls) != len(result.Order) {
+		return result, fmt.Errorf("controls.yaml must define at least one control")
+	}
+	for _, key := range result.Order {
+		c := result.Controls[key]
+		switch c.Type {
+		case "int":
+			if c.Min >= c.Max {
+				return result, fmt.Errorf("control %s must have min < max", key)
+			}
+		case "enum":
+			if len(c.Values) < 2 {
+				return result, fmt.Errorf("control %s needs at least two values", key)
+			}
+		case "bool":
+		default:
+			return result, fmt.Errorf("control %s has unsupported type %q", key, c.Type)
+		}
+		if c.Set == "" || c.Get == "" {
+			return result, fmt.Errorf("control %s requires set and get bindings", key)
+		}
+	}
+	return result, nil
 }
 
 // ── Yaml View Spec (about.yaml) ──────────────────────────────────────────────
