@@ -88,10 +88,11 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			if k >= 1 && k*srcW <= targetW {
 				baseRenderW = k * srcW
 				padRight = targetW - baseRenderW
+				floatH := float64(baseRenderW*spec.CellH*srcH*2) / float64(spec.CellW*srcW*3)
 				if c.AspectMode == "pixel" || c.AspectMode == "raw" || c.AspectMode == "1:1" {
-					baseRenderH = srcH
+					// Nearest integer row repeat: pixel duplication only, never blending.
+					baseRenderH = max(1, int(math.Round(floatH/float64(srcH)))) * srcH
 				} else {
-					floatH := float64(baseRenderW*spec.CellH*srcH*2) / float64(spec.CellW*srcW*3)
 					baseRenderH = max(1, int(math.Round(floatH)))
 				}
 				canvasRows = max(1, (baseRenderH+spec.CellH-1)/spec.CellH)
@@ -117,10 +118,11 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			if k >= 1 && k*srcH <= targetH {
 				baseRenderH = k * srcH
 				padBottom = targetH - baseRenderH
+				floatW := float64(baseRenderH*spec.CellW*srcW*3) / float64(spec.CellH*srcH*2)
 				if c.AspectMode == "pixel" || c.AspectMode == "raw" || c.AspectMode == "1:1" {
-					baseRenderW = srcW
+					// Nearest integer column repeat: pixel duplication only, never blending.
+					baseRenderW = max(1, int(math.Round(floatW/float64(srcW)))) * srcW
 				} else {
-					floatW := float64(baseRenderH*spec.CellW*srcW*3) / float64(spec.CellH*srcH*2)
 					baseRenderW = max(1, int(math.Round(floatW)))
 				}
 				canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)

@@ -187,6 +187,17 @@ func TestPlanRender_Doom3x3(t *testing.T) {
 		}
 	})
 
+	t.Run("six -W 160 aspect pixel duplicates rows 2x", func(t *testing.T) {
+		spec6 := NewV2CellRatio(2, 6, 2, 3)
+		plan := PlanRender(320, 200, TargetConstraints{ExplicitCols: 160, AspectMode: "pixel"}, spec6)
+		if plan.CanvasCols != 160 || plan.CanvasRows != 67 {
+			t.Errorf("Canvas = %dx%d, want 160x67", plan.CanvasCols, plan.CanvasRows)
+		}
+		if plan.RenderW != 320 || plan.RenderH != 400 {
+			t.Errorf("Render size = %dx%d, want 320x400 (1x cols, 2x rows)", plan.RenderW, plan.RenderH)
+		}
+	})
+
 	t.Run("both -W 160 -H 67 subcell snapping", func(t *testing.T) {
 		c := TargetConstraints{
 			ExplicitCols: 160,

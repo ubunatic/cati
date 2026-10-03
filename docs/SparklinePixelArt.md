@@ -161,7 +161,7 @@ and combined modes. See `TestAllRenderModesZoomOneSmallSquareUseCompleteCells`.
 
 **Aspect Modes: Subcell Lattice vs. Square-Pixel Correction.**
 - `--aspect aligned`: Continuous Aspect Snap. Treats source pixels as discrete subcells and derives aspect-preserved height snapping to mode cell boundaries ($W=107 \to 45\text{ rows}$ in `3x3`, $W=160 \to 67\text{ rows}$ in `2x3`/`3x3`).
-- `--aspect pixel / raw / 1:1`: Raw 1:1 Pixel-Art Snap. Maps source pixels directly to integer subcells in both axes without vertical downscaling or non-integer resampling ($W=107 \to 67\text{ rows}$ in `3x3` with unscaled $200\text{px}$ height).
+- `--aspect pixel / raw / 1:1`: Raw 1:1 Pixel-Art Snap. Maps source pixels directly to integer subcells in both axes without vertical downscaling or non-integer resampling ($W=107 \to 67$ rows in `3x3`; `six` at $W=160$ repeats rows 2× → 67 rows). Vertical scale is the nearest integer to the `aligned` height, so pixels are only ever duplicated, never blended.
 - `--aspect default / fit / contain`: Square-Pixel Font Correction. Treats source pixels as standard $1:1$ square pixels and applies terminal font aspect ratio correction ($1:2$ cell ratio), scaling to continuous display height $\text{Rows} = \operatorname{round}\left(\frac{\text{Cols} \cdot \text{SrcH}}{2 \cdot \text{SrcW}}\right)$ (yielding 50 rows for $320 \times 200$ at 160 columns, 34 rows at 107 columns).
 
 ---
