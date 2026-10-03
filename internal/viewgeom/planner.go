@@ -1,7 +1,7 @@
 package viewgeom
 
 import (
-	"ubunatic.com/cati/internal/imgutil"
+	"math"
 )
 
 // TargetConstraints holds the requested dimensions from CLI and terminal.
@@ -35,87 +35,70 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 
 	spec = NewV2CellRatio(spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen)
 
-	// Explicit zoom "0" means fit to box/viewport
-	if c.InitialZoom != "" && c.InitialZoom != "0" {
-		targetW, targetH, ok := explicitZoomPixelTarget(srcW, srcH, c, spec)
-		if ok {
-			cols := max(1, (targetW+spec.CellW-1)/spec.CellW)
-			rows := max(1, (targetH+spec.CellH-1)/spec.CellH)
-			return Plan{
-				CanvasCols: cols,
-				CanvasRows: rows,
-				RenderW:    targetW,
-				RenderH:    targetH,
-			}
-		}
-	}
+	// Step 1: Resolve the base canvas (CanvasCols, CanvasRows) and base content fit.
+	var canvasCols, canvasRows int
+	var baseRenderW, baseRenderH, baseExtH int
+	var padRight, padBottom int
+	hasAlignedPad := false
 
 	switch {
 	case c.ExplicitCols > 0 && c.ExplicitRows > 0:
 		// Both dimensions explicit: hard canvas box
-		cols, rows := c.ExplicitCols, c.ExplicitRows
+		canvasCols = c.ExplicitCols
+		canvasRows = c.ExplicitRows
 		if c.AspectMode == "aligned" {
-			targetW := cols * spec.CellW
-			targetH := rows * spec.CellH
+			targetW := canvasCols * spec.CellW
+			targetH := canvasRows * spec.CellH
 			if srcW <= targetW && srcH <= targetH {
-				return Plan{
-					CanvasCols: cols,
-					CanvasRows: rows,
-					RenderW:    srcW,
-					RenderH:    srcH,
-					PadRight:   targetW - srcW,
-					PadBottom:  targetH - srcH,
-				}
+				baseRenderW = srcW
+				baseRenderH = srcH
+				padRight = targetW - srcW
+				padBottom = targetH - srcH
+				hasAlignedPad = true
 			}
 		}
-		renderW, renderH, extH := fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, cols, rows)
-		return Plan{
-			CanvasCols: cols,
-			CanvasRows: rows,
-			RenderW:    renderW,
-			RenderH:    renderH,
-			ExtH:       extH,
+		if !hasAlignedPad {
+			baseRenderW, baseRenderH, baseExtH = fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, canvasCols, canvasRows)
 		}
 
 	case c.ExplicitCols > 0 && c.ExplicitRows == 0:
-		// Width explicit: rows derived from aspect
-		cols := c.ExplicitCols
+		// Width explicit: canvas rows derived from aspect
+		canvasCols = c.ExplicitCols
 		if c.AspectMode == "aligned" {
-			targetW := cols * spec.CellW
+			targetW := canvasCols * spec.CellW
 			if srcW <= targetW {
-				rows := max(1, (srcH+spec.CellH-1)/spec.CellH)
-				targetH := rows * spec.CellH
-				return Plan{
-					CanvasCols: cols,
-					CanvasRows: rows,
-					RenderW:    srcW,
-					RenderH:    srcH,
-					PadRight:   targetW - srcW,
-					PadBottom:  targetH - srcH,
-				}
+				canvasRows = max(1, (srcH+spec.CellH-1)/spec.CellH)
+				targetH := canvasRows * spec.CellH
+				baseRenderW = srcW
+				baseRenderH = srcH
+				padRight = targetW - srcW
+				padBottom = targetH - srcH
+				hasAlignedPad = true
 			}
 		}
-		renderW, renderH, extH := fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, cols, 0)
-		rows := max(1, (renderH+extH+spec.CellH-1)/spec.CellH)
-		return Plan{
-			CanvasCols: cols,
-			CanvasRows: rows,
-			RenderW:    renderW,
-			RenderH:    renderH,
-			ExtH:       extH,
+		if !hasAlignedPad {
+			baseRenderW, baseRenderH, baseExtH = fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, canvasCols, 0)
+			canvasRows = max(1, (baseRenderH+baseExtH+spec.CellH-1)/spec.CellH)
 		}
 
 	case c.ExplicitRows > 0 && c.ExplicitCols == 0:
-		// Height explicit: cols derived from aspect
-		rows := c.ExplicitRows
-		renderW, renderH, extH := fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, 0, rows)
-		cols := max(1, (renderW+spec.CellW-1)/spec.CellW)
-		return Plan{
-			CanvasCols: cols,
-			CanvasRows: rows,
-			RenderW:    renderW,
-			RenderH:    renderH,
-			ExtH:       extH,
+		// Height explicit: canvas cols derived from aspect
+		canvasRows = c.ExplicitRows
+		if c.AspectMode == "aligned" {
+			targetH := canvasRows * spec.CellH
+			if srcH <= targetH {
+				canvasCols = max(1, (srcW+spec.CellW-1)/spec.CellW)
+				targetW := canvasCols * spec.CellW
+				baseRenderW = srcW
+				baseRenderH = srcH
+				padRight = targetW - srcW
+				padBottom = targetH - srcH
+				hasAlignedPad = true
+			}
+		}
+		if !hasAlignedPad {
+			baseRenderW, baseRenderH, baseExtH = fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, 0, canvasRows)
+			canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
 		}
 
 	default:
@@ -124,44 +107,83 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 		if termCols <= 0 && termRows <= 0 {
 			termCols, termRows = 80, 24
 		}
-		renderW, renderH, extH := fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, termCols, termRows)
-		cols := max(1, (renderW+spec.CellW-1)/spec.CellW)
-		rows := max(1, (renderH+extH+spec.CellH-1)/spec.CellH)
+		baseRenderW, baseRenderH, baseExtH = fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, termCols, termRows)
+		canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
+		canvasRows = max(1, (baseRenderH+baseExtH+spec.CellH-1)/spec.CellH)
+	}
+
+	// Step 2: If no explicit zoom (or zoom is "0"), return the fitted canvas and content.
+	if c.InitialZoom == "" || c.InitialZoom == "0" || hasAlignedPad {
 		return Plan{
-			CanvasCols: cols,
-			CanvasRows: rows,
-			RenderW:    renderW,
-			RenderH:    renderH,
-			ExtH:       extH,
+			CanvasCols: canvasCols,
+			CanvasRows: canvasRows,
+			RenderW:    baseRenderW,
+			RenderH:    baseRenderH,
+			ExtH:       baseExtH,
+			PadRight:   padRight,
+			PadBottom:  padBottom,
 		}
+	}
+
+	// Step 3: Explicit zoom ("w", "h", or numeric k).
+	// CanvasCols and CanvasRows remain the resolved outer bounds.
+	zoomW, zoomH, ok := computeZoomContentSize(srcW, srcH, canvasCols, canvasRows, c.InitialZoom, spec)
+	if !ok {
+		return Plan{
+			CanvasCols: canvasCols,
+			CanvasRows: canvasRows,
+			RenderW:    baseRenderW,
+			RenderH:    baseRenderH,
+			ExtH:       baseExtH,
+		}
+	}
+
+	// If canvas was not explicit in either axis and no terminal was given, expand canvas to fit zoom
+	if c.ExplicitCols == 0 && c.ExplicitRows == 0 && c.TermCols <= 0 && c.TermRows <= 0 {
+		canvasCols = max(1, (zoomW+spec.CellW-1)/spec.CellW)
+		canvasRows = max(1, (zoomH+spec.CellH-1)/spec.CellH)
+	}
+
+	return Plan{
+		CanvasCols: canvasCols,
+		CanvasRows: canvasRows,
+		RenderW:    zoomW,
+		RenderH:    zoomH,
 	}
 }
 
-func explicitZoomPixelTarget(srcW, srcH int, c TargetConstraints, spec V2Spec) (int, int, bool) {
-	if c.InitialZoom == "w" || c.InitialZoom == "h" {
-		cols := c.ExplicitCols
-		rows := c.ExplicitRows
-		if cols <= 0 {
-			cols = c.TermCols
-		}
-		if rows <= 0 {
-			rows = c.TermRows
-		}
-		if cols <= 0 && rows <= 0 {
-			cols, rows = 80, 24
-		}
-		oldSpec := NewCellRatio(spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen)
-		zoom := oldSpec.InitialZoomRatio(c.InitialZoom, srcW, srcH, cols, rows, true)
-		dims := oldSpec.Dims(srcW, srcH, cols, rows, zoom)
-		targetW, targetH := imgutil.AlignCellSize(dims.ScaledW, dims.ScaledH, spec.CellW, spec.CellH)
-		return targetW, targetH, true
+func computeZoomContentSize(srcW, srcH, canvasCols, canvasRows int, initialZoom string, spec V2Spec) (int, int, bool) {
+	switch initialZoom {
+	case "w":
+		renderW := canvasCols * spec.CellW
+		renderH := max(1, int(math.Round(float64(renderW*srcH*spec.AspectDen)/float64(srcW*spec.AspectNum))))
+		return renderW, renderH, true
+	case "h":
+		renderH := canvasRows * spec.CellH
+		renderW := max(1, int(math.Round(float64(renderH*srcW*spec.AspectNum)/float64(srcH*spec.AspectDen))))
+		return renderW, renderH, true
 	}
 
-	k := ParseZoomK(c.InitialZoom)
+	k := ParseZoomK(initialZoom)
 	if k <= 0 {
 		return 0, 0, false
 	}
-	targetCols := max(1, int(float64(srcW)/k+0.5))
-	targetRows := max(1, int(float64(srcH)/(2*k)+0.5))
+
+	colsFloat := float64(srcW) / k
+	rowsFloat := float64(srcH) / (2.0 * k)
+
+	targetCols := safeScaleInt(colsFloat)
+	targetRows := safeScaleInt(rowsFloat)
+
 	return targetCols * spec.CellW, targetRows * spec.CellH, true
+}
+
+func safeScaleInt(val float64) int {
+	if math.IsNaN(val) || val <= 0 {
+		return 1
+	}
+	if val > 1_000_000 {
+		return 1_000_000
+	}
+	return max(1, int(math.Ceil(val)))
 }

@@ -80,38 +80,135 @@ func TestPlanRender_DoomSextant(t *testing.T) {
 			t.Errorf("Pad = R:%d B:%d, want R:0 B:1", plan.PadRight, plan.PadBottom)
 		}
 	})
-}
 
-func TestPlanRender_QuadblockAndSparkline(t *testing.T) {
-	// 32x20 test image
-	quadSpec := NewV2CellRatio(2, 2, 2, 1)
-	sparkSpec := NewV2CellRatio(4, 8, 1, 1)
-
-	t.Run("quadblock width only -W 8", func(t *testing.T) {
+	t.Run("height only -H 67 aspect aligned", func(t *testing.T) {
 		c := TargetConstraints{
-			ExplicitCols: 8,
-			AspectMode:   "default",
+			ExplicitRows: 67,
+			AspectMode:   "aligned",
 		}
-		plan := PlanRender(32, 20, c, quadSpec)
-		if plan.CanvasCols != 8 {
-			t.Errorf("CanvasCols = %d, want 8", plan.CanvasCols)
+		plan := PlanRender(320, 200, c, s2Spec)
+		if plan.CanvasCols != 160 {
+			t.Errorf("CanvasCols = %d, want 160", plan.CanvasCols)
 		}
-		if plan.CanvasRows <= 0 {
-			t.Errorf("CanvasRows must be > 0, got %d", plan.CanvasRows)
+		if plan.CanvasRows != 67 {
+			t.Errorf("CanvasRows = %d, want 67", plan.CanvasRows)
+		}
+		if plan.RenderW != 320 || plan.RenderH != 200 {
+			t.Errorf("Render size = %dx%d, want 320x200 (source 1:1)", plan.RenderW, plan.RenderH)
+		}
+		if plan.PadBottom != 1 || plan.PadRight != 0 {
+			t.Errorf("Pad = R:%d B:%d, want R:0 B:1", plan.PadRight, plan.PadBottom)
 		}
 	})
 
-	t.Run("sparkline height only -H 10", func(t *testing.T) {
+	t.Run("width only -W 160 aspect aligned", func(t *testing.T) {
 		c := TargetConstraints{
-			ExplicitRows: 10,
-			AspectMode:   "default",
+			ExplicitCols: 160,
+			AspectMode:   "aligned",
 		}
-		plan := PlanRender(32, 20, c, sparkSpec)
-		if plan.CanvasRows != 10 {
-			t.Errorf("CanvasRows = %d, want 10", plan.CanvasRows)
+		plan := PlanRender(320, 200, c, s2Spec)
+		if plan.CanvasCols != 160 {
+			t.Errorf("CanvasCols = %d, want 160", plan.CanvasCols)
 		}
-		if plan.CanvasCols <= 0 {
-			t.Errorf("CanvasCols must be > 0, got %d", plan.CanvasCols)
+		if plan.CanvasRows != 67 {
+			t.Errorf("CanvasRows = %d, want 67", plan.CanvasRows)
+		}
+		if plan.RenderW != 320 || plan.RenderH != 200 {
+			t.Errorf("Render size = %dx%d, want 320x200 (source 1:1)", plan.RenderW, plan.RenderH)
+		}
+		if plan.PadBottom != 1 || plan.PadRight != 0 {
+			t.Errorf("Pad = R:%d B:%d, want R:0 B:1", plan.PadRight, plan.PadBottom)
+		}
+	})
+}
+
+func TestPlanRender_ZoomPreservesHardCanvas(t *testing.T) {
+	// 32x20 halfblock source
+	halfSpec := NewV2CellRatio(1, 2, 1, 1)
+
+	t.Run("-W 8 -H 3 --zoom 1 preserves 8x3 canvas", func(t *testing.T) {
+		c := TargetConstraints{
+			ExplicitCols: 8,
+			ExplicitRows: 3,
+			InitialZoom:  "1",
+		}
+		plan := PlanRender(32, 20, c, halfSpec)
+		if plan.CanvasCols != 8 || plan.CanvasRows != 3 {
+			t.Errorf("Canvas = %dx%d, want 8x3", plan.CanvasCols, plan.CanvasRows)
+		}
+		if plan.RenderW != 32 || plan.RenderH != 20 {
+			t.Errorf("Render = %dx%d, want 32x20", plan.RenderW, plan.RenderH)
+		}
+	})
+
+	t.Run("-W 8 -H 3 --zoom w preserves 8x3 canvas", func(t *testing.T) {
+		c := TargetConstraints{
+			ExplicitCols: 8,
+			ExplicitRows: 3,
+			InitialZoom:  "w",
+		}
+		plan := PlanRender(32, 20, c, halfSpec)
+		if plan.CanvasCols != 8 || plan.CanvasRows != 3 {
+			t.Errorf("Canvas = %dx%d, want 8x3", plan.CanvasCols, plan.CanvasRows)
+		}
+		if plan.RenderW != 8 {
+			t.Errorf("RenderW = %d, want 8", plan.RenderW)
+		}
+	})
+
+	t.Run("-W 8 -H 3 --zoom h preserves 8x3 canvas", func(t *testing.T) {
+		c := TargetConstraints{
+			ExplicitCols: 8,
+			ExplicitRows: 3,
+			InitialZoom:  "h",
+		}
+		plan := PlanRender(32, 20, c, halfSpec)
+		if plan.CanvasCols != 8 || plan.CanvasRows != 3 {
+			t.Errorf("Canvas = %dx%d, want 8x3", plan.CanvasCols, plan.CanvasRows)
+		}
+		if plan.RenderH != 6 {
+			t.Errorf("RenderH = %d, want 6 (3 rows * 2 cellH)", plan.RenderH)
+		}
+	})
+
+	t.Run("extreme small zoom 1e-300 does not overflow", func(t *testing.T) {
+		c := TargetConstraints{
+			InitialZoom: "1e-300",
+		}
+		plan := PlanRender(32, 20, c, halfSpec)
+		if plan.CanvasCols <= 0 || plan.CanvasRows <= 0 {
+			t.Errorf("Canvas dimensions must be positive, got %dx%d", plan.CanvasCols, plan.CanvasRows)
+		}
+		if plan.RenderW <= 0 || plan.RenderH <= 0 {
+			t.Errorf("Render dimensions must be positive, got %dx%d", plan.RenderW, plan.RenderH)
+		}
+	})
+}
+
+func TestPlanRender_EdgeCases(t *testing.T) {
+	halfSpec := NewV2CellRatio(1, 2, 1, 1)
+
+	t.Run("zero source size", func(t *testing.T) {
+		c := TargetConstraints{ExplicitCols: 80, ExplicitRows: 24}
+		plan := PlanRender(0, 0, c, halfSpec)
+		if plan.CanvasCols != 80 || plan.CanvasRows != 24 {
+			t.Errorf("Canvas = %dx%d, want 80x24", plan.CanvasCols, plan.CanvasRows)
+		}
+	})
+
+	t.Run("negative source size", func(t *testing.T) {
+		c := TargetConstraints{ExplicitCols: 80, ExplicitRows: 24}
+		plan := PlanRender(-10, -5, c, halfSpec)
+		if plan.CanvasCols != 80 || plan.CanvasRows != 24 {
+			t.Errorf("Canvas = %dx%d, want 80x24", plan.CanvasCols, plan.CanvasRows)
+		}
+	})
+
+	t.Run("fallback terminal bounds", func(t *testing.T) {
+		c := TargetConstraints{TermCols: 80, TermRows: 24}
+		plan := PlanRender(160, 100, c, halfSpec)
+		if plan.CanvasCols > 80 || plan.CanvasRows > 24 {
+			t.Errorf("Plan dimensions (%dx%d) exceed terminal fallback 80x24", plan.CanvasCols, plan.CanvasRows)
 		}
 	})
 }
