@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"io"
 	"image"
 	"image/color"
 	"os"
@@ -968,6 +969,109 @@ func equalPixelRows(img image.Image, y0, y1 int) bool {
 		}
 	}
 	return true
+}
+
+func TestCLIDoom1S2Render(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "pad 0,1",
+			args: []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--pad", "0,1"},
+		},
+		{
+			name: "aspect aligned",
+			args: []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--aspect", "aligned"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := New()
+			cmd.SetArgs(tc.args)
+			outR, outW, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("os.Pipe: %v", err)
+			}
+			oldStdout := os.Stdout
+			os.Stdout = outW
+
+			outChan := make(chan []byte)
+			go func() {
+				outBytes, _ := io.ReadAll(outR)
+				outChan <- outBytes
+			}()
+
+			execErr := cmd.Execute()
+
+			outW.Close()
+			os.Stdout = oldStdout
+
+			if execErr != nil {
+				t.Fatalf("cmd.Execute error: %v", execErr)
+			}
+
+			outBytes := <-outChan
+			lines := strings.Split(strings.TrimSuffix(string(outBytes), "\n"), "\n")
+			if len(lines) != 67 {
+				t.Errorf("got %d lines, want 67 lines", len(lines))
+			}
+		})
+	}
+}
+
+func TestDoom1CustomS2RenderGolden(t *testing.T) {
+	orig, err := halfblock.LoadImage("assets/doom1.png")
+	if err != nil {
+		t.Fatalf("LoadImage: %v", err)
+	}
+	golden := goldenLoad(t, "testdata/custom/doom1/render_six_160x67.png")
+	if golden == nil {
+		t.Fatalf("failed to load custom doom1 golden")
+	}
+
+	rc, err := parseRenderMode("s2")
+	if err != nil {
+		t.Fatalf("parseRenderMode(s2): %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		pad    string
+		aspect string
+	}{
+		{name: "pad 0,1", pad: "0,1", aspect: "default"},
+		{name: "aspect aligned", pad: "", aspect: "aligned"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			img := orig
+			if tc.pad != "" {
+				padCols, padRows, err := parsePadSpec(tc.pad)
+				if err != nil {
+					t.Fatalf("parsePadSpec: %v", err)
+				}
+				img = padSourceImage(img, padCols, padRows)
+			}
+
+			prepared, err := prepareExplicitGridImage(img, 160, 67, rc, tc.aspect)
+			if err != nil {
+				t.Fatalf("prepareExplicitGridImage: %v", err)
+			}
+
+			cells := renderedCellSize(prepared, rc)
+			if cells.Cols != 160 || cells.Rows != 67 {
+				t.Errorf("got cells %dx%d, want 160x67", cells.Cols, cells.Rows)
+			}
+
+			rendered := goldenNativeRenderToImage(prepared, rc)
+			if !goldenEqual(rendered, golden) {
+				t.Errorf("%s: rendered image differs from golden render_six_160x67.png", tc.name)
+			}
+		})
+	}
 }
 
 func itoa(n int) string {

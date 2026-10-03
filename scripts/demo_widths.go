@@ -72,7 +72,7 @@ func imageName(path string) string {
 }
 
 func render(bin, path, modeFlag string, w int) []string {
-	out, err := exec.Command(bin, path, "-m", modeFlag, fmt.Sprintf("-w=%d", w)).Output()
+	out, err := exec.Command(bin, path, "-m", modeFlag, fmt.Sprintf("-W=%d", w)).Output()
 	if err != nil {
 		return []string{"(err)"}
 	}
@@ -95,7 +95,7 @@ func render(bin, path, modeFlag string, w int) []string {
 func renderAt(bin, path, modeFlag string, offsetSec float64, w int) []string {
 	rangeArg := fmt.Sprintf("%.3fs:", offsetSec)
 	out, err := exec.Command(bin, path, "-m", modeFlag,
-		fmt.Sprintf("-w=%d", w), "--range", rangeArg).Output()
+		fmt.Sprintf("-W=%d", w), "--range", rangeArg).Output()
 	if err != nil {
 		return []string{"(err)"}
 	}
