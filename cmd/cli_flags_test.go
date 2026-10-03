@@ -55,6 +55,18 @@ func TestValidateCommonFlags(t *testing.T) {
 			wantAspectNorm: "aligned",
 		},
 		{
+			name:           "valid aspect contain",
+			aspect:         "contain",
+			wantErr:        false,
+			wantAspectNorm: "contain",
+		},
+		{
+			name:           "valid aspect fit",
+			aspect:         "fit",
+			wantErr:        false,
+			wantAspectNorm: "fit",
+		},
+		{
 			name:          "invalid aspect",
 			aspect:        "bogus",
 			wantErr:       true,

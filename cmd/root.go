@@ -154,7 +154,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
 	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
-	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned|contain")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -275,7 +275,7 @@ func NewPlay() *cobra.Command {
 	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
 	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
-	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned|contain")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -344,7 +344,7 @@ func NewBrowse() *cobra.Command {
 	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
 	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
-	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned|contain")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -442,10 +442,10 @@ func validateCommonFlags(width, height int, aspect, initialZoom, pad *string) er
 	}
 	normAspect := strings.ToLower(strings.TrimSpace(*aspect))
 	switch normAspect {
-	case "", "default", "aligned":
+	case "", "default", "aligned", "contain", "fit":
 		*aspect = normAspect
 	default:
-		return fmt.Errorf("unknown --aspect %q; valid: default, aligned", *aspect)
+		return fmt.Errorf("unknown --aspect %q; valid: default, aligned, contain", *aspect)
 	}
 	if *initialZoom != "" {
 		normZoom := strings.ToLower(strings.TrimSpace(*initialZoom))
