@@ -182,7 +182,8 @@ Concrete `3x3` examples (6×3 internal grid per terminal cell):
 Doom at widths 107 and 160 still yields 45 and 67 rows. `six` at width 160 still repeats rows 2× and yields 67 rows. Too-small widths/heights retain the same aspect formula and shrink with nearest neighbor. `TargetConstraints.PixelPolicy` receives the loaded fractional limits from the CLI; the planner stays pure. Zero limits (including a missing policy file) allow only exact integer-repeat matches, without hardcoded spec fallbacks. A malformed existing policy returns a descriptive loader error.
 
 Run `scripts/demo_aspect.sh` to compare the current `default`, `aligned` and
-`pixel` behaviors on Doom and the vacation photo at widths 12, 54 and 110.
+`pixel` behaviors on Doom at widths 12, 54, 107, 110 and 160, and the vacation
+photo at widths 12, 54 and 110 (24 cases total).
 Each case prints its caption and command, then waits for Enter before rendering;
 `q` quits. Output remains in scrollback for comparison.
 - `--aspect default / fit / contain`: Square-Pixel Font Correction. Treats source pixels as standard $1:1$ square pixels and applies terminal font aspect ratio correction ($1:2$ cell ratio), scaling to continuous display height $\text{Rows} = \operatorname{round}\left(\frac{\text{Cols} \cdot \text{SrcH}}{2 \cdot \text{SrcW}}\right)$ (yielding 50 rows for $320 \times 200$ at 160 columns, 34 rows at 107 columns).
