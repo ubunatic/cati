@@ -62,10 +62,29 @@ Committed work since the audit (`4877f2c..875f311`, issue 075 M2–M4, 077, 078,
 
 ## 3. Disposition & Verification Plan
 
-1. Re-check each candidate and its owning ticket. Record **accept**, **defer**, **exclude**, or **already tracked**, with rationale and remaining decisions. The recommendations above are not final migration approvals.
-2. Prioritize confirmed shadow/fidelity gaps (input, settings/controls, UI content) before new policy surfaces. Reuse 004, 025, 057, and 075 for existing scope; bound other follow-ups by owner/consumer rather than file extension.
-3. For accepted implementation, update YAML, JSON Schema, loader, consumer, and integrity tests together. Verify schema conformance, loader fidelity, handler completeness, and consumption. Tests must detect changed/removed spec values, not confirm the current literal twice. Distinguish missing-file degradation from present-but-invalid content; do not add mirror fallback tables.
-4. Preserve user overrides, public APIs, command-specific behavior, and structural-key exceptions. If render geometry/algorithms change, follow `docs/RenderingBugPlaybook.md`, add golden PNG metadata, and update the rendering evergreen within that implementation's scope.
-5. For implementation, run relevant package/CLI and tagged viewer/browser tests, schema validation via actual repository test/tool support, `go vet ./...`, `make install`, and required preflight checks. Do not assume the illustrative `make validate-spec` target in the bundled guide exists here.
+Re-checked at HEAD `6ca59d5` on 2026-10-03. Dispositions are audit decisions, not blanket migration approval.
+
+| Candidate | Disposition | Rationale / boundary |
+|---|---|---|
+| A — Settings defaults | **Accept** | Go seeds height/jobs/frames differently from YAML, and six values repeat in config/controls. Make runtime defaults canonical and preserve user overrides. |
+| A — Partial controls consumption | **Accept** | Go fixes inventory/order/types and fallback bounds; loaded bindings/defaults are partly unused. Consume declared control metadata and test add/remove/change fidelity. |
+| A — Input shadows/silent degradation | **Accept** | `DefaultSpec` mirrors aliases/protocol/tokenizer data and malformed content restores tokenizer rules. Missing spec should yield raw-key behavior without shadows; present-invalid must error. |
+| A — Input declarations not consumed | **Accept** | Mouse sequences and `btn_no_button` are ignored; portable OS signal registration remains Go-owned and needs explicit treatment. |
+| A — UI content/style shadows | **Accept** | About fallback prose and style seed values duplicate `about.yaml`/`style.yaml`; retain graceful missing-spec behavior without duplicate content. |
+| A — Button theme tokens | **Already tracked** | Issue [004 §C](004-spec-loose-ends.md#c-themeyaml-style-tokens--stored-but-not-applied) owns applying declared theme tokens. |
+| B — CLI inventory/defaults/help/completion | **Defer** | Stable metadata may merit spec ownership, but command-specific contract needs design; CLI inventory work also owns `cmd/root.go`. |
+| B — Zoom policy/shadows | **Defer** | Remove-vs-declare strategy thresholds needs an owner decision; named executable strategies may remain Go-owned. |
+| B — Accepted option tokens/crop alignment | **Defer** | Ownership boundary and domain spec are undecided; examples need not enumerate numeric grammar. |
+| B — Playback fallback rates | **Defer** | 15 FPS and 24 FPS are distinct route defaults; intent must be decided before unification. |
+| B — Input display vocabulary | **Defer** | Stable labels may merit a spec, but library API ownership needs design. |
+| B — SVG unconstrained raster default | **Exclude** | 2048 is a documented library/resource default only when both target dimensions are unconstrained, not a universal product ceiling. |
+| B2 — Aspect-mode table | **Already in progress** | Another developer owns aspect-mode spec work; do not duplicate it here. |
+| B2 — CLI inventory | **Defer** | Same command-specific contract decision as the §B CLI candidate. |
+| B2 — Playback fallback rates | **Defer** | Same 15/24 FPS route decision as the §B playback candidate. |
+| C — Renderer registry omissions | **Exclude as stale** | Current `render_modes.yaml` includes both sparkline renderer entries and integrity coverage recognizes them. |
+| C — Experimental filtering | **Already tracked** | Issue [057](057-honour-spec-experimental-render-modes-across-mode-consumers.md) owns the all-mode consumer audit. |
+| C — Historical geometry references to 075 | **Historical/closed** | Issue 075 is closed; new geometry scope needs a current owner rather than reviving its links. |
+
+Prioritize accepted shadow/fidelity gaps as bounded follow-ups: input, settings/controls, then UI. For each accepted implementation, update YAML/schema/loader/consumer/tests together where the contract changes; tests must prove changed spec values affect behavior. Keep missing-file degradation distinct from invalid-present errors. Preserve user overrides, public APIs, command-specific behavior, and structural-key exceptions. Run relevant package/CLI tests, `go vet ./...`, `go test ./...`, and `make install`; use repository-supported schema validation and do not assume `make validate-spec` exists.
 
 **Audit acceptance:** Every retained candidate has evidence, a strength rationale, an owner or ownership question, file/test hints, and a disposition. Remove stale findings rather than converting them into work; synchronize the issue index. This refinement does not implement fixes, execute behavioral probes, or certify an exhaustive repository-wide audit.
