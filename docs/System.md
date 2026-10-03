@@ -295,9 +295,12 @@ The CLI render geometry pipeline uses a unified derivation model across static r
    - **Both `-W` and `-H`**: Establishes a fixed bounding box $(W, H)$ and pads content to fill the requested canvas.
    - **Unconstrained**: Fits within available terminal bounds without padding the canvas.
 
-3. **Subcell Alignment & Source Padding (`--aspect aligned`, `--pad`)**:
-   - `--pad <cols>,<rows>` prepends/appends transparent pixel rows or columns before rendering.
-   - `--aspect aligned` retains 1:1 source pixels when the source matches within subcell tolerance ($< C_w, < C_h$) of the target grid and transparently pads incomplete mode cells without downsampling blur.
+3. **Aspect Modes & Subcell Alignment (`--aspect`)**:
+   - **Square-Pixel Font Correction (`default`, `contain`, `fit`)**: Assumes source pixels are $1:1$ squares and applies terminal font aspect ratio correction ($1:2$ cell ratio) so physical geometry remains square on screen:
+     $$\text{Display Height in Cells} = \max\left(1, \operatorname{round}\left(\frac{\text{Cols} \times \text{SrcH}}{2 \times \text{SrcW}}\right)\right)$$
+   - **Mode-Native Subcell Lattice (`aligned`)**: Assumes source pixels map directly to the active mode's discrete subcell lattice $(C_w, C_h)$. Preserves $1:1$ pixel art (such as DOS $320 \times 200$ VGA buffers) and integer multiples ($k_x, k_y$) without resampling blur, padding incomplete edge cells transparently.
+   - **Explicit Dual Constraints (`-W <W> -H <H>`)**: Fills the exact requested $(W, H)$ cell grid, applying subcell snapping when content fits within subcell tolerance ($< C_w, < C_h$).
+   - **`--pad <cols>,<rows>`**: Prepends/appends transparent pixel rows or columns before rendering.
 
 ### Quality Benchmarking & Two-Phase Execution (`cati modes`)
 

@@ -159,6 +159,10 @@ This keeps zoom semantics independent of the glyph algorithm: at `--zoom=1`,
 a 4×4 source renders as 4×2 terminal cells in halfblock, quad, spark, sextant,
 and combined modes. See `TestAllRenderModesZoomOneSmallSquareUseCompleteCells`.
 
+**Aspect Modes: Subcell Lattice vs. Square-Pixel Correction.**
+- `--aspect aligned`: Treats source pixels as discrete subcell units within the mode's native subcell lattice $(C_w, C_h)$. Integer scaling factors ($k_x, k_y$) scale proportional to the mode's subcell resolution relative to base sextant ($2\times 3$), preserving 1:1 pixel art (such as Doom $320 \times 200$ VGA buffer at 160 cols $\times$ 67 rows in $2\times 3$, $3\times 3$, and $2\times 6$ modes) without resampling blur or distortion.
+- `--aspect default / fit / contain`: Treats source pixels as standard $1:1$ square pixels and applies terminal font aspect ratio correction ($1:2$ cell ratio), scaling to continuous display height $\text{Rows} = \operatorname{round}\left(\frac{\text{Cols} \cdot \text{SrcH}}{2 \cdot \text{SrcW}}\right)$ (yielding 50 rows for $320 \times 200$ at 160 columns).
+
 ---
 
 ## 3. Pixel Scanning Traversal & Pitfalls
