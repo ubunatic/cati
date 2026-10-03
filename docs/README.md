@@ -11,7 +11,7 @@ Welcome to the Cati developer documentation. The following resources cover our p
 *   [Spec System — Authoritative Reference](Spec.md) — Spec-as-code philosophy, file map, key dispatch pipeline, quality invariants, agent rules, integrity tests, and change checklist. **Read this before touching any `spec/` file or its Go loaders.**
 *   [Spec System & Browser Design](Design.md) — The `spec/` YAML-driven config system: template engine (`renderTpl`/`if()`), color system, button/label/view pipeline, full hint-bar variable table (`meta.*`, `ssim`, `last_key`, …), scrollbar, dense-mode grid, split-screen preview.
 *   [Quad-Block Pixel Art](QuadPixelArt.md) — Half-block vs. quad-block layout math, the 2× horizontal stretch aspect-ratio correction, neighbour-aware colour quantisation, and the quadrant character lookup table.
-*   [Sparkline Pixel Art](SparklinePixelArt.md) — Sparkline layout math, horizontal and vertical orientation, optimal-split character and color selection, and the test helper suite.
+*   [Sparkline Pixel Art](SparklinePixelArt.md) — Sparkline layout math, glyph/color fitting, pixel aspect snapping and padding policy, concrete geometry examples, and the interactive aspect demo.
 *   [Glyph Edge Artifacts & 1D Bar Dynamics](GlyphEdgeArtifacts.md) — Analysis of 1D bar/sparkline edge dynamics on curved contours (hairlines, thin ears, horns) and 2D set comparison.
 *   [Image Quality & Error Metrics](ImageQualityMetrics.md) — Comprehensive reference on photographic (SSIM, PSNR, LPIPS, Butteraugli, HaarPSI) and pixel art/terminal error metrics (Oklab, CIEDE2000, Sobel edge continuity, blockiness, 2-color cell optimization).
 *   [Glossary & Metric Taxonomy](Glossary.md) — Comprehensive taxonomy of error metrics (End-to-End $E_{\text{src}}$ vs Fitting $E_{\text{fit}}$), spatial geometry, glyph sets, and smart rendering terms.
@@ -20,7 +20,7 @@ Welcome to the Cati developer documentation. The following resources cover our p
 *   [Go Library API](GoLibrary.md) — Import and use Cati's high-performance renderers in your own Go applications and TUIs.
 *   [Go Conventions](Go.md) — Development guidelines for writing Go code, state management, error handling, CLI verbs, and testing.
 *   [Make Conventions](Make.md) — Standardized Makefile structures, target phony declarations using the sentinel `⚙️` trick, and self-documenting rules.
-*   [Testing](Testing.md) — Daily test command, opt-in player/browser/integration suites, benchmarks, preflight checks, and golden-image testing.
+*   [Testing](Testing.md) — Daily test command, opt-in player/browser/integration suites, benchmarks, preflight checks, golden images, and interactive aspect-demo verification.
 
 ## Studies
 

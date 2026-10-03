@@ -8,14 +8,25 @@
 
 ---
 
-## 1. Problem
+## Current state
+
+Pixel sizing is resolved: spec-owned 10% distortion/padding limits, one-cell
+derived-axis limit, and nearest-neighbor resizing protect small images and
+permit uniform repeats with padding. The interactive comparison demo is ready
+for visual inspection. This issue remains open only for the `aligned` downscale
+fallback decision. Glyph fitting and terminal calibration were deferred.
+
+## 1. Original problem
 
 `internal/viewgeom.PlanRender` single-dimension `aligned`/`pixel` paths (doom1.png 320×200):
 
 | Mode | `-W` | aligned | pixel | Note |
 |---|---|---|---|---|
 | quad | 160 | 67 | **100** | pixel: ideal 0.67× vertical rounds to 1× → +50% stretch |
-| 2x3/six/quad/half | 107 | 33–34 | 33–34 | `W·CellW < srcW` → no integer k ≥ 1, silently falls back to square-pixel `fitDimsRatio` (blends) |
+| 2x3/six/quad/half | 107 | 33–34 | 33–34 | `W·CellW < srcW` → no integer k ≥ 1, silently falls back to square-pixel `fitDimsRatio` |
+
+The fallback changes the aspect convention; blending depends on the selected
+prescaler. Default nearest-neighbor sampling itself does not blend colors.
 
 ## 2. Original decisions
 
@@ -24,7 +35,9 @@
 
 ## 3. Resume point
 
-Logic lives in the `ExplicitCols>0 && ExplicitRows==0` and mirrored `ExplicitRows` branches of `PlanRender`. Add cases to `TestPlanRender_Doom3x3` / `cmd/root_test.go` `TestCLIDoom1S2Render`.
+Decide whether `aligned` should retain square-pixel fit for inputs too narrow
+for an integer repeat, or use the same reference-lattice aspect as `pixel`.
+The pixel paths, regression tests and policy loader are already implemented.
 
 ## 4. Pixel decision (2026-10-03)
 
@@ -34,17 +47,17 @@ so the continuous vertical extent is `320·3·200·2/(6·320·3) = 66.67` pixels
 Clamping vertical repeats to at least 1 forced 200 pixels: 3× the intended height.
 Width 107 similarly forced 200 instead of 133.33 pixels; width 160 correctly uses 200.
 
-Pixel now accepts whole-pixel repeats only within less than one mode cell of the
-intended extent, rather than imposing a percentage policy. Otherwise it uses
+The first fix accepted whole-pixel repeats only within less than one mode cell
+of the intended extent, before the percentage refinement in §5. Otherwise it used
 nearest-neighbor scaling. The same rule limits blank padding on the constrained
 axis. Too-small widths/heights use nearest-neighbor downsampling with the same
 aspect formula, and pixel aliases override pyramid sampling to prevent blending.
 Expected 3x3 rows: width 53 → 22, 54 → 23, 107 → 45, 160 → 67.
 Quad at width 160 → 67 rows; six at width 160 remains 67 rows.
 
-Existing goldens are unaffected: they use renderer fit geometry or explicit
-native targets, not this single-dimension pixel path. Add a dedicated pixel
-sampling golden with algorithm and sizing metadata.
+Existing goldens were unaffected: they use renderer fit geometry or explicit
+native targets, not this single-dimension pixel path. A dedicated pixel sampling
+golden was added with algorithm and sizing metadata.
 
 Remaining open decision: `aligned` still uses the existing square-pixel fit fallback
 when a source cannot fit at an integer upscale. Its downscale policy is unchanged.
@@ -83,9 +96,9 @@ Before/after proofs:
   use 4.76% padding. New content 960×200, canvas 160×70.
 - Doom width 54 stays 320×67 plus right 4/bottom 2, canvas 54×23.
 
-Existing goldens should remain unchanged: the old 12×12 width-3 pixel fixture
+Existing goldens remained unchanged: the old 12×12 width-3 pixel fixture
 needs 33.33% padding to use an integer horizontal repeat, so it still uses 18×6
-content. Add separate annotated small/padded pixel goldens; no renderer or glyph
+content. Separate annotated small/padded pixel goldens were added; no renderer or glyph
 selection algorithm changes. The aligned downscale decision remains open.
 
 Validation: `HTO=0 make test` passed in both fast and reference modes; all existing
@@ -97,3 +110,24 @@ loader fidelity, missing-file behavior, and invalid/unknown/non-finite input.
 `make preflight` passed, installed updated binaries, and verified demo renders.
 Live checks: widths 54/107/110/119/160 emit 23/45/45/50/67 rows; height 70 emits
 70 rows with 160 columns.
+
+## 6. Interactive visual inspection
+
+`scripts/demo_aspect.sh` calls the installed `cati` and compares current
+`default`/`aligned`/`pixel` behavior on Doom at widths 12/54/107/110/160 and
+the vacation photo at widths 12/54/110 (24 cases). It does not recreate old
+binaries. Captions and exact commands appear below each render; dashed lines
+separate cases, and all output remains in scrollback. Up/Down or `k`/`j` move
+between cases, Enter advances, and `q`/EOF exits. Bounds stop navigation without
+exiting, so the final case remains available for backward inspection.
+
+All real renders, key sequence variants, boundaries and actual child-PTY
+navigation passed. Each script revision passed preflight. The user will report
+visible gaps by case number/command; automated success does not establish visual
+acceptance. See `docs/Testing.md` for test scope and the Harnez PTY workaround.
+
+The doc review also corrected an overstatement about physical aspect:
+`aligned`/`pixel` use the 2:3 reference convention when applicable. Doom at width
+160 produces 67 lattice rows; physically 1:2 terminal cells with square source
+pixels would require 50. Prescaling preserves sampled colors, while later glyph
+fitting may still approximate them. Those separate improvements remain deferred.
