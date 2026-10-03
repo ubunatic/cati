@@ -58,7 +58,7 @@
           "required": ["prefix", "press_suffix", "release_suffix", "enable_button", "enable_motion",
                        "disable_button", "disable_motion",
                        "btn_button_mask", "btn_shift_mask", "btn_meta_mask", "btn_ctrl_mask",
-                       "btn_motion_flag", "btn_scroll_flag"],
+                       "btn_motion_flag", "btn_scroll_flag", "btn_no_button"],
           "properties": {
             "prefix":          { "type": "string" },
             "press_suffix":    { "type": "string" },
@@ -72,7 +72,8 @@
             "btn_meta_mask":   { "type": "integer" },
             "btn_ctrl_mask":   { "type": "integer" },
             "btn_motion_flag": { "type": "integer" },
-            "btn_scroll_flag": { "type": "integer" }
+            "btn_scroll_flag": { "type": "integer" },
+            "btn_no_button":   { "type": "integer" }
           }
         },
         "tokenizer": {
@@ -88,7 +89,7 @@
                 "required": ["name", "match", "emit"],
                 "properties": {
                   "name":       { "type": "string" },
-                  "match":      { "type": "string", "enum": ["starts_with", "any"] },
+                  "match":      { "type": "string", "enum": ["starts_with", "utf8_lead", "any"] },
                   "prefix":     { "type": "string" },
                   "scan_until": { "type": "string", "description": "Set of terminator bytes for scan" },
                   "scan_class": {

@@ -156,7 +156,10 @@ func TestSpecRenderModesIntegrity(t *testing.T) {
 // TestSpecButtonsLoad verifies the button key-def loader returns a populated map
 // with every entry having a non-empty action.
 func TestSpecButtonsLoad(t *testing.T) {
-	inputSpec, _ := input.Load(fs.FS(spec.FS))
+	inputSpec, err := input.Load(fs.FS(spec.FS))
+	if err != nil {
+		t.Fatalf("load input spec: %v", err)
+	}
 	defs := loadButtonKeyDefs(inputSpec)
 	if len(defs) == 0 {
 		t.Fatal("loadButtonKeyDefs() returned empty map — spec/buttons.yaml not readable?")
@@ -249,7 +252,10 @@ func TestSpecNoGoFallback(t *testing.T) {
 // TestSpecKeyResolve verifies that inputSpec.ResolveKeyAlias maps all documented
 // aliases to the expected terminal byte sequences.
 func TestSpecKeyResolve(t *testing.T) {
-	inputSpec, _ := input.Load(fs.FS(spec.FS))
+	inputSpec, err := input.Load(fs.FS(spec.FS))
+	if err != nil {
+		t.Fatalf("load input spec: %v", err)
+	}
 	cases := []struct{ alias, want string }{
 		{"<esc>", "\x1b"},
 		{"<bs>", "\x7f"},
@@ -276,7 +282,10 @@ func TestSpecKeyResolve(t *testing.T) {
 // TestSpecViewKeyMaps verifies that buildViewKeyMaps produces non-empty maps for
 // all views and that key→action entries are consistent with the spec.
 func TestSpecViewKeyMaps(t *testing.T) {
-	inputSpec, _ := input.Load(fs.FS(spec.FS))
+	inputSpec, err := input.Load(fs.FS(spec.FS))
+	if err != nil {
+		t.Fatalf("load input spec: %v", err)
+	}
 	defs := loadButtonKeyDefs(inputSpec)
 	keyRows := loadViewKeyRows()
 	maps := buildViewKeyMaps(keyRows, defs)

@@ -97,12 +97,9 @@ The `match` types in the tokenizer:
 ## 3. `internal/input` Package API
 
 ```go
-// Load parses spec/input.yaml from the given FS. Falls back to DefaultSpec() on error.
+// Load parses spec/input.yaml from the given FS. A missing file returns an
+// empty spec so input can be shown as raw keys; malformed present content errors.
 func Load(fsys fs.FS) (*Spec, error)
-
-// DefaultSpec returns a hardcoded baseline matching current terminal conventions.
-// Used as fallback if the YAML cannot be read at runtime.
-func DefaultSpec() *Spec
 
 // Tokenize splits a raw byte buffer into terminal event tokens using the spec's
 // ordered tokenizer rules. Each token is one complete event.
@@ -237,7 +234,7 @@ The `hexEscape` helper renders valid UTF-8 printable codepoints (ö, €) direct
 
 ## 8. Pitfalls
 
-- **`DefaultSpec()` must stay in sync with `spec/input.yaml`**: it's the fallback when the file cannot be read at runtime. Any new tokenizer rule or key alias added to the YAML should be reflected in `DefaultSpec()`.
+- **Missing versus invalid input spec**: a missing `input.yaml` yields an empty spec, so input remains raw and no protocol defaults are duplicated in Go. A present but malformed or incomplete file returns an error to the browser, viewer, and input-test callers. Ctrl-C remains an explicit input-test exit safeguard.
 - **`\x03` Ctrl-C is always hardcoded** in every keyboard handler as a last-resort quit safeguard, independent of the spec. Do not remove it even if the `quit` button's `<c-c>` key is loaded from spec.
 - **Tokenizer rule order matters**: `utf8_multibyte` must precede `any_char` or multi-byte chars are split. `sgr_mouse` must precede `csi_sequence` or the `\x1b[<` prefix gets misidentified.
 - **`scan_class: alpha_tilde`** for CSI sequences: scans until an alphabetic character or `~`. This correctly terminates `\x1b[5~` (PgUp) at `~` and `\x1b[A` at `A`.

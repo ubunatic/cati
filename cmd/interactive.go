@@ -822,7 +822,11 @@ func interactive(path string, initWidth, initHeight int, rc renderCfg, fullComp 
 
 func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, sharedInputs chan string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, viewKeyMaps map[string]map[string]string, inputSpec *input.Spec, fullComp bool, initialZoom string) error {
 	if inputSpec == nil {
-		inputSpec, _ = input.Load(fs.FS(spec.FS))
+		loadedInputSpec, loadErr := input.Load(fs.FS(spec.FS))
+		if loadErr != nil {
+			return fmt.Errorf("load input spec: %w", loadErr)
+		}
+		inputSpec = loadedInputSpec
 	}
 
 	orig, err := halfblock.LoadImage(path)
@@ -1162,7 +1166,11 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, tr T
 	defer cancel()
 
 	if inputSpec == nil {
-		inputSpec, _ = input.Load(fs.FS(spec.FS))
+		loadedInputSpec, loadErr := input.Load(fs.FS(spec.FS))
+		if loadErr != nil {
+			return fmt.Errorf("load input spec: %w", loadErr)
+		}
+		inputSpec = loadedInputSpec
 	}
 	if style == nil {
 		style = loadStyle()

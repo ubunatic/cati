@@ -890,7 +890,10 @@ type scrollDragState struct {
 func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bool, initialZoom string, jobs int) error {
 	cfg := loadConfig()
 	cfg.MaxJobs = resolveWorkerCount(jobs, cfg.MaxJobs)
-	inputSpec, _ := input.Load(fs.FS(spec.FS))
+	inputSpec, err := input.Load(fs.FS(spec.FS))
+	if err != nil {
+		return fmt.Errorf("load input spec: %w", err)
+	}
 	style := loadStyle()
 	labels := loadLabels()
 	for k, v := range loadButtons(style.BtnLeftCap, style.BtnRightCap) {

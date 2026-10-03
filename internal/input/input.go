@@ -2,10 +2,14 @@
 package input
 
 import (
+	"errors"
+	"fmt"
 	"io/fs"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"gopkg.in/yaml.v3"
 )
 
 // EventType classifies a decoded terminal input event.
@@ -23,28 +27,29 @@ const (
 
 // MouseEvent holds decoded SGR 1006 mouse event data.
 type MouseEvent struct {
-	Btn     int
-	Col     int
-	Row     int
-	Release bool
-	Button  int
-	Shift   bool
-	Meta    bool
-	Ctrl    bool
-	Motion  bool
-	Scroll  bool
+	Btn      int
+	Col      int
+	Row      int
+	Release  bool
+	Button   int
+	NoButton int
+	Shift    bool
+	Meta     bool
+	Ctrl     bool
+	Motion   bool
+	Scroll   bool
 }
 
 func (m MouseEvent) IsScroll() bool { return m.Scroll }
 
 // IsDrag reports a button-held drag: motion flag set, scroll flag clear, and a
-// real button (0–2) held. Button==3 in SGR means no button held → that is a
+// real button (0–2) held. Button==NoButton in SGR means no button held → that is a
 // pure move, not a drag.
-func (m MouseEvent) IsDrag() bool { return m.Motion && !m.Scroll && m.Button != 3 }
+func (m MouseEvent) IsDrag() bool { return m.Motion && !m.Scroll && m.Button != m.NoButton }
 
-// IsMove reports a pure mouse move with no button held (SGR button field == 3
+// IsMove reports a pure mouse move with no button held (SGR button field == NoButton
 // with the motion flag set, emitted only in all-motion tracking mode).
-func (m MouseEvent) IsMove() bool { return m.Motion && !m.Scroll && m.Button == 3 }
+func (m MouseEvent) IsMove() bool { return m.Motion && !m.Scroll && m.Button == m.NoButton }
 
 func (m MouseEvent) ScrollDir() int {
 	if m.Btn&1 == 0 {
@@ -84,76 +89,31 @@ type Spec struct {
 	mouseBtnCtrlMask   int
 	mouseBtnMotionFlag int
 	mouseBtnScrollFlag int
+	mouseBtnNoButton   int
+	mouseEnableButton  string
+	mouseEnableMotion  string
+	mouseDisableButton string
+	mouseDisableMotion string
 	tokenizerRules     []tokRule
 	terminalSeqs       map[string]EventType
 }
 
-// DefaultSpec returns a built-in Spec that matches the current hardcoded behaviour.
-// It does not require spec/input.yaml to be present.
-func DefaultSpec() *Spec {
-	s := &Spec{
-		keyAliases: map[string]string{
-			"esc":       "\x1b",
-			"escape":    "\x1b",
-			"bs":        "\x7f",
-			"backspace": "\x7f",
-			"cr":        "\x0d",
-			"enter":     "\x0d",
-			"return":    "\x0d",
-			"lf":        "\x0a",
-			"nl":        "\x0a",
-			"space":     " ",
-			"tab":       "\t",
-			"del":       "\x1b[3~",
-			"delete":    "\x1b[3~",
-			"up":        "\x1b[A",
-			"down":      "\x1b[B",
-			"right":     "\x1b[C",
-			"left":      "\x1b[D",
-			"pgup":      "\x1b[5~",
-			"pageup":    "\x1b[5~",
-			"pgdn":      "\x1b[6~",
-			"pagedown":  "\x1b[6~",
-			"home":      "\x1b[H",
-			"end":       "\x1b[F",
-			"f1":        "\x1bOP", "f2": "\x1bOQ", "f3": "\x1bOR", "f4": "\x1bOS",
-			"f5": "\x1b[15~", "f6": "\x1b[17~", "f7": "\x1b[18~", "f8": "\x1b[19~",
-			"f9": "\x1b[20~", "f10": "\x1b[21~", "f11": "\x1b[23~", "f12": "\x1b[24~",
-		},
-		ctrlPrefix:         "c-",
-		ctrlBaseChar:       'a',
-		ctrlBaseCode:       1,
-		mousePrefix:        "\x1b[<",
-		mousePressS:        "M",
-		mouseReleaseS:      "m",
-		mouseBtnButtonMask: 0x03,
-		mouseBtnShiftMask:  0x04,
-		mouseBtnMetaMask:   0x08,
-		mouseBtnCtrlMask:   0x10,
-		mouseBtnMotionFlag: 0x20,
-		mouseBtnScrollFlag: 0x40,
-		terminalSeqs: map[string]EventType{
-			"\x1b[I": EventFocus,
-			"\x1b[O": EventDefocus,
-		},
-		tokenizerRules: []tokRule{
-			{name: "sgr_mouse", matchType: "starts_with", prefix: "\x1b[<", scanUntil: "Mm", emit: EventMouse},
-			{name: "csi_sequence", matchType: "starts_with", prefix: "\x1b[", scanClass: "alpha_tilde", emit: EventKey},
-			{name: "bare_escape", matchType: "starts_with", prefix: "\x1b", emit: EventKey},
-			{name: "utf8_multibyte", matchType: "utf8_lead", emit: EventKey},
-			{name: "any_char", matchType: "any", emit: EventKey},
-		},
-	}
-	return s
-}
-
-// Load reads and parses spec/input.yaml from fsys. Falls back to DefaultSpec on error.
+// Load reads and parses spec/input.yaml from fsys. A missing file returns an
+// empty spec so callers can continue displaying raw input; malformed content
+// returns an error.
 func Load(fsys fs.FS) (*Spec, error) {
 	data, err := fs.ReadFile(fsys, "input.yaml")
 	if err != nil {
-		return DefaultSpec(), err
+		if errors.Is(err, fs.ErrNotExist) {
+			return &Spec{}, nil
+		}
+		return nil, fmt.Errorf("read input.yaml: %w", err)
 	}
-	return parse(string(data))
+	s, err := parse(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("parse input.yaml: %w", err)
+	}
+	return s, nil
 }
 
 // resolveEscapes replaces \xNN and \t notation in a string value read from YAML.
@@ -199,16 +159,32 @@ func indentLevel(line string) int {
 }
 
 func parse(data string) (*Spec, error) {
-	s := DefaultSpec()
-	s.keyAliases = map[string]string{}
-	s.terminalSeqs = map[string]EventType{}
-	s.tokenizerRules = nil
+	var document map[string]any
+	if err := yaml.Unmarshal([]byte(data), &document); err != nil {
+		return nil, fmt.Errorf("invalid YAML: %w", err)
+	}
+	inputDocument, ok := document["input"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("input spec must contain an input mapping")
+	}
+	if _, ok := inputDocument["key_aliases"].(map[string]any); !ok {
+		return nil, fmt.Errorf("input spec key_aliases must be a mapping")
+	}
+	tokenizer, ok := inputDocument["tokenizer"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("input spec tokenizer must be a mapping")
+	}
+	if _, ok := tokenizer["rules"].([]any); !ok {
+		return nil, fmt.Errorf("input spec tokenizer.rules must be a list")
+	}
+	s := &Spec{keyAliases: map[string]string{}, terminalSeqs: map[string]EventType{}}
 
 	lines := strings.Split(data, "\n")
 
 	section := ""    // top-level key under "input:"
 	subSection := "" // second-level key
 	inInput := false
+	seenTokenizer := false
 
 	// For list items in signals / terminal_sequences / tokenizer.rules
 	type listItem struct {
@@ -277,6 +253,18 @@ func parse(data string) (*Spec, error) {
 		if indent == 4 && strings.HasSuffix(trimmed, ":") && !strings.Contains(trimmed, " ") {
 			commitItem()
 			subSection = strings.TrimSuffix(trimmed, ":")
+			if section == "tokenizer" && subSection == "rules" {
+				seenTokenizer = true
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") {
+			commitItem()
+			curItem = &listItem{fields: map[string]string{}}
+			rest := strings.TrimPrefix(trimmed, "- ")
+			if kv := strings.SplitN(rest, ":", 2); len(kv) == 2 {
+				curItem.fields[strings.TrimSpace(kv[0])] = stripYAMLValue(kv[1])
+			}
 			continue
 		}
 
@@ -353,14 +341,25 @@ func parse(data string) (*Spec, error) {
 				if n, err := strconv.Atoi(val); err == nil {
 					s.mouseBtnScrollFlag = n
 				}
+			case "btn_no_button":
+				if n, err := strconv.Atoi(val); err == nil {
+					s.mouseBtnNoButton = n
+				}
+			case "enable_button":
+				s.mouseEnableButton = val
+			case "enable_motion":
+				s.mouseEnableMotion = val
+			case "disable_button":
+				s.mouseDisableButton = val
+			case "disable_motion":
+				s.mouseDisableMotion = val
 			}
 		}
 	}
 	commitItem()
 
-	// If no rules were parsed (malformed file), fall back to defaults.
-	if len(s.tokenizerRules) == 0 {
-		s.tokenizerRules = DefaultSpec().tokenizerRules
+	if !inInput || len(s.keyAliases) == 0 || !seenTokenizer || len(s.tokenizerRules) == 0 {
+		return nil, fmt.Errorf("input spec must define key_aliases and tokenizer.rules")
 	}
 
 	return s, nil
@@ -475,7 +474,7 @@ func (s *Spec) Classify(tok string) Event {
 	if et, ok := s.terminalSeqs[tok]; ok {
 		return Event{Type: et, Token: tok}
 	}
-	if strings.HasPrefix(tok, s.mousePrefix) {
+	if s.mousePrefix != "" && strings.HasPrefix(tok, s.mousePrefix) {
 		if m, ok := s.ParseMouse(tok); ok {
 			return Event{Type: EventMouse, Token: tok, Mouse: m}
 		}
@@ -485,7 +484,7 @@ func (s *Spec) Classify(tok string) Event {
 
 // ParseMouse decodes an SGR 1006 mouse event token.
 func (s *Spec) ParseMouse(tok string) (MouseEvent, bool) {
-	if !strings.HasPrefix(tok, s.mousePrefix) {
+	if s.mousePrefix == "" || !strings.HasPrefix(tok, s.mousePrefix) {
 		return MouseEvent{}, false
 	}
 	body := tok[len(s.mousePrefix):]
@@ -510,16 +509,17 @@ func (s *Spec) ParseMouse(tok string) (MouseEvent, bool) {
 		return MouseEvent{}, false
 	}
 	m := MouseEvent{
-		Btn:     btn,
-		Col:     col,
-		Row:     row,
-		Release: release,
-		Button:  btn & s.mouseBtnButtonMask,
-		Shift:   btn&s.mouseBtnShiftMask != 0,
-		Meta:    btn&s.mouseBtnMetaMask != 0,
-		Ctrl:    btn&s.mouseBtnCtrlMask != 0,
-		Motion:  btn&s.mouseBtnMotionFlag != 0,
-		Scroll:  btn&s.mouseBtnScrollFlag != 0,
+		Btn:      btn,
+		Col:      col,
+		Row:      row,
+		Release:  release,
+		Button:   btn & s.mouseBtnButtonMask,
+		Shift:    btn&s.mouseBtnShiftMask != 0,
+		Meta:     btn&s.mouseBtnMetaMask != 0,
+		Ctrl:     btn&s.mouseBtnCtrlMask != 0,
+		Motion:   btn&s.mouseBtnMotionFlag != 0,
+		Scroll:   btn&s.mouseBtnScrollFlag != 0,
+		NoButton: s.mouseBtnNoButton,
 	}
 	return m, true
 }
@@ -666,13 +666,13 @@ func (s *Spec) EventName(ev Event) string {
 }
 
 // MouseEnableButton returns the sequence to enable button tracking.
-func (s *Spec) MouseEnableButton() string { return "\x1b[?1002h\x1b[?1006h" }
+func (s *Spec) MouseEnableButton() string { return s.mouseEnableButton }
 
 // MouseEnableMotion returns the sequence to enable full motion tracking.
-func (s *Spec) MouseEnableMotion() string { return "\x1b[?1003h\x1b[?1006h" }
+func (s *Spec) MouseEnableMotion() string { return s.mouseEnableMotion }
 
 // MouseDisableButton returns the sequence to disable button tracking.
-func (s *Spec) MouseDisableButton() string { return "\x1b[?1002l\x1b[?1006l" }
+func (s *Spec) MouseDisableButton() string { return s.mouseDisableButton }
 
 // MouseDisableMotion returns the sequence to disable full motion tracking.
-func (s *Spec) MouseDisableMotion() string { return "\x1b[?1003l\x1b[?1006l" }
+func (s *Spec) MouseDisableMotion() string { return s.mouseDisableMotion }

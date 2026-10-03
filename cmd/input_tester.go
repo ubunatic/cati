@@ -17,8 +17,10 @@ import (
 )
 
 func runInputTest() error {
-	// Load spec; fall back to defaults silently.
-	inputSpec, _ := input.Load(fs.FS(spec.FS))
+	inputSpec, err := input.Load(fs.FS(spec.FS))
+	if err != nil {
+		return fmt.Errorf("load input spec: %w", err)
+	}
 
 	fd := int(os.Stdin.Fd())
 	oldState, err := term.MakeRaw(fd)
