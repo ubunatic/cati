@@ -10,7 +10,7 @@ type TargetConstraints struct {
 	ExplicitRows int    // From -H (0 = unconstrained)
 	TermCols     int    // From terminal width
 	TermRows     int    // From terminal height
-	AspectMode   string // "default" or "aligned"
+	AspectMode   string // Source mapping mode, including "aligned" and "pixel"
 	InitialZoom  string // "0", "1", "w", "h", etc.
 }
 
@@ -42,6 +42,28 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 	hasAlignedPad := false
 
 	switch {
+	case IsPixelAspect(c.AspectMode) && c.ExplicitCols > 0 && c.ExplicitRows == 0:
+		canvasCols = c.ExplicitCols
+		targetW := canvasCols * spec.CellW
+		baseRenderW = pixelConstrainedSize(srcW, targetW, spec.CellW)
+		idealH := float64(baseRenderW) * float64(spec.CellH) * float64(srcH) * 2 / (float64(spec.CellW) * float64(srcW) * 3)
+		baseRenderH = pixelDerivedSize(srcH, idealH, spec.CellH)
+		canvasRows = max(1, (baseRenderH+spec.CellH-1)/spec.CellH)
+		padRight = targetW - baseRenderW
+		padBottom = canvasRows*spec.CellH - baseRenderH
+		hasAlignedPad = true
+
+	case IsPixelAspect(c.AspectMode) && c.ExplicitRows > 0 && c.ExplicitCols == 0:
+		canvasRows = c.ExplicitRows
+		targetH := canvasRows * spec.CellH
+		baseRenderH = pixelConstrainedSize(srcH, targetH, spec.CellH)
+		idealW := float64(baseRenderH) * float64(spec.CellW) * float64(srcW) * 3 / (float64(spec.CellH) * float64(srcH) * 2)
+		baseRenderW = pixelDerivedSize(srcW, idealW, spec.CellW)
+		canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
+		padBottom = targetH - baseRenderH
+		padRight = canvasCols*spec.CellW - baseRenderW
+		hasAlignedPad = true
+
 	case c.ExplicitCols > 0 && c.ExplicitRows > 0:
 		// Both dimensions explicit: hard canvas box
 		canvasCols = c.ExplicitCols
@@ -79,7 +101,7 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 	case c.ExplicitCols > 0 && c.ExplicitRows == 0:
 		// Width explicit: canvas rows derived from aspect
 		canvasCols = c.ExplicitCols
-		if c.AspectMode == "aligned" || c.AspectMode == "pixel" || c.AspectMode == "raw" || c.AspectMode == "1:1" {
+		if c.AspectMode == "aligned" {
 			targetW := canvasCols * spec.CellW
 			k := max(1, int(math.Round(float64(targetW)/float64(srcW))))
 			if k*srcW > targetW && k > 1 {
@@ -89,12 +111,7 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 				baseRenderW = k * srcW
 				padRight = targetW - baseRenderW
 				floatH := float64(baseRenderW*spec.CellH*srcH*2) / float64(spec.CellW*srcW*3)
-				if c.AspectMode == "pixel" || c.AspectMode == "raw" || c.AspectMode == "1:1" {
-					// Nearest integer row repeat: pixel duplication only, never blending.
-					baseRenderH = max(1, int(math.Round(floatH/float64(srcH)))) * srcH
-				} else {
-					baseRenderH = max(1, int(math.Round(floatH)))
-				}
+				baseRenderH = max(1, int(math.Round(floatH)))
 				canvasRows = max(1, (baseRenderH+spec.CellH-1)/spec.CellH)
 				targetH := canvasRows * spec.CellH
 				padBottom = targetH - baseRenderH
@@ -109,7 +126,7 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 	case c.ExplicitRows > 0 && c.ExplicitCols == 0:
 		// Height explicit: canvas cols derived from aspect
 		canvasRows = c.ExplicitRows
-		if c.AspectMode == "aligned" || c.AspectMode == "pixel" || c.AspectMode == "raw" || c.AspectMode == "1:1" {
+		if c.AspectMode == "aligned" {
 			targetH := canvasRows * spec.CellH
 			k := max(1, int(math.Round(float64(targetH)/float64(srcH))))
 			if k*srcH > targetH && k > 1 {
@@ -119,12 +136,7 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 				baseRenderH = k * srcH
 				padBottom = targetH - baseRenderH
 				floatW := float64(baseRenderH*spec.CellW*srcW*3) / float64(spec.CellH*srcH*2)
-				if c.AspectMode == "pixel" || c.AspectMode == "raw" || c.AspectMode == "1:1" {
-					// Nearest integer column repeat: pixel duplication only, never blending.
-					baseRenderW = max(1, int(math.Round(floatW/float64(srcW)))) * srcW
-				} else {
-					baseRenderW = max(1, int(math.Round(floatW)))
-				}
+				baseRenderW = max(1, int(math.Round(floatW)))
 				canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
 				targetW := canvasCols * spec.CellW
 				padRight = targetW - baseRenderW
@@ -185,6 +197,31 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 		RenderW:    zoomW,
 		RenderH:    zoomH,
 	}
+}
+
+// IsPixelAspect reports whether mode requests pixel-preserving nearest-neighbor sampling.
+func IsPixelAspect(mode string) bool {
+	return mode == "pixel" || mode == "raw" || mode == "1:1"
+}
+
+// Keep a whole-pixel repeat only when its padding fits inside one terminal cell.
+// Otherwise use the requested extent, including when the source must shrink.
+func pixelConstrainedSize(source, target, cell int) int {
+	repeated := (target / source) * source
+	if repeated > 0 && target-repeated < cell {
+		return repeated
+	}
+	return target
+}
+
+// Integer repeats may tweak the derived aspect by less than one cell. Larger
+// deviations use the continuous aspect rounded to a pixel, sampled with NN.
+func pixelDerivedSize(source int, ideal float64, cell int) int {
+	repeated := max(1, int(math.Round(ideal/float64(source)))) * source
+	if math.Abs(float64(repeated)-ideal) < float64(cell) {
+		return repeated
+	}
+	return max(1, int(math.Round(ideal)))
 }
 
 func computeZoomContentSize(srcW, srcH, canvasCols, canvasRows int, initialZoom string, spec V2Spec) (int, int, bool) {

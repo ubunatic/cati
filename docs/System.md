@@ -272,7 +272,7 @@ Autocompletion across shells (Bash, Zsh, Fish, PowerShell) is handled in `cmd/co
 
 3. **Dynamic Mode and Flag Value Completions**:
    - **`--mode`, `-m`**: dynamically enumerates all canonical render modes and aliases from `renderModes` and `legacyRenderModes` (loaded via `spec.LoadRenderModes()`), associating each with its description.
-   - **`--aspect`**: `default` (aspect-preserving fit), `aligned` (preserve source pixels and pad incomplete cells).
+   - **`--aspect`**: completes the canonical seven values used by validation: `default`, `aligned`, `pixel`, `raw`, `1:1`, `contain`, `fit`. `pixel` uses bounded aspect snapping and nearest-neighbor sampling; `raw` and `1:1` are its aliases.
    - **`--prescaler`, `-S`**: `nearest-neighbor` / `nn`, `pyramid`.
    - **`--crop`, `-c`**: presets (`auto`, `center`, `l,t`, `c,m`, `r,b`, `W:H`, `W:H:X:Y`).
    - **`--zoom`, `-z`**: presets (`0`, `1`, `1:1`, `100%`, `w`, `h`).
@@ -297,7 +297,7 @@ The CLI render geometry pipeline uses a unified derivation model across static r
 
 3. **Aspect Modes & Subcell Alignment (`--aspect`)**:
    - **Continuous Aspect Snap (`aligned`)**: Preserves the image's physical display aspect ratio on screen while snapping to the mode's integer subcells and character cell lattice, scaling both dimensions proportionally (e.g. $107\times 45$ for Doom in `3x3` mode).
-   - **Raw 1:1 Pixel-Art Snap (`pixel`, `raw`, `1:1`)**: Maps source pixels directly to integer subcells without vertical downscaling or non-integer resampling (e.g. $107\times 67$ for Doom in `3x3` mode with unscaled $200\text{px}$ height).
+   - **Pixel-Art Aspect Snap (`pixel`, `raw`, `1:1`)**: Accepts integer pixel repeats only within less than one mode cell of the intended size; otherwise uses nearest-neighbor scaling at the continuous aspect size. Doom in `3x3` gives $54\times23$, $107\times45$ and $160\times67$. Narrow widths keep this aspect derivation and shrink without blending. Pixel sampling overrides `--prescaler pyramid`; fractional scales may repeat or skip source pixels unevenly. Both explicit dimensions still define a hard box, and unconstrained renders still fit the terminal. See [SparklinePixelArt.md](SparklinePixelArt.md) for formulas and padding bounds.
    - **Square-Pixel Font Correction (`default`, `contain`, `fit`)**: Assumes source pixels are $1:1$ squares and applies terminal font aspect ratio correction ($1:2$ cell ratio) so physical geometry remains square on screen:
      $$\text{Display Height in Cells} = \max\left(1, \operatorname{round}\left(\frac{\text{Cols} \times \text{SrcH}}{2 \times \text{SrcW}}\right)\right)$$
    - **Explicit Dual Constraints (`-W <W> -H <H>`)**: Fills the exact requested $(W, H)$ cell grid, applying subcell snapping when content fits within subcell tolerance ($< C_w, < C_h$).

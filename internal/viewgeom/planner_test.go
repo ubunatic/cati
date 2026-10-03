@@ -1,6 +1,7 @@
 package viewgeom
 
 import (
+	"math"
 	"testing"
 )
 
@@ -167,7 +168,7 @@ func TestPlanRender_Doom3x3(t *testing.T) {
 		}
 	})
 
-	t.Run("width only -W 107 aspect pixel raw 1:1 height", func(t *testing.T) {
+	t.Run("width only -W 107 aspect pixel limits height distortion", func(t *testing.T) {
 		c := TargetConstraints{
 			ExplicitCols: 107,
 			AspectMode:   "pixel",
@@ -176,14 +177,14 @@ func TestPlanRender_Doom3x3(t *testing.T) {
 		if plan.CanvasCols != 107 {
 			t.Errorf("CanvasCols = %d, want 107", plan.CanvasCols)
 		}
-		if plan.CanvasRows != 67 {
-			t.Errorf("CanvasRows = %d, want 67", plan.CanvasRows)
+		if plan.CanvasRows != 45 {
+			t.Errorf("CanvasRows = %d, want 45", plan.CanvasRows)
 		}
-		if plan.RenderW != 640 || plan.RenderH != 200 {
-			t.Errorf("Render size = %dx%d, want 640x200 (raw 1:1 source height)", plan.RenderW, plan.RenderH)
+		if plan.RenderW != 640 || plan.RenderH != 133 {
+			t.Errorf("Render size = %dx%d, want 640x133", plan.RenderW, plan.RenderH)
 		}
-		if plan.PadRight != 2 || plan.PadBottom != 1 {
-			t.Errorf("Pad = R:%d B:%d, want R:2 B:1", plan.PadRight, plan.PadBottom)
+		if plan.PadRight != 2 || plan.PadBottom != 2 {
+			t.Errorf("Pad = R:%d B:%d, want R:2 B:2", plan.PadRight, plan.PadBottom)
 		}
 	})
 
@@ -230,6 +231,52 @@ func TestPlanRender_Doom3x3(t *testing.T) {
 			t.Errorf("Render size = %dx%d, want %dx%d", plan.RenderW, plan.RenderH, 160*6, 80*3)
 		}
 	})
+}
+
+func TestPlanRender_PixelSnapBounds(t *testing.T) {
+	for _, spec := range []V2Spec{
+		NewV2CellRatio(1, 2, 1, 1),
+		NewV2CellRatio(2, 2, 2, 1),
+		NewV2CellRatio(2, 3, 4, 3),
+		NewV2CellRatio(6, 3, 4, 1),
+		NewV2CellRatio(2, 6, 2, 3),
+	} {
+		for _, aspect := range []string{"pixel", "raw", "1:1"} {
+			for extent := 1; extent <= 321; extent++ {
+				width := PlanRender(320, 200, TargetConstraints{ExplicitCols: extent, AspectMode: aspect}, spec)
+				idealH := float64(width.RenderW*spec.CellH*200*2) / float64(spec.CellW*320*3)
+				if math.Abs(float64(width.RenderH)-idealH) >= float64(spec.CellH) {
+					t.Fatalf("cell %dx%d %s W=%d: height %d differs by a cell from ideal %.3f", spec.CellW, spec.CellH, aspect, extent, width.RenderH, idealH)
+				}
+				if width.CanvasCols != extent || width.PadRight < 0 || width.PadRight >= spec.CellW || width.RenderW+width.PadRight != extent*spec.CellW || width.RenderH+width.PadBottom != width.CanvasRows*spec.CellH || width.PadBottom < 0 || width.PadBottom >= spec.CellH {
+					t.Fatalf("cell %dx%d %s W=%d: invalid canvas or padding %+v", spec.CellW, spec.CellH, aspect, extent, width)
+				}
+				height := PlanRender(320, 200, TargetConstraints{ExplicitRows: extent, AspectMode: aspect}, spec)
+				idealW := float64(height.RenderH*spec.CellW*320*3) / float64(spec.CellH*200*2)
+				if math.Abs(float64(height.RenderW)-idealW) >= float64(spec.CellW) {
+					t.Fatalf("cell %dx%d %s H=%d: width %d differs by a cell from ideal %.3f", spec.CellW, spec.CellH, aspect, extent, height.RenderW, idealW)
+				}
+				if height.CanvasRows != extent || height.PadBottom < 0 || height.PadBottom >= spec.CellH || height.RenderH+height.PadBottom != extent*spec.CellH || height.RenderW+height.PadRight != height.CanvasCols*spec.CellW || height.PadRight < 0 || height.PadRight >= spec.CellW {
+					t.Fatalf("cell %dx%d %s H=%d: invalid canvas or padding %+v", spec.CellW, spec.CellH, aspect, extent, height)
+				}
+			}
+		}
+	}
+}
+
+func TestPixelDerivedSize_RepeatTolerance(t *testing.T) {
+	for _, tc := range []struct {
+		ideal float64
+		want  int
+	}{
+		{197.5, 200}, // Less than a 3px cell: allow an integer repeat.
+		{197, 197},   // Exactly one cell: retain the continuous size.
+		{66.67, 67},  // Never force a 1x repeat on a much smaller target.
+	} {
+		if got := pixelDerivedSize(200, tc.ideal, 3); got != tc.want {
+			t.Errorf("ideal %.2f: got %d, want %d", tc.ideal, got, tc.want)
+		}
+	}
 }
 
 func TestPlanRender_ZoomPreservesHardCanvas(t *testing.T) {

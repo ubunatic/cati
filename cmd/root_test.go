@@ -1013,8 +1013,44 @@ func TestCLIDoom1S2Render(t *testing.T) {
 		{
 			name:      "aspect pixel width only 3x3",
 			args:      []string{"assets/doom1.png", "-W", "107", "-m", "3x3", "--aspect", "pixel"},
-			wantLines: 67,
+			wantLines: 45,
 			wantCols:  107,
+		},
+		{
+			name:      "aspect pixel width 54 3x3 regression",
+			args:      []string{"assets/doom1.png", "-W", "54", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 23,
+			wantCols:  54,
+		},
+		{
+			name:      "aspect raw width 53 3x3 downscale",
+			args:      []string{"assets/doom1.png", "-W", "53", "-m", "3x3", "--aspect", "raw"},
+			wantLines: 22,
+			wantCols:  53,
+		},
+		{
+			name:      "aspect pixel width 160 3x3 control",
+			args:      []string{"assets/doom1.png", "-W", "160", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 67,
+			wantCols:  160,
+		},
+		{
+			name:      "aspect pixel width 160 quad distortion",
+			args:      []string{"assets/doom1.png", "-W", "160", "-m", "quad", "--aspect", "pixel"},
+			wantLines: 67,
+			wantCols:  160,
+		},
+		{
+			name:      "aspect pixel height only 3x3",
+			args:      []string{"assets/doom1.png", "-H", "23", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 23,
+			wantCols:  56,
+		},
+		{
+			name:      "aspect pixel preview width 54 3x3",
+			args:      []string{"assets/doom1.png", "-W", "54", "-m", "3x3", "--aspect", "pixel", "--play", "preview"},
+			wantLines: 23,
+			wantCols:  54,
 		},
 		{
 			name:      "aspect aligned width only halfblock",

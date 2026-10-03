@@ -804,6 +804,10 @@ func padSourceImage(img image.Image, padCols, padRows int) image.Image {
 }
 
 func prepareRenderPlanImage(orig image.Image, constraints viewgeom.TargetConstraints, rc renderCfg) (image.Image, error) {
+	if viewgeom.IsPixelAspect(constraints.AspectMode) {
+		// Pixel aspect must retain source colors even when it needs to shrink.
+		rc.prescaler = prescaleNearestNeighbor
+	}
 	if rc.gray {
 		orig = quadblock.ReduceColors(orig, rc.grayColors)
 	}

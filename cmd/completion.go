@@ -35,7 +35,7 @@ func completePlayModes() []string {
 var aspectModes = [][2]string{
 	{"default", "Square-pixel font correction (stretch to -W/-H box when both given)"},
 	{"aligned", "Continuous aspect snap onto the mode's subcell lattice"},
-	{"pixel", "Raw 1:1 pixel-art snap: integer subcells, no vertical resampling"},
+	{"pixel", "Pixel-art aspect snap within one cell, nearest-neighbor sampling"},
 	{"raw", "Alias for pixel"},
 	{"1:1", "Alias for pixel"},
 	{"contain", "Square-pixel fit inside -W/-H box with letterbox padding"},
