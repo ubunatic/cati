@@ -129,14 +129,6 @@ func settingsFieldLabel(key string) string {
 	return strings.Join(parts, " ")
 }
 
-func notifySignals(ch chan<- os.Signal, signals []os.Signal) bool {
-	if len(signals) == 0 {
-		return false
-	}
-	signal.Notify(ch, signals...)
-	return true
-}
-
 // applySettingsDelta increments or decrements the field matched by c.Key inside s.
 func applySettingsDelta(c ControlSpec, delta int, s *Settings) {
 	if h, ok := controlHandlers[c.Set]; ok && h.set != nil {
@@ -410,38 +402,81 @@ func styleItemAnsi(style *StyleConfig) string {
 // loadStyle loads colors/structure from spec/style.yaml.
 // FIXME(#004-item-C): spec.LoadTheme() tokens exist but are never applied.
 // spec/buttons.yaml's style: fields (danger, primary, etc.) are ignored.
-func loadStyle() (*StyleConfig, error) {
-	return loadStyleFrom(spec.FS)
-}
+func loadStyle() *StyleConfig {
+	cfg := &StyleConfig{
+		AppBorderStyle:     "box",
+		BtnLeftCap:         "[",
+		BtnRightCap:        "]",
+		GridSelectedBold:   true,
+		GridSelectedMarker: " ",
+		ImageBorder:        "none",
+		ScrollThumbChar:    "█",
+		ScrollRailChar:     "▒",
+		ScrollWidth:        1,
+		ScrollRailBg:       "",
+	}
 
-func loadStyleFrom(fsys fs.FS) (*StyleConfig, error) {
-	s, err := spec.LoadStyleFrom(fsys)
+	s, err := spec.LoadStyle()
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return &StyleConfig{}, nil
-		}
-		return nil, fmt.Errorf("load style spec: %w", err)
+		return cfg
 	}
-	return styleConfigFromSpec(s), nil
-}
 
-func styleConfigFromSpec(s spec.StyleSpec) *StyleConfig {
-	return &StyleConfig{
-		AppBg: s.App.Bg, AppBorderStyle: s.App.BorderStyle, AppBorderColor: s.App.BorderColor,
-		BtnFg: s.Buttons.Fg, BtnBg: s.Buttons.Bg, BtnBorderColor: s.Buttons.BorderColor,
-		BtnLeftCap: s.Buttons.LeftCap, BtnRightCap: s.Buttons.RightCap,
-		BtnActiveFg: s.Buttons.ActiveFg, BtnActiveBg: s.Buttons.ActiveBg,
-		PreviewBg: s.Preview.Bg, ControlBarBg: s.ControlBar.Bg, ControlBarFg: s.ControlBar.Fg,
-		HeaderFg: s.HeaderBar.Fg, HeaderBg: s.HeaderBar.Bg, HeaderBold: s.HeaderBar.Bold,
-		GridItemFg: s.Grid.ItemFg, GridItemBg: s.Grid.ItemBg,
-		GridSelectedFg: s.Grid.SelectedFg, GridSelectedBg: s.Grid.SelectedBg,
-		GridSelectedBold: s.Grid.SelectedBold, GridSelectedMarker: s.Grid.SelectedMarker,
-		ImageBorder: s.Grid.ImageBorder,
-		ScrollThumbChar: s.ScrollBar.ThumbChar, ScrollRailChar: s.ScrollBar.RailChar,
-		ScrollWidth: s.ScrollBar.Width, ScrollThumbFg: s.ScrollBar.ThumbFg,
-		ScrollRailFg: s.ScrollBar.RailFg, ScrollRailBg: s.ScrollBar.RailBg,
-		PageTitleFg: s.PageTitle.Fg, PageTitleBold: s.PageTitle.Bold,
+	cfg.AppBg = s.App.Bg
+	if s.App.BorderStyle != "" {
+		cfg.AppBorderStyle = s.App.BorderStyle
 	}
+	cfg.AppBorderColor = s.App.BorderColor
+
+	cfg.BtnFg = s.Buttons.Fg
+	cfg.BtnBg = s.Buttons.Bg
+	cfg.BtnBorderColor = s.Buttons.BorderColor
+	if s.Buttons.LeftCap != "" {
+		cfg.BtnLeftCap = s.Buttons.LeftCap
+	}
+	if s.Buttons.RightCap != "" {
+		cfg.BtnRightCap = s.Buttons.RightCap
+	}
+	cfg.BtnActiveFg = s.Buttons.ActiveFg
+	cfg.BtnActiveBg = s.Buttons.ActiveBg
+
+	cfg.PreviewBg = s.Preview.Bg
+
+	cfg.ControlBarBg = s.ControlBar.Bg
+	cfg.ControlBarFg = s.ControlBar.Fg
+
+	cfg.HeaderFg = s.HeaderBar.Fg
+	cfg.HeaderBg = s.HeaderBar.Bg
+	cfg.HeaderBold = s.HeaderBar.Bold
+
+	cfg.GridItemFg = s.Grid.ItemFg
+	cfg.GridItemBg = s.Grid.ItemBg
+	cfg.GridSelectedFg = s.Grid.SelectedFg
+	cfg.GridSelectedBg = s.Grid.SelectedBg
+	cfg.GridSelectedBold = s.Grid.SelectedBold
+	if s.Grid.SelectedMarker != "" {
+		cfg.GridSelectedMarker = s.Grid.SelectedMarker
+	}
+	if s.Grid.ImageBorder == "box" || s.Grid.ImageBorder == "double" || s.Grid.ImageBorder == "none" {
+		cfg.ImageBorder = s.Grid.ImageBorder
+	}
+
+	if s.ScrollBar.ThumbChar != "" {
+		cfg.ScrollThumbChar = s.ScrollBar.ThumbChar
+	}
+	if s.ScrollBar.RailChar != "" {
+		cfg.ScrollRailChar = s.ScrollBar.RailChar
+	}
+	if s.ScrollBar.Width == 1 || s.ScrollBar.Width == 2 {
+		cfg.ScrollWidth = s.ScrollBar.Width
+	}
+	cfg.ScrollThumbFg = s.ScrollBar.ThumbFg
+	cfg.ScrollRailFg = s.ScrollBar.RailFg
+	cfg.ScrollRailBg = s.ScrollBar.RailBg
+
+	cfg.PageTitleFg = s.PageTitle.Fg
+	cfg.PageTitleBold = s.PageTitle.Bold
+
+	return cfg
 }
 
 // ── Customizable Labels ──────────────────────────────────────────────────────
@@ -662,19 +697,37 @@ func parseYamlView(name string) (*YamlView, error) {
 	}, nil
 }
 
-func getAboutView() (*YamlView, error) {
-	return aboutViewFrom(spec.FS)
-}
+func getAboutView() *YamlView {
+	view, err := parseYamlView("about.yaml")
+	if err == nil && view != nil {
+		return view
+	}
+	return &YamlView{
+		Type:  "view",
+		Name:  "about",
+		Title: "Cati — cat for images & video in terminal",
+		Content: `Version: 1.0.0
+License: AGPL-3.0-or-later
+Authors: Uwe Jugel (codeberg.org/ubunatic/cati)
 
-func aboutViewFrom(fsys fs.FS) (*YamlView, error) {
-	v, err := spec.LoadYamlViewFrom(fsys, "about.yaml")
-	if errors.Is(err, fs.ErrNotExist) {
-		return &YamlView{}, nil
+Controls (Grid Preview):
+  • Left/Right/Up/Down Arrow: Move selection
+  • PageUp/PageDown, [, ]: Navigate pages
+  • Mouse wheel: Scroll pages
+  • Click thumbnail / Enter / Space: View full screen
+  • a / A: Toggle About page
+  • s / S: Settings dialog
+  • q / Esc: Quit application
+
+Controls (Interactive Single View):
+  • + / -: Zoom in / zoom out (centred on screen)
+  • Mouse wheel: Zoom in / zoom out at cursor position
+  • Left-click drag: Pan (grab-and-pull the image)
+  • Up/Down/Left/Right Arrows: Pan the image
+  • c / C: Copy current viewport to clipboard (PNG)
+  • q / Esc: Go back to Grid view`,
+		Controls: []string{"back", "quit", "website"},
 	}
-	if err != nil {
-		return nil, fmt.Errorf("load about spec: %w", err)
-	}
-	return &YamlView{Type: v.Type, Name: v.Name, Title: v.Title, Content: v.Content, Controls: v.Controls}, nil
 }
 
 // ── Config loader & saver ───────────────────────────────────────────────────
@@ -881,14 +934,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 	if err != nil {
 		return fmt.Errorf("load input spec: %w", err)
 	}
-	style, err := loadStyle()
-	if err != nil {
-		return err
-	}
-	aboutView, err := getAboutView()
-	if err != nil {
-		return err
-	}
+	style := loadStyle()
 	labels := loadLabels()
 	for k, v := range loadButtons(style.BtnLeftCap, style.BtnRightCap) {
 		labels[k] = v
@@ -1011,7 +1057,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 	}()
 
 	sigs := make(chan os.Signal, 1)
-	notifySignals(sigs, inputSpec.SignalsFor(input.EventQuit))
+	signal.Notify(sigs, inputSpec.SignalsFor(input.EventQuit)...)
 	defer signal.Stop(sigs)
 
 	inputs := make(chan string, 256)
@@ -1091,7 +1137,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 		}
 
 		if viewMode == "about" {
-			drawAboutPage(os.Stdout, termCols, effHeight, style, aboutView)
+			drawAboutPage(os.Stdout, termCols, effHeight, style)
 			buttons = drawBottomMenu(os.Stdout, effHeight, termCols, "about", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions, nil)
 			drawHintBar(os.Stdout, effHeight, termCols, labels["hint_about"], map[string]string{"last_key": lastKey}, style)
 			return
@@ -2093,8 +2139,10 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 	}
 }
 
-func drawAboutPage(w io.Writer, termCols, termRows int, style *StyleConfig, about *YamlView) {
+func drawAboutPage(w io.Writer, termCols, termRows int, style *StyleConfig) {
 	halfblock.ClearScreen(w)
+
+	about := getAboutView()
 	lines := strings.Split(about.Content, "\n")
 
 	titleAnsi := styleFG(style.PageTitleFg, "\x1b[36m")
@@ -2281,7 +2329,7 @@ func truncateANSI(s string, maxWidth int) string {
 // btnActions maps button key names to their registered action names (from spec/buttons.yaml); nil means use key name as action.
 func drawBottomMenu(w io.Writer, termRows, termCols int, viewMode string, activeAction string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, conditions map[string]bool, btnActions map[string]string, altBtnActions map[string]string) []menuButton {
 	if style == nil {
-		style = &StyleConfig{}
+		style = loadStyle()
 	}
 
 	viewName := viewMode

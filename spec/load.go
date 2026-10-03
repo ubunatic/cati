@@ -79,27 +79,13 @@ type StyleSpec struct {
 }
 
 func LoadStyle() (StyleSpec, error) {
-	return LoadStyleFrom(FS)
-}
-
-func LoadStyleFrom(fsys fs.FS) (StyleSpec, error) {
 	var spec StyleSpec
-	data, err := fs.ReadFile(fsys, "style.yaml")
+	data, err := fs.ReadFile(FS, "style.yaml")
 	if err != nil {
 		return spec, err
 	}
-	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&spec); err != nil {
-		return spec, err
-	}
-	if spec.App.BorderStyle != "none" && spec.App.BorderStyle != "box" && spec.App.BorderStyle != "double" {
-		return spec, fmt.Errorf("style.app.border_style must be none, box, or double")
-	}
-	if spec.ScrollBar.Width != 1 && spec.ScrollBar.Width != 2 {
-		return spec, fmt.Errorf("style.scroll_bar.width must be 1 or 2")
-	}
-	return spec, nil
+	err = yaml.Unmarshal(data, &spec)
+	return spec, err
 }
 
 // ── Theme Spec ───────────────────────────────────────────────────────────────
@@ -719,22 +705,13 @@ type YamlView struct {
 }
 
 func LoadYamlView(name string) (*YamlView, error) {
-	return LoadYamlViewFrom(FS, name)
-}
-
-func LoadYamlViewFrom(fsys fs.FS, name string) (*YamlView, error) {
 	var spec YamlView
-	data, err := fs.ReadFile(fsys, name)
+	data, err := fs.ReadFile(FS, name)
 	if err != nil {
 		return nil, err
 	}
-	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
-	decoder.KnownFields(true)
-	if err = decoder.Decode(&spec); err != nil {
+	if err = yaml.Unmarshal(data, &spec); err != nil {
 		return nil, err
-	}
-	if spec.Type != "view" || spec.Name == "" || spec.Title == "" {
-		return nil, fmt.Errorf("%s must define type=view, name, and title", name)
 	}
 	return &spec, nil
 }

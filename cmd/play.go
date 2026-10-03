@@ -104,7 +104,7 @@ func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}, er
 	}
 
 	sigs = make(chan os.Signal, 1)
-	notifySignals(sigs, inputSpec.SignalsFor(input.EventQuit))
+	signal.Notify(sigs, inputSpec.SignalsFor(input.EventQuit)...)
 
 	quit = make(chan struct{}, 1)
 	go func() {
