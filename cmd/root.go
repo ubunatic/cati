@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/cati/internal/viewgeom"
 	"ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
@@ -91,6 +92,9 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 			}
 			if len(args) == 0 {
 				return fmt.Errorf("requires at least 1 arg(s), only received 0")
+			}
+			if err := validateCommonFlags(width, height, aspect, initialZoom, pad); err != nil {
+				return err
 			}
 			rc, err := parseRenderMode(renderMode)
 			if err != nil {
@@ -204,6 +208,9 @@ func NewPlay() *cobra.Command {
 			if len(args) == 0 {
 				return fmt.Errorf("requires at least 1 arg(s), only received 0")
 			}
+			if err := validateCommonFlags(width, height, aspect, initialZoom, pad); err != nil {
+				return err
+			}
 			if smart {
 				return fmt.Errorf("--smart is currently supported for static cati renders only")
 			}
@@ -247,7 +254,7 @@ func NewPlay() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return play(paths, fps, width, height, rc, tr, cropSpec, aspect, playMode)
+				return play(paths, fps, width, height, rc, tr, cropSpec, aspect, pad, playMode)
 			}
 			if halfblock.IsVideo(paths[0]) {
 				return interactiveVideo(paths[0], width, height, rc, tr, nil, nil, nil, nil, nil, nil, fullComp, initialZoom)
@@ -302,6 +309,9 @@ func NewBrowse() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return fmt.Errorf("requires at least 1 arg(s), only received 0")
+			}
+			if err := validateCommonFlags(width, height, aspect, initialZoom, pad); err != nil {
+				return err
 			}
 			if smart {
 				return fmt.Errorf("--smart is currently supported for static cati renders only")
@@ -403,6 +413,9 @@ func forwardToPlayer(path string, width, height int, rc renderCfg, fullComp bool
 	if name := rcModeName(rc); name != "" && name != "?" && name != "half" {
 		args = append(args, "--mode", name)
 	}
+	if rc.prescaler == prescalePyramid {
+		args = append(args, "--prescaler", "pyramid")
+	}
 	if initialZoom != "" {
 		args = append(args, "--zoom", initialZoom)
 	}
@@ -417,6 +430,44 @@ func forwardToPlayer(path string, width, height int, rc renderCfg, fullComp bool
 	}
 	args = append(args, path)
 	return forwardCommand("catiplay", args)
+}
+
+func validateCommonFlags(width, height int, aspect, initialZoom, pad string) error {
+	if width < 0 {
+		return fmt.Errorf("--width must be 0 or greater, got %d", width)
+	}
+	if height < 0 {
+		return fmt.Errorf("--height must be 0 or greater, got %d", height)
+	}
+	switch strings.ToLower(strings.TrimSpace(aspect)) {
+	case "", "default", "aligned":
+		// valid
+	default:
+		return fmt.Errorf("unknown --aspect %q; valid: default, aligned", aspect)
+	}
+	if initialZoom != "" {
+		if err := validateZoom(initialZoom); err != nil {
+			return err
+		}
+	}
+	if pad != "" {
+		if _, _, err := parsePadSpec(pad); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateZoom(s string) error {
+	trimmed := strings.ToLower(strings.TrimSpace(s))
+	if trimmed == "" || trimmed == "w" || trimmed == "h" {
+		return nil
+	}
+	k := viewgeom.ParseZoomK(trimmed)
+	if k < 0 {
+		return fmt.Errorf("invalid --zoom %q; valid: \"0\", \"1\", \"w\", \"h\", \"100%%\", \"1:1\"", s)
+	}
+	return nil
 }
 
 // ── options ───────────────────────────────────────────────────────────────────
@@ -469,7 +520,7 @@ func run(o opts, rc renderCfg, args []string) error {
 		if err != nil {
 			return err
 		}
-		return play(paths, o.fps, o.width, o.height, rc, tr, cropSpec, o.aspect, o.playMode)
+		return play(paths, o.fps, o.width, o.height, rc, tr, cropSpec, o.aspect, o.pad, o.playMode)
 	}
 
 	if o.interactive {

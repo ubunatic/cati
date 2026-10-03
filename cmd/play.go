@@ -19,25 +19,25 @@ import (
 // It dispatches to playPreview, playImages (pre-load loop), or playVideos (streaming)
 // depending on playMode and whether any path is a video file.
 // width and height are in terminal characters (0 = auto-detect from terminal).
-func play(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string, playMode string) error {
+func play(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect, pad string, playMode string) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("no images to play")
 	}
 
 	if playMode == "preview" {
-		return playPreview(paths[0], width, height, rc, tr, crop, aspect)
+		return playPreview(paths[0], width, height, rc, tr, crop, aspect, pad)
 	}
 
 	for _, p := range paths {
 		if halfblock.IsVideo(p) {
-			return playVideos(paths, fps, width, height, rc, tr, crop, aspect, playMode)
+			return playVideos(paths, fps, width, height, rc, tr, crop, aspect, pad, playMode)
 		}
 	}
-	return playImages(paths, fps, width, height, rc, tr, crop, aspect, playMode)
+	return playImages(paths, fps, width, height, rc, tr, crop, aspect, pad, playMode)
 }
 
 // playPreview renders a single frame for preview mode and exits.
-func playPreview(path string, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string) error {
+func playPreview(path string, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect, pad string) error {
 	cols, rows := width, height
 	if cols == 0 && rows == 0 {
 		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
@@ -53,6 +53,14 @@ func playPreview(path string, width, height int, rc renderCfg, tr TimeRange, cro
 	}
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
+	}
+
+	if pad != "" {
+		padCols, padRows, err := parsePadSpec(pad)
+		if err != nil {
+			return err
+		}
+		img = padSourceImage(img, padCols, padRows)
 	}
 
 	if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
@@ -111,7 +119,7 @@ func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}) {
 // ── image sequence mode ───────────────────────────────────────────────────────
 
 // playImages pre-loads all frames and loops them at fps.
-func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string, playMode string) error {
+func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect, pad string, playMode string) error {
 	if fps <= 0 {
 		fps = 15
 	}
@@ -145,6 +153,13 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		img, err := halfblock.LoadImage(p)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
+		}
+		if pad != "" {
+			padCols, padRows, err := parsePadSpec(pad)
+			if err != nil {
+				return err
+			}
+			img = padSourceImage(img, padCols, padRows)
 		}
 		if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
 			img, err = prepareExplicitGridImage(img, cols, rows, rc, aspect)
@@ -203,7 +218,7 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 
 // playVideos streams one or more video files sequentially, playing each once or repeating.
 // All paths must be video files.
-func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string, playMode string) error {
+func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect, pad string, playMode string) error {
 	// Validate: all paths must be video files.
 	for _, p := range paths {
 		if !halfblock.IsVideo(p) {
@@ -316,6 +331,13 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 					continue
 				}
 				currentVideoHadFrames = true
+				if pad != "" {
+					padCols, padRows, err := parsePadSpec(pad)
+					if err != nil {
+						return err
+					}
+					img = padSourceImage(img, padCols, padRows)
+				}
 				if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
 					img, err = prepareExplicitGridImage(img, cols, rows, rc, aspect)
 				} else {
