@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/halfblock"
+	"ubunatic.com/cati/v1/quadblock"
 
 	catiterm "ubunatic.com/cati/v1/term"
 )
@@ -608,4 +609,91 @@ func expandArgs(args []string, recursive bool) ([]string, error) {
 // or video type.
 func isImageFile(path string) bool {
 	return imageExts[strings.ToLower(filepath.Ext(path))] || halfblock.IsVideo(path)
+}
+
+
+func parsePadSpec(raw string) (int, int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, 0, nil
+	}
+	parts := strings.Split(raw, ",")
+	if len(parts) == 1 {
+		v, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+		if err != nil || v < 0 {
+			return 0, 0, fmt.Errorf("invalid --pad value %q: expected <cols>,<rows> or single non-negative integer", raw)
+		}
+		return v, v, nil
+	}
+	if len(parts) == 2 {
+		cols, err1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+		rows, err2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err1 != nil || err2 != nil || cols < 0 || rows < 0 {
+			return 0, 0, fmt.Errorf("invalid --pad value %q: expected <cols>,<rows> as non-negative integers", raw)
+		}
+		return cols, rows, nil
+	}
+	return 0, 0, fmt.Errorf("invalid --pad value %q: expected <cols>,<rows>", raw)
+}
+
+func padSourceImage(img image.Image, padCols, padRows int) image.Image {
+	if padCols <= 0 && padRows <= 0 {
+		return img
+	}
+	b := img.Bounds()
+	srcW, srcH := b.Dx(), b.Dy()
+	if srcW <= 0 || srcH <= 0 {
+		return img
+	}
+	newW := srcW + padCols
+	newH := srcH + padRows
+	out := image.NewNRGBA(image.Rect(0, 0, newW, newH))
+	for y := 0; y < srcH; y++ {
+		for x := 0; x < srcW; x++ {
+			out.Set(x, y, img.At(b.Min.X+x, b.Min.Y+y))
+		}
+	}
+	return out
+}
+
+func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, rc renderCfg, aspectMode string) (image.Image, error) {
+	if rc.gray {
+		orig = quadblock.ReduceColors(orig, rc.grayColors)
+	}
+	b := orig.Bounds()
+	srcW, srcH := b.Dx(), b.Dy()
+	if srcW == 0 || srcH == 0 {
+		return orig, nil
+	}
+
+	cellW, cellH := rc.renderCellSize()
+	targetW := explicitCols * cellW
+	targetH := explicitRows * cellH
+
+	if aspectMode == "aligned" {
+		if srcW <= targetW && srcH <= targetH {
+			extraW := targetW - srcW
+			extraH := targetH - srcH
+			if extraW > 0 || extraH > 0 {
+				return padSourceImage(orig, extraW, extraH), nil
+			}
+			return orig, nil
+		}
+	}
+
+	if srcW <= targetW && srcH <= targetH {
+		diffW := targetW - srcW
+		diffH := targetH - srcH
+		if diffW < cellW && diffH < cellH {
+			if diffW > 0 || diffH > 0 {
+				return padSourceImage(orig, diffW, diffH), nil
+			}
+			return orig, nil
+		}
+	}
+
+	if srcW == targetW && srcH == targetH {
+		return orig, nil
+	}
+	return resizeRenderedImage(orig, targetW, targetH, rc), nil
 }
