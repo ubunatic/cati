@@ -48,12 +48,16 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 		canvasRows = c.ExplicitRows
 		targetW := canvasCols * spec.CellW
 		targetH := canvasRows * spec.CellH
-		if srcW <= targetW && srcH <= targetH {
-			diffW := targetW - srcW
-			diffH := targetH - srcH
+		k := max(1, int(math.Round(float64(targetW)/float64(srcW))))
+		if k*srcW > targetW && k > 1 {
+			k = targetW / srcW
+		}
+		if k >= 1 && k*srcW <= targetW && k*srcH <= targetH {
+			diffW := targetW - k*srcW
+			diffH := targetH - k*srcH
 			if c.AspectMode == "aligned" || (diffW < spec.CellW && diffH < spec.CellH) {
-				baseRenderW = srcW
-				baseRenderH = srcH
+				baseRenderW = k * srcW
+				baseRenderH = k * srcH
 				padRight = diffW
 				padBottom = diffH
 				hasAlignedPad = true
@@ -73,13 +77,17 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 		canvasCols = c.ExplicitCols
 		if c.AspectMode == "aligned" {
 			targetW := canvasCols * spec.CellW
-			if srcW <= targetW {
-				canvasRows = max(1, (srcH+spec.CellH-1)/spec.CellH)
+			k := max(1, int(math.Round(float64(targetW)/float64(srcW))))
+			if k*srcW > targetW && k > 1 {
+				k = targetW / srcW
+			}
+			if k >= 1 && k*srcW <= targetW {
+				baseRenderW = k * srcW
+				baseRenderH = k * srcH
+				padRight = targetW - baseRenderW
+				canvasRows = max(1, (baseRenderH+spec.CellH-1)/spec.CellH)
 				targetH := canvasRows * spec.CellH
-				baseRenderW = srcW
-				baseRenderH = srcH
-				padRight = targetW - srcW
-				padBottom = targetH - srcH
+				padBottom = targetH - baseRenderH
 				hasAlignedPad = true
 			}
 		}
@@ -93,13 +101,17 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 		canvasRows = c.ExplicitRows
 		if c.AspectMode == "aligned" {
 			targetH := canvasRows * spec.CellH
-			if srcH <= targetH {
-				canvasCols = max(1, (srcW+spec.CellW-1)/spec.CellW)
+			k := max(1, int(math.Round(float64(targetH)/float64(srcH))))
+			if k*srcH > targetH && k > 1 {
+				k = targetH / srcH
+			}
+			if k >= 1 && k*srcH <= targetH {
+				baseRenderW = k * srcW
+				baseRenderH = k * srcH
+				padBottom = targetH - baseRenderH
+				canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
 				targetW := canvasCols * spec.CellW
-				baseRenderW = srcW
-				baseRenderH = srcH
-				padRight = targetW - srcW
-				padBottom = targetH - srcH
+				padRight = targetW - baseRenderW
 				hasAlignedPad = true
 			}
 		}

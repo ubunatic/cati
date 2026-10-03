@@ -122,6 +122,44 @@ func TestPlanRender_DoomSextant(t *testing.T) {
 	})
 }
 
+func TestPlanRender_Doom3x3(t *testing.T) {
+	// Doom 1: 320x200 px
+	// Mode 3x3: 6x3 cell, aspect 4:1 (acSrcW = srcW*4, acSrcH = srcH*1)
+	spec3x3 := NewV2CellRatio(6, 3, 4, 1)
+
+	t.Run("width only -W 160 aspect aligned integer 3x upscale", func(t *testing.T) {
+		c := TargetConstraints{
+			ExplicitCols: 160,
+			AspectMode:   "aligned",
+		}
+		plan := PlanRender(320, 200, c, spec3x3)
+		if plan.CanvasCols != 160 {
+			t.Errorf("CanvasCols = %d, want 160", plan.CanvasCols)
+		}
+		if plan.RenderW != 960 || plan.RenderH != 600 {
+			t.Errorf("Render size = %dx%d, want 960x600 (3x integer scale)", plan.RenderW, plan.RenderH)
+		}
+		if plan.PadRight != 0 {
+			t.Errorf("PadRight = %d, want 0", plan.PadRight)
+		}
+	})
+
+	t.Run("both -W 160 -H 67 default stretch", func(t *testing.T) {
+		c := TargetConstraints{
+			ExplicitCols: 160,
+			ExplicitRows: 67,
+			AspectMode:   "default",
+		}
+		plan := PlanRender(320, 200, c, spec3x3)
+		if plan.CanvasCols != 160 || plan.CanvasRows != 67 {
+			t.Errorf("Canvas = %dx%d, want 160x67", plan.CanvasCols, plan.CanvasRows)
+		}
+		if plan.RenderW != 160*6 || plan.RenderH != 67*3 {
+			t.Errorf("Render size = %dx%d, want %dx%d", plan.RenderW, plan.RenderH, 160*6, 67*3)
+		}
+	})
+}
+
 func TestPlanRender_ZoomPreservesHardCanvas(t *testing.T) {
 	// 32x20 halfblock source
 	halfSpec := NewV2CellRatio(1, 2, 1, 1)
