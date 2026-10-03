@@ -32,10 +32,9 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["name", "number", "event"],
+            "required": ["name", "event"],
             "properties": {
-              "name":   { "type": "string", "description": "Signal name, e.g. SIGINT" },
-              "number": { "type": "integer", "description": "Signal number" },
+              "name":   { "type": "string", "enum": ["SIGINT", "SIGTERM", "SIGWINCH"], "description": "Portable signal name resolved to a Go OS signal constant" },
               "event":  { "type": "string", "enum": ["quit", "resize"], "description": "Event produced by this signal" }
             }
           }

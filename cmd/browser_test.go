@@ -97,6 +97,11 @@ func TestControlWithoutGoHandlerFailsIntegrity(t *testing.T) {
 	if err := validateControlHandlers(controls, controlHandlers); err == nil || !strings.Contains(err.Error(), "no Go setter handler") {
 		t.Fatalf("missing handler integrity error = %v", err)
 	}
+	controls[0].Set = "preview_height"
+	controls[0].Get = "get_preview_height"
+	if err := validateControlHandlers(controls, controlHandlers); err == nil || !strings.Contains(err.Error(), "no Go setter handler") {
+		t.Fatalf("bare control key unexpectedly registered as binding: %v", err)
+	}
 }
 
 func TestTruncateANSIPreservesEscapesAndWidth(t *testing.T) {

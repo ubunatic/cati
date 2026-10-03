@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -61,7 +60,7 @@ func runInputTest() error {
 	}()
 
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGWINCH)
+	signal.Notify(sigs, inputSpec.SignalsFor(input.EventResize)...)
 	defer signal.Stop(sigs)
 
 	const maxLines = 20

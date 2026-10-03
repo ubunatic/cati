@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
@@ -99,6 +101,12 @@ type Spec struct {
 	mouseDisableMotion string
 	tokenizerRules     []tokRule
 	terminalSeqs       map[string]EventType
+	signals            []signalBinding
+}
+
+type signalBinding struct {
+	event  EventType
+	signal os.Signal
 }
 
 // Load reads and parses spec/input.yaml from fsys. A missing file returns an
@@ -194,6 +202,7 @@ func parse(data string) (*Spec, error) {
 		fields map[string]string
 	}
 	var curItem *listItem
+	var signalErr error
 
 	commitItem := func() {
 		if curItem == nil {
@@ -201,7 +210,15 @@ func parse(data string) (*Spec, error) {
 		}
 		switch section {
 		case "signals":
-			// nothing stored in Spec directly (signals are handled by OS signal package)
+			name, event := curItem.fields["name"], EventType(curItem.fields["event"])
+			sig, ok := resolveSignalName(name)
+			if !ok {
+				signalErr = fmt.Errorf("unsupported input signal %q", name)
+			} else if event != EventQuit && event != EventResize {
+				signalErr = fmt.Errorf("unsupported input signal event %q", event)
+			} else {
+				s.signals = append(s.signals, signalBinding{event: event, signal: sig})
+			}
 		case "terminal_sequences":
 			seq := resolveEscapes(curItem.fields["seq"])
 			ev := curItem.fields["event"]
@@ -360,12 +377,39 @@ func parse(data string) (*Spec, error) {
 		}
 	}
 	commitItem()
+	if signalErr != nil {
+		return nil, signalErr
+	}
 
 	if !inInput || len(s.keyAliases) == 0 || !seenTokenizer || len(s.tokenizerRules) == 0 {
 		return nil, fmt.Errorf("input spec must define key_aliases and tokenizer.rules")
 	}
 
 	return s, nil
+}
+
+func resolveSignalName(name string) (os.Signal, bool) {
+	switch name {
+	case "SIGINT":
+		return os.Interrupt, true
+	case "SIGTERM":
+		return syscall.SIGTERM, true
+	case "SIGWINCH":
+		return syscall.SIGWINCH, true
+	default:
+		return nil, false
+	}
+}
+
+// SignalsFor returns the declared operating-system signals that produce event.
+func (s *Spec) SignalsFor(event EventType) []os.Signal {
+	var signals []os.Signal
+	for _, binding := range s.signals {
+		if binding.event == event {
+			signals = append(signals, binding.signal)
+		}
+	}
+	return signals
 }
 
 // ResolveKeyAlias converts a named alias like "<esc>" or "<c-c>" to its terminal sequence.

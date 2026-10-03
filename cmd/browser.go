@@ -19,7 +19,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -85,7 +84,7 @@ type controlHandler struct {
 }
 
 var controlHandlers = func() map[string]controlHandler {
-	handlers := map[string]controlHandler{
+	byControl := map[string]controlHandler{
 		"preview_height": {typeName: "int", get: func(s Settings) string { return fmt.Sprintf("%d rows", s.MaxPreviewHeight) }, set: func(c ControlSpec, d int, s *Settings) {
 			s.MaxPreviewHeight = max(c.Min, min(c.Max, s.MaxPreviewHeight+d))
 		}},
@@ -111,7 +110,8 @@ var controlHandlers = func() map[string]controlHandler {
 			s.VideoPreviewDelay = max(c.Min, min(c.Max, s.VideoPreviewDelay+d*100))
 		}},
 	}
-	for key, handler := range handlers {
+	handlers := make(map[string]controlHandler, len(byControl)*2)
+	for key, handler := range byControl {
 		handlers["set_"+key] = handler
 		handlers["get_"+key] = handler
 	}
@@ -1057,7 +1057,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 	}()
 
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigs, inputSpec.SignalsFor(input.EventQuit)...)
 	defer signal.Stop(sigs)
 
 	inputs := make(chan string, 256)

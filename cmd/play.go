@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"io/fs"
 	"os"
 	"os/signal"
-	"syscall"
 	"time"
 
 	"golang.org/x/term"
+	"ubunatic.com/cati/internal/input"
 	"ubunatic.com/cati/internal/viewgeom"
+	spec "ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/halfblock"
 
 	catiterm "ubunatic.com/cati/v1/term"
@@ -85,7 +87,11 @@ func playPreview(path string, width, height int, rc renderCfg, tr TimeRange, cro
 // playTerminal sets up raw mode, signals, and the quit channel.
 // Returns a restore function, a signal channel, and a quit channel.
 // The caller must defer restore().
-func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}) {
+func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}, err error) {
+	inputSpec, err := input.Load(fs.FS(spec.FS))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("load input spec for signals: %w", err)
+	}
 	fd := int(os.Stdin.Fd())
 	oldState, err := term.MakeRaw(fd)
 	if err != nil {
@@ -98,7 +104,7 @@ func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}) {
 	}
 
 	sigs = make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigs, inputSpec.SignalsFor(input.EventQuit)...)
 
 	quit = make(chan struct{}, 1)
 	go func() {
@@ -180,7 +186,10 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		frames = append(frames, img)
 	}
 
-	restore, sigs, quit := playTerminal()
+	restore, sigs, quit, err := playTerminal()
+	if err != nil {
+		return err
+	}
 	defer restore()
 	defer signal.Stop(sigs)
 	defer func() {
@@ -260,7 +269,10 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		}
 	}
 
-	restore, sigs, quit := playTerminal()
+	restore, sigs, quit, err := playTerminal()
+	if err != nil {
+		return err
+	}
 	defer restore()
 	defer signal.Stop(sigs)
 	defer func() {

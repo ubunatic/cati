@@ -2,7 +2,9 @@ package input_test
 
 import (
 	"io/fs"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"testing/fstest"
 
@@ -345,5 +347,50 @@ func TestChangedSpecAliasChangesBehavior(t *testing.T) {
 	}
 	if got := s.ResolveKeyAlias("<esc>"); got != "CUSTOM" {
 		t.Errorf("ResolveKeyAlias(<esc>) = %q, want changed spec value CUSTOM", got)
+	}
+}
+
+func TestDeclaredSignalsAreSupportedAndDriveRegistration(t *testing.T) {
+	s := loadInputSpec(t)
+	quit := s.SignalsFor(input.EventQuit)
+	resize := s.SignalsFor(input.EventResize)
+	if len(quit) != 2 || quit[0] != os.Interrupt || quit[1] != syscall.SIGTERM {
+		t.Fatalf("quit signals = %v, want interrupt and SIGTERM", quit)
+	}
+	if len(resize) != 1 || resize[0] != syscall.SIGWINCH {
+		t.Fatalf("resize signals = %v, want SIGWINCH", resize)
+	}
+}
+
+func TestChangedSignalNameChangesRegistration(t *testing.T) {
+	data, err := fs.ReadFile(fs.FS(spec.FS), "input.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(string(data), "name: SIGTERM", "name: SIGWINCH", 1)
+	if changed == string(data) {
+		t.Fatal("could not find SIGTERM declaration")
+	}
+	s, err := input.Load(fstest.MapFS{"input.yaml": {Data: []byte(changed)}})
+	if err != nil {
+		t.Fatalf("Load changed signal spec: %v", err)
+	}
+	quit := s.SignalsFor(input.EventQuit)
+	if len(quit) != 2 || quit[1] != syscall.SIGWINCH {
+		t.Fatalf("changed quit signals = %v, want changed SIGWINCH binding", quit)
+	}
+}
+
+func TestUnsupportedDeclaredSignalFailsLoad(t *testing.T) {
+	data, err := fs.ReadFile(fs.FS(spec.FS), "input.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(string(data), "name: SIGTERM", "name: SIGUSR1", 1)
+	if changed == string(data) {
+		t.Fatal("could not find SIGTERM declaration")
+	}
+	if _, err := input.Load(fstest.MapFS{"input.yaml": {Data: []byte(changed)}}); err == nil || !strings.Contains(err.Error(), "unsupported input signal") {
+		t.Fatalf("unsupported signal load error = %v", err)
 	}
 }

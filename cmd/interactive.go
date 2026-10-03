@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/term"
@@ -863,7 +862,7 @@ func interactiveWithChan(path string, initWidth, initHeight int, rc renderCfg, s
 	}()
 
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigs, inputSpec.SignalsFor(input.EventQuit)...)
 	defer signal.Stop(sigs)
 
 	inputs := sharedInputs
@@ -1263,7 +1262,7 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, tr T
 	defer ticker.Stop()
 
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigs, inputSpec.SignalsFor(input.EventQuit)...)
 	defer signal.Stop(sigs)
 
 	frames, cleanup, err := halfblock.OpenVideoStream(ctx, path, displayFPS, tr.Start, tr.End)

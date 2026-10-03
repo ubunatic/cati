@@ -87,6 +87,11 @@ input:
         emit: key
 ```
 
+Signal declarations use portable names rather than numeric IDs. The input loader
+resolves each declared name to the corresponding Go OS signal constant and rejects
+unsupported names; browser/play routes register the declared `quit` signals, while
+the input tester registers declared `resize` signals.
+
 The `match` types in the tokenizer:
 - `starts_with` — literal prefix match; scans to end-of-prefix or to a terminator set (`scan_until`)
 - `utf8_lead` — byte ≥ 0x80: consume a complete UTF-8 codepoint via `utf8.DecodeRuneInString`

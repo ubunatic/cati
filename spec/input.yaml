@@ -55,13 +55,10 @@ input:
   # OS signals that produce input events.
   signals:
     - name: SIGINT
-      number: 2
       event: quit
     - name: SIGTERM
-      number: 15
       event: quit
     - name: SIGWINCH
-      number: 28
       event: resize
 
   # Terminal escape sequences that produce non-key events.
