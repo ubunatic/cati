@@ -8,20 +8,17 @@ controls:
     type: int
     min: 10
     max: 200
-    default: 40
     set: set_preview_height
     get: get_preview_height
 
   view_mode:
     type: enum
     values: [grid, preview]
-    default: grid
     set: set_view_mode
     get: get_view_mode
 
   preview_videos:
     type: bool
-    default: true
     set: set_preview_videos
     get: get_preview_videos
 
@@ -29,7 +26,6 @@ controls:
     type: int
     min: 1
     max: 32
-    default: 4
     set: set_max_jobs
     get: get_max_jobs
 
@@ -37,7 +33,6 @@ controls:
     type: int
     min: 1
     max: 60
-    default: 8
     set: set_video_frames
     get: get_video_frames
 
@@ -45,6 +40,5 @@ controls:
     type: int
     min: 0
     max: 5000
-    default: 1000
     set: set_video_preview_delay
     get: get_video_preview_delay

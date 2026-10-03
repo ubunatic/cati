@@ -45,6 +45,8 @@ All user-facing configuration, styling, labelling, and layout lives in `spec/`. 
 
 All of these files are loaded through typed helpers in `spec/load.go`. The `cmd/` package keeps only thin adapters such as `loadViewButtonRows()` and `loadViewKeyRows()` so the browser logic still works with simple string templates, but the spec content itself is no longer line-parsed in Go.
 
+`config.yaml` is the canonical source for all six initial settings values. `controls.yaml` declares editable control metadata and does not repeat runtime defaults. The user's `~/.config/cati/config` values override these spec defaults.
+
 ### 3.2 Color values
 
 All color fields accept:
@@ -220,7 +222,6 @@ controls:
     type: int
     min: 10
     max: 200
-    default: 40
     set: set_preview_height    # not yet wired — action name for future use
     get: get_preview_height
 ```

@@ -622,13 +622,12 @@ func lcm(a, b int) int {
 // ── Controls Spec ────────────────────────────────────────────────────────────
 
 type ControlDef struct {
-	Type    string      `yaml:"type"`
-	Min     int         `yaml:"min"`
-	Max     int         `yaml:"max"`
-	Values  []string    `yaml:"values"`
-	Default interface{} `yaml:"default"`
-	Set     string      `yaml:"set"`
-	Get     string      `yaml:"get"`
+	Type   string   `yaml:"type"`
+	Min    int      `yaml:"min"`
+	Max    int      `yaml:"max"`
+	Values []string `yaml:"values"`
+	Set    string   `yaml:"set"`
+	Get    string   `yaml:"get"`
 }
 
 type ControlsSpec struct {
@@ -679,16 +678,55 @@ type ConfigDef struct {
 }
 
 type ConfigSpec struct {
+	Schema string    `yaml:"$schema"`
 	Config ConfigDef `yaml:"config"`
 }
 
 // LoadConfigDefaults reads default settings values.
 func LoadConfigDefaults() (ConfigSpec, error) {
+	return LoadConfigDefaultsFrom(FS)
+}
+
+// LoadConfigDefaultsFrom reads and validates settings defaults from fsys.
+func LoadConfigDefaultsFrom(fsys fs.FS) (ConfigSpec, error) {
 	var spec ConfigSpec
-	data, err := fs.ReadFile(FS, "config.yaml")
+	data, err := fs.ReadFile(fsys, "config.yaml")
 	if err != nil {
 		return spec, err
 	}
-	err = yaml.Unmarshal(data, &spec)
-	return spec, err
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&spec); err != nil {
+		return spec, err
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return spec, err
+	}
+	config, ok := document["config"].(map[string]any)
+	if !ok {
+		return spec, fmt.Errorf("config.yaml must define a config mapping")
+	}
+	for _, key := range []string{"preview_height", "view_mode", "max_jobs", "video_frames", "preview_videos", "video_preview_delay"} {
+		if _, ok := config[key]; !ok {
+			return spec, fmt.Errorf("config.yaml is missing config.%s", key)
+		}
+	}
+	c := spec.Config
+	if c.PreviewHeight < 10 || c.PreviewHeight > 200 {
+		return spec, fmt.Errorf("config.preview_height must be between 10 and 200")
+	}
+	if c.ViewMode != "grid" && c.ViewMode != "preview" {
+		return spec, fmt.Errorf("config.view_mode must be grid or preview")
+	}
+	if c.MaxJobs < 1 || c.MaxJobs > 32 {
+		return spec, fmt.Errorf("config.max_jobs must be between 1 and 32")
+	}
+	if c.VideoFrames < 1 || c.VideoFrames > 60 {
+		return spec, fmt.Errorf("config.video_frames must be between 1 and 60")
+	}
+	if c.VideoPreviewDelay < 0 || c.VideoPreviewDelay > 5000 {
+		return spec, fmt.Errorf("config.video_preview_delay must be between 0 and 5000")
+	}
+	return spec, nil
 }

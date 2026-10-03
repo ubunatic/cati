@@ -710,42 +710,43 @@ func getConfigDir() string {
 	return filepath.Join(home, ".config", "cati")
 }
 
-func loadSpecConfigDefaults() Settings {
-	cfg := Settings{MaxPreviewHeight: 20, ViewMode: "grid", PreviewVideos: true, MaxJobs: 0, VideoFrames: 10, VideoPreviewDelay: 1000}
-	s, err := spec.LoadConfigDefaults()
-	if err != nil {
-		return cfg
+func settingsFromConfigDefaults(c spec.ConfigDef) Settings {
+	return Settings{
+		MaxPreviewHeight:  c.PreviewHeight,
+		ViewMode:          c.ViewMode,
+		PreviewVideos:     c.PreviewVideos,
+		MaxJobs:           c.MaxJobs,
+		VideoFrames:       c.VideoFrames,
+		VideoPreviewDelay: c.VideoPreviewDelay,
 	}
-	if s.Config.PreviewHeight > 0 {
-		cfg.MaxPreviewHeight = s.Config.PreviewHeight
-	}
-	if s.Config.ViewMode == "preview" || s.Config.ViewMode == "grid" {
-		cfg.ViewMode = s.Config.ViewMode
-	}
-	cfg.PreviewVideos = s.Config.PreviewVideos
-	if s.Config.MaxJobs >= 0 {
-		cfg.MaxJobs = s.Config.MaxJobs
-	}
-	if s.Config.VideoFrames > 0 {
-		cfg.VideoFrames = s.Config.VideoFrames
-	}
-	if s.Config.VideoPreviewDelay >= 0 {
-		cfg.VideoPreviewDelay = s.Config.VideoPreviewDelay
-	}
-	return cfg
 }
 
-func loadConfig() Settings {
-	cfg := loadSpecConfigDefaults()
+func loadSpecConfigDefaults() (Settings, error) {
+	s, err := spec.LoadConfigDefaults()
+	if err != nil {
+		return Settings{}, err
+	}
+	return settingsFromConfigDefaults(s.Config), nil
+}
+
+func loadConfig() (Settings, error) {
+	cfg, err := loadSpecConfigDefaults()
+	if err != nil {
+		return Settings{}, fmt.Errorf("load config defaults: %w", err)
+	}
 	dir := getConfigDir()
 	if dir == "" {
-		return cfg
+		return cfg, nil
 	}
 	path := filepath.Join(dir, "config")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return cfg
+		return cfg, nil
 	}
+	return applyConfigOverrides(cfg, data), nil
+}
+
+func applyConfigOverrides(cfg Settings, data []byte) Settings {
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -888,7 +889,10 @@ type scrollDragState struct {
 }
 
 func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bool, initialZoom string, jobs int) error {
-	cfg := loadConfig()
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
 	cfg.MaxJobs = resolveWorkerCount(jobs, cfg.MaxJobs)
 	inputSpec, err := input.Load(fs.FS(spec.FS))
 	if err != nil {

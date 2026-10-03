@@ -103,3 +103,7 @@ Implemented in the M2 commit: removed `DefaultSpec` and parser fallback tables; 
 2. **Dual parsing:** `parse` now runs `yaml.Unmarshal` for validation and then the old line parser for values. Optional if cheap: decode values from the unmarshalled document instead, so one parser defines the format. Skip if it grows M3 beyond one commit; note the decision here.
 
 Then implement M3 as planned (`config.yaml` canonical for runtime defaults; tests prove a changed spec default changes the loaded config and user overrides still win).
+
+**M3 pre-work decisions:** Preserve `MouseEvent`'s exported struct shape and existing `Button==3` no-button API convention. `ParseMouse` interprets the spec-declared code and normalizes it at the loader boundary; helper behavior for external struct literals remains based on the 0–2 held-button range. A struct-literal regression test covers left drag and move. Dual parsing is deferred: replacing the legacy line parser is unrelated to settings defaults and would expand this bounded milestone.
+
+**M3 implementation:** `config.yaml` is the only owner of initial settings values; duplicate `default` values were removed from controls. The config loader validates required fields and ranges, returns invalid-spec errors to browser startup, and has tests proving a changed YAML default changes loaded settings while user overrides win. Verification passed: `go vet ./...`, `go test ./...` (no `--- FAIL` output), and `make install`.
