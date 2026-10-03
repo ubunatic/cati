@@ -46,14 +46,16 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 		// Both dimensions explicit: hard canvas box
 		canvasCols = c.ExplicitCols
 		canvasRows = c.ExplicitRows
-		if c.AspectMode == "aligned" {
-			targetW := canvasCols * spec.CellW
-			targetH := canvasRows * spec.CellH
-			if srcW <= targetW && srcH <= targetH {
+		targetW := canvasCols * spec.CellW
+		targetH := canvasRows * spec.CellH
+		if srcW <= targetW && srcH <= targetH {
+			diffW := targetW - srcW
+			diffH := targetH - srcH
+			if c.AspectMode == "aligned" || (diffW < spec.CellW && diffH < spec.CellH) {
 				baseRenderW = srcW
 				baseRenderH = srcH
-				padRight = targetW - srcW
-				padBottom = targetH - srcH
+				padRight = diffW
+				padBottom = diffH
 				hasAlignedPad = true
 			}
 		}

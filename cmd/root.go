@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/internal/viewgeom"
 	"ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/halfblock"
@@ -802,33 +803,24 @@ func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, 
 	}
 
 	cellW, cellH := rc.renderCellSize()
-	targetW := explicitCols * cellW
-	targetH := explicitRows * cellH
-
-	if aspectMode == "aligned" {
-		if srcW <= targetW && srcH <= targetH {
-			extraW := targetW - srcW
-			extraH := targetH - srcH
-			if extraW > 0 || extraH > 0 {
-				return padSourceImage(orig, extraW, extraH), nil
-			}
-			return orig, nil
-		}
+	aspectNum, aspectDen := rc.renderAspectCorrection()
+	spec := viewgeom.NewV2CellRatio(cellW, cellH, aspectNum, aspectDen)
+	constraints := viewgeom.TargetConstraints{
+		ExplicitCols: explicitCols,
+		ExplicitRows: explicitRows,
+		AspectMode:   aspectMode,
 	}
+	plan := viewgeom.PlanRender(srcW, srcH, constraints, spec)
 
-	if srcW <= targetW && srcH <= targetH {
-		diffW := targetW - srcW
-		diffH := targetH - srcH
-		if diffW < cellW && diffH < cellH {
-			if diffW > 0 || diffH > 0 {
-				return padSourceImage(orig, diffW, diffH), nil
-			}
-			return orig, nil
-		}
+	result := orig
+	if plan.RenderW != srcW || plan.RenderH != srcH {
+		result = resizeRenderedImage(result, plan.RenderW, plan.RenderH, rc)
 	}
-
-	if srcW == targetW && srcH == targetH {
-		return orig, nil
+	if plan.PadRight > 0 || plan.PadBottom > 0 {
+		result = padSourceImage(result, plan.PadRight, plan.PadBottom)
 	}
-	return resizeRenderedImage(orig, targetW, targetH, rc), nil
+	if plan.ExtH > 0 {
+		result = imgutil.AppendTransparentRows(result, plan.ExtH)
+	}
+	return result, nil
 }
