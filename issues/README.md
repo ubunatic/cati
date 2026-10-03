@@ -76,6 +76,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 070 | [070-add-2x4-braille-foreground-and-background-render-mode.md](070-add-2x4-braille-foreground-and-background-render-mode.md) | Add 2x4 braille foreground and background render mode | Resolved |
 | 071 | [071-respect-explicit-width-and-height-in-static-renders.md](071-respect-explicit-width-and-height-in-static-renders.md) | Respect explicit width and height in static renders | Open |
 | 072 | [072-add-aspect-modes-for-cli-source-mapping.md](072-add-aspect-modes-for-cli-source-mapping.md) | Add aspect modes for CLI source mapping | Open |
+| 073 | [073-add-pixel-matched-s2-and-h2-render-paths.md](073-add-pixel-matched-s2-and-h2-render-paths.md) | Add pixel-matched s2 and h2 render paths | Open |
 
 ## Archived
 
