@@ -1,6 +1,6 @@
 # 077 — Cover 3x3 and all composite modes in geometry planner and fix line count/padding mismatches
 
-**Status**: Open
+**Status**: Closed — resolved by updating planner to fill explicit grid and aligning glyph grid bounds
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug
