@@ -92,3 +92,14 @@ Prioritize accepted shadow/fidelity gaps as bounded follow-ups: input, settings/
 Implemented in the M2 commit: removed `DefaultSpec` and parser fallback tables; missing `input.yaml` now yields an empty spec for raw-key handling, while malformed or incomplete present content returns an error. Browser, viewer, and input-test entry points surface loader errors. Existing mouse enable/disable sequences and no-button value are loaded from YAML. Tests cover missing/invalid specs and prove a changed alias changes behavior. Verification passed: `go vet ./...`, `go test ./...` (no `--- FAIL` output), and `make install`.
 
 **Audit acceptance:** Every retained candidate has evidence, a strength rationale, an owner or ownership question, file/test hints, and a disposition. Remove stale findings rather than converting them into work; synchronize the issue index. This targeted inventory is not an exhaustive repository-wide audit; remaining accepted gaps and deferred ownership decisions are follow-up work.
+
+**M2 host review:** accepted. Full suite green on review. An empty (missing-file) spec still consumes unmatched bytes one by one, so Ctrl-C (`\x03`) still passes through.
+
+### M3 — Settings defaults
+
+**Pre-Work / Required Refinements (from M2 review):**
+
+1. **Public mouse helper regression:** `MouseEvent.NoButton` is a new exported field whose zero value is `0`. A `MouseEvent` built outside `ParseMouse` (library users, test literals) now reports `IsDrag()==false` for a left-button drag (`Button==0`) and `IsMove()==true` for it. §3.4 requires preserving public APIs. Fix without a Go copy of the spec value: e.g. `ParseMouse` resolves drag/move into the event when it parses (it has the spec), so the helpers no longer compare against a field that literals leave at 0. Document the chosen contract in `docs/Input.md`. Add a test with a struct-literal left drag.
+2. **Dual parsing:** `parse` now runs `yaml.Unmarshal` for validation and then the old line parser for values. Optional if cheap: decode values from the unmarshalled document instead, so one parser defines the format. Skip if it grows M3 beyond one commit; note the decision here.
+
+Then implement M3 as planned (`config.yaml` canonical for runtime defaults; tests prove a changed spec default changes the loaded config and user overrides still win).
