@@ -25,7 +25,7 @@ terminal mode and spawning `catiplay`, so browser/player runtime failures stay
 outside the primary `cati` process.
 
 Core rendering logic lives in the public libraries under `v1/`
-(`v1/halfblock/`, `v1/quadblock/`, `v1/sextant/`, `v1/braille/`, and `v1/sparkline/`),
+(`v1/halfblock/`, `v1/quadblock/`, `v1/sextant/`, and `v1/sparkline/`),
 utilizing core types defined in `v1/core/` and terminal size detection utility
 in `v1/term/`.
 
