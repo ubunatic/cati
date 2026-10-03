@@ -34,7 +34,7 @@
 
 ## D. `controls.yaml` — declared but not read
 
-✅ **Fixed** — `loadControls()` reads `spec/controls.yaml` and returns `[]ControlSpec`. The settings form (`drawSettingsPage`) is now driven by this slice: field labels derive from `settingsFieldLabel(key)`, tab cycling uses `len(controls)`, and inc/dec bounds come from `c.Min`/`c.Max`. `applySettingsDelta` dispatches on `c.Key` to update the right field in the `Settings` struct.
+✅ **Fixed** — `loadControls()` reads `spec/controls.yaml` and returns `[]ControlSpec`. The settings form (`drawSettingsPage`) is now driven by this slice: field labels derive from `settingsFieldLabel(key)`, tab cycling uses `len(controls)`, and inc/dec bounds come from `c.Min`/`c.Max`. Since [076](076-audit-spec-driven-approach-violations-and-classify-candidates.md) M4, the inventory, order, types, bounds, and `set`/`get` bindings all come from the spec; `applySettingsDelta` dispatches through the declared `set` binding, and a control without a Go handler is a load error.
 
 ---
 
