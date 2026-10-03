@@ -117,3 +117,13 @@ Then implement M3 as planned (`config.yaml` canonical for runtime defaults; test
 Then implement M4 as planned: the control inventory, order, type and bounds come from `controls.yaml`; the 100 ms delay step is either declared in the spec or justified in a code comment as mechanics. Tests: adding/removing/reordering a control in a fixture changes the settings page; a control with no Go handler fails an integrity test.
 
 **M4 implementation:** `LoadControlsFrom` preserves YAML declaration order and validates control shape; `loadControls` builds the settings inventory directly from the spec, gracefully leaves it empty when absent, and returns malformed-spec or missing-handler errors to browser startup. `set`/`get` bindings dispatch through a registered handler table. Integer bounds and enum values come from the spec; the 100 ms delay step is documented as a UI input mechanic. Fixture tests cover changed inventory, order, bounds, enum values, and missing handlers. Design data flow is updated in `docs/Design.md`.
+
+**M4 host review:** accepted. Order comes from the YAML node order; type, bounds, enum size and bindings are validated; a control without a Go handler is an error.
+
+### M5 — Input declarations
+
+**Pre-Work / Required Refinements (from M4 review):**
+
+1. `controlHandlers` registers each handler under the bare key as well as `set_<key>`/`get_<key>`, so `set: preview_height` would also pass validation. Register only the declared binding names, and add a negative test for a bare-key binding.
+
+Then implement M5 as planned: consume or deliberately remove the declared-but-unused input fields (`signals` and any others still unread after M2). For signals, resolve OS signals by portable names (`os.Interrupt`, `syscall.SIGWINCH`, ...), not by YAML signal numbers; if the YAML block stays, test that every declared signal is supported. Tests must fail when a spec value changes or is removed.
