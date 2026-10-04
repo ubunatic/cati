@@ -194,9 +194,10 @@ func parseFrontMatter(content string) (title string, parent string, weight int, 
 	return title, parent, weight, true
 }
 
+var h1Regex = regexp.MustCompile(`(?m)^#\s+(.+)$`)
+
 func extractH1(content string) string {
-	re := regexp.MustCompile(`(?m)^#\s+(.+)$`)
-	matches := re.FindStringSubmatch(content)
+	matches := h1Regex.FindStringSubmatch(content)
 	if len(matches) > 1 {
 		return strings.TrimSpace(matches[1])
 	}
