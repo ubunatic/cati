@@ -163,6 +163,41 @@ func TestBrowser_ParseYaml(t *testing.T) {
 	}
 }
 
+func BenchmarkTplWidth(b *testing.B) {
+	tpl := " {app_name | bold} [{dir}] — Page {page}/{pages} ({start}-{end} of {total})"
+	vars := map[string]string{
+		"app_name": "Cati Browser",
+		"dir":      "/home/user/Pictures",
+		"page":     "1",
+		"pages":    "12",
+		"start":    "1",
+		"end":      "18",
+		"total":    "210",
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = tplWidth(tpl, vars)
+	}
+}
+
+func BenchmarkRenderTpl(b *testing.B) {
+	tpl := " {app_name | bold} [{dir}] — Page {page}/{pages} ({start}-{end} of {total})"
+	vars := map[string]string{
+		"app_name": "Cati Browser",
+		"dir":      "/home/user/Pictures",
+		"page":     "1",
+		"pages":    "12",
+		"start":    "1",
+		"end":      "18",
+		"total":    "210",
+	}
+	baseAnsi := "\x1b[1m\x1b[30m\x1b[47m"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = renderTpl(tpl, vars, baseAnsi)
+  }
+}
+
 func TestStyleAndAboutFixturesDriveOutput(t *testing.T) {
 	styleDoc := "app:\n  border_style: box\nbuttons:\n  left_cap: '<'\n  right_cap: '>'\nscroll_bar:\n  width: 1\n"
 	styleSpec, err := spec.LoadStyleFrom(fstest.MapFS{"style.yaml": {Data: []byte(styleDoc)}})
