@@ -29,6 +29,8 @@ Welcome to the Cati developer documentation. The following resources cover our p
 | File | Topic |
 |------|-------|
 | [studies/2026-09-27-host-orchestrator-polling-and-concurrency-postmortem.md](studies/2026-09-27-host-orchestrator-polling-and-concurrency-postmortem.md) | Host Orchestrator Polling Storms and Concurrent Agent Spawning Post-Mortem |
+| [studies/2026-10-04-terminal-pixels-with-agents-story.md](studies/2026-10-04-terminal-pixels-with-agents-story.md) | Terminal Pixels, Measured and Made |
+| [studies/google-jules-performance-story.md](studies/google-jules-performance-story.md) | Google Jules performance work across Cati and Loom Games |
 | [studies/codespaces-color-rendering.md](studies/codespaces-color-rendering.md) | GitHub Codespaces Workbench Color Rendering Artifacts |
 
 ---

@@ -23,6 +23,11 @@ As of October 4, the repository records 255 commits in the preceding six weeks, 
 
 ## Facts
 
+Git history records 31 commits by `google-labs-jules[bot]` in the six weeks
+ending 2026-10-05. The companion
+[Jules performance study](google-jules-performance-story.md) describes
+representative Cati and Loom Games commits.
+
 | | |
 |---|---|
 | Stack | Go 1.26, Cobra, YAML specs, Unicode and ANSI terminal output, external video/audio tools |
