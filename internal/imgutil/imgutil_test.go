@@ -77,6 +77,44 @@ func TestFitDimsUnifiedGeometry(t *testing.T) {
 	}
 }
 
+func TestFitDimsRatioMatchesFitDimsWhenDenomIsOne(t *testing.T) {
+	for _, c := range realCells {
+		for _, cols := range []int{1, 3, 6, 12, 24} {
+			for _, rows := range []int{0, 5, 10, 20} {
+				for _, srcH := range []int{100, 360, 480} {
+					w1, h1, ext1 := FitDims(640, srcH, c.cellW, c.cellH, c.aspectX, cols, rows)
+					w2, h2, ext2 := FitDimsRatio(640, srcH, c.cellW, c.cellH, c.aspectX, 1, cols, rows)
+					if w1 != w2 || h1 != h2 || ext1 != ext2 {
+						t.Errorf("FitDimsRatio mismatch for %s cols=%d rows=%d: FitDims=(%d,%d,%d), FitDimsRatio=(%d,%d,%d)",
+							c.name, cols, rows, w1, h1, ext1, w2, h2, ext2)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestFitDimsRatioSanitizationAndRationalAspect(t *testing.T) {
+	// Zero source dimensions
+	w, h, ext := FitDimsRatio(0, 100, 2, 3, 4, 3, 10, 5)
+	if w != 20 || h != 15 || ext != 0 {
+		t.Errorf("zero srcW: got (%d,%d,%d), want (20,15,0)", w, h, ext)
+	}
+
+	// Invalid aspect numbers should be sanitized to 1
+	w1, h1, ext1 := FitDimsRatio(100, 100, 2, 2, 0, -1, 10, 0)
+	w2, h2, ext2 := FitDimsRatio(100, 100, 2, 2, 1, 1, 10, 0)
+	if w1 != w2 || h1 != h2 || ext1 != ext2 {
+		t.Errorf("aspect sanitization mismatch: got (%d,%d,%d), want (%d,%d,%d)", w1, h1, ext1, w2, h2, ext2)
+	}
+
+	// Sextant-style cell geometry (2x3 cells with 4:3 aspect ratio)
+	sw, sh, extS := FitDimsRatio(640, 480, 2, 3, 4, 3, 20, 0)
+	if sw <= 0 || sh <= 0 || extS < 0 {
+		t.Errorf("sextant fit failed: got (%d,%d,%d)", sw, sh, extS)
+	}
+}
+
 // TestFitDimsHalfCellInvariant asserts extH is always 0 or exactly CellH/2, so
 // the transparent tail never exceeds half a char (TestGoldenTransparentBound).
 func TestFitDimsHalfCellInvariant(t *testing.T) {
