@@ -492,13 +492,22 @@ func lastInfoLineForTest(out string) string {
 	return ""
 }
 
+var infoOrZoomHintRe = regexp.MustCompile(`info raw=[^\r\n]*|src px/cell=[0-9.]+`)
+
 func lastInfoOrZoomHintForTest(out string) string {
-	re := regexp.MustCompile(`info raw=[^\r\n]*|src px/cell=[0-9.]+`)
-	matches := re.FindAllString(stripANSIForTest(out), -1)
+	matches := infoOrZoomHintRe.FindAllString(stripANSIForTest(out), -1)
 	if len(matches) == 0 {
 		return ""
 	}
 	return matches[len(matches)-1]
+}
+
+func BenchmarkLastInfoOrZoomHintForTest(b *testing.B) {
+	sample := "\x1b[31m[Halfblock]\x1b[0m info raw=1.23 ladder=1.25 trim=none cells=26x13 src=32x32\nsrc px/cell=1.25\n"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = lastInfoOrZoomHintForTest(sample)
+	}
 }
 
 func lastSSIMForModeForTest(out, mode string) string {
