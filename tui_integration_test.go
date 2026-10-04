@@ -10,12 +10,29 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 	"unicode/utf8"
 	"unsafe"
 )
+
+var (
+	zoomHintRe       = regexp.MustCompile(`src px/cell=[0-9.]+`)
+	infoOrZoomHintRe = regexp.MustCompile(`info raw=[^\r\n]*|src px/cell=[0-9.]+`)
+	modeSSIMReCache  sync.Map
+)
+
+func getModeSSIMRe(mode string) *regexp.Regexp {
+	if re, ok := modeSSIMReCache.Load(mode); ok {
+		return re.(*regexp.Regexp)
+	}
+	pattern := regexp.QuoteMeta(mode) + `.*?S:([0-9.]+)`
+	re := regexp.MustCompile(pattern)
+	actual, _ := modeSSIMReCache.LoadOrStore(mode, re)
+	return actual.(*regexp.Regexp)
+}
 
 func TestInteractiveSmallGradientViaPipedStdin(t *testing.T) {
 	if _, err := os.Stat("testdata/gradient_32x32.png"); err != nil {
@@ -467,7 +484,7 @@ func lastZoomHintForTest(out string) string {
 }
 
 func zoomHintsForTest(out string) []string {
-	return regexp.MustCompile(`src px/cell=[0-9.]+`).FindAllString(stripANSIForTest(out), -1)
+	return zoomHintRe.FindAllString(stripANSIForTest(out), -1)
 }
 
 func uniqueZoomHintsForTest(out string) []string {
@@ -493,8 +510,7 @@ func lastInfoLineForTest(out string) string {
 }
 
 func lastInfoOrZoomHintForTest(out string) string {
-	re := regexp.MustCompile(`info raw=[^\r\n]*|src px/cell=[0-9.]+`)
-	matches := re.FindAllString(stripANSIForTest(out), -1)
+	matches := infoOrZoomHintRe.FindAllString(stripANSIForTest(out), -1)
 	if len(matches) == 0 {
 		return ""
 	}
@@ -502,12 +518,21 @@ func lastInfoOrZoomHintForTest(out string) string {
 }
 
 func lastSSIMForModeForTest(out, mode string) string {
-	pattern := regexp.QuoteMeta(mode) + `.*?S:([0-9.]+)`
-	matches := regexp.MustCompile(pattern).FindAllStringSubmatch(stripANSIForTest(out), -1)
+	re := getModeSSIMRe(mode)
+	matches := re.FindAllStringSubmatch(stripANSIForTest(out), -1)
 	if len(matches) == 0 {
 		return ""
 	}
 	return matches[len(matches)-1][1]
+}
+
+func BenchmarkLastSSIMForModeForTest(b *testing.B) {
+	out := "sample output with quad/splithalf S:0.916 and quad/splithalf S:0.958"
+	mode := "quad/splithalf"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = lastSSIMForModeForTest(out, mode)
+	}
 }
 
 func firstRenderedFrameForTest(out string) string {
