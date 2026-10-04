@@ -83,6 +83,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 077 | [077-cover-3x3-and-all-composite-modes-in-geometry-planner-and-fix-line-count-padding-mismatches.md](077-cover-3x3-and-all-composite-modes-in-geometry-planner-and-fix-line-count-padding-mismatches.md) | Cover 3x3 and all composite modes in geometry planner and fix line count/padding mismatches | Closed — resolved by updating planner to fill explicit grid and aligning glyph grid bounds |
 | 078 | [078-pixel-and-aligned-aspect-edge-cases.md](078-pixel-and-aligned-aspect-edge-cases.md) | Pixel/aligned aspect edge cases: distortion cap and downscale fallback | Open |
 | 079 | [079-spec-policy-ownership-decisions-cli-zoom-options-playback-and-input-labels.md](079-spec-policy-ownership-decisions-cli-zoom-options-playback-and-input-labels.md) | Spec policy ownership decisions: CLI, zoom, options, playback, and input labels | Open |
+| 080 | [080-refresh-readme-format-and-go-version-support.md](080-refresh-readme-format-and-go-version-support.md) | Refresh README format and Go version support | Open |
 
 ## Archived
 
