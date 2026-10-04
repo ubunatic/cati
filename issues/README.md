@@ -84,6 +84,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 078 | [078-pixel-and-aligned-aspect-edge-cases.md](078-pixel-and-aligned-aspect-edge-cases.md) | Pixel/aligned aspect edge cases: distortion cap and downscale fallback | Open |
 | 079 | [079-spec-policy-ownership-decisions-cli-zoom-options-playback-and-input-labels.md](079-spec-policy-ownership-decisions-cli-zoom-options-playback-and-input-labels.md) | Spec policy ownership decisions: CLI, zoom, options, playback, and input labels | Open |
 | 080 | [080-refresh-readme-format-and-go-version-support.md](080-refresh-readme-format-and-go-version-support.md) | Refresh README format and Go version support | Open |
+| 081 | [081-replace-file-home-links-in-docs-and-book-with-repo-relative-or-codeberg-urls.md](081-replace-file-home-links-in-docs-and-book-with-repo-relative-or-codeberg-urls.md) | Replace file:///home links in docs and book with repo-relative or Codeberg URLs | Open |
 
 ## Archived
 
