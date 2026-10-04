@@ -1,6 +1,6 @@
 # 081 — Replace file:///home links in docs and book with repo-relative or Codeberg URLs
 
-**Status**: Open
+**Status**: Closed — Replaced local file links with Codeberg source links, rebuilt book, and verified uman website scan cati clean
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Documentation
