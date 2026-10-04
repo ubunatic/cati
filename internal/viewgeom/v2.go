@@ -1,9 +1,8 @@
 package viewgeom
 
-// V2Spec carries the copied width-first geometry inputs.
-//
-// FIXME: this is a v2 copy of the render-fit math. Keep it isolated until the
-// pipeline settles, then consolidate with the original geometry surface.
+import "ubunatic.com/cati/internal/imgutil"
+
+// V2Spec carries width-first geometry inputs.
 type V2Spec struct {
 	CellW     int
 	CellH     int
@@ -70,7 +69,7 @@ func (s V2Spec) Fit(srcW, srcH, cols, rows int, frame bool) V2Plan {
 	}
 	plan.InnerCols = cols
 
-	renderW, renderH, extH := fitDimsRatio(srcW, srcH, s.CellW, s.CellH, s.AspectNum, s.AspectDen, cols, rows)
+	renderW, renderH, extH := imgutil.FitDimsRatio(srcW, srcH, s.CellW, s.CellH, s.AspectNum, s.AspectDen, cols, rows)
 	plan.RenderW = renderW
 	plan.RenderH = renderH
 	plan.ExtH = extH
@@ -117,7 +116,7 @@ func (s V2Spec) FitWidthPrimary(srcW, srcH, cols, rows int, frame bool) V2Plan {
 	}
 	plan.InnerCols = cols
 
-	renderW, renderH, extH := fitDimsRatio(srcW, srcH, s.CellW, s.CellH, s.AspectNum, s.AspectDen, cols, 0)
+	renderW, renderH, extH := imgutil.FitDimsRatio(srcW, srcH, s.CellW, s.CellH, s.AspectNum, s.AspectDen, cols, 0)
 	plan.RenderW = renderW
 	plan.RenderH = renderH
 	plan.ExtH = extH
@@ -137,73 +136,3 @@ func (s V2Spec) FitWidthPrimary(srcW, srcH, cols, rows int, frame bool) V2Plan {
 	return plan
 }
 
-// fitDimsRatio is the copied rational-aspect fit math for the v2 pipeline.
-//
-// FIXME: keep in sync with the v2 render path until the copy is consolidated.
-func fitDimsRatio(srcW, srcH, cellW, cellH, aspectNum, aspectDen, cols, rows int) (targetW, targetH, extH int) {
-	if srcW == 0 || srcH == 0 {
-		return max(1, cols*cellW), max(1, rows*cellH), 0
-	}
-	if aspectNum < 1 {
-		aspectNum = 1
-	}
-	if aspectDen < 1 {
-		aspectDen = 1
-	}
-
-	maxW, maxH := cols*cellW, rows*cellH
-
-	acSrcW := srcW * aspectNum
-	acSrcH := srcH * aspectDen
-	var rawW int
-	var hNum, hDen int
-	heightDerived := true
-	switch {
-	case cols <= 0 && rows <= 0:
-		rawW, hNum, hDen = max(1, acSrcW/aspectDen), srcH, 1
-	case rows <= 0:
-		rawW, hNum, hDen = maxW, acSrcH*maxW, acSrcW
-	case cols <= 0:
-		targetH, rawW, heightDerived = maxH, max(1, acSrcW*maxH/acSrcH), false
-	default:
-		if acSrcW*maxH >= acSrcH*maxW {
-			rawW, hNum, hDen = maxW, acSrcH*maxW, acSrcW
-		} else {
-			targetH, rawW, heightDerived = maxH, max(1, acSrcW*maxH/acSrcH), false
-		}
-	}
-
-	if heightDerived {
-		half := cellH / 2
-		if cellH > 1 && half > 0 {
-			cellScaled := cellH * hDen
-			halfScaled := half * hDen
-			full := hNum / cellScaled
-			rem := hNum - full*cellScaled
-			switch {
-			case rem < halfScaled:
-				targetH = full * cellH
-			case 2*rem <= cellScaled+halfScaled:
-				targetH = full*cellH + half
-				extH = half
-			default:
-				targetH = (full + 1) * cellH
-			}
-		} else {
-			targetH = max(1, hNum/hDen)
-		}
-		if targetH < 1 {
-			targetH = cellH
-		}
-	}
-
-	targetW = rawW
-	if cellW > 1 && targetW > cellW {
-		targetW -= targetW % cellW
-	}
-	if targetW < 1 {
-		targetW = 1
-	}
-
-	return targetW, targetH, extH
-}

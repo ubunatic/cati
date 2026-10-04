@@ -1,15 +1,17 @@
 package cmd
 
 import (
-	"io"
 	"image"
 	"image/color"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
+	"ubunatic.com/cati/internal/viewgeom"
 	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
 	"ubunatic.com/cati/v1/sextant"
@@ -976,26 +978,115 @@ func TestCLIDoom1S2Render(t *testing.T) {
 		name      string
 		args      []string
 		wantLines int
+		wantCols  int
 	}{
 		{
 			name:      "pad 0,1",
 			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--pad", "0,1"},
 			wantLines: 67,
+			wantCols:  160,
 		},
 		{
-			name:      "aspect aligned",
+			name:      "aspect aligned both dimensions",
 			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--aspect", "aligned"},
 			wantLines: 67,
+			wantCols:  160,
 		},
 		{
-			name:      "play preview -H 67",
-			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--play", "preview"},
+			name:      "aspect aligned width only s2",
+			args:      []string{"assets/doom1.png", "-W", "160", "-m", "s2", "--aspect", "aligned"},
 			wantLines: 67,
+			wantCols:  160,
 		},
 		{
-			name:      "play preview space separated -H 67",
+			name:      "aspect aligned height only s2",
+			args:      []string{"assets/doom1.png", "-H", "67", "-m", "s2", "--aspect", "aligned"},
+			wantLines: 67,
+			wantCols:  160,
+		},
+		{
+			name:      "aspect aligned width only 3x3",
+			args:      []string{"assets/doom1.png", "-W", "107", "-m", "3x3", "--aspect", "aligned"},
+			wantLines: 45,
+			wantCols:  107,
+		},
+		{
+			name:      "aspect pixel width only 3x3",
+			args:      []string{"assets/doom1.png", "-W", "107", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 45,
+			wantCols:  107,
+		},
+		{
+			name:      "aspect pixel width 54 3x3 regression",
+			args:      []string{"assets/doom1.png", "-W", "54", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 23,
+			wantCols:  54,
+		},
+		{
+			name:      "aspect raw width 53 3x3 downscale",
+			args:      []string{"assets/doom1.png", "-W", "53", "-m", "3x3", "--aspect", "raw"},
+			wantLines: 22,
+			wantCols:  53,
+		},
+		{
+			name:      "aspect pixel width 160 3x3 control",
+			args:      []string{"assets/doom1.png", "-W", "160", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 67,
+			wantCols:  160,
+		},
+		{
+			name:      "aspect pixel width 110 3x3 keeps uniform columns",
+			args:      []string{"assets/doom1.png", "-W", "110", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 45,
+			wantCols:  110,
+		},
+		{
+			name:      "aspect pixel height 70 3x3 keeps uniform rows",
+			args:      []string{"assets/doom1.png", "-H", "70", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 70,
+			wantCols:  160,
+		},
+		{
+			name:      "aspect pixel width 160 quad distortion",
+			args:      []string{"assets/doom1.png", "-W", "160", "-m", "quad", "--aspect", "pixel"},
+			wantLines: 67,
+			wantCols:  160,
+		},
+		{
+			name:      "aspect pixel height only 3x3",
+			args:      []string{"assets/doom1.png", "-H", "23", "-m", "3x3", "--aspect", "pixel"},
+			wantLines: 23,
+			wantCols:  56,
+		},
+		{
+			name:      "aspect pixel preview width 54 3x3",
+			args:      []string{"assets/doom1.png", "-W", "54", "-m", "3x3", "--aspect", "pixel", "--play", "preview"},
+			wantLines: 23,
+			wantCols:  54,
+		},
+		{
+			name:      "aspect aligned width only halfblock",
+			args:      []string{"assets/doom1.png", "-W", "160", "--aspect", "aligned"},
+			wantLines: 50,
+			wantCols:  160,
+		},
+		{
+			name:      "halfblock exact box 160x100",
+			args:      []string{"assets/doom1.png", "-W", "160", "-H", "100"},
+			wantLines: 100,
+			wantCols:  160,
+		},
+		{
+			name:      "play preview -H 67 s2",
 			args:      []string{"assets/doom1.png", "-W", "160", "-H", "67", "-m", "s2", "--play", "preview"},
 			wantLines: 67,
+			wantCols:  160,
+		},
+		{
+			name:      "play preview width only aspect aligned halfblock",
+			args:      []string{"assets/doom1.png", "-W", "160", "--aspect", "aligned", "--play", "preview"},
+			wantLines: 50,
+			wantCols:  160,
 		},
 	}
 
@@ -1008,7 +1099,9 @@ func TestCLIDoom1S2Render(t *testing.T) {
 				t.Fatalf("os.Pipe: %v", err)
 			}
 			oldStdout := os.Stdout
+			oldArgs := os.Args
 			os.Stdout = outW
+			os.Args = append([]string{"cati"}, tc.args...)
 
 			outChan := make(chan []byte)
 			go func() {
@@ -1020,6 +1113,7 @@ func TestCLIDoom1S2Render(t *testing.T) {
 
 			outW.Close()
 			os.Stdout = oldStdout
+			os.Args = oldArgs
 
 			if execErr != nil {
 				t.Fatalf("cmd.Execute error: %v", execErr)
@@ -1030,8 +1124,23 @@ func TestCLIDoom1S2Render(t *testing.T) {
 			if len(lines) != tc.wantLines {
 				t.Errorf("got %d lines, want %d lines", len(lines), tc.wantLines)
 			}
+			if len(lines) > 0 && tc.wantCols > 0 {
+				plain := stripAnsi(lines[0])
+				cols := utf8.RuneCountInString(plain)
+				if cols != tc.wantCols {
+					t.Errorf("got %d cols in first line (%q), want %d cols", cols, plain, tc.wantCols)
+				}
+			}
 		})
 	}
+}
+
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func stripAnsi(s string) string {
+	cleaned := ansiRegex.ReplaceAllString(s, "")
+	cleaned = strings.Trim(cleaned, "\r\n")
+	return cleaned
 }
 
 func TestDoom1CustomS2RenderGolden(t *testing.T) {
@@ -1085,6 +1194,119 @@ func TestDoom1CustomS2RenderGolden(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCLIGeometryEdgeCases(t *testing.T) {
+	src := goldenSourceLoad(t, "assets/doom1.png")
+	if src == nil {
+		t.Skip("assets/doom1.png missing")
+	}
+	rcHalf, err := findRenderModeByName("half")
+	if err != nil {
+		t.Fatalf("findRenderModeByName(half): %v", err)
+	}
+
+	t.Run("explicit_box_with_zoom_0", func(t *testing.T) {
+		constraints := viewgeom.TargetConstraints{
+			ExplicitCols: 8,
+			ExplicitRows: 8,
+			TermCols:     80,
+			TermRows:     24,
+			InitialZoom:  "0",
+		}
+		prepared, err := prepareRenderPlanImage(src, constraints, rcHalf)
+		if err != nil {
+			t.Fatalf("prepareRenderPlanImage: %v", err)
+		}
+		cells := renderedCellSize(prepared, rcHalf)
+		if cells.Cols != 8 || cells.Rows != 8 {
+			t.Fatalf("cells = %dx%d, want 8x8", cells.Cols, cells.Rows)
+		}
+	})
+
+	t.Run("unconstrained_terminal_fitting", func(t *testing.T) {
+		constraints := viewgeom.TargetConstraints{
+			ExplicitCols: 0,
+			ExplicitRows: 0,
+			TermCols:     120,
+			TermRows:     40,
+		}
+		prepared, err := prepareRenderPlanImage(src, constraints, rcHalf)
+		if err != nil {
+			t.Fatalf("prepareRenderPlanImage: %v", err)
+		}
+		cells := renderedCellSize(prepared, rcHalf)
+		if cells.Cols > 120 || cells.Rows > 40 {
+			t.Fatalf("cells = %dx%d exceeds terminal bounds 120x40", cells.Cols, cells.Rows)
+		}
+		if cells.Rows == 40 {
+			t.Fatalf("unconstrained fit incorrectly padded to full terminal height 40")
+		}
+	})
+
+	t.Run("smart_explicit_box", func(t *testing.T) {
+		rcSmart := rcHalf
+		rcSmart.smart = true
+		prepared, err := smartPrepare(src, 8, 8, rcSmart)
+		if err != nil {
+			t.Fatalf("smartPrepare: %v", err)
+		}
+		cellW, cellH := rcSmart.renderCellSize()
+		targetW := 8 * cellW
+		targetH := 8 * cellH
+		curW, curH := prepared.Bounds().Dx(), prepared.Bounds().Dy()
+		if curW < targetW || curH < targetH {
+			prepared = padSourceImage(prepared, max(0, targetW-curW), max(0, targetH-curH))
+		}
+		cells := renderedCellSize(prepared, rcSmart)
+		if cells.Cols != 8 || cells.Rows != 8 {
+			t.Fatalf("cells = %dx%d, want 8x8", cells.Cols, cells.Rows)
+		}
+	})
+
+	t.Run("mode_3x3_width_107_no_line_count_mismatch", func(t *testing.T) {
+		rc3x3, err := findRenderModeByName("3x3")
+		if err != nil {
+			t.Fatalf("findRenderModeByName(3x3): %v", err)
+		}
+		constraints := viewgeom.TargetConstraints{
+			ExplicitCols: 107,
+			ExplicitRows: 0,
+			TermCols:     80,
+			TermRows:     24,
+		}
+		prepared, err := prepareRenderPlanImage(src, constraints, rc3x3)
+		if err != nil {
+			t.Fatalf("prepareRenderPlanImage: %v", err)
+		}
+		if err := renderChecked(io.Discard, prepared, rc3x3); err != nil {
+			t.Fatalf("renderChecked: %v", err)
+		}
+	})
+
+	t.Run("mode_six_explicit_stretch_160x67", func(t *testing.T) {
+		rcSix, err := findRenderModeByName("six")
+		if err != nil {
+			t.Fatalf("findRenderModeByName(six): %v", err)
+		}
+		constraints := viewgeom.TargetConstraints{
+			ExplicitCols: 160,
+			ExplicitRows: 67,
+			TermCols:     80,
+			TermRows:     24,
+		}
+		prepared, err := prepareRenderPlanImage(src, constraints, rcSix)
+		if err != nil {
+			t.Fatalf("prepareRenderPlanImage: %v", err)
+		}
+		cells := renderedCellSize(prepared, rcSix)
+		if cells.Cols != 160 || cells.Rows != 67 {
+			t.Fatalf("cells = %dx%d, want 160x67", cells.Cols, cells.Rows)
+		}
+		if err := renderChecked(io.Discard, prepared, rcSix); err != nil {
+			t.Fatalf("renderChecked: %v", err)
+		}
+	})
 }
 
 func itoa(n int) string {

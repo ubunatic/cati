@@ -126,10 +126,10 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 
 	if cols > 0 || opts.Rows > 0 {
 		b := img.Bounds()
-		if cols > 0 && opts.Rows > 0 && b.Dx() == cols*cellW && b.Dy() == opts.Rows*cellH {
+		if (cols <= 0 || (b.Dx()+cellW-1)/cellW == cols) && (opts.Rows <= 0 || (b.Dy()+cellH-1)/cellH == opts.Rows) {
 			scaled = img
-			outCols = cols
-			outRows = opts.Rows
+			outCols = max(1, (b.Dx()+cellW-1)/cellW)
+			outRows = max(1, (b.Dy()+cellH-1)/cellH)
 		} else {
 			targetW, targetH, extH := imgutil.FitDims(b.Dx(), b.Dy(), cellW, cellH, aspectX, cols, opts.Rows)
 			scaled = imgutil.ScaleNN(img, targetW, targetH)
@@ -142,8 +142,8 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	} else {
 		scaled = img
 		b := img.Bounds()
-		outCols = max(1, b.Dx()/cellW)
-		outRows = max(1, b.Dy()/cellH)
+		outCols = max(1, (b.Dx()+cellW-1)/cellW)
+		outRows = max(1, (b.Dy()+cellH-1)/cellH)
 	}
 
 	b := scaled.Bounds()

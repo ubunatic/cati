@@ -1,10 +1,10 @@
 # 071 — Respect explicit width and height in static renders
 
-**Status**: Open
+**Status**: Closed — unified in CLI geometry pipeline and pure planner
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug
-**Related**: [#028](028-v2-unconstrained-static-fit-aspect.md), [#029](029-v2-default-static-fit-full-terminal-width.md)
+**Related**: [#028](028-v2-unconstrained-static-fit-aspect.md), [#029](029-v2-default-static-fit-full-terminal-width.md), [#075](075-unify-cli-render-geometry-contracts-and-validate-route-specific-options.md)
 
 ---
 

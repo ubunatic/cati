@@ -9,14 +9,17 @@
     "$schema":        { "type": "string" },
     "config": {
       "type": "object",
+      "required": ["preview_height", "view_mode", "max_jobs", "video_frames", "preview_videos", "video_preview_delay"],
       "additionalProperties": false,
       "properties": {
         "preview_height":  { "type": "integer", "minimum": 10, "maximum": 200 },
         "view_mode":       { "type": "string", "enum": ["grid", "preview"] },
         "max_jobs":        { "type": "integer", "minimum": 1, "maximum": 32 },
         "video_frames":    { "type": "integer", "minimum": 1, "maximum": 60 },
-        "preview_videos":  { "type": "boolean" }
+        "preview_videos":  { "type": "boolean" },
+        "video_preview_delay": { "type": "integer", "minimum": 0, "maximum": 5000 }
       }
     }
-  }
+  },
+  "required": ["config"]
 }

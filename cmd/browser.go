@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -18,7 +19,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -73,7 +73,50 @@ type ControlSpec struct {
 	Min    int
 	Max    int
 	Values []string // for enum type
+	Set    string
+	Get    string
 }
+
+type controlHandler struct {
+	typeName string
+	get      func(Settings) string
+	set      func(ControlSpec, int, *Settings)
+}
+
+var controlHandlers = func() map[string]controlHandler {
+	byControl := map[string]controlHandler{
+		"preview_height": {typeName: "int", get: func(s Settings) string { return fmt.Sprintf("%d rows", s.MaxPreviewHeight) }, set: func(c ControlSpec, d int, s *Settings) {
+			s.MaxPreviewHeight = max(c.Min, min(c.Max, s.MaxPreviewHeight+d))
+		}},
+		"view_mode": {typeName: "enum", get: func(s Settings) string { return s.ViewMode }, set: func(c ControlSpec, d int, s *Settings) {
+			if len(c.Values) == 0 {
+				return
+			}
+			i := 0
+			for n, v := range c.Values {
+				if v == s.ViewMode {
+					i = n
+					break
+				}
+			}
+			i = ((i+d)%len(c.Values) + len(c.Values)) % len(c.Values)
+			s.ViewMode = c.Values[i]
+		}},
+		"preview_videos": {typeName: "bool", get: func(s Settings) string { return strconv.FormatBool(s.PreviewVideos) }, set: func(_ ControlSpec, d int, s *Settings) { s.PreviewVideos = d > 0 }},
+		"max_jobs":       {typeName: "int", get: func(s Settings) string { return strconv.Itoa(s.MaxJobs) }, set: func(c ControlSpec, d int, s *Settings) { s.MaxJobs = max(c.Min, min(c.Max, s.MaxJobs+d)) }},
+		"video_frames":   {typeName: "int", get: func(s Settings) string { return strconv.Itoa(s.VideoFrames) }, set: func(c ControlSpec, d int, s *Settings) { s.VideoFrames = max(c.Min, min(c.Max, s.VideoFrames+d)) }},
+		"video_preview_delay": {typeName: "int", get: func(s Settings) string { return strconv.Itoa(s.VideoPreviewDelay) }, set: func(c ControlSpec, d int, s *Settings) {
+			// Settings navigation uses 100 ms input steps; allowed bounds come from controls.yaml.
+			s.VideoPreviewDelay = max(c.Min, min(c.Max, s.VideoPreviewDelay+d*100))
+		}},
+	}
+	handlers := make(map[string]controlHandler, len(byControl)*2)
+	for key, handler := range byControl {
+		handlers["set_"+key] = handler
+		handlers["get_"+key] = handler
+	}
+	return handlers
+}()
 
 // settingsFieldLabel converts a snake_case control key to a Title Case display label.
 func settingsFieldLabel(key string) string {
@@ -86,32 +129,36 @@ func settingsFieldLabel(key string) string {
 	return strings.Join(parts, " ")
 }
 
+func notifySignals(ch chan<- os.Signal, signals []os.Signal) bool {
+	if len(signals) == 0 {
+		return false
+	}
+	signal.Notify(ch, signals...)
+	return true
+}
+
 // applySettingsDelta increments or decrements the field matched by c.Key inside s.
 func applySettingsDelta(c ControlSpec, delta int, s *Settings) {
-	switch c.Key {
-	case "preview_height":
-		s.MaxPreviewHeight = max(c.Min, min(c.Max, s.MaxPreviewHeight+delta))
-	case "view_mode":
-		if len(c.Values) > 0 {
-			idx := 0
-			for i, v := range c.Values {
-				if v == s.ViewMode {
-					idx = i
-					break
-				}
-			}
-			idx = ((idx+delta)%len(c.Values) + len(c.Values)) % len(c.Values)
-			s.ViewMode = c.Values[idx]
-		}
-	case "preview_videos":
-		s.PreviewVideos = delta > 0
-	case "max_jobs":
-		s.MaxJobs = max(c.Min, min(c.Max, s.MaxJobs+delta))
-	case "video_frames":
-		s.VideoFrames = max(c.Min, min(c.Max, s.VideoFrames+delta))
-	case "video_preview_delay":
-		s.VideoPreviewDelay = max(c.Min, min(c.Max, s.VideoPreviewDelay+delta*100))
+	if h, ok := controlHandlers[c.Set]; ok && h.set != nil {
+		h.set(c, delta, s)
 	}
+}
+
+func validateControlHandlers(controls []ControlSpec, handlers map[string]controlHandler) error {
+	for _, c := range controls {
+		h, ok := handlers[c.Set]
+		if !ok || h.set == nil {
+			return fmt.Errorf("control %s has no Go setter handler %q", c.Key, c.Set)
+		}
+		if h.typeName != c.Type {
+			return fmt.Errorf("control %s type %q does not match setter handler type %q", c.Key, c.Type, h.typeName)
+		}
+		h, ok = handlers[c.Get]
+		if !ok || h.get == nil {
+			return fmt.Errorf("control %s has no Go getter handler %q", c.Key, c.Get)
+		}
+	}
+	return nil
 }
 
 type StyleConfig struct {
@@ -363,81 +410,38 @@ func styleItemAnsi(style *StyleConfig) string {
 // loadStyle loads colors/structure from spec/style.yaml.
 // FIXME(#004-item-C): spec.LoadTheme() tokens exist but are never applied.
 // spec/buttons.yaml's style: fields (danger, primary, etc.) are ignored.
-func loadStyle() *StyleConfig {
-	cfg := &StyleConfig{
-		AppBorderStyle:     "box",
-		BtnLeftCap:         "[",
-		BtnRightCap:        "]",
-		GridSelectedBold:   true,
-		GridSelectedMarker: " ",
-		ImageBorder:        "none",
-		ScrollThumbChar:    "█",
-		ScrollRailChar:     "▒",
-		ScrollWidth:        1,
-		ScrollRailBg:       "",
-	}
+func loadStyle() (*StyleConfig, error) {
+	return loadStyleFrom(spec.FS)
+}
 
-	s, err := spec.LoadStyle()
+func loadStyleFrom(fsys fs.FS) (*StyleConfig, error) {
+	s, err := spec.LoadStyleFrom(fsys)
 	if err != nil {
-		return cfg
+		if errors.Is(err, fs.ErrNotExist) {
+			return &StyleConfig{}, nil
+		}
+		return nil, fmt.Errorf("load style spec: %w", err)
 	}
+	return styleConfigFromSpec(s), nil
+}
 
-	cfg.AppBg = s.App.Bg
-	if s.App.BorderStyle != "" {
-		cfg.AppBorderStyle = s.App.BorderStyle
+func styleConfigFromSpec(s spec.StyleSpec) *StyleConfig {
+	return &StyleConfig{
+		AppBg: s.App.Bg, AppBorderStyle: s.App.BorderStyle, AppBorderColor: s.App.BorderColor,
+		BtnFg: s.Buttons.Fg, BtnBg: s.Buttons.Bg, BtnBorderColor: s.Buttons.BorderColor,
+		BtnLeftCap: s.Buttons.LeftCap, BtnRightCap: s.Buttons.RightCap,
+		BtnActiveFg: s.Buttons.ActiveFg, BtnActiveBg: s.Buttons.ActiveBg,
+		PreviewBg: s.Preview.Bg, ControlBarBg: s.ControlBar.Bg, ControlBarFg: s.ControlBar.Fg,
+		HeaderFg: s.HeaderBar.Fg, HeaderBg: s.HeaderBar.Bg, HeaderBold: s.HeaderBar.Bold,
+		GridItemFg: s.Grid.ItemFg, GridItemBg: s.Grid.ItemBg,
+		GridSelectedFg: s.Grid.SelectedFg, GridSelectedBg: s.Grid.SelectedBg,
+		GridSelectedBold: s.Grid.SelectedBold, GridSelectedMarker: s.Grid.SelectedMarker,
+		ImageBorder:     s.Grid.ImageBorder,
+		ScrollThumbChar: s.ScrollBar.ThumbChar, ScrollRailChar: s.ScrollBar.RailChar,
+		ScrollWidth: s.ScrollBar.Width, ScrollThumbFg: s.ScrollBar.ThumbFg,
+		ScrollRailFg: s.ScrollBar.RailFg, ScrollRailBg: s.ScrollBar.RailBg,
+		PageTitleFg: s.PageTitle.Fg, PageTitleBold: s.PageTitle.Bold,
 	}
-	cfg.AppBorderColor = s.App.BorderColor
-
-	cfg.BtnFg = s.Buttons.Fg
-	cfg.BtnBg = s.Buttons.Bg
-	cfg.BtnBorderColor = s.Buttons.BorderColor
-	if s.Buttons.LeftCap != "" {
-		cfg.BtnLeftCap = s.Buttons.LeftCap
-	}
-	if s.Buttons.RightCap != "" {
-		cfg.BtnRightCap = s.Buttons.RightCap
-	}
-	cfg.BtnActiveFg = s.Buttons.ActiveFg
-	cfg.BtnActiveBg = s.Buttons.ActiveBg
-
-	cfg.PreviewBg = s.Preview.Bg
-
-	cfg.ControlBarBg = s.ControlBar.Bg
-	cfg.ControlBarFg = s.ControlBar.Fg
-
-	cfg.HeaderFg = s.HeaderBar.Fg
-	cfg.HeaderBg = s.HeaderBar.Bg
-	cfg.HeaderBold = s.HeaderBar.Bold
-
-	cfg.GridItemFg = s.Grid.ItemFg
-	cfg.GridItemBg = s.Grid.ItemBg
-	cfg.GridSelectedFg = s.Grid.SelectedFg
-	cfg.GridSelectedBg = s.Grid.SelectedBg
-	cfg.GridSelectedBold = s.Grid.SelectedBold
-	if s.Grid.SelectedMarker != "" {
-		cfg.GridSelectedMarker = s.Grid.SelectedMarker
-	}
-	if s.Grid.ImageBorder == "box" || s.Grid.ImageBorder == "double" || s.Grid.ImageBorder == "none" {
-		cfg.ImageBorder = s.Grid.ImageBorder
-	}
-
-	if s.ScrollBar.ThumbChar != "" {
-		cfg.ScrollThumbChar = s.ScrollBar.ThumbChar
-	}
-	if s.ScrollBar.RailChar != "" {
-		cfg.ScrollRailChar = s.ScrollBar.RailChar
-	}
-	if s.ScrollBar.Width == 1 || s.ScrollBar.Width == 2 {
-		cfg.ScrollWidth = s.ScrollBar.Width
-	}
-	cfg.ScrollThumbFg = s.ScrollBar.ThumbFg
-	cfg.ScrollRailFg = s.ScrollBar.RailFg
-	cfg.ScrollRailBg = s.ScrollBar.RailBg
-
-	cfg.PageTitleFg = s.PageTitle.Fg
-	cfg.PageTitleBold = s.PageTitle.Bold
-
-	return cfg
 }
 
 // ── Customizable Labels ──────────────────────────────────────────────────────
@@ -658,37 +662,19 @@ func parseYamlView(name string) (*YamlView, error) {
 	}, nil
 }
 
-func getAboutView() *YamlView {
-	view, err := parseYamlView("about.yaml")
-	if err == nil && view != nil {
-		return view
-	}
-	return &YamlView{
-		Type:  "view",
-		Name:  "about",
-		Title: "Cati — cat for images & video in terminal",
-		Content: `Version: 1.0.0
-License: AGPL-3.0-or-later
-Authors: Uwe Jugel (codeberg.org/ubunatic/cati)
+func getAboutView() (*YamlView, error) {
+	return aboutViewFrom(spec.FS)
+}
 
-Controls (Grid Preview):
-  • Left/Right/Up/Down Arrow: Move selection
-  • PageUp/PageDown, [, ]: Navigate pages
-  • Mouse wheel: Scroll pages
-  • Click thumbnail / Enter / Space: View full screen
-  • a / A: Toggle About page
-  • s / S: Settings dialog
-  • q / Esc: Quit application
-
-Controls (Interactive Single View):
-  • + / -: Zoom in / zoom out (centred on screen)
-  • Mouse wheel: Zoom in / zoom out at cursor position
-  • Left-click drag: Pan (grab-and-pull the image)
-  • Up/Down/Left/Right Arrows: Pan the image
-  • c / C: Copy current viewport to clipboard (PNG)
-  • q / Esc: Go back to Grid view`,
-		Controls: []string{"back", "quit", "website"},
+func aboutViewFrom(fsys fs.FS) (*YamlView, error) {
+	v, err := spec.LoadYamlViewFrom(fsys, "about.yaml")
+	if errors.Is(err, fs.ErrNotExist) {
+		return &YamlView{}, nil
 	}
+	if err != nil {
+		return nil, fmt.Errorf("load about spec: %w", err)
+	}
+	return &YamlView{Type: v.Type, Name: v.Name, Title: v.Title, Content: v.Content, Controls: v.Controls}, nil
 }
 
 // ── Config loader & saver ───────────────────────────────────────────────────
@@ -710,42 +696,43 @@ func getConfigDir() string {
 	return filepath.Join(home, ".config", "cati")
 }
 
-func loadSpecConfigDefaults() Settings {
-	cfg := Settings{MaxPreviewHeight: 20, ViewMode: "grid", PreviewVideos: true, MaxJobs: 0, VideoFrames: 10, VideoPreviewDelay: 1000}
-	s, err := spec.LoadConfigDefaults()
-	if err != nil {
-		return cfg
+func settingsFromConfigDefaults(c spec.ConfigDef) Settings {
+	return Settings{
+		MaxPreviewHeight:  c.PreviewHeight,
+		ViewMode:          c.ViewMode,
+		PreviewVideos:     c.PreviewVideos,
+		MaxJobs:           c.MaxJobs,
+		VideoFrames:       c.VideoFrames,
+		VideoPreviewDelay: c.VideoPreviewDelay,
 	}
-	if s.Config.PreviewHeight > 0 {
-		cfg.MaxPreviewHeight = s.Config.PreviewHeight
-	}
-	if s.Config.ViewMode == "preview" || s.Config.ViewMode == "grid" {
-		cfg.ViewMode = s.Config.ViewMode
-	}
-	cfg.PreviewVideos = s.Config.PreviewVideos
-	if s.Config.MaxJobs >= 0 {
-		cfg.MaxJobs = s.Config.MaxJobs
-	}
-	if s.Config.VideoFrames > 0 {
-		cfg.VideoFrames = s.Config.VideoFrames
-	}
-	if s.Config.VideoPreviewDelay >= 0 {
-		cfg.VideoPreviewDelay = s.Config.VideoPreviewDelay
-	}
-	return cfg
 }
 
-func loadConfig() Settings {
-	cfg := loadSpecConfigDefaults()
+func loadSpecConfigDefaults() (Settings, error) {
+	s, err := spec.LoadConfigDefaults()
+	if err != nil {
+		return Settings{}, err
+	}
+	return settingsFromConfigDefaults(s.Config), nil
+}
+
+func loadConfig() (Settings, error) {
+	cfg, err := loadSpecConfigDefaults()
+	if err != nil {
+		return Settings{}, fmt.Errorf("load config defaults: %w", err)
+	}
 	dir := getConfigDir()
 	if dir == "" {
-		return cfg
+		return cfg, nil
 	}
 	path := filepath.Join(dir, "config")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return cfg
+		return cfg, nil
 	}
+	return applyConfigOverrides(cfg, data), nil
+}
+
+func applyConfigOverrides(cfg Settings, data []byte) Settings {
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -805,31 +792,28 @@ func saveConfig(cfg Settings) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
-func loadControls() []ControlSpec {
-	specs := []ControlSpec{
-		{Key: "preview_height", Type: "int", Min: 10, Max: 200},
-		{Key: "view_mode", Type: "enum", Values: []string{"grid", "preview"}},
-		{Key: "preview_videos", Type: "bool"},
-		{Key: "max_jobs", Type: "int", Min: 1, Max: 32},
-		{Key: "video_frames", Type: "int", Min: 1, Max: 60},
-		{Key: "video_preview_delay", Type: "int", Min: 0, Max: 5000},
-	}
+func loadControls() ([]ControlSpec, error) {
 	cSpec, err := spec.LoadControls()
 	if err != nil {
-		return specs
-	}
-	for i, s := range specs {
-		if def, ok := cSpec.Controls[s.Key]; ok {
-			if def.Min != 0 || def.Max != 0 {
-				specs[i].Min = def.Min
-				specs[i].Max = def.Max
-			}
-			if len(def.Values) > 0 {
-				specs[i].Values = def.Values
-			}
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
 		}
+		return nil, fmt.Errorf("load controls spec: %w", err)
 	}
-	return specs
+	controls := controlsFromSpec(cSpec)
+	if err := validateControlHandlers(controls, controlHandlers); err != nil {
+		return nil, err
+	}
+	return controls, nil
+}
+
+func controlsFromSpec(cSpec spec.ControlsSpec) []ControlSpec {
+	controls := make([]ControlSpec, 0, len(cSpec.Order))
+	for _, key := range cSpec.Order {
+		def := cSpec.Controls[key]
+		controls = append(controls, ControlSpec{Key: key, Type: def.Type, Min: def.Min, Max: def.Max, Values: def.Values, Set: def.Set, Get: def.Get})
+	}
+	return controls
 }
 
 // ── Dynamic Directory Loading ───────────────────────────────────────────────
@@ -888,17 +872,33 @@ type scrollDragState struct {
 }
 
 func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bool, initialZoom string, jobs int) error {
-	cfg := loadConfig()
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
 	cfg.MaxJobs = resolveWorkerCount(jobs, cfg.MaxJobs)
-	inputSpec, _ := input.Load(fs.FS(spec.FS))
-	style := loadStyle()
+	inputSpec, err := input.Load(fs.FS(spec.FS))
+	if err != nil {
+		return fmt.Errorf("load input spec: %w", err)
+	}
+	style, err := loadStyle()
+	if err != nil {
+		return err
+	}
+	aboutView, err := getAboutView()
+	if err != nil {
+		return err
+	}
 	labels := loadLabels()
 	for k, v := range loadButtons(style.BtnLeftCap, style.BtnRightCap) {
 		labels[k] = v
 	}
 	viewBtnRows := loadViewButtonRows()
 	viewKeyRows := loadViewKeyRows()
-	controls := loadControls()
+	controls, err := loadControls()
+	if err != nil {
+		return err
+	}
 	btnActions := loadButtonActions()
 	// altBtnActions := loadAltButtonActions()
 	viewKeyMaps := buildViewKeyMaps(viewKeyRows, loadButtonKeyDefs(inputSpec))
@@ -1011,7 +1011,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 	}()
 
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	notifySignals(sigs, inputSpec.SignalsFor(input.EventQuit))
 	defer signal.Stop(sigs)
 
 	inputs := make(chan string, 256)
@@ -1091,7 +1091,7 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 		}
 
 		if viewMode == "about" {
-			drawAboutPage(os.Stdout, termCols, effHeight, style)
+			drawAboutPage(os.Stdout, termCols, effHeight, style, aboutView)
 			buttons = drawBottomMenu(os.Stdout, effHeight, termCols, "about", hoveredButtonAction, style, labels, viewBtnRows, nil, btnActions, nil)
 			drawHintBar(os.Stdout, effHeight, termCols, labels["hint_about"], map[string]string{"last_key": lastKey}, style)
 			return
@@ -2093,10 +2093,8 @@ func browser(args []string, initWidth, initHeight int, rc renderCfg, fullComp bo
 	}
 }
 
-func drawAboutPage(w io.Writer, termCols, termRows int, style *StyleConfig) {
+func drawAboutPage(w io.Writer, termCols, termRows int, style *StyleConfig, about *YamlView) {
 	halfblock.ClearScreen(w)
-
-	about := getAboutView()
 	lines := strings.Split(about.Content, "\n")
 
 	titleAnsi := styleFG(style.PageTitleFg, "\x1b[36m")
@@ -2125,24 +2123,9 @@ func drawSettingsPage(w io.Writer, termCols, termRows int, controls []ControlSpe
 	type field struct{ label, value string }
 	fields := make([]field, len(controls))
 	for i, c := range controls {
-		var value string
-		switch c.Key {
-		case "preview_height":
-			value = fmt.Sprintf("%d rows", temp.MaxPreviewHeight)
-		case "view_mode":
-			value = temp.ViewMode
-		case "preview_videos":
-			if temp.PreviewVideos {
-				value = "true"
-			} else {
-				value = "false"
-			}
-		case "max_jobs":
-			value = fmt.Sprintf("%d", temp.MaxJobs)
-		case "video_frames":
-			value = fmt.Sprintf("%d", temp.VideoFrames)
-		default:
-			value = "?"
+		value := "?"
+		if h, ok := controlHandlers[c.Get]; ok && h.get != nil {
+			value = h.get(temp)
 		}
 		fields[i] = field{settingsFieldLabel(c.Key), value}
 	}
@@ -2298,7 +2281,7 @@ func truncateANSI(s string, maxWidth int) string {
 // btnActions maps button key names to their registered action names (from spec/buttons.yaml); nil means use key name as action.
 func drawBottomMenu(w io.Writer, termRows, termCols int, viewMode string, activeAction string, style *StyleConfig, labels map[string]string, viewBtnRows map[string]string, conditions map[string]bool, btnActions map[string]string, altBtnActions map[string]string) []menuButton {
 	if style == nil {
-		style = loadStyle()
+		style = &StyleConfig{}
 	}
 
 	viewName := viewMode

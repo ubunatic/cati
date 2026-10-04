@@ -159,6 +159,55 @@ This keeps zoom semantics independent of the glyph algorithm: at `--zoom=1`,
 a 4×4 source renders as 4×2 terminal cells in halfblock, quad, spark, sextant,
 and combined modes. See `TestAllRenderModesZoomOneSmallSquareUseCompleteCells`.
 
+**Aspect Modes: Subcell Lattice vs. Square-Pixel Correction.**
+
+- `--aspect aligned`: Continuous Aspect Snap. Uses the 2:3 reference lattice when an integer repeat fits on the constrained axis, then derives the other extent continuously and pads incomplete cells ($W=107 \to 45\text{ rows}$ in `3x3`, $W=160 \to 67\text{ rows}$ in `2x3`/`3x3`). Narrow inputs fall back to square-pixel fit; that policy remains open in [#078](../issues/078-pixel-and-aligned-aspect-edge-cases.md).
+- `--aspect pixel / raw / 1:1`: Pixel-Art Aspect Snap. Prefers whole-pixel repeats with bounded padding and aspect distortion, using `spec/aspect.yaml` as the policy source. Prescaling always uses nearest neighbor, even with `--prescaler pyramid`; fractional scales may repeat or skip pixels unevenly. Explicit width and height still define a hard box; unconstrained renders still fit the terminal.
+- `--aspect default / fit / contain`: Square-Pixel Font Correction. Treats source pixels as standard $1:1$ square pixels and applies terminal font aspect ratio correction ($1:2$ cell ratio), scaling to continuous display height $\text{Rows} = \operatorname{round}\left(\frac{\text{Cols} \cdot \text{SrcH}}{2 \cdot \text{SrcW}}\right)$ (yielding 50 rows for $320 \times 200$ at 160 columns, 34 rows at 107 columns). With both dimensions explicit, `default` stretches to the box while `fit`/`contain` preserve aspect within it.
+
+The lattice and screen-shape targets differ: Doom at width 160 needs about 67
+rows under the 2:3 reference convention, versus 50 rows for square source pixels
+displayed in physically 1:2 terminal cells. The current pixel distortion limit
+is relative to the lattice target; it does not calibrate the terminal font.
+Nearest-neighbor resizing preserves sampled source colors, but the later glyph
+fit can still approximate colors and boundaries. Glyph-quality changes and
+terminal calibration were deferred; this work addresses sizing and padding.
+
+For a single explicit dimension, pixel sizing follows these steps:
+
+1. Convert the requested terminal extent into subcells. Choose the largest integer pixel repeat that fits, but accept it only when the unused extent is at most `pixel.max_padding` of the requested extent (currently **10%**). Otherwise fill that extent using nearest neighbor. Width/height remains the hard outer canvas constraint; padding is transparent at the right/bottom.
+2. Derive the other content dimension from the chosen content extent. Width-only uses `RenderH = RenderW·CellH·SrcH·2/(CellW·SrcW·3)`; height-only uses its inverse. This retains the existing 2:3 reference-lattice convention, rather than calibrating physical terminal-cell proportions.
+3. Try the nearest integer repeat on the derived axis. Accept it only when its absolute difference is **less than one mode cell** and its difference divided by the ideal extent is at most `pixel.max_distortion` (currently **10%**). Otherwise round the ideal extent to a subcell and use nearest neighbor. Pixel rounding/minimum size can exceed the percentage at extremely small extents; the percentage limits optional integer-repeat snapping, not unavoidable raster rounding.
+4. Pad the derived axis to complete its final terminal cell. This final cell padding is separate from the constrained-axis percentage budget.
+
+Concrete `3x3` examples (6×3 internal grid per terminal cell):
+
+| Source / request | Content subcells | Transparent padding | Canvas cells | Reason |
+|---|---|---|---|---|
+| 12×12, width 5 | 30×10 | bottom 2 | 5×4 | A 12-row repeat would stretch ideal height 10 by 20%; reject it. |
+| Doom 320×200, width 54 | 320×67 | right 4, bottom 2 | 54×23 | 1× horizontal repeat fits; vertical repeat would be 3× too tall. |
+| Doom, width 107 | 640×133 | right 2, bottom 2 | 107×45 | 2× horizontal repeats; reject a 200-row vertical repeat. |
+| Doom, width 110 | 640×133 | right 20, bottom 2 | 110×45 | 2× horizontal repeats use 96.97% of the requested width; allow the 3.03% padding. |
+| Doom, width 160 | 960×200 | bottom 1 | 160×67 | Exact 3× horizontal and 1× vertical repeats. |
+| Doom, height 70 | 960×200 | bottom 10 | 160×70 | 1× source rows fit with 4.76% padding; columns repeat 3×. |
+
+Doom at widths 107 and 160 still yields 45 and 67 rows. `six` at width 160 still repeats rows 2× and yields 67 rows. Too-small widths/heights retain the same aspect formula and shrink with nearest neighbor. `TargetConstraints.PixelPolicy` receives the loaded fractional limits from the CLI; the planner stays pure. Zero limits (including a missing policy file) allow only exact integer-repeat matches, without hardcoded spec fallbacks. A malformed existing policy returns a descriptive loader error.
+
+Run `scripts/demo_aspect.sh` to compare the current `default`, `aligned` and
+`pixel` behaviors on Doom at widths 12, 54, 107, 110 and 160, and the vacation
+photo at widths 12, 54 and 110 (24 cases total).
+Each case renders first, then prints its caption and command below the image.
+Up/Down arrows (or `k`/`j`) move to the previous/next case; Enter also advances,
+and `q` quits immediately without Enter. Navigation stops at the first/last case
+so the final example remains available for backward navigation. A dashed line
+separates renders, and output remains in scrollback for comparison.
+
+Report visual gaps with the case number and printed command. Case numbers are
+stable within this 24-case list; revisiting a case renders it again rather than
+scrolling to the previous output. The demo compares currently supported modes,
+not historical binaries. See [Testing.md](Testing.md#interactive-aspect-demo)
+for navigation and terminal-check evidence.
+
 ---
 
 ## 3. Pixel Scanning Traversal & Pitfalls

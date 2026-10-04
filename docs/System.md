@@ -255,6 +255,54 @@ The naive `steps[len-1-i]` reversed-index pattern is wrong — it produces ascen
 
 **Renderer reconstruction for quality metrics.** SSIM, blockiness, and edge continuity compare the ideal source crop against a reconstruction of what the terminal renderer actually emits. Halfblock is represented by the viewport image itself, quad uses `quadblock.RenderToImage`, and spark uses `sparkline.RenderToImage`. The rendered reconstruction is normalized to the common `metrics.GridK × metrics.GridK` per-terminal-cell quality grid: smaller outputs are nearest-neighbour upscaled, while denser outputs are pyramid-downscaled. Never compare spark quality against the raw NN viewport; that scores the sampler, not the glyph renderer.
 
+### CLI Autocompletion Architecture & Cobra Shell Conventions
+
+Autocompletion across shells (Bash, Zsh, Fish, PowerShell) is handled in `cmd/completion.go` using Cobra's completion hooks:
+
+1. **Positional Image File Filtering (`cati <file>`)**:
+   - Cobra root commands with subcommands (`play`, `browse`, `modes`) default to `ShellCompDirectiveNoFileComp`, blocking shell file completion on positional arguments.
+   - Assigning `root.ValidArgsFunction` with `cobra.ShellCompDirectiveFilterFileExt` instructs the shell to complete files matching supported image extensions (`.png`, `.jpg`, `.jpeg`, `.svg`, `.webp`, `.gif`, `.bmp`, `.tiff`, `.tif`, both lowercase and uppercase) and directories, while allowing Cobra's engine to complete subcommand prefixes (`play`, `browse`, `modes`).
+
+2. **Optional Flag Argument Transitions (`--play [mode]`)**:
+   - The `--play` / `-p` flag defines `NoOptDefVal = "once"` to support standalone invocation without arguments.
+   - When `--play` is passed as a space-separated argument without a mode (e.g. `cati --play <TAB>`), pflag treats the next token as positional. `ValidArgsFunction` inspects whether a mode (`once`, `repeat`, `preview`) has already been specified in `args`:
+     - If missing: returns play modes with `cobra.ShellCompDirectiveNoFileComp`.
+     - Once provided: transitions to `supportedImageExtensions()` with `cobra.ShellCompDirectiveFilterFileExt`.
+   - Direct flag assignment (e.g. `--play=`) is handled by `RegisterFlagCompletionFunc("play", ...)`.
+
+3. **Dynamic Mode and Flag Value Completions**:
+   - **`--mode`, `-m`**: dynamically enumerates all canonical render modes and aliases from `renderModes` and `legacyRenderModes` (loaded via `spec.LoadRenderModes()`), associating each with its description.
+   - **`--aspect`**: completes the canonical seven values used by validation: `default`, `aligned`, `pixel`, `raw`, `1:1`, `contain`, `fit`. `pixel` uses bounded aspect snapping and nearest-neighbor sampling; `raw` and `1:1` are its aliases.
+   - **`--prescaler`, `-S`**: `nearest-neighbor` / `nn`, `pyramid`.
+   - **`--crop`, `-c`**: presets (`auto`, `center`, `l,t`, `c,m`, `r,b`, `W:H`, `W:H:X:Y`).
+   - **`--zoom`, `-z`**: presets (`0`, `1`, `1:1`, `100%`, `w`, `h`).
+   - **`--range`**: time ranges (`5s`, `5s:7s`).
+
+### CLI Render Geometry Pipeline (`internal/viewgeom.PlanRender`)
+
+The CLI render geometry pipeline uses a unified derivation model across static renders, playback previews, image sequences, and video streaming:
+
+1. **Option Hierarchy & Priority**:
+   - **`-W` (`--width`) and `-H` (`--height`)** are highest-priority canvas constraints defining the hard outer terminal grid boundaries.
+   - **Secondary Options**: `--pad`, `--aspect`, `--zoom`, `--crop`, `--smart`, and `--prescaler` are applied within or onto that canvas.
+   - **Provenance Preservation**: Explicit dimensions (`ExplicitCols`, `ExplicitRows`) are distinguished from auto-detected terminal dimensions (`TermCols`, `TermRows`), preventing unconstrained renders from being padded to the full terminal box.
+
+2. **Algorithm-Dependent Dimension Derivation**:
+   - **Width-Only (`-W`)**: Derives rows using mode cell geometry and aspect ratio correction:
+     $$\text{Rows} = \max\left(1, \operatorname{round}\left(W \times \frac{C_w \times \text{SrcH}}{a \times \text{SrcW} \times C_h}\right)\right)$$
+   - **Height-Only (`-H`)**: Derives columns using mode cell geometry and aspect ratio correction:
+     $$\text{Cols} = \max\left(1, \operatorname{round}\left(H \times \frac{C_h \times a \times \text{SrcW}}{\text{SrcH} \times C_w}\right)\right)$$
+   - **Both `-W` and `-H`**: Establishes a fixed bounding box $(W, H)$ and pads content to fill the requested canvas.
+   - **Unconstrained**: Fits within available terminal bounds without padding the canvas.
+
+3. **Aspect Modes & Subcell Alignment (`--aspect`)**:
+   - **Continuous Aspect Snap (`aligned`)**: Uses the 2:3 reference lattice when an integer repeat fits the constrained axis, derives the other extent continuously and pads incomplete cells (e.g. $107\times45$ for Doom in `3x3`). This target differs from physical square-pixel screen geometry: at width 160, Doom uses 67 lattice rows versus 50 rows in physically 1:2 terminal cells. Narrow inputs still fall back to square-pixel fit; that decision remains open in #078.
+   - **Pixel-Art Aspect Snap (`pixel`, `raw`, `1:1`)**: Loads `spec/aspect.yaml` into `TargetConstraints.PixelPolicy`. The constrained axis can use up to 10% transparent padding to retain integer repeats; the derived axis accepts integer repeats only within both 10% of its ideal extent and less than one mode cell. Otherwise it uses nearest-neighbor scaling. A 12×12 source at width 5 in `3x3` uses 30×10 content subcells, avoiding a 20% vertical stretch. Doom at width 110 uses 640×133 content subcells with 20 right-padding subcells, retaining uniform 2× source columns within a 110×45 canvas. Width 54 still yields 23 rows. Pixel sampling overrides `--prescaler pyramid`; fractional scales may repeat or skip source pixels unevenly. Both explicit dimensions still define a hard box, and unconstrained renders still fit the terminal. See [SparklinePixelArt.md](SparklinePixelArt.md) for formulas and padding bounds.
+   - **Square-Pixel Font Correction (`default`, `contain`, `fit`)**: Assumes source pixels are $1:1$ squares and applies terminal font aspect ratio correction ($1:2$ cell ratio) so physical geometry remains square on screen:
+     $$\text{Display Height in Cells} = \max\left(1, \operatorname{round}\left(\frac{\text{Cols} \times \text{SrcH}}{2 \times \text{SrcW}}\right)\right)$$
+   - **Explicit Dual Constraints (`-W <W> -H <H>`)**: Fills the exact requested $(W, H)$ cell grid, applying subcell snapping when content fits within subcell tolerance ($< C_w, < C_h$).
+   - **`--pad <cols>,<rows>`**: Prepends/appends transparent pixel rows or columns before rendering.
+
 ### Quality Benchmarking & Two-Phase Execution (`cati modes`)
 
 The `cati modes` CLI command provides side-by-side visual and metric analysis across all registered render modes and dynamic candidate solvers (`--smart`).

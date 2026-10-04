@@ -45,6 +45,14 @@ All user-facing configuration, styling, labelling, and layout lives in `spec/`. 
 
 All of these files are loaded through typed helpers in `spec/load.go`. The `cmd/` package keeps only thin adapters such as `loadViewButtonRows()` and `loadViewKeyRows()` so the browser logic still works with simple string templates, but the spec content itself is no longer line-parsed in Go.
 
+`config.yaml` is the canonical source for all six initial settings values. `controls.yaml` declares editable control metadata and does not repeat runtime defaults. The user's `~/.config/cati/config` values override these spec defaults.
+
+**Loader contract (issue 076):**
+- A **missing** spec file degrades to empty content, such as raw key names or a blank About page, never to a Go copy of the spec.
+- A **present but invalid** file is a load error that the caller returns; it is never silently replaced.
+- Loaders decode strictly (`KnownFields(true)`), so every spec struct needs a `Schema string \`yaml:"$schema"\`` field. Without it, the file's `$schema:` line fails loading at startup. This shipped in an M6 work-in-progress commit, but it was not in a release, and `go vet` did not catch it, only `go test`.
+- Empty signal lists must not reach `signal.Notify`, because Notify with no signals subscribes to every signal; use `notifySignals`.
+
 ### 3.2 Color values
 
 All color fields accept:
@@ -209,10 +217,16 @@ tplResolve(key, vars) string     — resolves key: quoted literal, vars map, or 
 
 ### 3.9 `spec/controls.yaml` — runtime controls
 
-Loaded by `loadControls()` → `[]ControlSpec`. Drives the settings form:
+Loaded by `loadControls()` → `[]ControlSpec` in YAML declaration order. The spec owns the
+editable inventory, type, integer bounds, enum values, and getter/setter binding names.
+`loadControls` validates every binding against a Go handler before the browser starts.
+Missing controls spec leaves the settings inventory empty; malformed specs or missing
+handlers are reported to the caller. The settings form is driven by:
 - Field labels come from `settingsFieldLabel(key)` (snake_case → Title Case)
 - Tab cycles through `len(controls)` fields
-- `↑`/`↓` call `applySettingsDelta(c, ±1, &tempCfg)` which uses `c.Min`/`c.Max` for int fields and `c.Values` for enum fields
+- `↑`/`↓` call the setter named by `c.Set`; integer handlers use `c.Min`/`c.Max` and enum handlers use `c.Values`
+- displayed values come from the getter named by `c.Get`
+- delay adjustment uses 100 ms input steps as UI mechanics; allowed bounds remain spec-owned
 
 ```yaml
 controls:
@@ -220,12 +234,12 @@ controls:
     type: int
     min: 10
     max: 200
-    default: 40
-    set: set_preview_height    # not yet wired — action name for future use
+    set: set_preview_height
     get: get_preview_height
 ```
 
-Adding a new control to `controls.yaml` with a known `key` (one handled in `applySettingsDelta`) is enough to add it to the settings form.
+Adding, removing, or reordering controls in `controls.yaml` changes the settings form directly.
+Every declared getter and setter must have a registered Go handler; unknown bindings fail startup.
 
 ---
 

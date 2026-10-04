@@ -68,6 +68,7 @@ type StylePageTitle struct {
 }
 
 type StyleSpec struct {
+	Schema     string          `yaml:"$schema"`
 	App        StyleApp        `yaml:"app"`
 	Buttons    StyleButtons    `yaml:"buttons"`
 	Preview    StylePreview    `yaml:"preview"`
@@ -79,13 +80,27 @@ type StyleSpec struct {
 }
 
 func LoadStyle() (StyleSpec, error) {
+	return LoadStyleFrom(FS)
+}
+
+func LoadStyleFrom(fsys fs.FS) (StyleSpec, error) {
 	var spec StyleSpec
-	data, err := fs.ReadFile(FS, "style.yaml")
+	data, err := fs.ReadFile(fsys, "style.yaml")
 	if err != nil {
 		return spec, err
 	}
-	err = yaml.Unmarshal(data, &spec)
-	return spec, err
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&spec); err != nil {
+		return spec, err
+	}
+	if spec.App.BorderStyle != "none" && spec.App.BorderStyle != "box" && spec.App.BorderStyle != "double" {
+		return spec, fmt.Errorf("style.app.border_style must be none, box, or double")
+	}
+	if spec.ScrollBar.Width != 1 && spec.ScrollBar.Width != 2 {
+		return spec, fmt.Errorf("style.scroll_bar.width must be 1 or 2")
+	}
+	return spec, nil
 }
 
 // ── Theme Spec ───────────────────────────────────────────────────────────────
@@ -622,27 +637,76 @@ func lcm(a, b int) int {
 // ── Controls Spec ────────────────────────────────────────────────────────────
 
 type ControlDef struct {
-	Type    string      `yaml:"type"`
-	Min     int         `yaml:"min"`
-	Max     int         `yaml:"max"`
-	Values  []string    `yaml:"values"`
-	Default interface{} `yaml:"default"`
-	Set     string      `yaml:"set"`
-	Get     string      `yaml:"get"`
+	Type   string   `yaml:"type"`
+	Min    int      `yaml:"min"`
+	Max    int      `yaml:"max"`
+	Values []string `yaml:"values"`
+	Set    string   `yaml:"set"`
+	Get    string   `yaml:"get"`
 }
 
 type ControlsSpec struct {
+	Schema   string                `yaml:"$schema"`
 	Controls map[string]ControlDef `yaml:"controls"`
+	Order    []string              `yaml:"-"`
 }
 
 func LoadControls() (ControlsSpec, error) {
-	var spec ControlsSpec
-	data, err := fs.ReadFile(FS, "controls.yaml")
+	return LoadControlsFrom(FS)
+}
+
+func LoadControlsFrom(fsys fs.FS) (ControlsSpec, error) {
+	var result ControlsSpec
+	data, err := fs.ReadFile(fsys, "controls.yaml")
 	if err != nil {
-		return spec, err
+		return result, err
 	}
-	err = yaml.Unmarshal(data, &spec)
-	return spec, err
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&result); err != nil {
+		return result, err
+	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return result, err
+	}
+	if len(root.Content) != 1 || root.Content[0].Kind != yaml.MappingNode {
+		return result, fmt.Errorf("controls.yaml must contain a mapping")
+	}
+	for i := 0; i+1 < len(root.Content[0].Content); i += 2 {
+		if root.Content[0].Content[i].Value == "controls" {
+			node := root.Content[0].Content[i+1]
+			if node.Kind != yaml.MappingNode {
+				return result, fmt.Errorf("controls must be a mapping")
+			}
+			for j := 0; j+1 < len(node.Content); j += 2 {
+				result.Order = append(result.Order, node.Content[j].Value)
+			}
+		}
+	}
+	if len(result.Order) == 0 || len(result.Controls) != len(result.Order) {
+		return result, fmt.Errorf("controls.yaml must define at least one control")
+	}
+	for _, key := range result.Order {
+		c := result.Controls[key]
+		switch c.Type {
+		case "int":
+			if c.Min >= c.Max {
+				return result, fmt.Errorf("control %s must have min < max", key)
+			}
+		case "enum":
+			if len(c.Values) < 2 {
+				return result, fmt.Errorf("control %s needs at least two values", key)
+			}
+		case "bool":
+		default:
+			return result, fmt.Errorf("control %s has unsupported type %q", key, c.Type)
+		}
+		if c.Set == "" || c.Get == "" {
+			return result, fmt.Errorf("control %s requires set and get bindings", key)
+		}
+	}
+	return result, nil
 }
 
 // ── Yaml View Spec (about.yaml) ──────────────────────────────────────────────
@@ -656,13 +720,22 @@ type YamlView struct {
 }
 
 func LoadYamlView(name string) (*YamlView, error) {
+	return LoadYamlViewFrom(FS, name)
+}
+
+func LoadYamlViewFrom(fsys fs.FS, name string) (*YamlView, error) {
 	var spec YamlView
-	data, err := fs.ReadFile(FS, name)
+	data, err := fs.ReadFile(fsys, name)
 	if err != nil {
 		return nil, err
 	}
-	if err = yaml.Unmarshal(data, &spec); err != nil {
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	if err = decoder.Decode(&spec); err != nil {
 		return nil, err
+	}
+	if spec.Type != "view" || spec.Name == "" || spec.Title == "" {
+		return nil, fmt.Errorf("%s must define type=view, name, and title", name)
 	}
 	return &spec, nil
 }
@@ -679,16 +752,55 @@ type ConfigDef struct {
 }
 
 type ConfigSpec struct {
+	Schema string    `yaml:"$schema"`
 	Config ConfigDef `yaml:"config"`
 }
 
 // LoadConfigDefaults reads default settings values.
 func LoadConfigDefaults() (ConfigSpec, error) {
+	return LoadConfigDefaultsFrom(FS)
+}
+
+// LoadConfigDefaultsFrom reads and validates settings defaults from fsys.
+func LoadConfigDefaultsFrom(fsys fs.FS) (ConfigSpec, error) {
 	var spec ConfigSpec
-	data, err := fs.ReadFile(FS, "config.yaml")
+	data, err := fs.ReadFile(fsys, "config.yaml")
 	if err != nil {
 		return spec, err
 	}
-	err = yaml.Unmarshal(data, &spec)
-	return spec, err
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&spec); err != nil {
+		return spec, err
+	}
+	var document map[string]any
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return spec, err
+	}
+	config, ok := document["config"].(map[string]any)
+	if !ok {
+		return spec, fmt.Errorf("config.yaml must define a config mapping")
+	}
+	for _, key := range []string{"preview_height", "view_mode", "max_jobs", "video_frames", "preview_videos", "video_preview_delay"} {
+		if _, ok := config[key]; !ok {
+			return spec, fmt.Errorf("config.yaml is missing config.%s", key)
+		}
+	}
+	c := spec.Config
+	if c.PreviewHeight < 10 || c.PreviewHeight > 200 {
+		return spec, fmt.Errorf("config.preview_height must be between 10 and 200")
+	}
+	if c.ViewMode != "grid" && c.ViewMode != "preview" {
+		return spec, fmt.Errorf("config.view_mode must be grid or preview")
+	}
+	if c.MaxJobs < 1 || c.MaxJobs > 32 {
+		return spec, fmt.Errorf("config.max_jobs must be between 1 and 32")
+	}
+	if c.VideoFrames < 1 || c.VideoFrames > 60 {
+		return spec, fmt.Errorf("config.video_frames must be between 1 and 60")
+	}
+	if c.VideoPreviewDelay < 0 || c.VideoPreviewDelay > 5000 {
+		return spec, fmt.Errorf("config.video_preview_delay must be between 0 and 5000")
+	}
+	return spec, nil
 }

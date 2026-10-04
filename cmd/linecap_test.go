@@ -72,7 +72,13 @@ func (lc *lineCapWriter) AssertFits(t *testing.T, budget int) {
 	}
 }
 
-func testStyleForLinecap() *StyleConfig { return loadStyle() }
+func testStyleForLinecap() *StyleConfig {
+	style, err := loadStyle()
+	if err != nil {
+		panic(err)
+	}
+	return style
+}
 func testLabelsForLinecap() map[string]string {
 	style := testStyleForLinecap()
 	labels := loadLabels()

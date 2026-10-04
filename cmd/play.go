@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"io/fs"
 	"os"
 	"os/signal"
-	"syscall"
 	"time"
 
 	"golang.org/x/term"
+	"ubunatic.com/cati/internal/input"
+	"ubunatic.com/cati/internal/viewgeom"
+	spec "ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/halfblock"
 
 	catiterm "ubunatic.com/cati/v1/term"
@@ -19,28 +22,28 @@ import (
 // It dispatches to playPreview, playImages (pre-load loop), or playVideos (streaming)
 // depending on playMode and whether any path is a video file.
 // width and height are in terminal characters (0 = auto-detect from terminal).
-func play(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string, playMode string) error {
+func play(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect, pad string, playMode string) error {
 	if len(paths) == 0 {
 		return fmt.Errorf("no images to play")
 	}
 
 	if playMode == "preview" {
-		return playPreview(paths[0], width, height, rc, tr, crop, aspect)
+		return playPreview(paths[0], width, height, rc, tr, crop, aspect, pad)
 	}
 
 	for _, p := range paths {
 		if halfblock.IsVideo(p) {
-			return playVideos(paths, fps, width, height, rc, tr, crop, aspect, playMode)
+			return playVideos(paths, fps, width, height, rc, tr, crop, aspect, pad, playMode)
 		}
 	}
-	return playImages(paths, fps, width, height, rc, tr, crop, aspect, playMode)
+	return playImages(paths, fps, width, height, rc, tr, crop, aspect, pad, playMode)
 }
 
 // playPreview renders a single frame for preview mode and exits.
-func playPreview(path string, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string) error {
-	cols, rows := width, height
-	if cols == 0 && rows == 0 {
-		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
+func playPreview(path string, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect, pad string) error {
+	termCols, termRows := width, height
+	if termCols == 0 && termRows == 0 {
+		termCols, termRows = catiterm.TermWidth(), catiterm.TermHeight()
 	}
 	autoCropCols, autoCropRows := catiterm.TermWidth(), catiterm.TermHeight()
 
@@ -55,11 +58,22 @@ func playPreview(path string, width, height int, rc renderCfg, tr TimeRange, cro
 		return fmt.Errorf("%s: %w", path, err)
 	}
 
-	if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
-		img, err = prepareExplicitGridImage(img, cols, rows, rc, aspect)
-	} else {
-		img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+	if pad != "" {
+		padCols, padRows, err := parsePadSpec(pad)
+		if err != nil {
+			return err
+		}
+		img = padSourceImage(img, padCols, padRows)
 	}
+
+	constraints := viewgeom.TargetConstraints{
+		ExplicitCols: width,
+		ExplicitRows: height,
+		TermCols:     termCols,
+		TermRows:     termRows,
+		AspectMode:   aspect,
+	}
+	img, err = prepareRenderPlanImage(img, constraints, rc)
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
@@ -73,7 +87,11 @@ func playPreview(path string, width, height int, rc renderCfg, tr TimeRange, cro
 // playTerminal sets up raw mode, signals, and the quit channel.
 // Returns a restore function, a signal channel, and a quit channel.
 // The caller must defer restore().
-func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}) {
+func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}, err error) {
+	inputSpec, err := input.Load(fs.FS(spec.FS))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("load input spec for signals: %w", err)
+	}
 	fd := int(os.Stdin.Fd())
 	oldState, err := term.MakeRaw(fd)
 	if err != nil {
@@ -86,7 +104,7 @@ func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}) {
 	}
 
 	sigs = make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	notifySignals(sigs, inputSpec.SignalsFor(input.EventQuit))
 
 	quit = make(chan struct{}, 1)
 	go func() {
@@ -111,14 +129,14 @@ func playTerminal() (restore func(), sigs chan os.Signal, quit chan struct{}) {
 // ── image sequence mode ───────────────────────────────────────────────────────
 
 // playImages pre-loads all frames and loops them at fps.
-func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string, playMode string) error {
+func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect, pad string, playMode string) error {
 	if fps <= 0 {
 		fps = 15
 	}
 
-	cols, rows := width, height
-	if cols == 0 && rows == 0 {
-		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
+	termCols, termRows := width, height
+	if termCols == 0 && termRows == 0 {
+		termCols, termRows = catiterm.TermWidth(), catiterm.TermHeight()
 	}
 	autoCropCols, autoCropRows := catiterm.TermWidth(), catiterm.TermHeight()
 
@@ -146,11 +164,21 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
-		if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
-			img, err = prepareExplicitGridImage(img, cols, rows, rc, aspect)
-		} else {
-			img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+		if pad != "" {
+			padCols, padRows, err := parsePadSpec(pad)
+			if err != nil {
+				return err
+			}
+			img = padSourceImage(img, padCols, padRows)
 		}
+		constraints := viewgeom.TargetConstraints{
+			ExplicitCols: width,
+			ExplicitRows: height,
+			TermCols:     termCols,
+			TermRows:     termRows,
+			AspectMode:   aspect,
+		}
+		img, err = prepareRenderPlanImage(img, constraints, rc)
 		if err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
@@ -158,7 +186,10 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		frames = append(frames, img)
 	}
 
-	restore, sigs, quit := playTerminal()
+	restore, sigs, quit, err := playTerminal()
+	if err != nil {
+		return err
+	}
 	defer restore()
 	defer signal.Stop(sigs)
 	defer func() {
@@ -203,7 +234,7 @@ func playImages(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 
 // playVideos streams one or more video files sequentially, playing each once or repeating.
 // All paths must be video files.
-func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect string, playMode string) error {
+func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRange, crop cropSpec, aspect, pad string, playMode string) error {
 	// Validate: all paths must be video files.
 	for _, p := range paths {
 		if !halfblock.IsVideo(p) {
@@ -225,9 +256,9 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		displayFPS = 15
 	}
 
-	cols, rows := width, height
-	if cols == 0 && rows == 0 {
-		cols, rows = catiterm.TermWidth(), catiterm.TermHeight()
+	termCols, termRows := width, height
+	if termCols == 0 && termRows == 0 {
+		termCols, termRows = catiterm.TermWidth(), catiterm.TermHeight()
 	}
 	autoCropCols, autoCropRows := catiterm.TermWidth(), catiterm.TermHeight()
 
@@ -238,7 +269,10 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 		}
 	}
 
-	restore, sigs, quit := playTerminal()
+	restore, sigs, quit, err := playTerminal()
+	if err != nil {
+		return err
+	}
 	defer restore()
 	defer signal.Stop(sigs)
 	defer func() {
@@ -316,11 +350,21 @@ func playVideos(paths []string, fps, width, height int, rc renderCfg, tr TimeRan
 					continue
 				}
 				currentVideoHadFrames = true
-				if height > 0 || (cols > 0 && rows > 0) || aspect == "aligned" {
-					img, err = prepareExplicitGridImage(img, cols, rows, rc, aspect)
-				} else {
-					img, err = prepareRenderedImageChecked(img, nil, cols, rows, rc, "")
+				if pad != "" {
+					padCols, padRows, err := parsePadSpec(pad)
+					if err != nil {
+						return err
+					}
+					img = padSourceImage(img, padCols, padRows)
 				}
+				constraints := viewgeom.TargetConstraints{
+					ExplicitCols: width,
+					ExplicitRows: height,
+					TermCols:     termCols,
+					TermRows:     termRows,
+					AspectMode:   aspect,
+				}
+				img, err = prepareRenderPlanImage(img, constraints, rc)
 				if err != nil {
 					return err
 				}

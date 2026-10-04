@@ -9,11 +9,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/cati/internal/imgutil"
+	"ubunatic.com/cati/internal/viewgeom"
 	"ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
@@ -74,6 +77,12 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 		Args:         cobra.ArbitraryArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("requires at least 1 arg(s), only received 0")
+			}
+			if err := validateCommonFlags(width, height, &aspect, &initialZoom, &pad); err != nil {
+				return err
+			}
 			if bench {
 				if len(args) != 1 {
 					return fmt.Errorf("--bench requires exactly one media file")
@@ -88,9 +97,6 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 			}
 			if inputTest {
 				return runInputTest()
-			}
-			if len(args) == 0 {
-				return fmt.Errorf("requires at least 1 arg(s), only received 0")
 			}
 			rc, err := parseRenderMode(renderMode)
 			if err != nil {
@@ -149,7 +155,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
 	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
-	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned|pixel|contain")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -169,6 +175,8 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.AddCommand(forwardSubcommand("play", "catiplay", "play media with catiplay"))
 	root.AddCommand(forwardSubcommand("browse", "catibrowse", "browse files with catibrowse"))
 	root.AddCommand(modesCommand())
+
+	registerRootCompletion(root)
 
 	return root
 }
@@ -201,6 +209,9 @@ func NewPlay() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return fmt.Errorf("requires at least 1 arg(s), only received 0")
+			}
+			if err := validateCommonFlags(width, height, &aspect, &initialZoom, &pad); err != nil {
+				return err
 			}
 			if smart {
 				return fmt.Errorf("--smart is currently supported for static cati renders only")
@@ -245,7 +256,7 @@ func NewPlay() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return play(paths, fps, width, height, rc, tr, cropSpec, aspect, playMode)
+				return play(paths, fps, width, height, rc, tr, cropSpec, aspect, pad, playMode)
 			}
 			if halfblock.IsVideo(paths[0]) {
 				return interactiveVideo(paths[0], width, height, rc, tr, nil, nil, nil, nil, nil, nil, fullComp, initialZoom)
@@ -265,7 +276,7 @@ func NewPlay() *cobra.Command {
 	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
 	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
-	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned|pixel|contain")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -301,6 +312,9 @@ func NewBrowse() *cobra.Command {
 			if len(args) == 0 {
 				return fmt.Errorf("requires at least 1 arg(s), only received 0")
 			}
+			if err := validateCommonFlags(width, height, &aspect, &initialZoom, &pad); err != nil {
+				return err
+			}
 			if smart {
 				return fmt.Errorf("--smart is currently supported for static cati renders only")
 			}
@@ -331,7 +345,7 @@ func NewBrowse() *cobra.Command {
 	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
 	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
-	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned")
+	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned|pixel|contain")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -401,6 +415,9 @@ func forwardToPlayer(path string, width, height int, rc renderCfg, fullComp bool
 	if name := rcModeName(rc); name != "" && name != "?" && name != "half" {
 		args = append(args, "--mode", name)
 	}
+	if rc.prescaler == prescalePyramid {
+		args = append(args, "--prescaler", "pyramid")
+	}
 	if initialZoom != "" {
 		args = append(args, "--zoom", initialZoom)
 	}
@@ -415,6 +432,44 @@ func forwardToPlayer(path string, width, height int, rc renderCfg, fullComp bool
 	}
 	args = append(args, path)
 	return forwardCommand("catiplay", args)
+}
+
+func validateCommonFlags(width, height int, aspect, initialZoom, pad *string) error {
+	if width < 0 {
+		return fmt.Errorf("--width must be 0 or greater, got %d", width)
+	}
+	if height < 0 {
+		return fmt.Errorf("--height must be 0 or greater, got %d", height)
+	}
+	normAspect := strings.ToLower(strings.TrimSpace(*aspect))
+	if normAspect != "" && !slices.Contains(aspectModeNames(), normAspect) {
+		return fmt.Errorf("unknown --aspect %q; valid: %s", *aspect, strings.Join(aspectModeNames(), ", "))
+	}
+	*aspect = normAspect
+	if *initialZoom != "" {
+		normZoom := strings.ToLower(strings.TrimSpace(*initialZoom))
+		if err := validateZoom(normZoom); err != nil {
+			return err
+		}
+		*initialZoom = normZoom
+	}
+	if *pad != "" {
+		if _, _, err := parsePadSpec(*pad); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateZoom(s string) error {
+	if s == "" || s == "w" || s == "h" {
+		return nil
+	}
+	k := viewgeom.ParseZoomK(s)
+	if k < 0 {
+		return fmt.Errorf("invalid --zoom %q; valid: \"0\", \"1\", \"w\", \"h\", \"100%%\", \"1:1\"", s)
+	}
+	return nil
 }
 
 // ── options ───────────────────────────────────────────────────────────────────
@@ -467,7 +522,7 @@ func run(o opts, rc renderCfg, args []string) error {
 		if err != nil {
 			return err
 		}
-		return play(paths, o.fps, o.width, o.height, rc, tr, cropSpec, o.aspect, o.playMode)
+		return play(paths, o.fps, o.width, o.height, rc, tr, cropSpec, o.aspect, o.pad, o.playMode)
 	}
 
 	if o.interactive {
@@ -535,14 +590,27 @@ func run(o opts, rc renderCfg, args []string) error {
 			img = padSourceImage(img, padCols, padRows)
 		}
 
-		if o.initialZoom == "" {
-			if o.height > 0 || (o.width > 0 && o.height > 0) || o.aspect == "aligned" {
-				img, err = prepareExplicitGridImage(img, termCols, termRows, rc, o.aspect)
-			} else {
-				img, err = smartPrepare(img, termCols, termRows, rc)
+		if rc.smart {
+			img, err = smartPrepare(img, termCols, termRows, rc)
+			if err == nil && o.width > 0 && o.height > 0 {
+				cellW, cellH := rc.renderCellSize()
+				targetW := o.width * cellW
+				targetH := o.height * cellH
+				curW, curH := img.Bounds().Dx(), img.Bounds().Dy()
+				if curW < targetW || curH < targetH {
+					img = padSourceImage(img, max(0, targetW-curW), max(0, targetH-curH))
+				}
 			}
 		} else {
-			img, err = prepareRenderedImageChecked(img, nil, termCols, termRows, rc, o.initialZoom)
+			constraints := viewgeom.TargetConstraints{
+				ExplicitCols: o.width,
+				ExplicitRows: o.height,
+				TermCols:     termCols,
+				TermRows:     termRows,
+				AspectMode:   o.aspect,
+				InitialZoom:  o.initialZoom,
+			}
+			img, err = prepareRenderPlanImage(img, constraints, rc)
 		}
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)
@@ -691,7 +759,6 @@ func parsePlayMode(playVal string, changed bool, args *[]string) (string, error)
 	return mode, nil
 }
 
-
 func parsePadSpec(raw string) (int, int, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -736,7 +803,16 @@ func padSourceImage(img image.Image, padCols, padRows int) image.Image {
 	return out
 }
 
-func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, rc renderCfg, aspectMode string) (image.Image, error) {
+func prepareRenderPlanImage(orig image.Image, constraints viewgeom.TargetConstraints, rc renderCfg) (image.Image, error) {
+	if viewgeom.IsPixelAspect(constraints.AspectMode) {
+		policy, err := spec.LoadPixelAspectPolicy()
+		if err != nil {
+			return nil, err
+		}
+		constraints.PixelPolicy = viewgeom.PixelAspectPolicy{MaxDistortion: policy.MaxDistortion, MaxPadding: policy.MaxPadding}
+		// Pixel aspect must retain source colors even when it needs to shrink.
+		rc.prescaler = prescaleNearestNeighbor
+	}
 	if rc.gray {
 		orig = quadblock.ReduceColors(orig, rc.grayColors)
 	}
@@ -747,33 +823,37 @@ func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, 
 	}
 
 	cellW, cellH := rc.renderCellSize()
-	targetW := explicitCols * cellW
-	targetH := explicitRows * cellH
+	aspectNum, aspectDen := rc.renderAspectCorrection()
+	spec := viewgeom.NewV2CellRatio(cellW, cellH, aspectNum, aspectDen)
+	plan := viewgeom.PlanRender(srcW, srcH, constraints, spec)
 
-	if aspectMode == "aligned" {
-		if srcW <= targetW && srcH <= targetH {
-			extraW := targetW - srcW
-			extraH := targetH - srcH
-			if extraW > 0 || extraH > 0 {
-				return padSourceImage(orig, extraW, extraH), nil
-			}
-			return orig, nil
+	result := orig
+	if plan.RenderW != srcW || plan.RenderH != srcH {
+		result = resizeRenderedImage(result, plan.RenderW, plan.RenderH, rc)
+	}
+	if plan.PadRight > 0 || plan.PadBottom > 0 {
+		result = padSourceImage(result, plan.PadRight, plan.PadBottom)
+	}
+	if plan.ExtH > 0 {
+		result = imgutil.AppendTransparentRows(result, plan.ExtH)
+	}
+
+	if constraints.ExplicitCols > 0 && constraints.ExplicitRows > 0 {
+		targetW := constraints.ExplicitCols * cellW
+		targetH := constraints.ExplicitRows * cellH
+		curW := result.Bounds().Dx()
+		curH := result.Bounds().Dy()
+		if curW < targetW || curH < targetH {
+			result = padSourceImage(result, max(0, targetW-curW), max(0, targetH-curH))
 		}
 	}
+	return result, nil
+}
 
-	if srcW <= targetW && srcH <= targetH {
-		diffW := targetW - srcW
-		diffH := targetH - srcH
-		if diffW < cellW && diffH < cellH {
-			if diffW > 0 || diffH > 0 {
-				return padSourceImage(orig, diffW, diffH), nil
-			}
-			return orig, nil
-		}
-	}
-
-	if srcW == targetW && srcH == targetH {
-		return orig, nil
-	}
-	return resizeRenderedImage(orig, targetW, targetH, rc), nil
+func prepareExplicitGridImage(orig image.Image, explicitCols, explicitRows int, rc renderCfg, aspectMode string) (image.Image, error) {
+	return prepareRenderPlanImage(orig, viewgeom.TargetConstraints{
+		ExplicitCols: explicitCols,
+		ExplicitRows: explicitRows,
+		AspectMode:   aspectMode,
+	}, rc)
 }

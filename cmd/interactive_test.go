@@ -28,6 +28,15 @@ func TestInteractive_MissingFile(t *testing.T) {
 	}
 }
 
+func loadTestInputSpec(t *testing.T) *input.Spec {
+	t.Helper()
+	s, err := input.Load(fs.FS(spec.FS))
+	if err != nil {
+		t.Fatalf("Load embedded input spec: %v", err)
+	}
+	return s
+}
+
 // ── fitPixelDims ─────────────────────────────────────────────────────────────
 
 func TestFitPixelDims(t *testing.T) {
@@ -57,7 +66,7 @@ func TestFitPixelDims(t *testing.T) {
 // ── mouse parsing (via input.Spec) ───────────────────────────────────────────
 
 func TestParseSGRMouse(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadTestInputSpec(t)
 	tests := []struct {
 		name             string
 		input            string
@@ -100,7 +109,7 @@ func TestParseSGRMouse(t *testing.T) {
 // ── SGR button predicates (via input.MouseEvent methods) ─────────────────────
 
 func TestSGRPredicates(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadTestInputSpec(t)
 	type row struct {
 		tok      string
 		isScroll bool
@@ -232,7 +241,7 @@ func TestResolveViewerTermSizeTreatsHeightAsImageRows(t *testing.T) {
 		t.Fatalf("rows = %d, want image rows %d + chrome rows %d", rows, imageRows, viewerChromeRows)
 	}
 
-	vc := newViewerCore("image_viewer", width, imageRows, renderCfg{}, false, input.DefaultSpec(), nil, nil, nil, nil, nil)
+	vc := newViewerCore("image_viewer", width, imageRows, renderCfg{}, false, loadTestInputSpec(t), nil, nil, nil, nil, nil)
 	if got := vc.viewRows(); got != imageRows {
 		t.Fatalf("viewRows = %d, want explicit image height %d", got, imageRows)
 	}
@@ -872,7 +881,7 @@ func abs(f float64) float64 {
 }
 
 func TestSpecZoomKKeyBindings(t *testing.T) {
-	inputSpec, _ := input.Load(fs.FS(spec.FS))
+	inputSpec := loadTestInputSpec(t)
 	defs := loadButtonKeyDefs(inputSpec)
 	keyRows := loadViewKeyRows()
 	maps := buildViewKeyMaps(keyRows, defs)

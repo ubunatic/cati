@@ -1,10 +1,10 @@
 # 072 — Add aspect modes for CLI source mapping
 
-**Status**: Open
+**Status**: Closed — unified in CLI geometry pipeline and pure planner
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
-**Related**: [#071](071-respect-explicit-width-and-height-in-static-renders.md)
+**Related**: [#071](071-respect-explicit-width-and-height-in-static-renders.md), [#075](075-unify-cli-render-geometry-contracts-and-validate-route-specific-options.md)
 
 ---
 

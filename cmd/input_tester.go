@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -17,8 +16,10 @@ import (
 )
 
 func runInputTest() error {
-	// Load spec; fall back to defaults silently.
-	inputSpec, _ := input.Load(fs.FS(spec.FS))
+	inputSpec, err := input.Load(fs.FS(spec.FS))
+	if err != nil {
+		return fmt.Errorf("load input spec: %w", err)
+	}
 
 	fd := int(os.Stdin.Fd())
 	oldState, err := term.MakeRaw(fd)
@@ -59,7 +60,7 @@ func runInputTest() error {
 	}()
 
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGWINCH)
+	notifySignals(sigs, inputSpec.SignalsFor(input.EventResize))
 	defer signal.Stop(sigs)
 
 	const maxLines = 20

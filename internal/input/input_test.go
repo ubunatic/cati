@@ -1,21 +1,28 @@
 package input_test
 
 import (
+	"io/fs"
 	"os"
+	"strings"
+	"syscall"
 	"testing"
+	"testing/fstest"
 
 	"ubunatic.com/cati/internal/input"
+	spec "ubunatic.com/cati/spec"
 )
 
-func TestDefaultSpec(t *testing.T) {
-	s := input.DefaultSpec()
-	if s == nil {
-		t.Fatal("DefaultSpec returned nil")
+func loadInputSpec(t *testing.T) *input.Spec {
+	t.Helper()
+	s, err := input.Load(fs.FS(spec.FS))
+	if err != nil {
+		t.Fatalf("Load embedded input spec: %v", err)
 	}
+	return s
 }
 
 func TestResolveKeyAlias(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadInputSpec(t)
 	cases := []struct{ alias, want string }{
 		{"<esc>", "\x1b"},
 		{"<ESC>", "\x1b"},
@@ -48,7 +55,7 @@ func TestResolveKeyAlias(t *testing.T) {
 }
 
 func TestTokenizeBasic(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadInputSpec(t)
 	cases := []struct {
 		raw  string
 		want []string
@@ -79,7 +86,7 @@ func TestTokenizeBasic(t *testing.T) {
 }
 
 func TestTokenizeMixed(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadInputSpec(t)
 	// Multiple events packed into one read buffer.
 	raw := "q\x1b[A\x1b[<0;10;5Mab"
 	got := s.Tokenize(raw)
@@ -95,7 +102,7 @@ func TestTokenizeMixed(t *testing.T) {
 }
 
 func TestParseMouse(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadInputSpec(t)
 	cases := []struct {
 		tok     string
 		wantOK  bool
@@ -145,7 +152,7 @@ func TestParseMouse(t *testing.T) {
 }
 
 func TestClassify(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadInputSpec(t)
 	cases := []struct {
 		tok  string
 		want input.EventType
@@ -167,7 +174,7 @@ func TestClassify(t *testing.T) {
 }
 
 func TestKeyNameAliasBeforeCtrl(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadInputSpec(t)
 	// Tab is \x09 — falls in ctrl range (1–26) but must show as "Tab" not "Ctrl-I".
 	if got := s.KeyName("\x09"); got != "Tab" {
 		t.Errorf("KeyName(tab) = %q, want \"Tab\"", got)
@@ -187,7 +194,7 @@ func TestKeyNameAliasBeforeCtrl(t *testing.T) {
 }
 
 func TestKeyNameUTF8(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadInputSpec(t)
 	cases := []struct{ seq, want string }{
 		{"\xc3\xb6", "ö"},     // ö U+00F6
 		{"\xe2\x82\xac", "€"}, // € U+20AC
@@ -201,7 +208,7 @@ func TestKeyNameUTF8(t *testing.T) {
 }
 
 func TestTokenizeUTF8(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadInputSpec(t)
 	// ö is \xc3\xb6 — must arrive as one token, not two.
 	tokens := s.Tokenize("\xc3\xb6")
 	if len(tokens) != 1 {
@@ -218,7 +225,7 @@ func TestTokenizeUTF8(t *testing.T) {
 }
 
 func TestMouseMoveVsDrag(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadInputSpec(t)
 	// btn=35 (0x23): motion flag (0x20) + button bits 0b11 (3) = pure move
 	move, ok := s.ParseMouse("\x1b[<35;20;10M")
 	if !ok {
@@ -250,8 +257,20 @@ func TestMouseMoveVsDrag(t *testing.T) {
 	}
 }
 
+func TestMouseEventLiteralDragAndMove(t *testing.T) {
+	drag := input.MouseEvent{Motion: true, Button: 0}
+	if !drag.IsDrag() || drag.IsMove() {
+		t.Errorf("literal left-button motion: IsDrag=%v IsMove=%v, want true/false", drag.IsDrag(), drag.IsMove())
+	}
+
+	move := input.MouseEvent{Motion: true, Button: 3}
+	if move.IsDrag() || !move.IsMove() {
+		t.Errorf("literal no-button motion: IsDrag=%v IsMove=%v, want false/true", move.IsDrag(), move.IsMove())
+	}
+}
+
 func TestScrollDir(t *testing.T) {
-	s := input.DefaultSpec()
+	s := loadInputSpec(t)
 	up, okUp := s.ParseMouse("\x1b[<64;1;1M")
 	dn, okDn := s.ParseMouse("\x1b[<65;1;1M")
 	if !okUp || !okDn {
@@ -266,8 +285,7 @@ func TestScrollDir(t *testing.T) {
 }
 
 func TestLoadSpec(t *testing.T) {
-	fsys := os.DirFS("../../spec")
-	s, err := input.Load(fsys)
+	s, err := input.Load(fs.FS(spec.FS))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -285,5 +303,94 @@ func TestLoadSpec(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("loaded spec ResolveKeyAlias(%q) = %q, want %q", tc.alias, got, tc.want)
 		}
+	}
+}
+
+func TestLoadMissingSpecUsesRawInputWithoutFallbacks(t *testing.T) {
+	s, err := input.Load(fstest.MapFS{})
+	if err != nil {
+		t.Fatalf("Load missing spec: %v", err)
+	}
+	if got := s.ResolveKeyAlias("<esc>"); got != "<esc>" {
+		t.Errorf("missing spec alias = %q, want raw alias", got)
+	}
+	if got := s.Tokenize("\x03q"); strings.Join(got, "") != "\x03q" || len(got) != 2 {
+		t.Errorf("missing spec tokenization = %q, want raw bytes", got)
+	}
+	if got := s.Classify("\x03"); got.Type != input.EventKey || got.Token != "\x03" {
+		t.Errorf("missing spec Ctrl-C classification = %+v, want raw key", got)
+	}
+	if _, ok := s.ParseMouse("\x1b[<0;1;1M"); ok {
+		t.Error("missing spec unexpectedly parsed mouse input")
+	}
+}
+
+func TestLoadPresentInvalidSpecReturnsError(t *testing.T) {
+	_, err := input.Load(fstest.MapFS{"input.yaml": {Data: []byte("input:\n  tokenizer:\n    rules: []\n")}})
+	if err == nil {
+		t.Fatal("Load invalid present spec returned nil error")
+	}
+}
+
+func TestChangedSpecAliasChangesBehavior(t *testing.T) {
+	data, err := fs.ReadFile(fs.FS(spec.FS), "input.yaml")
+	if err != nil {
+		t.Fatalf("read embedded input spec: %v", err)
+	}
+	changed := strings.Replace(string(data), `esc: "\x1b"`, `esc: "CUSTOM"`, 1)
+	if changed == string(data) {
+		t.Fatal("could not find esc alias in embedded input spec")
+	}
+	s, err := input.Load(fstest.MapFS{"input.yaml": {Data: []byte(changed)}})
+	if err != nil {
+		t.Fatalf("Load changed spec: %v", err)
+	}
+	if got := s.ResolveKeyAlias("<esc>"); got != "CUSTOM" {
+		t.Errorf("ResolveKeyAlias(<esc>) = %q, want changed spec value CUSTOM", got)
+	}
+}
+
+func TestDeclaredSignalsAreSupportedAndDriveRegistration(t *testing.T) {
+	s := loadInputSpec(t)
+	quit := s.SignalsFor(input.EventQuit)
+	resize := s.SignalsFor(input.EventResize)
+	if len(quit) != 2 || quit[0] != os.Interrupt || quit[1] != syscall.SIGTERM {
+		t.Fatalf("quit signals = %v, want interrupt and SIGTERM", quit)
+	}
+	if len(resize) != 1 || resize[0] != syscall.SIGWINCH {
+		t.Fatalf("resize signals = %v, want SIGWINCH", resize)
+	}
+}
+
+func TestChangedSignalNameChangesRegistration(t *testing.T) {
+	data, err := fs.ReadFile(fs.FS(spec.FS), "input.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(string(data), "name: SIGTERM", "name: SIGWINCH", 1)
+	if changed == string(data) {
+		t.Fatal("could not find SIGTERM declaration")
+	}
+	s, err := input.Load(fstest.MapFS{"input.yaml": {Data: []byte(changed)}})
+	if err != nil {
+		t.Fatalf("Load changed signal spec: %v", err)
+	}
+	quit := s.SignalsFor(input.EventQuit)
+	if len(quit) != 2 || quit[1] != syscall.SIGWINCH {
+		t.Fatalf("changed quit signals = %v, want changed SIGWINCH binding", quit)
+	}
+}
+
+func TestUnsupportedDeclaredSignalFailsLoad(t *testing.T) {
+	data, err := fs.ReadFile(fs.FS(spec.FS), "input.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := strings.Replace(string(data), "name: SIGTERM", "name: SIGUSR1", 1)
+	if changed == string(data) {
+		t.Fatal("could not find SIGTERM declaration")
+	}
+	if _, err := input.Load(fstest.MapFS{"input.yaml": {Data: []byte(changed)}}); err == nil || !strings.Contains(err.Error(), "unsupported input signal") {
+		t.Fatalf("unsupported signal load error = %v", err)
 	}
 }

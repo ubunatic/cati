@@ -11,9 +11,10 @@ The daily test command is:
 make test
 ```
 
-It runs `go vet ./...` and the default `go test ./...` suite. This covers the
+It runs `go vet ./...` and the default `go test ./...` suite in both fast and
+reference modes. This covers the
 library packages, renderers, CLI logic, spec integrity, and ordinary package
-tests. The Makefile runs these test targets with the pinned Go 1.25.0 toolchain
+tests. The Makefile runs these test targets with the pinned Go 1.26.0 toolchain
 and ignores enclosing `go.work` files so JPEG-based golden renders are stable.
 
 Additional suites are opt-in:
@@ -66,10 +67,38 @@ Visual rendering regressions are covered by PNG golden tests in
 `cmd/golden_render_test.go` and renderer fixture tests. Do not regenerate
 goldens merely to make a test pass; follow `docs/RenderingBugPlaybook.md`.
 
+## Interactive aspect demo
+
+Run `scripts/demo_aspect.sh` after `make install`. It resolves assets relative
+to its own location and calls `cati` from PATH. Its 24 cases cover `default`,
+`aligned` and `pixel` on Doom at widths 12/54/107/110/160 and the vacation photo
+at widths 12/54/110. Images render before captions and commands, with dashed
+separators; Up/Down or `k`/`j` navigate, Enter advances, and `q` or EOF exits.
+Keys act immediately without Enter. Navigation remains at either boundary,
+allowing backward inspection from the final case.
+
+Verification from the aspect session (2026-10-03): all 24 real renders passed;
+CSI (`ESC [ A/B`) and SS3 (`ESC O A/B`) navigation, first/last boundaries,
+backward navigation, quit/EOF and shell syntax were checked. A child PTY also
+verified `1 → 2 → 1 → quit` with actual terminal key capture. Direct host PTY
+attempts were stopped and killed by Harnez process-group handling; that was a
+harness failure, not evidence of a demo failure. When this occurs, record the
+failure and verify through an independently controlled child PTY with a bounded
+wait and cleanup. Do not claim terminal verification based only on piped input.
+
+Geometry coverage lives in `internal/viewgeom/planner_test.go`, CLI regression
+coverage in `cmd/root_test.go`, and sampling/annotated PNG golden coverage in
+`cmd/pixel_aspect_test.go`. The aspect implementation passed `HTO=0 make test`
+in both fast and reference modes; existing goldens remained unchanged. Later
+script-only changes used real renders, navigation checks and `make preflight`.
+These checks do not replace visual review: report gaps with the caption's case
+number and exact printed command. See [SparklinePixelArt.md](SparklinePixelArt.md)
+for the policy, geometry examples and remaining limitations.
+
 The opt-in static renderer search can be exercised with, for example:
 
 ```bash
-GOWORK=off GOTOOLCHAIN=go1.25.0 go run ./cmd/cati --width 40 --smart image.png
+GOWORK=off GOTOOLCHAIN=go1.26.0 go run ./cmd/cati --width 40 --smart image.png
 ```
 
 `--smart` evaluates candidates from the requested width down through the
@@ -89,7 +118,7 @@ must be output-identical; each split has a parity test that toggles
 `core.Fastpath`. Check the whole suite on the simple paths with:
 
 ```bash
-CATI_FASTPATH=0 GOWORK=off GOTOOLCHAIN=go1.25.0 go test ./...
+CATI_FASTPATH=0 GOWORK=off GOTOOLCHAIN=go1.26.0 go test -tags=fastpath0 ./...
 ```
 
 Known exception: `metrics.extractLumaFlat` fast paths drift slightly
