@@ -17,3 +17,7 @@
 ## 2026-03-30 - Zero-Allocation Byte Buffer ANSI Escape Formatting in Sparkline Renderer
 **Learning:** Using `fmt.Sprintf` and `strings.Builder` per grid cell in `sparkline.Render` generated >2,200 heap allocations and 245 KB allocation churn per rendered frame.
 **Action:** Format ANSI 24-bit RGB escape sequences into reusable `[]byte` line buffers with `strconv.AppendUint` and `utf8.AppendRune` under `core.Fastpath`, reducing heap allocations to 32 allocs/op and cutting render latency by >40%.
+
+## 2026-10-04 - Closed-Form RGB Distance Scoring and Early Exit in 2x3, Six, and S2 Solvers
+**Learning:** Evaluating all 64 sextant masks by iterating per-pixel distances (`rgbaDist2`) and calling virtual pixel lookups in 2x3 cell solvers accounted for >90% of rendering CPU time. In candidate solvers, iterating candidates when a cell is completely transparent or has an exact 0-error match added unnecessary candidate search loops.
+**Action:** Precompute mask bit index lookup tables (`maskBitIndices[64]`), compute total pixel color sums once per cell, evaluate closed-form squared RGB error equations, add direct 2x3 slice sampling for `*image.RGBA`/`*image.NRGBA`, and add early exits for transparent cells and perfect 0-error candidate matches in `v1/sparkline` and `v1/sextant`.

@@ -2,6 +2,8 @@ package viewgeom
 
 import (
 	"math"
+
+	"ubunatic.com/cati/internal/imgutil"
 )
 
 // TargetConstraints holds the requested dimensions from CLI and terminal.
@@ -99,7 +101,7 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 		}
 		if !hasAlignedPad {
 			if c.AspectMode == "contain" || c.AspectMode == "fit" {
-				baseRenderW, baseRenderH, baseExtH = fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, canvasCols, canvasRows)
+				baseRenderW, baseRenderH, baseExtH = imgutil.FitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, canvasCols, canvasRows)
 			} else {
 				baseRenderW = targetW
 				baseRenderH = targetH
@@ -127,7 +129,7 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			}
 		}
 		if !hasAlignedPad {
-			baseRenderW, baseRenderH, baseExtH = fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, canvasCols, 0)
+			baseRenderW, baseRenderH, baseExtH = imgutil.FitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, canvasCols, 0)
 			canvasRows = max(1, (baseRenderH+baseExtH+spec.CellH-1)/spec.CellH)
 		}
 
@@ -152,7 +154,7 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			}
 		}
 		if !hasAlignedPad {
-			baseRenderW, baseRenderH, baseExtH = fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, 0, canvasRows)
+			baseRenderW, baseRenderH, baseExtH = imgutil.FitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, 0, canvasRows)
 			canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
 		}
 
@@ -162,7 +164,7 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 		if termCols <= 0 && termRows <= 0 {
 			termCols, termRows = 80, 24
 		}
-		baseRenderW, baseRenderH, baseExtH = fitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, termCols, termRows)
+		baseRenderW, baseRenderH, baseExtH = imgutil.FitDimsRatio(srcW, srcH, spec.CellW, spec.CellH, spec.AspectNum, spec.AspectDen, termCols, termRows)
 		canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
 		canvasRows = max(1, (baseRenderH+baseExtH+spec.CellH-1)/spec.CellH)
 	}

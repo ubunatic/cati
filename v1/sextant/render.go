@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"io"
+	"math"
 	"math/bits"
 	"sort"
 	"strconv"
@@ -95,9 +96,23 @@ var (
 	sextantRuneByMask = map[uint8]rune{}
 	sextantMasks      []uint8
 	sextantRunes      [64]rune
+	maskBitIndices    [64]struct {
+		count   int
+		indices [6]int
+	}
 )
 
 func init() {
+	for m := 0; m < 64; m++ {
+		var cnt int
+		for i := 0; i < 6; i++ {
+			if m&int(bitForIdxTable[i]) != 0 {
+				maskBitIndices[m].indices[cnt] = i
+				cnt++
+			}
+		}
+		maskBitIndices[m].count = cnt
+	}
 	next := rune(0x1FB00)
 	for _, name := range sextantNames() {
 		mask := sextantBits(name)
@@ -330,6 +345,71 @@ func splitAxis(min, max, parts, idx int) (int, int) {
 }
 
 func sampleBlock(img image.Image, x0, x1, y0, y1 int) [6]color.RGBA {
+	if x1-x0 == 2 && y1-y0 == 3 {
+		if core.Fastpath {
+			if rgba, ok := img.(*image.RGBA); ok {
+				var pixels [6]color.RGBA
+				off0 := rgba.PixOffset(x0, y0)
+				off1 := rgba.PixOffset(x0, y0+1)
+				off2 := rgba.PixOffset(x0, y0+2)
+				p0 := rgba.Pix[off0 : off0+8]
+				p1 := rgba.Pix[off1 : off1+8]
+				p2 := rgba.Pix[off2 : off2+8]
+				if p0[3] != 0 {
+					pixels[0] = color.RGBA{R: p0[0], G: p0[1], B: p0[2], A: p0[3]}
+				}
+				if p0[7] != 0 {
+					pixels[1] = color.RGBA{R: p0[4], G: p0[5], B: p0[6], A: p0[7]}
+				}
+				if p1[3] != 0 {
+					pixels[2] = color.RGBA{R: p1[0], G: p1[1], B: p1[2], A: p1[3]}
+				}
+				if p1[7] != 0 {
+					pixels[3] = color.RGBA{R: p1[4], G: p1[5], B: p1[6], A: p1[7]}
+				}
+				if p2[3] != 0 {
+					pixels[4] = color.RGBA{R: p2[0], G: p2[1], B: p2[2], A: p2[3]}
+				}
+				if p2[7] != 0 {
+					pixels[5] = color.RGBA{R: p2[4], G: p2[5], B: p2[6], A: p2[7]}
+				}
+				return pixels
+			}
+			if nrgba, ok := img.(*image.NRGBA); ok {
+				var pixels [6]color.RGBA
+				off0 := nrgba.PixOffset(x0, y0)
+				off1 := nrgba.PixOffset(x0, y0+1)
+				off2 := nrgba.PixOffset(x0, y0+2)
+				p0 := nrgba.Pix[off0 : off0+8]
+				p1 := nrgba.Pix[off1 : off1+8]
+				p2 := nrgba.Pix[off2 : off2+8]
+				if p0[3] != 0 {
+					pixels[0] = color.RGBA{R: p0[0], G: p0[1], B: p0[2], A: p0[3]}
+				}
+				if p0[7] != 0 {
+					pixels[1] = color.RGBA{R: p0[4], G: p0[5], B: p0[6], A: p0[7]}
+				}
+				if p1[3] != 0 {
+					pixels[2] = color.RGBA{R: p1[0], G: p1[1], B: p1[2], A: p1[3]}
+				}
+				if p1[7] != 0 {
+					pixels[3] = color.RGBA{R: p1[4], G: p1[5], B: p1[6], A: p1[7]}
+				}
+				if p2[3] != 0 {
+					pixels[4] = color.RGBA{R: p2[0], G: p2[1], B: p2[2], A: p2[3]}
+				}
+				if p2[7] != 0 {
+					pixels[5] = color.RGBA{R: p2[4], G: p2[5], B: p2[6], A: p2[7]}
+				}
+				return pixels
+			}
+		}
+		return [6]color.RGBA{
+			samplePixelFast(img, x0, y0), samplePixelFast(img, x0+1, y0),
+			samplePixelFast(img, x0, y0+1), samplePixelFast(img, x0+1, y0+1),
+			samplePixelFast(img, x0, y0+2), samplePixelFast(img, x0+1, y0+2),
+		}
+	}
 	var pixels [6]color.RGBA
 	i := 0
 	for row := 0; row < blockRows; row++ {
@@ -679,17 +759,150 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 	if len(masks) == 0 {
 		return cellResult{ch: ' ', transparent: true}
 	}
+
+	if !core.Fastpath {
+		preferred := directMask(pixels)
+		bestCell, bestScore := scoreMask(pixels, masks[0])
+		for _, mask := range masks[1:] {
+			cell, score := scoreMask(pixels, mask)
+			if score < bestScore ||
+				(score == bestScore && maskOverlap(mask, preferred) > maskOverlap(bestCell.mask, preferred)) ||
+				(score == bestScore && maskOverlap(mask, preferred) == maskOverlap(bestCell.mask, preferred) && popcount(mask) > popcount(bestCell.mask)) {
+				bestCell = cell
+				bestScore = score
+			}
+		}
+		return bestCell
+	}
+
+	var pr, pg, pb [6]int
+	var opaqueMask uint8
+	var transMask uint8
+	var totalSumR, totalSumG, totalSumB int
+	var totalSqSum int
+
+	for i := 0; i < 6; i++ {
+		p := pixels[i]
+		if p.A == 0 {
+			transMask |= bitForIdxTable[i]
+			continue
+		}
+		opaqueMask |= bitForIdxTable[i]
+		r, g, b := int(p.R), int(p.G), int(p.B)
+		pr[i], pg[i], pb[i] = r, g, b
+		totalSumR += r
+		totalSumG += g
+		totalSumB += b
+		totalSqSum += r*r + g*g + b*b
+	}
+
+	if opaqueMask == 0 {
+		return cellResult{ch: ' ', mask: 0, transparent: true}
+	}
+
 	preferred := directMask(pixels)
-	bestCell, bestScore := scoreMask(pixels, masks[0])
-	for _, mask := range masks[1:] {
-		cell, score := scoreMask(pixels, mask)
-		if score < bestScore ||
-			(score == bestScore && maskOverlap(mask, preferred) > maskOverlap(bestCell.mask, preferred)) ||
-			(score == bestScore && maskOverlap(mask, preferred) == maskOverlap(bestCell.mask, preferred) && popcount(mask) > popcount(bestCell.mask)) {
-			bestCell = cell
+
+	bestScore := math.MaxInt
+	var bestCell cellResult
+	bestPreferredOverlap := -1
+	bestPopcount := -1
+
+	for _, mask := range masks {
+		m := mask & 0b111111
+		fgOpaque := m & opaqueMask
+		bgOpaque := (^m) & opaqueMask
+		fgN := bits.OnesCount8(fgOpaque)
+		bgN := bits.OnesCount8(bgOpaque)
+
+		var fgSumR, fgSumG, fgSumB int
+		entry := &maskBitIndices[fgOpaque]
+		for idx := 0; idx < entry.count; idx++ {
+			i := entry.indices[idx]
+			fgSumR += pr[i]
+			fgSumG += pg[i]
+			fgSumB += pb[i]
+		}
+
+		var bgSumR, bgSumG, bgSumB int
+		if bgN > 0 {
+			bgSumR = totalSumR - fgSumR
+			bgSumG = totalSumG - fgSumG
+			bgSumB = totalSumB - fgSumB
+		}
+
+		var fgR, fgG, fgB int
+		if fgN > 0 {
+			fgR = fgSumR / fgN
+			fgG = fgSumG / fgN
+			fgB = fgSumB / fgN
+		}
+
+		var bgR, bgG, bgB int
+		if bgN > 0 {
+			bgR = bgSumR / bgN
+			bgG = bgSumG / bgN
+			bgB = bgSumB / bgN
+		}
+
+		score := totalSqSum
+		if fgN > 0 {
+			score -= 2 * (fgR*fgSumR + fgG*fgSumG + fgB*fgSumB)
+			score += fgN * (fgR*fgR + fgG*fgG + fgB*fgB)
+		}
+		if bgN > 0 {
+			score -= 2 * (bgR*bgSumR + bgG*bgSumG + bgB*bgSumB)
+			score += bgN * (bgR*bgR + bgG*bgG + bgB*bgB)
+		}
+
+		if bgN > 0 {
+			transCount := bits.OnesCount8(transMask)
+			score += transCount * transparentOverpaintPenalty
+		} else {
+			transFGCount := bits.OnesCount8(m & transMask)
+			score += transFGCount * transparentOverpaintPenalty
+		}
+
+		cell := cellResult{
+			ch:   sextantRunes[m],
+			mask: m,
+		}
+		if fgN > 0 {
+			cell.fg = color.RGBA{R: uint8(fgR), G: uint8(fgG), B: uint8(fgB), A: 255}
+			cell.hasFG = true
+		}
+		if bgN > 0 {
+			cell.bg = color.RGBA{R: uint8(bgR), G: uint8(bgG), B: uint8(bgB), A: 255}
+			cell.hasBG = true
+		}
+
+		if m == 0 || m == 0b111111 {
+			cell.ch = ' '
+			cell.mask = 0
+			if m == 0 && !cell.hasBG && bgN > 0 {
+				cell.bg = color.RGBA{R: uint8(bgR), G: uint8(bgG), B: uint8(bgB), A: 255}
+				cell.hasBG = true
+			}
+			if m == 0b111111 && !cell.hasBG && fgN > 0 {
+				cell.bg = color.RGBA{R: uint8(fgR), G: uint8(fgG), B: uint8(fgB), A: 255}
+				cell.hasBG = true
+			}
+		}
+
+		overlap := bits.OnesCount8(m & preferred)
+		pop := bits.OnesCount8(m)
+
+		better := score < bestScore ||
+			(score == bestScore && overlap > bestPreferredOverlap) ||
+			(score == bestScore && overlap == bestPreferredOverlap && pop > bestPopcount)
+
+		if better {
 			bestScore = score
+			bestCell = cell
+			bestPreferredOverlap = overlap
+			bestPopcount = pop
 		}
 	}
+
 	return bestCell
 }
 
