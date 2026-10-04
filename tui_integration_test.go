@@ -458,6 +458,11 @@ func assertNoSparkSizeMismatchOutput(t *testing.T, out string) {
 	}
 }
 
+var (
+	zoomHintPatternRe     = regexp.MustCompile(`src px/cell=[0-9.]+`)
+	infoOrZoomHintPatternRe = regexp.MustCompile(`info raw=[^\r\n]*|src px/cell=[0-9.]+`)
+)
+
 func lastZoomHintForTest(out string) string {
 	matches := zoomHintsForTest(out)
 	if len(matches) == 0 {
@@ -466,8 +471,17 @@ func lastZoomHintForTest(out string) string {
 	return matches[len(matches)-1]
 }
 
+func BenchmarkZoomHintsForTest(b *testing.B) {
+	sampleOutput := "header info src px/cell=0.5 footer status src px/cell=1.0 src px/cell=2.5"
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = zoomHintsForTest(sampleOutput)
+	}
+}
+
 func zoomHintsForTest(out string) []string {
-	return regexp.MustCompile(`src px/cell=[0-9.]+`).FindAllString(stripANSIForTest(out), -1)
+	return zoomHintPatternRe.FindAllString(stripANSIForTest(out), -1)
 }
 
 func uniqueZoomHintsForTest(out string) []string {
@@ -493,8 +507,7 @@ func lastInfoLineForTest(out string) string {
 }
 
 func lastInfoOrZoomHintForTest(out string) string {
-	re := regexp.MustCompile(`info raw=[^\r\n]*|src px/cell=[0-9.]+`)
-	matches := re.FindAllString(stripANSIForTest(out), -1)
+	matches := infoOrZoomHintPatternRe.FindAllString(stripANSIForTest(out), -1)
 	if len(matches) == 0 {
 		return ""
 	}
