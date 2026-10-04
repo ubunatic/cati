@@ -1,6 +1,6 @@
 # 080 — Refresh README format and Go version support
 
-**Status**: Open
+**Status**: Closed — Updated README and website Go requirements and supported image formats from go.mod and decoder registrations; make test/install and website scan/doctor passed
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Documentation
