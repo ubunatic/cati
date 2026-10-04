@@ -77,6 +77,44 @@ func TestFitDimsUnifiedGeometry(t *testing.T) {
 	}
 }
 
+func TestFitDimsRatioMatchesFitDimsWhenDenomIsOne(t *testing.T) {
+	for _, c := range realCells {
+		for _, cols := range []int{1, 3, 6, 12, 24} {
+			for _, rows := range []int{0, 5, 10, 20} {
+				for _, srcH := range []int{100, 360, 480} {
+					w1, h1, ext1 := FitDims(640, srcH, c.cellW, c.cellH, c.aspectX, cols, rows)
+					w2, h2, ext2 := FitDimsRatio(640, srcH, c.cellW, c.cellH, c.aspectX, 1, cols, rows)
+					if w1 != w2 || h1 != h2 || ext1 != ext2 {
+						t.Errorf("FitDimsRatio mismatch for %s cols=%d rows=%d: FitDims=(%d,%d,%d), FitDimsRatio=(%d,%d,%d)",
+							c.name, cols, rows, w1, h1, ext1, w2, h2, ext2)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestFitDimsRatioSanitizationAndRationalAspect(t *testing.T) {
+	// Zero source dimensions
+	w, h, ext := FitDimsRatio(0, 100, 2, 3, 4, 3, 10, 5)
+	if w != 20 || h != 15 || ext != 0 {
+		t.Errorf("zero srcW: got (%d,%d,%d), want (20,15,0)", w, h, ext)
+	}
+
+	// Invalid aspect numbers should be sanitized to 1
+	w1, h1, ext1 := FitDimsRatio(100, 100, 2, 2, 0, -1, 10, 0)
+	w2, h2, ext2 := FitDimsRatio(100, 100, 2, 2, 1, 1, 10, 0)
+	if w1 != w2 || h1 != h2 || ext1 != ext2 {
+		t.Errorf("aspect sanitization mismatch: got (%d,%d,%d), want (%d,%d,%d)", w1, h1, ext1, w2, h2, ext2)
+	}
+
+	// Sextant-style cell geometry (2x3 cells with 4:3 aspect ratio)
+	sw, sh, extS := FitDimsRatio(640, 480, 2, 3, 4, 3, 20, 0)
+	if sw <= 0 || sh <= 0 || extS < 0 {
+		t.Errorf("sextant fit failed: got (%d,%d,%d)", sw, sh, extS)
+	}
+}
+
 // TestFitDimsHalfCellInvariant asserts extH is always 0 or exactly CellH/2, so
 // the transparent tail never exceeds half a char (TestGoldenTransparentBound).
 func TestFitDimsHalfCellInvariant(t *testing.T) {
@@ -137,6 +175,261 @@ func TestFitPixelDims(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ── AppendTransparentRows & FillTransparentRows ────────────────────────────────
+
+func TestAppendTransparentRows(t *testing.T) {
+	red := rgba(255, 0, 0, 255)
+	green := rgba(0, 255, 0, 255)
+
+	t.Run("standard origin bounds", func(t *testing.T) {
+		src := image.NewRGBA(image.Rect(0, 0, 2, 2))
+		src.Set(0, 0, red)
+		src.Set(1, 0, green)
+		src.Set(0, 1, green)
+		src.Set(1, 1, red)
+
+		addH := 2
+		out := AppendTransparentRows(src, addH)
+
+		wantBounds := image.Rect(0, 0, 2, 4)
+		if out.Bounds() != wantBounds {
+			t.Fatalf("bounds got %v, want %v", out.Bounds(), wantBounds)
+		}
+
+		// Verify original content rows
+		for y := 0; y < 2; y++ {
+			for x := 0; x < 2; x++ {
+				if got, want := out.At(x, y), src.At(x, y); got != want {
+					t.Errorf("pixel at (%d,%d) got %v, want %v", x, y, got, want)
+				}
+			}
+		}
+
+		// Verify appended transparent rows
+		transparent := color.RGBA{0, 0, 0, 0}
+		for y := 2; y < 4; y++ {
+			for x := 0; x < 2; x++ {
+				r, g, b, a := out.At(x, y).RGBA()
+				tr, tg, tb, ta := transparent.RGBA()
+				if r != tr || g != tg || b != tb || a != ta {
+					t.Errorf("pixel at (%d,%d) got RGBA(%d,%d,%d,%d), want transparent RGBA(0,0,0,0)", x, y, r, g, b, a)
+				}
+			}
+		}
+	})
+
+	t.Run("non-zero origin bounds", func(t *testing.T) {
+		src := image.NewRGBA(image.Rect(5, 10, 7, 12))
+		src.Set(5, 10, red)
+		src.Set(6, 10, green)
+		src.Set(5, 11, green)
+		src.Set(6, 11, red)
+
+		addH := 3
+		out := AppendTransparentRows(src, addH)
+
+		wantBounds := image.Rect(0, 0, 2, 5)
+		if out.Bounds() != wantBounds {
+			t.Fatalf("bounds got %v, want %v", out.Bounds(), wantBounds)
+		}
+
+		for y := 0; y < 2; y++ {
+			for x := 0; x < 2; x++ {
+				if got, want := out.At(x, y), src.At(5+x, 10+y); got != want {
+					t.Errorf("pixel at (%d,%d) got %v, want %v", x, y, got, want)
+				}
+			}
+		}
+
+		for y := 2; y < 5; y++ {
+			for x := 0; x < 2; x++ {
+				r, g, b, a := out.At(x, y).RGBA()
+				if r != 0 || g != 0 || b != 0 || a != 0 {
+					t.Errorf("pixel at (%d,%d) got RGBA(%d,%d,%d,%d), want transparent RGBA(0,0,0,0)", x, y, r, g, b, a)
+				}
+			}
+		}
+	})
+
+	t.Run("zero added height", func(t *testing.T) {
+		src := solidImage(3, 3, red)
+		out := AppendTransparentRows(src, 0)
+		if out.Bounds() != src.Bounds() {
+			t.Fatalf("bounds got %v, want %v", out.Bounds(), src.Bounds())
+		}
+		for y := 0; y < 3; y++ {
+			for x := 0; x < 3; x++ {
+				if got, want := out.At(x, y), src.At(x, y); got != want {
+					t.Errorf("pixel at (%d,%d) got %v, want %v", x, y, got, want)
+				}
+			}
+		}
+	})
+}
+
+func TestFillTransparentRows(t *testing.T) {
+	blue := rgba(0, 0, 255, 255)
+	trans := rgba(0, 0, 0, 0)
+
+	t.Run("replaces transparent bottom rows", func(t *testing.T) {
+		src := image.NewRGBA(image.Rect(0, 0, 2, 4))
+		src.Set(0, 0, blue)
+		src.Set(1, 0, blue)
+		src.Set(0, 1, blue)
+		src.Set(1, 1, blue)
+		src.Set(0, 2, trans)
+		src.Set(1, 2, trans)
+		src.Set(0, 3, trans)
+		src.Set(1, 3, trans)
+
+		out := FillTransparentRows(src)
+		if out == src {
+			t.Fatalf("expected new image instance, got original")
+		}
+
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 2; x++ {
+				r, g, b, a := out.At(x, y).RGBA()
+				br, bg, bb, ba := blue.RGBA()
+				if r != br || g != bg || b != bb || a != ba {
+					t.Errorf("at (%d,%d) got RGBA(%d,%d,%d,%d), want blue", x, y, r, g, b, a)
+				}
+			}
+		}
+	})
+
+	t.Run("no transparent tail returns original", func(t *testing.T) {
+		src := solidImage(2, 2, blue)
+		out := FillTransparentRows(src)
+		if out != src {
+			t.Errorf("expected original image returned unchanged when no transparent tail")
+		}
+	})
+
+	t.Run("all transparent rows returns original", func(t *testing.T) {
+		src := solidImage(2, 2, trans)
+		out := FillTransparentRows(src)
+		if out != src {
+			t.Errorf("expected original image returned unchanged when all rows transparent")
+		}
+	})
+}
+
+func TestScaleNN_ResizingAndBounds(t *testing.T) {
+	red := rgba(255, 0, 0, 255)
+	green := rgba(0, 255, 0, 255)
+	blue := rgba(0, 0, 255, 255)
+	white := rgba(255, 255, 255, 255)
+
+	// Helper to create a 2x2 image with distinctive colors in each quadrant
+	create2x2 := func(minX, minY int) *image.RGBA {
+		img := image.NewRGBA(image.Rect(minX, minY, minX+2, minY+2))
+		img.Set(minX+0, minY+0, red)
+		img.Set(minX+1, minY+0, green)
+		img.Set(minX+0, minY+1, blue)
+		img.Set(minX+1, minY+1, white)
+		return img
+	}
+
+	t.Run("upscaling 2x2 to 4x4", func(t *testing.T) {
+		src := create2x2(0, 0)
+		dst := ScaleNN(src, 4, 4)
+
+		b := dst.Bounds()
+		if b.Dx() != 4 || b.Dy() != 4 {
+			t.Fatalf("expected 4x4 bounds, got %dx%d", b.Dx(), b.Dy())
+		}
+
+		expected := [][]color.RGBA{
+			{red, red, green, green},
+			{red, red, green, green},
+			{blue, blue, white, white},
+			{blue, blue, white, white},
+		}
+
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				r, g, b, a := dst.At(x, y).RGBA()
+				wantR, wantG, wantB, wantA := expected[y][x].RGBA()
+				if r != wantR || g != wantG || b != wantB || a != wantA {
+					t.Errorf("at (%d,%d) got RGBA(%d,%d,%d,%d), want RGBA(%d,%d,%d,%d)",
+						x, y, r, g, b, a, wantR, wantG, wantB, wantA)
+				}
+			}
+		}
+	})
+
+	t.Run("downscaling 4x4 to 2x2", func(t *testing.T) {
+		src := image.NewRGBA(image.Rect(0, 0, 4, 4))
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				var c color.RGBA
+				switch {
+				case x < 2 && y < 2:
+					c = red
+				case x >= 2 && y < 2:
+					c = green
+				case x < 2 && y >= 2:
+					c = blue
+				default:
+					c = white
+				}
+				src.Set(x, y, c)
+			}
+		}
+
+		dst := ScaleNN(src, 2, 2)
+		b := dst.Bounds()
+		if b.Dx() != 2 || b.Dy() != 2 {
+			t.Fatalf("expected 2x2 bounds, got %dx%d", b.Dx(), b.Dy())
+		}
+
+		expected := [][]color.RGBA{
+			{red, green},
+			{blue, white},
+		}
+
+		for y := 0; y < 2; y++ {
+			for x := 0; x < 2; x++ {
+				r, g, b, a := dst.At(x, y).RGBA()
+				wantR, wantG, wantB, wantA := expected[y][x].RGBA()
+				if r != wantR || g != wantG || b != wantB || a != wantA {
+					t.Errorf("at (%d,%d) got RGBA(%d,%d,%d,%d), want RGBA(%d,%d,%d,%d)",
+						x, y, r, g, b, a, wantR, wantG, wantB, wantA)
+				}
+			}
+		}
+	})
+
+	t.Run("source with non-zero origin bounds", func(t *testing.T) {
+		src := create2x2(10, 20)
+		dst := ScaleNN(src, 4, 4)
+
+		b := dst.Bounds()
+		if b.Min.X != 0 || b.Min.Y != 0 || b.Dx() != 4 || b.Dy() != 4 {
+			t.Fatalf("expected dst bounds Rect(0,0,4,4), got %v", b)
+		}
+
+		expected := [][]color.RGBA{
+			{red, red, green, green},
+			{red, red, green, green},
+			{blue, blue, white, white},
+			{blue, blue, white, white},
+		}
+
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				r, g, b, a := dst.At(x, y).RGBA()
+				wantR, wantG, wantB, wantA := expected[y][x].RGBA()
+				if r != wantR || g != wantG || b != wantB || a != wantA {
+					t.Errorf("at (%d,%d) got RGBA(%d,%d,%d,%d), want RGBA(%d,%d,%d,%d)",
+						x, y, r, g, b, a, wantR, wantG, wantB, wantA)
+				}
+			}
+		}
+	})
 }
 
 func TestFitPixelDims_PreservesAspect(t *testing.T) {
@@ -202,5 +495,34 @@ func TestCropImage_SubImage(t *testing.T) {
 	b := cropped.Bounds()
 	if b.Dx() != 10 || b.Dy() != 10 {
 		t.Errorf("full crop dims: got %dx%d", b.Dx(), b.Dy())
+	}
+}
+
+// ── ScaleNN ──────────────────────────────────────────────────────────────────
+
+func TestScaleNN_GuardClauses(t *testing.T) {
+	emptyImg := image.NewRGBA(image.Rect(0, 0, 0, 0))
+	if got := ScaleNN(emptyImg, 10, 10); got != emptyImg {
+		t.Errorf("ScaleNN with empty image did not return original image pointer")
+	}
+
+	validImg := solidImage(10, 10, rgba(255, 0, 0, 255))
+	tests := []struct {
+		name string
+		w, h int
+	}{
+		{"zero width", 0, 10},
+		{"zero height", 10, 0},
+		{"negative width", -1, 10},
+		{"negative height", 10, -1},
+		{"identical dimensions", 10, 10},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ScaleNN(validImg, tc.w, tc.h); got != validImg {
+				t.Errorf("ScaleNN(%d, %d) did not return original image pointer", tc.w, tc.h)
+			}
+		})
 	}
 }

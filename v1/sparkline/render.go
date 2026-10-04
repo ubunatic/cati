@@ -7,8 +7,10 @@ import (
 	"io"
 	"math"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/v1/core"
@@ -236,28 +238,62 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 		return err
 	}
 
+	if !core.Fastpath {
+		for y := 0; y < grid.Height; y++ {
+			var sb strings.Builder
+			if !opts.NoLinePrefix {
+				sb.WriteString(ansiLinePrefix)
+			}
+			for x := 0; x < grid.Width; x++ {
+				cell := grid.Cells[y][x]
+				if cell.Transparent {
+					sb.WriteRune(' ')
+					continue
+				}
+				if cell.HasBg {
+					sb.WriteString(bgRGB(cell.Bg))
+				}
+				if cell.HasFg {
+					sb.WriteString(fgRGB(cell.Fg))
+				}
+				sb.WriteRune(cell.Ch)
+				sb.WriteString(ansiReset)
+			}
+			if _, err := fmt.Fprintln(w, sb.String()); err != nil {
+				return fmt.Errorf("sparkline render: %w", err)
+			}
+		}
+		return nil
+	}
+
+	var buf []byte
 	for y := 0; y < grid.Height; y++ {
-		var sb strings.Builder
+		buf = buf[:0]
 		if !opts.NoLinePrefix {
-			sb.WriteString(ansiLinePrefix)
+			buf = append(buf, ansiLinePrefix...)
 		}
 		for x := 0; x < grid.Width; x++ {
 			cell := grid.Cells[y][x]
 			if cell.Transparent {
-				sb.WriteRune(' ')
+				buf = append(buf, ' ')
 				continue
 			}
 			if cell.HasBg {
-				sb.WriteString(bgRGB(cell.Bg))
+				buf = appendBgRGB(buf, cell.Bg)
 			}
 			if cell.HasFg {
-				sb.WriteString(fgRGB(cell.Fg))
+				buf = appendFgRGB(buf, cell.Fg)
 			}
-			sb.WriteRune(cell.Ch)
-			sb.WriteString(ansiReset)
+			buf = utf8.AppendRune(buf, cell.Ch)
+			buf = append(buf, ansiReset...)
 		}
-		if _, err := fmt.Fprintln(w, sb.String()); err != nil {
+		buf = append(buf, '\n')
+		n, err := w.Write(buf)
+		if err != nil {
 			return fmt.Errorf("sparkline render: %w", err)
+		}
+		if n != len(buf) {
+			return fmt.Errorf("sparkline render: %w", io.ErrShortWrite)
 		}
 	}
 	return nil
@@ -271,8 +307,7 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 // RenderToImage runs the same cell selection as RenderOpts but writes the
 // reconstructed glyph image instead of ANSI escape codes.
 func RenderToImage(img image.Image, outCols, outRows int, mode Mode) image.Image {
-	result, _ := RenderToImageWithOptions(img, outCols, outRows, Options{Mode: mode})
-	return result
+	return RenderToImageJ(img, outCols, outRows, mode, 1)
 }
 
 // RenderToImageWithOptions reconstructs the exact pixels represented by opts.
@@ -346,7 +381,6 @@ func RenderJ(w io.Writer, img image.Image, outCols, outRows int, mode Mode, jobs
 }
 
 // RenderToImageJ is a worker-aware copy of RenderToImage.
-// FIXME: copied from RenderToImage; consolidate once the worker path settles.
 func RenderToImageJ(img image.Image, outCols, outRows int, mode Mode, jobs int) image.Image {
 	result, _ := renderToImageWithOptions(img, outCols, outRows, Options{Mode: mode}, jobs)
 	return result
@@ -1087,6 +1121,26 @@ func setRGBA(dst *image.RGBA, x, y int, c color.RGBA) {
 	dst.Pix[i+1] = c.G
 	dst.Pix[i+2] = c.B
 	dst.Pix[i+3] = c.A
+}
+
+func appendFgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[38;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
+}
+
+func appendBgRGB(b []byte, c color.RGBA) []byte {
+	b = append(b, "\x1b[48;2;"...)
+	b = strconv.AppendUint(b, uint64(c.R), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.G), 10)
+	b = append(b, ';')
+	b = strconv.AppendUint(b, uint64(c.B), 10)
+	return append(b, 'm')
 }
 
 func fgRGB(c color.RGBA) string {

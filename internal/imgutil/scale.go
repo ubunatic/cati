@@ -105,8 +105,9 @@ func AppendTransparentRows(img image.Image, addH int) image.Image {
 	return out
 }
 
-// FitDims computes pixel dimensions for fitting a srcW×srcH source into a
-// cols×rows terminal viewport with the given cell geometry, allowing upscale.
+// FitDimsRatio computes pixel dimensions for fitting a srcW×srcH source into a
+// cols×rows terminal viewport with rational aspect ratio (aspectNum/aspectDen),
+// allowing upscale.
 //
 // Returns:
 //   - targetW, targetH: dimensions to resize to (targetH snapped to a half-cell
@@ -117,7 +118,7 @@ func AppendTransparentRows(img image.Image, addH int) image.Image {
 //     bottom half left for the terminal background — never more than half a char.
 //
 // Resolution-independent geometry: every render mode is built so that
-// CellW/(AspectX·CellH) = 1/2, which means the *continuous* display height in
+// CellW/(Aspect·CellH) = 1/2, which means the *continuous* display height in
 // char rows, srcH·cols/(2·srcW), is identical across modes. The half-cell snap
 // below is therefore computed from that continuous height (carried as the exact
 // ratio hNum/hDen), NOT from a height already floored to integer pixels. Flooring
@@ -126,9 +127,15 @@ func AppendTransparentRows(img image.Image, addH int) image.Image {
 // modes would disagree on the bottom-row geometry for the same source and width.
 //
 // Either cols or rows may be 0 (unconstrained). Both 0 returns source dimensions.
-func FitDims(srcW, srcH, cellW, cellH, aspectX, cols, rows int) (targetW, targetH, extH int) {
+func FitDimsRatio(srcW, srcH, cellW, cellH, aspectNum, aspectDen, cols, rows int) (targetW, targetH, extH int) {
 	if srcW == 0 || srcH == 0 {
 		return max(1, cols*cellW), max(1, rows*cellH), 0
+	}
+	if aspectNum < 1 {
+		aspectNum = 1
+	}
+	if aspectDen < 1 {
+		aspectDen = 1
 	}
 
 	maxW, maxH := cols*cellW, rows*cellH
@@ -138,22 +145,23 @@ func FitDims(srcW, srcH, cellW, cellH, aspectX, cols, rows int) (targetW, target
 	// when the unconstrained max would be MaxInt. When height is the *derived*
 	// dimension we keep its exact continuous value as hNum/hDen (px = hNum/hDen)
 	// so the half-cell snap is not corrupted by integer-pixel flooring.
-	acSrcW := srcW * aspectX
+	acSrcW := srcW * aspectNum
+	acSrcH := srcH * aspectDen
 	var rawW int
 	var hNum, hDen int // continuous derived height in px = hNum/hDen
 	heightDerived := true
 	switch {
 	case cols <= 0 && rows <= 0:
-		rawW, hNum, hDen = acSrcW, srcH, 1
+		rawW, hNum, hDen = max(1, acSrcW/aspectDen), srcH, 1
 	case rows <= 0: // width-only constraint
-		rawW, hNum, hDen = maxW, srcH*maxW, acSrcW
+		rawW, hNum, hDen = maxW, acSrcH*maxW, acSrcW
 	case cols <= 0: // height-only constraint — height is fixed (exact cells)
-		targetH, rawW, heightDerived = maxH, max(1, acSrcW*maxH/srcH), false
+		targetH, rawW, heightDerived = maxH, max(1, acSrcW*maxH/acSrcH), false
 	default: // both constrained — safe to compare (no overflow)
-		if acSrcW*maxH >= srcH*maxW { // width-bound, height derived
-			rawW, hNum, hDen = maxW, srcH*maxW, acSrcW
+		if acSrcW*maxH >= acSrcH*maxW { // width-bound, height derived
+			rawW, hNum, hDen = maxW, acSrcH*maxW, acSrcW
 		} else { // height-bound — height is fixed (exact cells)
-			targetH, rawW, heightDerived = maxH, max(1, acSrcW*maxH/srcH), false
+			targetH, rawW, heightDerived = maxH, max(1, acSrcW*maxH/acSrcH), false
 		}
 	}
 
@@ -207,4 +215,10 @@ func FitDims(srcW, srcH, cellW, cellH, aspectX, cols, rows int) (targetW, target
 	}
 
 	return targetW, targetH, extH
+}
+
+// FitDims computes pixel dimensions for fitting a srcW×srcH source into a
+// cols×rows terminal viewport with integer aspect multiplier (AspectNum=aspectX, AspectDen=1).
+func FitDims(srcW, srcH, cellW, cellH, aspectX, cols, rows int) (targetW, targetH, extH int) {
+	return FitDimsRatio(srcW, srcH, cellW, cellH, aspectX, 1, cols, rows)
 }

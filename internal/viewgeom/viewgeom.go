@@ -394,12 +394,7 @@ func (s Spec) InitialZoomRatio(flag string, srcW, srcH, termCols, termRows int, 
 		if baseFitW <= 0 {
 			return 1.0
 		}
-		var fitW int
-		if s.AspectDen > 0 {
-			fitW, _, _ = fitDimsRatio(srcW, srcH, s.CellW, s.CellH, aspectNum, aspectDen, termCols, termRows)
-		} else {
-			fitW, _, _ = imgutil.FitDims(srcW, srcH, s.CellW, s.CellH, s.AspectX, termCols, termRows)
-		}
+		fitW, _, _ := imgutil.FitDimsRatio(srcW, srcH, s.CellW, s.CellH, aspectNum, aspectDen, termCols, termRows)
 		return float64(fitW) / float64(baseFitW)
 	}
 	mz := s.MaxZoom(srcW, srcH, termCols, termRows)
