@@ -951,115 +951,7 @@ func charToMask(ch rune) uint8 {
 // is a faithful reconstruction of exactly what the terminal would display.
 // This is the correct test signal for SSIM computation.
 func RenderToImage(img image.Image, opts Options) *image.RGBA {
-	b := img.Bounds()
-	pixW, pixH := b.Dx(), b.Dy()
-	dst := image.NewRGBA(image.Rect(0, 0, pixW, pixH))
-
-	tcCols := (pixW + 1) / 2
-	trRows := (pixH + 1) / 2
-	cells := make([]quadCell, tcCols*trRows)
-
-	// Quadrant pixel offsets within a 2×2 block: UL=0, UR=1, LL=2, LR=3.
-	// Maps to bit positions: UL=bit3, UR=bit2, LL=bit1, LR=bit0.
-	quadBit := [4]uint8{bitUL, bitUR, bitLL, bitLR}
-	// dx,dy offsets for each quadrant index.
-	qDX := [4]int{0, 1, 0, 1}
-	qDY := [4]int{0, 0, 1, 1}
-
-	for tr := range trRows {
-		for tc := range tcCols {
-			py0 := b.Min.Y + tr*2
-			px0 := b.Min.X + tc*2
-
-			var pixels [4]color.RGBA
-			pixels[0] = samplePixel(img, px0, py0, b, opts)
-			pixels[1] = samplePixel(img, px0+1, py0, b, opts)
-			pixels[2] = samplePixel(img, px0, py0+1, b, opts)
-			pixels[3] = samplePixel(img, px0+1, py0+1, b, opts)
-
-			if opts.Blend == BlendAmbiguous || opts.Blend == BlendAmbiguousWide {
-				if _, n := collectUnique(pixels); n >= 3 {
-					radius := 1
-					if opts.Blend == BlendAmbiguousWide {
-						radius = 2
-					}
-					pixels[0] = blendedPixelR(img, px0, py0, b, radius)
-					pixels[1] = blendedPixelR(img, px0+1, py0, b, radius)
-					pixels[2] = blendedPixelR(img, px0, py0+1, b, radius)
-					pixels[3] = blendedPixelR(img, px0+1, py0+1, b, radius)
-				}
-			}
-
-			var leftCell, aboveCell *quadCell
-			if tc > 0 {
-				leftCell = &cells[tr*tcCols+tc-1]
-			}
-			if tr > 0 {
-				aboveCell = &cells[(tr-1)*tcCols+tc]
-			}
-
-			c := compileCell(pixels, leftCell, aboveCell, opts)
-			cells[tr*tcCols+tc] = c
-
-			mask := charToMask(c.ch)
-			bg := c.bg
-			if !c.hasBG {
-				bg = color.RGBA{} // transparent = terminal default bg
-			}
-			fg := c.fg
-			if !c.hasFG {
-				fg = bg
-			}
-			switch c.ch {
-			case '▌':
-				for q, dx := range []int{0, 1, 0, 1} {
-					dy := qDY[q]
-					px, py := tc*2+dx, tr*2+dy
-					if px < pixW && py < pixH {
-						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
-						if src.A == 0 {
-							dst.SetRGBA(px, py, color.RGBA{})
-						} else if dx == 0 {
-							dst.SetRGBA(px, py, fg)
-						} else {
-							dst.SetRGBA(px, py, bg)
-						}
-					}
-				}
-			case '▐':
-				for q, dx := range []int{0, 1, 0, 1} {
-					dy := qDY[q]
-					px, py := tc*2+dx, tr*2+dy
-					if px < pixW && py < pixH {
-						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
-						if src.A == 0 {
-							dst.SetRGBA(px, py, color.RGBA{})
-						} else if dx == 1 {
-							dst.SetRGBA(px, py, fg)
-						} else {
-							dst.SetRGBA(px, py, bg)
-						}
-					}
-				}
-			default:
-				for q, bit := range quadBit {
-					dx, dy := qDX[q], qDY[q]
-					px, py := tc*2+dx, tr*2+dy
-					if px < pixW && py < pixH {
-						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
-						if src.A == 0 {
-							dst.SetRGBA(px, py, color.RGBA{})
-						} else if mask&bit != 0 {
-							dst.SetRGBA(px, py, fg)
-						} else {
-							dst.SetRGBA(px, py, bg)
-						}
-					}
-				}
-			}
-		}
-	}
-	return dst
+	return RenderToImageJ(img, opts, opts.Jobs)
 }
 
 // RenderJ is a compatibility wrapper.
@@ -1070,11 +962,10 @@ func RenderJ(w io.Writer, img image.Image, opts Options, jobs int) error {
 	return Render(w, img, cols, opts)
 }
 
-// RenderToImageJ is a worker-aware copy of RenderToImage.
-// FIXME: copied from RenderToImage; consolidate once the worker path settles.
+// RenderToImageJ is a worker-aware version of RenderToImage.
 func RenderToImageJ(img image.Image, opts Options, jobs int) *image.RGBA {
-	if jobs <= 1 {
-		return RenderToImage(img, opts)
+	if jobs <= 0 {
+		jobs = 1
 	}
 	b := img.Bounds()
 	pixW, pixH := b.Dx(), b.Dy()
@@ -1220,10 +1111,7 @@ func computeQuadCellsJ(img image.Image, b image.Rectangle, opts Options, tcCols,
 	return cells, nil
 }
 
-// computeQuadCell is the worker-copy cell compiler used by RenderJ and
-// RenderToImageJ.
-// FIXME: copied from the Render/RenderToImage pixel-selection path; consider
-// consolidating once the worker path settles.
+// computeQuadCell compiles a single quad block cell at position (tc, tr).
 func computeQuadCell(img image.Image, b image.Rectangle, opts Options, cells []quadCell, tr, tc, tcCols, trRows int) quadCell {
 	py0 := b.Min.Y + tr*2
 	py1 := py0 + 1
