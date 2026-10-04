@@ -139,6 +139,121 @@ func TestFitPixelDims(t *testing.T) {
 	}
 }
 
+func TestScaleNN_ResizingAndBounds(t *testing.T) {
+	red := rgba(255, 0, 0, 255)
+	green := rgba(0, 255, 0, 255)
+	blue := rgba(0, 0, 255, 255)
+	white := rgba(255, 255, 255, 255)
+
+	// Helper to create a 2x2 image with distinctive colors in each quadrant
+	create2x2 := func(minX, minY int) *image.RGBA {
+		img := image.NewRGBA(image.Rect(minX, minY, minX+2, minY+2))
+		img.Set(minX+0, minY+0, red)
+		img.Set(minX+1, minY+0, green)
+		img.Set(minX+0, minY+1, blue)
+		img.Set(minX+1, minY+1, white)
+		return img
+	}
+
+	t.Run("upscaling 2x2 to 4x4", func(t *testing.T) {
+		src := create2x2(0, 0)
+		dst := ScaleNN(src, 4, 4)
+
+		b := dst.Bounds()
+		if b.Dx() != 4 || b.Dy() != 4 {
+			t.Fatalf("expected 4x4 bounds, got %dx%d", b.Dx(), b.Dy())
+		}
+
+		expected := [][]color.RGBA{
+			{red, red, green, green},
+			{red, red, green, green},
+			{blue, blue, white, white},
+			{blue, blue, white, white},
+		}
+
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				r, g, b, a := dst.At(x, y).RGBA()
+				wantR, wantG, wantB, wantA := expected[y][x].RGBA()
+				if r != wantR || g != wantG || b != wantB || a != wantA {
+					t.Errorf("at (%d,%d) got RGBA(%d,%d,%d,%d), want RGBA(%d,%d,%d,%d)",
+						x, y, r, g, b, a, wantR, wantG, wantB, wantA)
+				}
+			}
+		}
+	})
+
+	t.Run("downscaling 4x4 to 2x2", func(t *testing.T) {
+		src := image.NewRGBA(image.Rect(0, 0, 4, 4))
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				var c color.RGBA
+				switch {
+				case x < 2 && y < 2:
+					c = red
+				case x >= 2 && y < 2:
+					c = green
+				case x < 2 && y >= 2:
+					c = blue
+				default:
+					c = white
+				}
+				src.Set(x, y, c)
+			}
+		}
+
+		dst := ScaleNN(src, 2, 2)
+		b := dst.Bounds()
+		if b.Dx() != 2 || b.Dy() != 2 {
+			t.Fatalf("expected 2x2 bounds, got %dx%d", b.Dx(), b.Dy())
+		}
+
+		expected := [][]color.RGBA{
+			{red, green},
+			{blue, white},
+		}
+
+		for y := 0; y < 2; y++ {
+			for x := 0; x < 2; x++ {
+				r, g, b, a := dst.At(x, y).RGBA()
+				wantR, wantG, wantB, wantA := expected[y][x].RGBA()
+				if r != wantR || g != wantG || b != wantB || a != wantA {
+					t.Errorf("at (%d,%d) got RGBA(%d,%d,%d,%d), want RGBA(%d,%d,%d,%d)",
+						x, y, r, g, b, a, wantR, wantG, wantB, wantA)
+				}
+			}
+		}
+	})
+
+	t.Run("source with non-zero origin bounds", func(t *testing.T) {
+		src := create2x2(10, 20)
+		dst := ScaleNN(src, 4, 4)
+
+		b := dst.Bounds()
+		if b.Min.X != 0 || b.Min.Y != 0 || b.Dx() != 4 || b.Dy() != 4 {
+			t.Fatalf("expected dst bounds Rect(0,0,4,4), got %v", b)
+		}
+
+		expected := [][]color.RGBA{
+			{red, red, green, green},
+			{red, red, green, green},
+			{blue, blue, white, white},
+			{blue, blue, white, white},
+		}
+
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				r, g, b, a := dst.At(x, y).RGBA()
+				wantR, wantG, wantB, wantA := expected[y][x].RGBA()
+				if r != wantR || g != wantG || b != wantB || a != wantA {
+					t.Errorf("at (%d,%d) got RGBA(%d,%d,%d,%d), want RGBA(%d,%d,%d,%d)",
+						x, y, r, g, b, a, wantR, wantG, wantB, wantA)
+				}
+			}
+		}
+	})
+}
+
 func TestFitPixelDims_PreservesAspect(t *testing.T) {
 	// For a 2:1 image, ratio should be approximately preserved.
 	// Integer truncation can cause up to ~2% error; we allow ±3%.
@@ -202,5 +317,34 @@ func TestCropImage_SubImage(t *testing.T) {
 	b := cropped.Bounds()
 	if b.Dx() != 10 || b.Dy() != 10 {
 		t.Errorf("full crop dims: got %dx%d", b.Dx(), b.Dy())
+	}
+}
+
+// ── ScaleNN ──────────────────────────────────────────────────────────────────
+
+func TestScaleNN_GuardClauses(t *testing.T) {
+	emptyImg := image.NewRGBA(image.Rect(0, 0, 0, 0))
+	if got := ScaleNN(emptyImg, 10, 10); got != emptyImg {
+		t.Errorf("ScaleNN with empty image did not return original image pointer")
+	}
+
+	validImg := solidImage(10, 10, rgba(255, 0, 0, 255))
+	tests := []struct {
+		name string
+		w, h int
+	}{
+		{"zero width", 0, 10},
+		{"zero height", 10, 0},
+		{"negative width", -1, 10},
+		{"negative height", 10, -1},
+		{"identical dimensions", 10, 10},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ScaleNN(validImg, tc.w, tc.h); got != validImg {
+				t.Errorf("ScaleNN(%d, %d) did not return original image pointer", tc.w, tc.h)
+			}
+		})
 	}
 }
