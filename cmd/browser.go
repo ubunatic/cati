@@ -255,14 +255,14 @@ func renderTpl(tpl string, vars map[string]string, baseAnsi string) string {
 	var sb strings.Builder
 	i := 0
 	for i < len(tpl) {
-		open := strings.Index(tpl[i:], "{")
+		open := strings.IndexByte(tpl[i:], '{')
 		if open == -1 {
 			sb.WriteString(tpl[i:])
 			break
 		}
 		sb.WriteString(tpl[i : i+open])
 		i += open + 1
-		close := strings.Index(tpl[i:], "}")
+		close := strings.IndexByte(tpl[i:], '}')
 		if close == -1 {
 			sb.WriteByte('{')
 			continue
@@ -323,14 +323,14 @@ func tplWidth(tpl string, vars map[string]string) int {
 	w := 0
 	i := 0
 	for i < len(tpl) {
-		open := strings.Index(tpl[i:], "{")
+		open := strings.IndexByte(tpl[i:], '{')
 		if open == -1 {
 			w += utf8.RuneCountInString(tpl[i:])
 			break
 		}
 		w += utf8.RuneCountInString(tpl[i : i+open])
 		i += open + 1
-		close := strings.Index(tpl[i:], "}")
+		close := strings.IndexByte(tpl[i:], '}')
 		if close == -1 {
 			break
 		}
@@ -550,12 +550,12 @@ func extractViewButtonNames(tpl string) []string {
 	var names []string
 	i := 0
 	for i < len(tpl) {
-		open := strings.Index(tpl[i:], "{")
+		open := strings.IndexByte(tpl[i:], '{')
 		if open == -1 {
 			break
 		}
 		i += open + 1
-		close := strings.Index(tpl[i:], "}")
+		close := strings.IndexByte(tpl[i:], '}')
 		if close == -1 {
 			break
 		}
@@ -2383,14 +2383,14 @@ func parseMenuItems(tpl string, labels map[string]string, conditions map[string]
 	var items []menuLayoutItem
 	i := 0
 	for i < len(tpl) {
-		open := strings.Index(tpl[i:], "{")
+		open := strings.IndexByte(tpl[i:], '{')
 		if open == -1 {
 			break
 		}
 		literal := tpl[i : i+open]
 		i += open + 1
 
-		close := strings.Index(tpl[i:], "}")
+		close := strings.IndexByte(tpl[i:], '}')
 		if close == -1 {
 			break
 		}
@@ -2489,7 +2489,7 @@ func compactButtonLabel(label string) string {
 	left, body, right := splitButtonCaps(label)
 	body = strings.TrimSpace(body)
 	if strings.HasPrefix(body, "{") {
-		if end := strings.Index(body, "}"); end >= 0 {
+		if end := strings.IndexByte(body, '}'); end >= 0 {
 			return left + body[:end+1] + right
 		}
 	}
