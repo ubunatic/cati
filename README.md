@@ -59,7 +59,7 @@ cd cati
 make install      # installs cati, catiplay, and catibrowse to ~/go/bin
 ```
 
-Or install with Go 1.21+.
+Or install with Go 1.26.0+.
 
 ```bash
 go install ubunatic.com/cati/cmd/cati@latest
@@ -148,11 +148,14 @@ make clean    # remove built binaries
 |--------|-----------|
 | PNG    | `.png`    |
 | JPEG   | `.jpg`, `.jpeg` |
+| GIF    | `.gif`    |
+| BMP    | `.bmp`    |
+| TIFF   | `.tif`, `.tiff` |
+| WebP   | `.webp`   |
 | SVG    | `.svg`    |
 
-Support for more raster formats (GIF, WebP, …) can be added by importing the
-relevant `image/*` decoder package. SVG is rasterized via `rsvg-convert`
-(librsvg), which must be installed and on `$PATH`.
+The GIF, BMP, TIFF, and WebP decoders are registered by the renderer. SVG is
+rasterized via `rsvg-convert` (librsvg), which must be installed and on `$PATH`.
 
 ---
 
