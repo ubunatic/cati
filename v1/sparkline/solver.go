@@ -127,6 +127,15 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 				idx++
 			}
 		}
+	} else if nrgba, ok := img.(*image.NRGBA); ok && core.Fastpath {
+		idx := 0
+		for y := y0; y <= y1; y++ {
+			p := nrgba.Pix[nrgba.PixOffset(x0, y):]
+			for x := 0; x < blockW; x++ {
+				pr[idx], pg[idx], pb[idx], pa[idx] = p[x*4], p[x*4+1], p[x*4+2], p[x*4+3]
+				idx++
+			}
+		}
 	} else {
 		idx := 0
 		for y := y0; y <= y1; y++ {
@@ -151,6 +160,10 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 		totalSumG += ug
 		totalSumB += ub
 		totalSqSum += int64(ur*ur + ug*ug + ub*ub)
+	}
+
+	if opaque0 == 0 && opaque1 == 0 {
+		return cellResult{Ch: ' ', Err: 0}
 	}
 
 	var validMask0, validMask1 uint64
@@ -270,6 +283,9 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 				} else {
 					bestBG = color.RGBA{}
 				}
+				if errInt == 0 && fgTrans == 0 && splitPenalty == 0 {
+					break
+				}
 			}
 		}
 	} else {
@@ -371,6 +387,9 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 					bestBG = color.RGBA{R: bgAvgR, G: bgAvgG, B: bgAvgB, A: 255}
 				} else {
 					bestBG = color.RGBA{}
+				}
+				if errInt == 0 && fgTrans == 0 && splitPenalty == 0 {
+					break
 				}
 			}
 		}
