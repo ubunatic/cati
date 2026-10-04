@@ -307,8 +307,7 @@ func RenderOpts(w io.Writer, img image.Image, outCols, outRows int, mode Mode) e
 // RenderToImage runs the same cell selection as RenderOpts but writes the
 // reconstructed glyph image instead of ANSI escape codes.
 func RenderToImage(img image.Image, outCols, outRows int, mode Mode) image.Image {
-	result, _ := RenderToImageWithOptions(img, outCols, outRows, Options{Mode: mode})
-	return result
+	return RenderToImageJ(img, outCols, outRows, mode, 1)
 }
 
 // RenderToImageWithOptions reconstructs the exact pixels represented by opts.
@@ -382,7 +381,6 @@ func RenderJ(w io.Writer, img image.Image, outCols, outRows int, mode Mode, jobs
 }
 
 // RenderToImageJ is a worker-aware copy of RenderToImage.
-// FIXME: copied from RenderToImage; consolidate once the worker path settles.
 func RenderToImageJ(img image.Image, outCols, outRows int, mode Mode, jobs int) image.Image {
 	result, _ := renderToImageWithOptions(img, outCols, outRows, Options{Mode: mode}, jobs)
 	return result
