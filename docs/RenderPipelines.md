@@ -34,10 +34,10 @@ graph TD
 ```
 
 ### Key Entry Points and API Links
-*   **Half-block**: [halfblock.ScaleToFit](file:///home/uwe/projects/cati/internal/halfblock/render.go#L82) & [halfblock.Render](file:///home/uwe/projects/cati/internal/halfblock/render.go#L213)
-*   **Quad-block**: [quadblock.ScaleToFit](file:///home/uwe/projects/cati/internal/quadblock/render.go#L662) & [quadblock.RenderOpts](file:///home/uwe/projects/cati/internal/quadblock/render.go#L753)
-*   **Sextant**: [sextant.Render](file:///home/uwe/projects/cati/internal/sextant/render.go#L582)
-*   **Sparkline**: [sparkline.ScaleToFit](file:///home/uwe/projects/cati/internal/sparkline/render.go#L24) & [sparkline.RenderOpts](file:///home/uwe/projects/cati/internal/sparkline/render.go#L67)
+*   **Half-block**: [halfblock.ScaleToFit](https://codeberg.org/ubunatic/cati/src/branch/main/internal/halfblock/render.go#L82) & [halfblock.Render](https://codeberg.org/ubunatic/cati/src/branch/main/internal/halfblock/render.go#L213)
+*   **Quad-block**: [quadblock.ScaleToFit](https://codeberg.org/ubunatic/cati/src/branch/main/internal/quadblock/render.go#L662) & [quadblock.RenderOpts](https://codeberg.org/ubunatic/cati/src/branch/main/internal/quadblock/render.go#L753)
+*   **Sextant**: [sextant.Render](https://codeberg.org/ubunatic/cati/src/branch/main/internal/sextant/render.go#L582)
+*   **Sparkline**: [sparkline.ScaleToFit](https://codeberg.org/ubunatic/cati/src/branch/main/internal/sparkline/render.go#L24) & [sparkline.RenderOpts](https://codeberg.org/ubunatic/cati/src/branch/main/internal/sparkline/render.go#L67)
 
 ---
 
@@ -83,7 +83,7 @@ src (2x4 pixels)
 Half-block rendering implements dual-path execution gated by `core.Fastpath` (default enabled, disabled via `CATI_FASTPATH=0`):
 - **Direct RGBA Access**: Fast path directly indexes `*image.RGBA.Pix` slices during scaling and sampling, avoiding interface boxing from `img.At(x, y)`.
 - **Zero-Allocation ANSI Formatting**: Assembles ANSI 24-bit color escapes directly into a reusable line byte buffer via `strconv.AppendUint` instead of `fmt.Sprintf` / `strings.Builder`.
-- See [docs/perf/2026-09-24-halfblock-direct-rgba-fastpath.md](file:///home/uwe/projects/cati/docs/perf/2026-09-24-halfblock-direct-rgba-fastpath.md) for benchmark data and technical details.
+- See [docs/perf/2026-09-24-halfblock-direct-rgba-fastpath.md](https://codeberg.org/ubunatic/cati/src/branch/main/docs/perf/2026-09-24-halfblock-direct-rgba-fastpath.md) for benchmark data and technical details.
 
 ---
 
@@ -117,7 +117,7 @@ src (2x2 pixels)
 
 *   The first cell has all 4 sub-pixels filled (`#`), rendering as a full block `█`.
 *   The second cell has the top two sub-pixels empty (`.`) and bottom two filled (`#`), rendering as a bottom half block `▄`.
-*   **Neighbor-Aware Quantisation**: In [pickBestPair](file:///home/uwe/projects/cati/internal/quadblock/render.go), if a cell has 3 or more colors, we quantise it to 2 colors using a score weighted by exact pixel coverage (4x) and color continuity with left/above cells (1x).
+*   **Neighbor-Aware Quantisation**: In [pickBestPair](https://codeberg.org/ubunatic/cati/src/branch/main/internal/quadblock/render.go), if a cell has 3 or more colors, we quantise it to 2 colors using a score weighted by exact pixel coverage (4x) and color continuity with left/above cells (1x).
 
 ---
 
@@ -201,5 +201,5 @@ src (4x8 pixel block)
     # # # #
 ```
 
-*   The optimal split level is chosen using [pickBestLevel](file:///home/uwe/projects/cati/internal/sparkline/sparkline.go), returning `bestK` (0 to 7) corresponding to Unicode characters ` ▂▃▄▅▆▇█`.
+*   The optimal split level is chosen using [pickBestLevel](https://codeberg.org/ubunatic/cati/src/branch/main/internal/sparkline/sparkline.go), returning `bestK` (0 to 7) corresponding to Unicode characters ` ▂▃▄▅▆▇█`.
 *   **`spark/quad` combo**: In `spark/quad`, the renderer additionally evaluates 2D quadrant/half masks upsampled to 4x8 blocks. The candidate with the lowest SSE (plus a transparent-pixel penalty and a solid-color tiebreaker) is rendered.
