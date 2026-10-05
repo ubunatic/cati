@@ -21,3 +21,7 @@
 ## 2026-10-04 - Closed-Form RGB Distance Scoring and Early Exit in 2x3, Six, and S2 Solvers
 **Learning:** Evaluating all 64 sextant masks by iterating per-pixel distances (`rgbaDist2`) and calling virtual pixel lookups in 2x3 cell solvers accounted for >90% of rendering CPU time. In candidate solvers, iterating candidates when a cell is completely transparent or has an exact 0-error match added unnecessary candidate search loops.
 **Action:** Precompute mask bit index lookup tables (`maskBitIndices[64]`), compute total pixel color sums once per cell, evaluate closed-form squared RGB error equations, add direct 2x3 slice sampling for `*image.RGBA`/`*image.NRGBA`, and add early exits for transparent cells and perfect 0-error candidate matches in `v1/sparkline` and `v1/sextant`.
+
+## 2026-10-05 - Frequency-Based Candidate Weights and Direct Pixel Fastpaths in Quadblock
+**Learning:** Re-counting pixel matching coverage and neighbor continuity by iterating over pixel slices for every candidate pair in `pickBestPair()` consumed 26.7% of quadblock CPU execution time. Variadic slice allocation headers in 2-pixel color averaging (`avgRGB()`) added an additional 10.3% flat CPU overhead.
+**Action:** Compute candidate frequency counts in a single pass in `collectUnique()`, evaluate pair weights `weights[k] = counts[k]*4 + m[k]` directly over fixed candidate arrays (`[4]color.RGBA`), introduce `avgRGB2()` for 2-pixel color averaging, and fastpath 2x2 subpixel sampling on `*image.RGBA` images in `computeQuadCell()`.
