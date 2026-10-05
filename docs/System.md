@@ -80,7 +80,7 @@ For detail on specific components, refer to:
 *   **Precedent for future formats**: any future non-raster or exotic format (WebP animations, PDF pages, …) should follow this same "assumed-present external CLI, no defensive availability check" pattern rather than adding a heavy Go dependency, unless the format's registry-based `image/*` decoder already exists in the standard library.
 
 ### Website Content Contract
-*   **Retired**: the hand-written `website/index.html`, its JavaScript pixel-grid visualizer and `scripts/generate_pixels.go`, which inlined the logo's pixel colors into it to avoid canvas CORS tainting under `file://`.
+*   **Retired**: the hand-written `website/index.html`, its JavaScript pixel-grid visualizer and `scripts/generate_pixels.go`, which inlined the logo's pixel colors into it to avoid canvas CORS tainting when the page was opened from local disk.
 *   **Now**: `website/` is content only: `website/page.yaml` plus the media it references. `uman website sync cati` copies it into ubunatic.com, whose `make gen-tools` renders the page (ubunatic.com issue 071). An interactive logo visualizer would return there as a boxed demo.
 
 ---
