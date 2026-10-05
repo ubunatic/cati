@@ -8,8 +8,8 @@
 # relative to website/.
 
 title: cati — Cat for images
-title_lead: cat for
-title_main: images.
+title_lead: cat
+title_main: for images.
 kicker: Terminal Image Viewer
 lead: >-
   High-performance terminal image and video renderer in Go. Turns pixels into colored Unicode block
