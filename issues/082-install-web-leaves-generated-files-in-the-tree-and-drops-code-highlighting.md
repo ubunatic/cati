@@ -1,6 +1,6 @@
 # 082 — install-web leaves generated files in the tree and drops code highlighting
 
-**Status**: Closed — Built docs in a scratch tree; GOWORK=off GOTOOLCHAIN=go1.26.0 go vet ./...
+**Status**: Closed — Built the documentation in a scratch tree; make check confirms install-web preserves Git status and syntax highlighting. make check and make install passed.
 GOWORK=off GOTOOLCHAIN=go1.26.0 go test ./...
 ?   	ubunatic.com/cati	[no test files]
 ok  	ubunatic.com/cati/cmd	(cached)
