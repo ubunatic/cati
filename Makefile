@@ -49,6 +49,20 @@ logo: ⚙️ build ## animate the cati logo (q or Ctrl+C to stop)
 install: ⚙️ build  ## install to ~/go/bin (user)
 	go install ./cmd/cati ./cmd/catiplay ./cmd/catibrowse ./examples/imgbrowser ./examples/mediabrowse
 
+install-web: ⚙️  ## build the documentation website without modifying source files
+	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
+	  cp -R docs examples scripts book.toml "$$tmp"/; \
+	  mkdir -p "$$tmp/assets"; cp -R assets/book "$$tmp/assets/"; \
+	  mkdir -p "$$tmp/website"; cp website/index.html "$$tmp/website/"; \
+	  (cd "$$tmp" && go run scripts/generate_summary.go && mdbook build --dest-dir "$(CURDIR)/website/book")
+
+check: ⚙️  ## run checks and ensure install-web leaves the checkout clean
+	$(GO_TEST_ENV) go vet ./...
+	$(GO_TEST_ENV) go test ./...
+	@before="$$(git status --porcelain)"; $(MAKE) install-web; \
+	  after="$$(git status --porcelain)"; \
+	  test "$$before" = "$$after" || { echo "FAIL: install-web changed git status"; git status --short; exit 1; }
+
 # Tests run twice: default CATI_FASTPATH=1, then 0 (simple reference paths).
 # core.Fastpath is read at package init, before go test records env lookups,
 # so the no-op fastpath0 tag keeps a separate test-cache entry for mode 0.
