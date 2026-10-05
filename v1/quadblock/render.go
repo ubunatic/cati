@@ -82,6 +82,27 @@ func colorDist2(a, b color.RGBA) int {
 	return dr*dr + dg*dg + db*db
 }
 
+// avgRGB2 returns the arithmetic mean color of two pixels.
+func avgRGB2(p1, p2 color.RGBA) color.RGBA {
+	t1 := isTransparent(p1)
+	t2 := isTransparent(p2)
+	if t1 && t2 {
+		return color.RGBA{}
+	}
+	if t1 {
+		return p2
+	}
+	if t2 {
+		return p1
+	}
+	return color.RGBA{
+		R: uint8((int(p1.R) + int(p2.R)) / 2),
+		G: uint8((int(p1.G) + int(p2.G)) / 2),
+		B: uint8((int(p1.B) + int(p2.B)) / 2),
+		A: 255,
+	}
+}
+
 // avgRGB returns the arithmetic mean colour of the opaque pixels in the slice.
 func avgRGB(pixels ...color.RGBA) color.RGBA {
 	var r, g, b, n int
@@ -231,8 +252,8 @@ type quadCell struct {
 // ── Colour quantisation ───────────────────────────────────────────────────────
 
 // collectUnique returns the distinct non-transparent colours found in pixels
-// written into a fixed-size array along with the count.
-func collectUnique(pixels [4]color.RGBA) (out [4]color.RGBA, n int) {
+// written into a fixed-size array along with their frequencies and the count.
+func collectUnique(pixels [4]color.RGBA) (out [4]color.RGBA, counts [4]int, n int) {
 	for _, p := range pixels {
 		if isTransparent(p) {
 			continue
@@ -240,87 +261,89 @@ func collectUnique(pixels [4]color.RGBA) (out [4]color.RGBA, n int) {
 		found := false
 		for i := 0; i < n; i++ {
 			if eqRGB(p, out[i]) {
+				counts[i]++
 				found = true
 				break
 			}
 		}
 		if !found {
 			out[n] = p
+			counts[n] = 1
 			n++
 		}
 	}
-	return out, n
+	return out, counts, n
 }
 
 // pickBestPair selects fg and bg from candidates, scoring each pair by:
-//   - coverage: pixels that exactly match one of the two colours (weight 4)
+//   - coverage: pixels that match one of the two colours (weight 4)
 //   - continuity: bonus when a colour already appears in a neighbour cell (weight 1)
 //
 // The higher-count colour becomes fg.
-func pickBestPair(pixels [4]color.RGBA, candidates []color.RGBA, left, above *quadCell) (fg, bg color.RGBA, hasBG bool) {
-	if len(candidates) == 1 {
+func pickBestPair(candidates [4]color.RGBA, counts [4]int, n int, left, above *quadCell) (fg, bg color.RGBA, hasBG bool) {
+	if n == 1 {
 		return candidates[0], color.RGBA{}, false
 	}
 
-	type scored struct {
-		a, b  color.RGBA
-		score int
+	var m [4]int
+	if left != nil && !left.transparent {
+		if left.hasFG {
+			for k := 0; k < n; k++ {
+				if eqRGB(candidates[k], left.fg) {
+					m[k]++
+					break
+				}
+			}
+		}
+		if left.hasBG {
+			for k := 0; k < n; k++ {
+				if eqRGB(candidates[k], left.bg) {
+					m[k]++
+					break
+				}
+			}
+		}
 	}
-	best := scored{a: candidates[0], b: candidates[1], score: -1}
-
-	for i := range len(candidates) {
-		for j := i + 1; j < len(candidates); j++ {
-			ca, cb := candidates[i], candidates[j]
-
-			coverage := 0
-			for _, p := range pixels {
-				if isTransparent(p) {
-					continue
-				}
-				if eqRGB(p, ca) || eqRGB(p, cb) {
-					coverage++
+	if above != nil && !above.transparent {
+		if above.hasFG {
+			for k := 0; k < n; k++ {
+				if eqRGB(candidates[k], above.fg) {
+					m[k]++
+					break
 				}
 			}
-
-			continuity := 0
-			if left != nil && !left.transparent {
-				if left.hasFG && (eqRGB(left.fg, ca) || eqRGB(left.fg, cb)) {
-					continuity++
+		}
+		if above.hasBG {
+			for k := 0; k < n; k++ {
+				if eqRGB(candidates[k], above.bg) {
+					m[k]++
+					break
 				}
-				if left.hasBG && (eqRGB(left.bg, ca) || eqRGB(left.bg, cb)) {
-					continuity++
-				}
-			}
-			if above != nil && !above.transparent {
-				if above.hasFG && (eqRGB(above.fg, ca) || eqRGB(above.fg, cb)) {
-					continuity++
-				}
-				if above.hasBG && (eqRGB(above.bg, ca) || eqRGB(above.bg, cb)) {
-					continuity++
-				}
-			}
-
-			if s := coverage*4 + continuity; s > best.score {
-				best = scored{a: ca, b: cb, score: s}
 			}
 		}
 	}
 
-	countA, countB := 0, 0
-	for _, p := range pixels {
-		if isTransparent(p) {
-			continue
-		}
-		if eqRGB(p, best.a) {
-			countA++
-		} else if eqRGB(p, best.b) {
-			countB++
+	var weights [4]int
+	for k := 0; k < n; k++ {
+		weights[k] = counts[k]*4 + m[k]
+	}
+
+	bestI, bestJ := 0, 1
+	bestScore := weights[0] + weights[1]
+
+	for i := 0; i < n; i++ {
+		for j := i + 1; j < n; j++ {
+			if s := weights[i] + weights[j]; s > bestScore {
+				bestScore = s
+				bestI, bestJ = i, j
+			}
 		}
 	}
-	if countA >= countB {
-		return best.a, best.b, true
+
+	if counts[bestI] >= counts[bestJ] {
+		return candidates[bestI], candidates[bestJ], true
 	}
-	return best.b, best.a, true
+	return candidates[bestJ], candidates[bestI], true
 }
 
 // exactCoverage counts how many of the 4 pixels match fg or bg exactly.
@@ -340,8 +363,8 @@ func exactCoverage(pixels [4]color.RGBA, fg, bg color.RGBA, hasBG bool) int {
 // halfblockFallback encodes the cell using row-average colours and halfblock
 // chars, trading quad precision for clean colours at ambiguous boundaries.
 func halfblockFallback(pixels [4]color.RGBA) quadCell {
-	top := avgRGB(pixels[0], pixels[1])
-	bot := avgRGB(pixels[2], pixels[3])
+	top := avgRGB2(pixels[0], pixels[1])
+	bot := avgRGB2(pixels[2], pixels[3])
 	topT := isTransparent(top)
 	botT := isTransparent(bot)
 	switch {
@@ -364,8 +387,8 @@ func halfblockFallback(pixels [4]color.RGBA) quadCell {
 // When withNeighbors is true it also considers the fg/bg of left/above cells as
 // candidate bg colours, picking the one with the lowest total quantisation error.
 func splitHalfCell(pixels [4]color.RGBA, left, above *quadCell, withNeighbors bool, threshold int) quadCell {
-	top := avgRGB(pixels[0], pixels[1]) // UL+UR average → top colour
-	bot := avgRGB(pixels[2], pixels[3]) // LL+LR average → bottom colour
+	top := avgRGB2(pixels[0], pixels[1]) // UL+UR average → top colour
+	bot := avgRGB2(pixels[2], pixels[3]) // LL+LR average → bottom colour
 	topT := isTransparent(top)
 	botT := isTransparent(bot)
 
@@ -417,7 +440,7 @@ func splitHalfCell(pixels [4]color.RGBA, left, above *quadCell, withNeighbors bo
 	// callers request the same conservative halfblock fallback used by the
 	// general quantiser; this was previously skipped by the SplitHalf fast path.
 	if hasBG && threshold > 0 {
-		_, uniqueN := collectUnique(pixels)
+		_, _, uniqueN := collectUnique(pixels)
 		if uniqueN > 2 && exactCoverage(pixels, fg, bg, true) < threshold {
 			return halfblockFallback(pixels)
 		}
@@ -664,7 +687,7 @@ func compileCell(pixels [4]color.RGBA, left, above *quadCell, opts Options) quad
 		return cell
 	}
 
-	uniqueArr, numUnique := collectUnique(pixels)
+	uniqueArr, countsArr, numUnique := collectUnique(pixels)
 
 	if numUnique == 0 {
 		return quadCell{ch: ' ', transparent: true}
@@ -680,8 +703,7 @@ func compileCell(pixels [4]color.RGBA, left, above *quadCell, opts Options) quad
 		fg, bg = uniqueArr[0], uniqueArr[1]
 		hasBG = true
 	default:
-		uniqueSlice := uniqueArr[:numUnique]
-		fg, bg, hasBG = pickBestPair(pixels, uniqueSlice, left, above)
+		fg, bg, hasBG = pickBestPair(uniqueArr, countsArr, numUnique, left, above)
 		if opts.HalfblockThreshold > 0 {
 			if exactCoverage(pixels, fg, bg, hasBG) < opts.HalfblockThreshold {
 				return halfblockFallback(pixels)
@@ -1119,13 +1141,47 @@ func computeQuadCell(img image.Image, b image.Rectangle, opts Options, cells []q
 	px1 := px0 + 1
 
 	var pixels [4]color.RGBA
-	pixels[0] = samplePixel(img, px0, py0, b, opts)
-	pixels[1] = samplePixel(img, px1, py0, b, opts)
-	pixels[2] = samplePixel(img, px0, py1, b, opts)
-	pixels[3] = samplePixel(img, px1, py1, b, opts)
+	if core.Fastpath && opts.Blend == BlendNone {
+		if rgba, ok := img.(*image.RGBA); ok {
+			minX, minY := rgba.Rect.Min.X, rgba.Rect.Min.Y
+			maxX, maxY := rgba.Rect.Max.X, rgba.Rect.Max.Y
+			stride := rgba.Stride
+			pix := rgba.Pix
+
+			sampleRGBA := func(x, y int) color.RGBA {
+				if x < minX || x >= maxX || y < minY || y >= maxY {
+					return color.RGBA{}
+				}
+				off := (y-minY)*stride + (x-minX)*4
+				if off >= 0 && off+3 < len(pix) {
+					a := pix[off+3]
+					if a == 0 {
+						return color.RGBA{}
+					}
+					return color.RGBA{R: pix[off], G: pix[off+1], B: pix[off+2], A: a}
+				}
+				return color.RGBA{}
+			}
+
+			pixels[0] = sampleRGBA(px0, py0)
+			pixels[1] = sampleRGBA(px1, py0)
+			pixels[2] = sampleRGBA(px0, py1)
+			pixels[3] = sampleRGBA(px1, py1)
+		} else {
+			pixels[0] = samplePixel(img, px0, py0, b, opts)
+			pixels[1] = samplePixel(img, px1, py0, b, opts)
+			pixels[2] = samplePixel(img, px0, py1, b, opts)
+			pixels[3] = samplePixel(img, px1, py1, b, opts)
+		}
+	} else {
+		pixels[0] = samplePixel(img, px0, py0, b, opts)
+		pixels[1] = samplePixel(img, px1, py0, b, opts)
+		pixels[2] = samplePixel(img, px0, py1, b, opts)
+		pixels[3] = samplePixel(img, px1, py1, b, opts)
+	}
 
 	if opts.Blend == BlendAmbiguous || opts.Blend == BlendAmbiguousWide {
-		if _, n := collectUnique(pixels); n >= 3 {
+		if _, _, n := collectUnique(pixels); n >= 3 {
 			radius := 1
 			if opts.Blend == BlendAmbiguousWide {
 				radius = 2
