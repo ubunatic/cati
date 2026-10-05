@@ -8,7 +8,9 @@
 # relative to website/.
 
 title: cati — Cat for images
-kicker: Terminal Stack · P1 Tool
+title_lead: cat for
+title_main: images.
+kicker: Terminal Image Viewer
 lead: >-
   High-performance terminal image and video renderer in Go. Turns pixels into colored Unicode block
   characters and 24-bit ANSI true-color directly in your shell — with zero external daemons or
@@ -17,18 +19,20 @@ logo:
   src: cati_0001.png
   alt: cati logo, a pixel-art cat
   pixelated: true
-install: go install ubunatic.com/cati/cmd/cati@latest
 go_package: true
-links:
-  - label: Install & Run
-    href: "#install"
-  - label: Render modes compared
-    href: "#renders"
+cta_primary:
+  label: Get started
+  href: "#install"
+cta_secondary:
+  label: View source
+  href: https://codeberg.org/ubunatic/cati
 
 sections:
   - id: demo
     blocks:
       - video:
+          chrome: terminal
+          window_title: cati demo
           src: cati-demo.webm
           label: Recorded cati demo reel in a terminal
           caption: >-
@@ -37,6 +41,7 @@ sections:
 
   # 1. The problem
   - id: why
+    tag: Why cati
     title: Why cati?
     blocks:
       - text: |
@@ -56,18 +61,22 @@ sections:
 
   # 2. What it does, with the renders as evidence
   - id: renders
+    tag: Capabilities
     title: Capabilities & Render Modes
     blocks:
       - cards:
-          - title: Subcell Block Geometry
+          - badge: "▀▄"
+            title: Subcell Block Geometry
             text: >-
               Supports half-block (1×2), quadrant (2×2), sextant (2×3), and 3×3 composite modes.
               Dynamically balances color error against spatial resolution.
-          - title: Pure Geometry Planner
+          - badge: "▦"
+            title: Pure Geometry Planner
             text: >-
               Unifies width, height, aspect preservation, and alignment padding across both static
               images and streaming video playback. Backed by a 24-case verification matrix.
-          - title: CLI, Player & Library
+          - badge: ">_"
+            title: CLI, Player & Library
             text: >-
               Use it as a shell command (`cati image.png`), a directory viewer, or import
               `ubunatic.com/cati` as an in-process renderer in your Go TUI applications.
@@ -129,6 +138,10 @@ sections:
               - src: testdata/sample_darth_daughter/render_spark_50ch.png
                 alt: Spark render of the costume photo at 50 columns
                 label: spark
+  - id: usage
+    tag: Usage
+    title: Images in your shell
+    blocks:
       - shell: |
           # Quick preview of any image in your terminal
           cati photo.jpg
@@ -141,6 +154,7 @@ sections:
 
   # 3. How it was built
   - id: story
+    tag: Engineering
     title: "The Engineering Story: Managing Agents with Guardrails"
     blocks:
       - text: |
@@ -178,6 +192,7 @@ sections:
 
   # 4. How it is verified
   - id: verification
+    tag: Verification
     title: Verification & Invariants
     blocks:
       - facts:
@@ -201,6 +216,7 @@ sections:
 
   # 5. How to use it
   - id: install
+    tag: Install
     title: Getting Started
     blocks:
       - text: "Install the three commands via Go (requires Go 1.26 or newer):"

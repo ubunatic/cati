@@ -82,6 +82,7 @@ For detail on specific components, refer to:
 ### Website Content Contract
 *   **Retired**: the hand-written `website/index.html`, its JavaScript pixel-grid visualizer and `scripts/generate_pixels.go`, which inlined the logo's pixel colors into it to avoid canvas CORS tainting when the page was opened from local disk.
 *   **Now**: `website/` is content only: `website/page.yaml` plus the media it references. `uman website sync cati` copies it into ubunatic.com, whose `make gen-tools` renders the page (ubunatic.com issue 071). An interactive logo visualizer would return there as a boxed demo.
+*   **Presentation**: The manifest supplies `title_lead`/`title_main` for the accented headline, a visitor-facing `kicker`, and explicit `cta_primary`/`cta_secondary` actions. The recorded demo uses `chrome: terminal` with `window_title`; section `tag` pills and decorative card `badge` glyphs provide hierarchy (ubunatic.com issue 076). The schema and shared styles live in ubunatic.com; keep this manifest in sync with its `cati/page.yaml`.
 
 ---
 
