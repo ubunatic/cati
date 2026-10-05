@@ -423,6 +423,10 @@ func parseGlyphSetShapes(def GlyphSetDef) ([]GlyphShape, error) {
 			return generatedBrailleShapes(), nil
 		case "unicode_bars":
 			return generatedBarShapes(def)
+		case "octant_2x4":
+			return generatedOctantShapes(), nil
+		case "vector_linear_splits":
+			return generatedVectorShapes(), nil
 		default:
 			return nil, fmt.Errorf("unknown mask generator %q", def.Generated)
 		}
@@ -599,6 +603,251 @@ func generatedBrailleShapes() []GlyphShape {
 		shapes[mask] = GlyphShape{Glyph: rune(0x2800 + mask), Mask: m}
 	}
 	return shapes
+}
+
+func generatedOctantShapes() []GlyphShape {
+	// The 26 pre-existing Unicode block characters mapped to their exact 2x4 cell subpixel bitmasks:
+	// Bit positions: (x=0,y=0)->bit 0, (x=1,y=0)->bit 1, (x=0,y=1)->bit 2, (x=1,y=1)->bit 3,
+	// (x=0,y=2)->bit 4, (x=1,y=2)->bit 5, (x=0,y=3)->bit 6, (x=1,y=3)->bit 7.
+	preexisting := map[int]rune{
+		0x00: ' ',          // empty
+		0xFF: '█',          // full block (U+2588)
+		0x01: '\U0001FB00', // single top-left octant (U+1FB00)
+		0x02: '\U0001FB01', // single top-right octant (U+1FB01)
+		0x04: '\U0001FB02', // single upper-mid-left octant (U+1FB02)
+		0x08: '\U0001FB04', // single upper-mid-right octant (U+1FB04)
+		0x10: '\U0001FB05', // single lower-mid-left octant (U+1FB05)
+		0x20: '\U0001FB06', // single lower-mid-right octant (U+1FB06)
+		0x40: '\U0001FB08', // single bot-left octant (U+1FB08)
+		0x80: '\U0001FB09', // single bot-right octant (U+1FB09)
+		0x05: '▘',          // top-left quad (U+2598)
+		0x0A: '▝',          // top-right quad (U+259D)
+		0x50: '▖',          // bot-left quad (U+2596)
+		0xA0: '▗',          // bot-right quad (U+2597)
+		0x0F: '▀',          // top half (U+2580)
+		0xF0: '▄',          // bottom half (U+2584)
+		0x55: '▌',          // left half (U+258C)
+		0xAA: '▐',          // right half (U+2590)
+		0x03: '▔',          // upper 1/4 bar (U+2594)
+		0xC0: '▂',          // lower 1/4 bar (U+2582)
+		0x3C: '\U0001FB0B', // middle 1/2 bar (U+1FB0B)
+		0x0C: '\U0001FB03', // upper-middle 1/4 bar (U+1FB03)
+		0x30: '\U0001FB07', // lower-middle 1/4 bar (U+1FB07)
+		0xE0: '▃',          // lower 3/8 bar (U+2583)
+		0xFC: '▆',          // lower 3/4 bar (U+2586)
+		0x3F: '▇',          // upper 3/4 bar (U+2587)
+	}
+	shapes := make([]GlyphShape, 256)
+	octantIdx := 0
+	for mask := 0; mask < 256; mask++ {
+		m := make([]bool, 8)
+		for bit := 0; bit < 8; bit++ {
+			if (mask & (1 << bit)) != 0 {
+				m[bit] = true
+			}
+		}
+		r, ok := preexisting[mask]
+		if !ok {
+			r = rune(0x1CD00 + octantIdx)
+			octantIdx++
+		}
+		shapes[mask] = GlyphShape{Glyph: r, Mask: m}
+	}
+	return shapes
+}
+
+func generatedVectorShapes() []GlyphShape {
+	runes := []rune{
+		' ', '█', '▀', '▄', '▌', '▐', '┃', '🬋', '🬇', '🬃',
+		'\U0001FB9A', '\U0001FB9B',
+	}
+	for r := rune(0x1FB3C); r <= 0x1FB6F; r++ {
+		runes = append(runes, r)
+	}
+
+	shapes := make([]GlyphShape, 0, len(runes))
+	for _, r := range runes {
+		mask := vectorRuneMask(r)
+		shapes = append(shapes, GlyphShape{Glyph: r, Mask: mask})
+	}
+	return shapes
+}
+
+func vectorRuneMask(r rune) []bool {
+	m := make([]bool, 16)
+	set := func(x, y int, val bool) {
+		if x >= 0 && x < 4 && y >= 0 && y < 4 {
+			m[y*4+x] = val
+		}
+	}
+
+	switch r {
+	case ' ':
+		// all false
+	case '█':
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				set(x, y, true)
+			}
+		}
+	case '▀':
+		for y := 0; y < 2; y++ {
+			for x := 0; x < 4; x++ {
+				set(x, y, true)
+			}
+		}
+	case '▄':
+		for y := 2; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				set(x, y, true)
+			}
+		}
+	case '▌':
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 2; x++ {
+				set(x, y, true)
+			}
+		}
+	case '▐':
+		for y := 0; y < 4; y++ {
+			for x := 2; x < 4; x++ {
+				set(x, y, true)
+			}
+		}
+	case '┃':
+		for y := 0; y < 4; y++ {
+			set(1, y, true)
+			set(2, y, true)
+		}
+	case '🬋':
+		for x := 0; x < 4; x++ {
+			set(x, 1, true)
+			set(x, 2, true)
+		}
+	case '🬇':
+		for x := 0; x < 4; x++ {
+			set(x, 2, true)
+		}
+	case '🬃':
+		for x := 0; x < 4; x++ {
+			set(x, 1, true)
+		}
+	case '\U0001FB9A': // 🮚 upper-left to lower-right diagonal half block
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				if y < x {
+					set(x, y, true)
+				}
+			}
+		}
+	case '\U0001FB9B': // 🮛 lower-left to upper-right diagonal half block
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 4; x++ {
+				if x+y < 4 {
+					set(x, y, true)
+				}
+			}
+		}
+	default:
+		// U+1FB3C..U+1FB6F: block diagonals, diagonal composites, triangular 3/4 and 1/4 blocks
+		if r >= 0x1FB3C && r <= 0x1FB6F {
+			idx := int(r - 0x1FB3C)
+			for y := 0; y < 4; y++ {
+				for x := 0; x < 4; x++ {
+					// 4x4 subpixel linear half-plane / triangular evaluation
+					switch idx {
+					// 0x1FB3C..0x1FB40: Lower-left to upper-right block diagonals
+					case 0: // 0x1FB3C: lower-left 1/4 diagonal
+						set(x, y, x+y >= 4)
+					case 1: // 0x1FB3D: lower-left 1/2 diagonal
+						set(x, y, x+y >= 3)
+					case 2: // 0x1FB3E: lower-left 3/4 diagonal
+						set(x, y, x+y >= 2)
+					case 3: // 0x1FB3F: upper-right 1/4 diagonal
+						set(x, y, x+y <= 0)
+					case 4: // 0x1FB40: upper-right 1/2 diagonal
+						set(x, y, x+y < 3)
+
+					// 0x1FB41..0x1FB45: Upper-left to lower-right block diagonals
+					case 5: // 0x1FB41: upper-left 1/4 diagonal
+						set(x, y, y < x-1)
+					case 6: // 0x1FB42: upper-left 1/2 diagonal
+						set(x, y, y < x)
+					case 7: // 0x1FB43: lower-right 1/4 diagonal
+						set(x, y, y > x+1)
+					case 8: // 0x1FB44: lower-right 1/2 diagonal
+						set(x, y, y > x)
+					case 9: // 0x1FB45: upper-right 1/2 diagonal
+						set(x, y, x >= y)
+
+					// 0x1FB46..0x1FB4B: Sloped 1/2 and 2 diagonals
+					case 10: // 0x1FB46: slope 2 upper-left fill
+						set(x, y, y < 2*x)
+					case 11: // 0x1FB47: slope 2 lower-right fill
+						set(x, y, y >= 2*x)
+					case 12: // 0x1FB48: slope 1/2 upper-left fill
+						set(x, y, 2*y < x)
+					case 13: // 0x1FB49: slope 1/2 lower-right fill
+						set(x, y, 2*y >= x)
+					case 14: // 0x1FB4A: slope -2 upper-right fill
+						set(x, y, y+2*x >= 4)
+					case 15: // 0x1FB4B: slope -2 lower-left fill
+						set(x, y, y+2*x < 4)
+
+					// 0x1FB4C..0x1FB5B: Sloped diagonal triangular half/quarter fills
+					case 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31:
+						step := idx - 16
+						set(x, y, (x*4+y) >= step)
+
+					// 0x1FB5C..0x1FB67: Block diagonal corner and edge composites
+					case 32: // top-left corner
+						set(x, y, x < 2 && y < 2)
+					case 33: // top-right corner
+						set(x, y, x >= 2 && y < 2)
+					case 34: // bottom-left corner
+						set(x, y, x < 2 && y >= 2)
+					case 35: // bottom-right corner
+						set(x, y, x >= 2 && y >= 2)
+					case 36: // top edge triangle
+						set(x, y, y < 2 && (x == 1 || x == 2))
+					case 37: // bottom edge triangle
+						set(x, y, y >= 2 && (x == 1 || x == 2))
+					case 38: // left edge triangle
+						set(x, y, x < 2 && (y == 1 || y == 2))
+					case 39: // right edge triangle
+						set(x, y, x >= 2 && (y == 1 || y == 2))
+					case 40: // center diamond
+						set(x, y, (x == 1 || x == 2) && (y == 1 || y == 2))
+					case 41: // outer corners
+						set(x, y, (x == 0 || x == 3) && (y == 0 || y == 3))
+					case 42: // top-left & bottom-right pair
+						set(x, y, (x < 2 && y < 2) || (x >= 2 && y >= 2))
+					case 43: // top-right & bottom-left pair
+						set(x, y, (x >= 2 && y < 2) || (x < 2 && y >= 2))
+
+					// 0x1FB68..0x1FB6F: Triangular 3/4 and 1/4 block shapes
+					case 44: // Top-left 3/4
+						set(x, y, x+y < 4 || x < 2)
+					case 45: // Top-right 3/4
+						set(x, y, x >= y || y < 2)
+					case 46: // Bottom-left 3/4
+						set(x, y, y >= x || x < 2)
+					case 47: // Bottom-right 3/4
+						set(x, y, x+y >= 3 || y >= 2)
+					case 48: // Top-left 1/4
+						set(x, y, x < 2 && y < 2 && x+y < 2)
+					case 49: // Top-right 1/4
+						set(x, y, x >= 2 && y < 2 && x-y >= 2)
+					case 50: // Bottom-left 1/4
+						set(x, y, x < 2 && y >= 2 && y-x >= 2)
+					case 51: // Bottom-right 1/4
+						set(x, y, x >= 2 && y >= 2 && x+y >= 5)
+					}
+				}
+			}
+		}
+	}
+	return m
 }
 
 func generatedSextantShapes() []GlyphShape {
