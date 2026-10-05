@@ -490,7 +490,16 @@ func loadRenderModeEntries() []renderModeEntry {
 		if ok {
 			cfg, ok = renderers[def.Renderer]
 			if !ok {
-				continue
+				if def.Renderer == "glyph_union" {
+					resolution, resolveErr := spec.ResolveGlyphSetExpression(name)
+					if resolveErr == nil {
+						cfg = renderCfg{id: 100 + index, glyph: &resolution}
+						ok = true
+					}
+				}
+				if !ok {
+					continue
+				}
 			}
 		} else {
 			resolution, resolveErr := spec.ResolveGlyphSetExpression(name)

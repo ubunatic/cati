@@ -90,6 +90,7 @@ func TestSpecRenderModesIntegrity(t *testing.T) {
 		"sparkline_spark_quad": true,
 		"sparkline_six_half":   true,
 		"sparkline_spark_six":  true,
+		"glyph_union":          true,
 	}
 	knownColorers := map[string]bool{
 		"top_bottom": true,

@@ -21,6 +21,11 @@ func TestResolveGlyphSetExpression(t *testing.T) {
 		{"1", []int{0}, 1, 1},
 		{"2", []int{0, 2}, 1, 2},
 		{"4", []int{0, 1, 2, 4}, 2, 2},
+		{"octant", []int{0, 10}, 2, 4},
+		{"oct", []int{0, 10}, 2, 4},
+		{"vector", []int{0, 50}, 4, 4},
+		{"v", []int{0, 50}, 4, 4},
+		{"vec", []int{0, 50}, 4, 4},
 	}
 	for _, tt := range tests {
 		got, err := ResolveGlyphSetExpression(tt.expr)
@@ -96,6 +101,55 @@ func TestResolveGlyphSetExpressionIsIdempotentAndSorted(t *testing.T) {
 	}
 	if !equalInts(got.IDs, []int{0, 1, 6, 44}) {
 		t.Fatalf("IDs = %v", got.IDs)
+	}
+}
+
+func TestOctantAndVectorGlyphSets(t *testing.T) {
+	oct, err := ResolveGlyphSetExpression("octant")
+	if err != nil {
+		t.Fatalf("ResolveGlyphSetExpression(octant): %v", err)
+	}
+	if oct.Geometry.W != 2 || oct.Geometry.H != 4 {
+		t.Errorf("octant geometry = %dx%d, want 2x4", oct.Geometry.W, oct.Geometry.H)
+	}
+	if len(oct.Shapes) != 256 {
+		t.Errorf("octant shapes count = %d, want 256", len(oct.Shapes))
+	}
+	hasOctantRune := false
+	for _, shape := range oct.Shapes {
+		if shape.Glyph >= 0x1CD00 && shape.Glyph <= 0x1CDE5 {
+			hasOctantRune = true
+			break
+		}
+	}
+	if !hasOctantRune {
+		t.Errorf("octant mode missing U+1CD00..U+1CDE5 characters")
+	}
+
+	vec, err := ResolveGlyphSetExpression("vector")
+	if err != nil {
+		t.Fatalf("ResolveGlyphSetExpression(vector): %v", err)
+	}
+	if vec.Geometry.W != 4 || vec.Geometry.H != 4 {
+		t.Errorf("vector geometry = %dx%d, want 4x4", vec.Geometry.W, vec.Geometry.H)
+	}
+	if len(vec.Shapes) < 50 {
+		t.Errorf("vector shapes count = %d, want >= 50", len(vec.Shapes))
+	}
+	hasDiagonal := false
+	for _, shape := range vec.Shapes {
+		if shape.Glyph >= 0x1FB3C && shape.Glyph <= 0x1FB6F {
+			hasDiagonal = true
+		}
+		if shape.Glyph >= 0x1FB00 && shape.Glyph <= 0x1FB3B && shape.Glyph != 0x1FB03 && shape.Glyph != 0x1FB07 && shape.Glyph != 0x1FB0B {
+			t.Errorf("vector mode unexpectedly includes pixel-like sextant rune %U", shape.Glyph)
+		}
+		if shape.Glyph == '▘' || shape.Glyph == '▝' || shape.Glyph == '▖' || shape.Glyph == '▗' {
+			t.Errorf("vector mode unexpectedly includes quadrant rune %c", shape.Glyph)
+		}
+	}
+	if !hasDiagonal {
+		t.Errorf("vector mode missing U+1FB3C..U+1FB6F linear diagonal shapes")
 	}
 }
 
