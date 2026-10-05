@@ -53,7 +53,6 @@ install-web: ⚙️  ## build the documentation website without modifying source
 	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
 	  cp -R docs examples scripts book.toml "$$tmp"/; \
 	  mkdir -p "$$tmp/assets"; cp -R assets/book "$$tmp/assets/"; \
-	  mkdir -p "$$tmp/website"; cp website/index.html "$$tmp/website/"; \
 	  (cd "$$tmp" && go run scripts/generate_summary.go && mdbook build --dest-dir "$(CURDIR)/website/book")
 
 check: ⚙️  ## run checks and ensure install-web leaves the checkout clean
@@ -118,8 +117,7 @@ preflight: ⚙️ install  ## pre-commit checks: install binaries + vet + verify
 	@echo "Checking demo-widths for render errors..."
 	@go run scripts/demo_widths.go -bin ./$(BINARY) 2>&1 | grep -i "err\|panic\|fail" && echo "FAIL: render errors found" && exit 1 || echo "OK: no render errors"
 
-generate: ⚙️  ## generate static assets/code (e.g., inlined website/index.html pixel colors)
-	go run scripts/generate_pixels.go
+generate: ⚙️  ## generate static assets/code (Go library example in docs/GoLibrary.md)
 	go run scripts/generate_summary.go
 
 tidy: ⚙️  ## tidy go modules
@@ -139,8 +137,8 @@ serve: ⚙️  # start book webserver (not for website)
 	@killall -q mdbook || true
 	mdbook serve
 
-browse: ⚙️ book ## open website
-	open website/index.html 2>/dev/null
+browse: ⚙️ book ## open the built book (the website page is rendered by ubunatic.com from website/page.yaml)
+	open website/book/index.html 2>/dev/null
 
 edit-baby: ⚙️  ## open baby vid in Kdenlive
 	open assets/baby.kdenlive

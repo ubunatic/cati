@@ -40,7 +40,7 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
 
 ## Asset Generation & Licensing
 
-- Web Assets: If you modify the logo `website/cati_0001.png`, you must run `make generate` to sync the static inline color coordinates in `website/index.html`.
+- Web Assets: `website/` is content only: `website/page.yaml` plus the media it references. ubunatic.com renders the page from it (`make gen-tools` there, ubunatic.com issue 071); there is no hand-written `website/index.html` any more.
 - Licensing: The project is licensed under `AGPL-3.0-or-later`. Follow REUSE spec guidelines; license headers should be declared via `REUSE.toml` annotations instead of adding comment blocks to individual source files.
 
 ## Project Docs & Issues

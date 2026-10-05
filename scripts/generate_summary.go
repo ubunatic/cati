@@ -235,9 +235,6 @@ func syncExample() {
 	// Code block wrapper for markdown
 	mdCodeBlock := "```go\n" + exampleStr + "\n```"
 
-	// HTML code block wrapper for website
-	htmlCodeBlock := "<pre class=\"code\"><code>" + escapeHTML(exampleStr) + "</code></pre>"
-
 	// Sync docs/GoLibrary.md
 	goLibPath := filepath.Join("docs", "GoLibrary.md")
 	if err := replaceBetweenMarkers(goLibPath, "<!-- GO_EXAMPLE_START -->", "<!-- GO_EXAMPLE_END -->", mdCodeBlock); err != nil {
@@ -245,22 +242,7 @@ func syncExample() {
 		os.Exit(1)
 	}
 
-	// Sync website/index.html
-	webPath := filepath.Join("website", "index.html")
-	if err := replaceBetweenMarkers(webPath, "<!-- GO_EXAMPLE_START -->", "<!-- GO_EXAMPLE_END -->", htmlCodeBlock); err != nil {
-		fmt.Fprintf(os.Stderr, "Error updating %s: %v\n", webPath, err)
-		os.Exit(1)
-	}
-	fmt.Println("Synced Go library example to docs/GoLibrary.md and website/index.html.")
-}
-
-func escapeHTML(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, "\"", "&quot;")
-	s = strings.ReplaceAll(s, "'", "&#39;")
-	return s
+	fmt.Println("Synced Go library example to docs/GoLibrary.md.")
 }
 
 func replaceBetweenMarkers(filePath, startMarker, endMarker, content string) error {

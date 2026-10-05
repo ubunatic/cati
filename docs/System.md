@@ -79,15 +79,9 @@ For detail on specific components, refer to:
 *   **Implementation**: `v1/halfblock/svg.go` — `RasterizeSVG` keeps the backwards-compatible no-target path and pipes `rsvg-convert --format=png -w 2048 -h <scaled> <path>` output into `image/png.Decode` (the 2048px cap bounds memory on pathological inputs while preserving enough detail for typical terminal display and zoom). Callers that know their render box use `RasterizeSVGWithTarget` / `LoadImageWithTarget`, which probe the SVG's declared `width`/`height` or `viewBox`, preserve its aspect ratio, and ask `rsvg-convert` for the fitted pixel size directly. Static `cati` renders and browser thumbnails use this path so small SVGs no longer pay for a full 2048px-edge raster only to be downscaled immediately. `ProbeSVGDimensions` avoids spawning a subprocess for metadata-only lookups (thumbnail hover, `meta.src_w/h`) by parsing just the root `<svg>` element's `width`/`height`/`viewBox` attributes with `encoding/xml.Decoder`, stopping after the first start element. Absolute SVG/CSS units follow browser CSS pixels (`1in = 96px`, so `5cm ≈ 189px`); relative units such as percentages still need caller/container context and fall back to `viewBox` when present.
 *   **Precedent for future formats**: any future non-raster or exotic format (WebP animations, PDF pages, …) should follow this same "assumed-present external CLI, no defensive availability check" pattern rather than adding a heavy Go dependency, unless the format's registry-based `image/*` decoder already exists in the standard library.
 
-### Offline-First Website Compatibility
-*   **CORS Tainting**: The website visualizes how the pixel grid encodes pixels using a JavaScript visualizer. Reading PNG pixels directly using canvas `getImageData()` throws a `SecurityError` in modern browsers if the website is opened directly from the local disk using the `file://` protocol.
-*   **Static Inlining**: The pixel grid now bypasses the canvas entirely at runtime. The raw pixel colors are pre-extracted and inlined directly in `website/index.html`.
-*   **Asset Generator**: A dedicated Go script (`scripts/generate_pixels.go`) is provided to parse the logo image and automate this inlining workflow inside the HTML via marker comments:
-    ```javascript
-    // PIXELS_START
-    const pixelColors = [ ... ];
-    // PIXELS_END
-    ```
+### Website Content Contract
+*   **Retired**: the hand-written `website/index.html`, its JavaScript pixel-grid visualizer and `scripts/generate_pixels.go`, which inlined the logo's pixel colors into it to avoid canvas CORS tainting under `file://`.
+*   **Now**: `website/` is content only: `website/page.yaml` plus the media it references. `uman website sync cati` copies it into ubunatic.com, whose `make gen-tools` renders the page (ubunatic.com issue 071). An interactive logo visualizer would return there as a boxed demo.
 
 ---
 

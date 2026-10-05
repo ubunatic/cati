@@ -1,0 +1,216 @@
+# SPDX-FileCopyrightText: 2026 Uwe Jugel
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# yaml-language-server: $schema=../spec/schemas/page.schema.json
+#
+# Content for the cati page on ubunatic.com (ubunatic.com issue 071, content
+# contract): `uman website sync cati` copies website/ there, and its
+# `make gen-tools` renders this file to cati/index.html. Media paths are
+# relative to website/.
+
+title: cati — Cat for images
+kicker: Terminal Stack · P1 Tool
+lead: >-
+  High-performance terminal image and video renderer in Go. Turns pixels into colored Unicode block
+  characters and 24-bit ANSI true-color directly in your shell — with zero external daemons or
+  Electron bloat.
+logo:
+  src: cati_0001.png
+  alt: cati logo, a pixel-art cat
+  pixelated: true
+install: go install ubunatic.com/cati/cmd/cati@latest
+go_package: true
+links:
+  - label: Install & Run
+    href: "#install"
+  - label: Render modes compared
+    href: "#renders"
+
+sections:
+  - id: demo
+    blocks:
+      - video:
+          src: cati-demo.webm
+          label: Recorded cati demo reel in a terminal
+          caption: >-
+            Recorded demo: static SVG rendering, spark/best mode, image sequences, and the player
+            forwarder.
+
+  # 1. The problem
+  - id: why
+    title: Why cati?
+    blocks:
+      - text: |
+          An image in a terminal sounds simple: sample pixel colors, pick a character, and emit ANSI
+          escape codes. In practice, the hard part is **preserving image fidelity while respecting
+          the rigid geometry of a text cell grid**.
+
+          Each terminal character cell can encode two vertical pixel rows with half-blocks (`▀`,
+          `▄`), four subpixels with quadrant blocks (`▖`, `▗`, `▘`, `▝`), or six subpixels with
+          Unicode sextants. Cati was engineered to bridge this gap cleanly: combining raster
+          decoding, SVG rendering, and video playback into a single, inspectable Go CLI and
+          reusable rendering library.
+      - callout:
+          text: >-
+            **The Engineering Goal:** Accurate pixel aspect ratio snapping and fast rendering across
+            Tilix, Kitty, Foot, Ptyxis, Alacritty, and the Linux VT.
+
+  # 2. What it does, with the renders as evidence
+  - id: renders
+    title: Capabilities & Render Modes
+    blocks:
+      - cards:
+          - title: Subcell Block Geometry
+            text: >-
+              Supports half-block (1×2), quadrant (2×2), sextant (2×3), and 3×3 composite modes.
+              Dynamically balances color error against spatial resolution.
+          - title: Pure Geometry Planner
+            text: >-
+              Unifies width, height, aspect preservation, and alignment padding across both static
+              images and streaming video playback. Backed by a 24-case verification matrix.
+          - title: CLI, Player & Library
+            text: >-
+              Use it as a shell command (`cati image.png`), a directory viewer, or import
+              `ubunatic.com/cati` as an in-process renderer in your Go TUI applications.
+      - text: |
+          ### Orig, half, quad, spark
+
+          The same three samples across the rendering ladder: the original photo, then cati's
+          half-block, quadrant and spark renders, captured from a real terminal. Select an image
+          to open it at full size.
+      - gallery:
+          - title: Dense PCB detail (80 columns)
+            caption: >-
+              **half** preserves the white silkscreen speckles; **quad** sharpens pad edges, but can
+              look striped; **spark** groups tiny parts into cleaner board shapes.
+            images:
+              - src: assets/samples/sample-001-soldering-practice-2025.jpg
+                alt: Original soldering practice photo
+                label: original
+              - src: testdata/sample_soldering_practice/render_halfblock_80ch.png
+                alt: Half-block render of the soldering practice photo at 80 columns
+                label: half
+              - src: testdata/sample_soldering_practice/render_quad_80ch.png
+                alt: Quadrant render of the soldering practice photo at 80 columns
+                label: quad
+              - src: testdata/sample_soldering_practice/render_spark_80ch.png
+                alt: Spark render of the soldering practice photo at 80 columns
+                label: spark
+          - title: Soft portrait edges (50 columns)
+            caption: >-
+              **half** keeps face and hand tones more granular; **quad** improves thin trunks and
+              the cap outline; **spark** smooths sky and skin into broad readable areas.
+            images:
+              - src: assets/samples/sample-002-summer-vacation.jpg
+                alt: Original summer vacation photo
+                label: original
+              - src: testdata/sample_summer_vacation/render_halfblock_50ch.png
+                alt: Half-block render of the summer vacation photo at 50 columns
+                label: half
+              - src: testdata/sample_summer_vacation/render_quad_50ch.png
+                alt: Quadrant render of the summer vacation photo at 50 columns
+                label: quad
+              - src: testdata/sample_summer_vacation/render_spark_50ch.png
+                alt: Spark render of the summer vacation photo at 50 columns
+                label: spark
+          - title: Gloss and silhouettes (50 columns)
+            caption: >-
+              **half** keeps noisy fabric and mask highlights; **quad** gives sabers and helmet edges
+              firmer diagonals; **spark** favors the bold black helmet and pink jacket masses.
+            images:
+              - src: assets/samples/sample-003-darth-daughter.jpg
+                alt: Original photo of a child in a Darth Vader costume
+                label: original
+              - src: testdata/sample_darth_daughter/render_halfblock_50ch.png
+                alt: Half-block render of the costume photo at 50 columns
+                label: half
+              - src: testdata/sample_darth_daughter/render_quad_50ch.png
+                alt: Quadrant render of the costume photo at 50 columns
+                label: quad
+              - src: testdata/sample_darth_daughter/render_spark_50ch.png
+                alt: Spark render of the costume photo at 50 columns
+                label: spark
+      - shell: |
+          # Quick preview of any image in your terminal
+          cati photo.jpg
+
+          # High-resolution sextant rendering
+          cati -m six diagram.png
+
+          # Stream animated GIF or video
+          cati play animation.gif
+
+  # 3. How it was built
+  - id: story
+    title: "The Engineering Story: Managing Agents with Guardrails"
+    blocks:
+      - text: |
+          Cati is a prime case study in **governing autonomous AI development with strong
+          verification gates**. Over a six-week period, the repository recorded **255 commits, 27
+          PR merges, and 65 Go test files** across 38,200 lines of Go.
+      - callout:
+          tone: violet
+          text: >-
+            **Guardrail in Practice:** An AI optimization is only accepted if parity checks prove the
+            output remains visually and mathematically identical to the reference path.
+      - text: |
+          ### 1. The Geometry Snapping Trap
+
+          In late September, user options for width, height, aspect behavior, and padding had
+          drifted into conflicting rules between the static image pipeline and the media player.
+          Agents working on aspect ratio fixes inadvertently caused pixel-aspect distortions on
+          non-square fonts.
+
+          **The Fix:** Rather than patching ad-hoc formulas, we specified a centralized *Geometry
+          Planner* (Issue 075). The team created an interactive aspect test matrix with 24 test
+          cases. The planner snaps to native subcell lattices, enforces alignment padding, and
+          scales row heights relative to terminal character metrics.
+
+          ### 2. High-Performance Closed-Form Sextant Math
+
+          Rendering high-resolution sextant glyphs originally used brute-force per-mask pixel
+          scoring, which choked frame rates on terminal video playback. Working with
+          `google-labs-jules[bot]` and local Harnez workers, the scoring loop was replaced with a
+          **closed-form error calculation and lookup tables**, coupled with early exits for
+          sparkline candidate searches.
+
+          **Measured Result:** A **40% reduction in sextant render latency** and a **27.3% latency
+          reduction for S2** mode. Strict parity benchmarks guaranteed zero visual regressions.
+
+  # 4. How it is verified
+  - id: verification
+    title: Verification & Invariants
+    blocks:
+      - facts:
+          - key: Test Coverage
+            value: 65 Go test files covering CLI regressions, PTY escape parsing, and color error math.
+          - key: Headless PTY Canaries
+            value: Automated pseudo-terminal canaries verify ANSI cursor positions and reset sequences.
+          - key: Parity Benchmarks
+            value: Benchmarks test both throughput and visual mismatch against reference renderers.
+          - key: Compliance
+            value: 100% REUSE 3.3 compliant (SPDX AGPL-3.0-or-later).
+      - gallery:
+          - title: Works in restricted shells
+            caption: >-
+              cati rendering the site's pixel-art portrait at 10, 20 and 30 columns inside a Plesk
+              chroot SSH shell on shared web hosting: no image protocol, only Unicode blocks and ANSI
+              colors.
+            images:
+              - src: assets/cati-plesk-chroot-proof.png
+                alt: Terminal screenshot of cati rendering a pixel-art portrait at three widths inside a Plesk chroot SSH session
+
+  # 5. How to use it
+  - id: install
+    title: Getting Started
+    blocks:
+      - text: "Install the three commands via Go (requires Go 1.26 or newer):"
+      - shell: |
+          go install ubunatic.com/cati/cmd/cati@latest
+          go install ubunatic.com/cati/cmd/catiplay@latest
+          go install ubunatic.com/cati/cmd/catibrowse@latest
+      - text: "Or clone the repository and build locally:"
+      - shell: |
+          git clone https://codeberg.org/ubunatic/cati.git
+          cd cati
+          make build
+          ./cati testdata/checkerboard_4x4.png
