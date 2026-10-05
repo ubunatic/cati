@@ -86,6 +86,8 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 080 | [080-refresh-readme-format-and-go-version-support.md](080-refresh-readme-format-and-go-version-support.md) | Refresh README format and Go version support | Closed — Updated README and website Go requirements and supported image formats from go.mod and decoder registrations; make test/install and website scan/doctor passed |
 | 081 | [081-replace-file-home-links-in-docs-and-book-with-repo-relative-or-codeberg-urls.md](081-replace-file-home-links-in-docs-and-book-with-repo-relative-or-codeberg-urls.md) | Replace file:///home links in docs and book with repo-relative or Codeberg URLs | Closed — Replaced local file links with Codeberg source links, rebuilt book, and verified uman website scan cati clean |
 | 082 | [082-install-web-leaves-generated-files-in-the-tree-and-drops-code-highlighting.md](082-install-web-leaves-generated-files-in-the-tree-and-drops-code-highlighting.md) | install-web leaves generated files in the tree and drops code highlighting | Closed — install-web builds docs in a scratch tree (d034881); make check fails if install-web leaves git status dirty; verified tree clean and Go example highlighting kept |
+| 083 | [083-add-vector-render-mode-using-linear-cell-split-characters.md](083-add-vector-render-mode-using-linear-cell-split-characters.md) | Add vector render mode using linear cell split characters | Open |
+| 084 | [084-add-octant-render-mode-using-unicode-1cd0-block-characters.md](084-add-octant-render-mode-using-unicode-1cd0-block-characters.md) | Add octant render mode using Unicode 1CD0 block characters | Open |
 
 ## Archived
 
