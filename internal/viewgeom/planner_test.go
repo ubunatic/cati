@@ -56,6 +56,45 @@ func TestPlanRender_DoomHalfblock(t *testing.T) {
 			t.Errorf("CanvasRows = %d, want 50", plan.CanvasRows)
 		}
 	})
+
+	t.Run("width only -W 160 aspect pixel", func(t *testing.T) {
+		c := TargetConstraints{
+			ExplicitCols: 160,
+			AspectMode:   "pixel",
+			PixelPolicy:  pixelPolicy(t),
+		}
+		plan := PlanRender(320, 200, c, halfSpec)
+		if plan.CanvasCols != 160 {
+			t.Errorf("CanvasCols = %d, want 160", plan.CanvasCols)
+		}
+		if plan.CanvasRows != 50 {
+			t.Errorf("CanvasRows = %d, want 50", plan.CanvasRows)
+		}
+		if plan.RenderW != 160 || plan.RenderH != 100 {
+			t.Errorf("Render size = %dx%d, want 160x100", plan.RenderW, plan.RenderH)
+		}
+	})
+
+	t.Run("checker 20x20 width only -W 5 aspect pixel", func(t *testing.T) {
+		c := TargetConstraints{
+			ExplicitCols: 5,
+			AspectMode:   "pixel",
+			PixelPolicy:  pixelPolicy(t),
+		}
+		plan := PlanRender(20, 20, c, halfSpec)
+		if plan.CanvasCols != 5 {
+			t.Errorf("CanvasCols = %d, want 5", plan.CanvasCols)
+		}
+		if plan.CanvasRows != 3 {
+			t.Errorf("CanvasRows = %d, want 3", plan.CanvasRows)
+		}
+		if plan.RenderW != 5 || plan.RenderH != 5 {
+			t.Errorf("Render size = %dx%d, want 5x5", plan.RenderW, plan.RenderH)
+		}
+		if plan.PadBottom != 1 {
+			t.Errorf("PadBottom = %d, want 1", plan.PadBottom)
+		}
+	})
 }
 
 func TestPlanRender_DoomSextant(t *testing.T) {
@@ -248,7 +287,8 @@ func TestPlanRender_PixelSnapBounds(t *testing.T) {
 		for _, aspect := range []string{"pixel", "raw", "1:1"} {
 			for extent := 1; extent <= 321; extent++ {
 				width := PlanRender(320, 200, TargetConstraints{ExplicitCols: extent, AspectMode: aspect, PixelPolicy: policy}, spec)
-				idealH := float64(width.RenderW*spec.CellH*200*2) / float64(spec.CellW*320*3)
+				fNum, fDen := formulaParams(spec, policy)
+				idealH := float64(width.RenderW*spec.CellH*200*fNum) / float64(spec.CellW*320*fDen)
 				if math.Abs(float64(width.RenderH)-idealH) >= float64(spec.CellH) {
 					t.Fatalf("cell %dx%d %s W=%d: height %d differs by a cell from ideal %.3f", spec.CellW, spec.CellH, aspect, extent, width.RenderH, idealH)
 				}
@@ -259,7 +299,7 @@ func TestPlanRender_PixelSnapBounds(t *testing.T) {
 					t.Fatalf("cell %dx%d %s W=%d: invalid canvas or padding %+v", spec.CellW, spec.CellH, aspect, extent, width)
 				}
 				height := PlanRender(320, 200, TargetConstraints{ExplicitRows: extent, AspectMode: aspect, PixelPolicy: policy}, spec)
-				idealW := float64(height.RenderH*spec.CellW*320*3) / float64(spec.CellH*200*2)
+				idealW := float64(height.RenderH*spec.CellW*320*fDen) / float64(spec.CellH*200*fNum)
 				if math.Abs(float64(height.RenderW)-idealW) >= float64(spec.CellW) {
 					t.Fatalf("cell %dx%d %s H=%d: width %d differs by a cell from ideal %.3f", spec.CellW, spec.CellH, aspect, extent, height.RenderW, idealW)
 				}
@@ -295,7 +335,14 @@ func pixelPolicy(t *testing.T) PixelAspectPolicy {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return PixelAspectPolicy{MaxDistortion: policy.MaxDistortion, MaxPadding: policy.MaxPadding}
+	return PixelAspectPolicy{
+		MaxDistortion: policy.MaxDistortion,
+		MaxPadding:    policy.MaxPadding,
+		Formula: FormulaPolicy{
+			Default:   FormulaParams{Num: policy.Formula.Default.Num, Den: policy.Formula.Default.Den},
+			Halfblock: FormulaParams{Num: policy.Formula.Halfblock.Num, Den: policy.Formula.Halfblock.Den},
+		},
+	}
 }
 
 func TestPlanRender_PixelSmallAndPadded(t *testing.T) {

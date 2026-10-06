@@ -1076,6 +1076,18 @@ func TestCLIDoom1S2Render(t *testing.T) {
 			wantCols:  160,
 		},
 		{
+			name:      "aspect pixel width only halfblock",
+			args:      []string{"assets/doom1.png", "-W", "160", "-m", "half", "--aspect", "pixel"},
+			wantLines: 50,
+			wantCols:  160,
+		},
+		{
+			name:      "aspect pixel checkerboard width 5 halfblock",
+			args:      []string{"testdata/demo_checker_20x20/source.png", "-W", "5", "-m", "half", "--aspect", "pixel"},
+			wantLines: 3,
+			wantCols:  5,
+		},
+		{
 			name:      "halfblock exact box 160x100",
 			args:      []string{"assets/doom1.png", "-W", "160", "-H", "100"},
 			wantLines: 100,

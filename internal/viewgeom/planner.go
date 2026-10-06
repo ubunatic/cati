@@ -22,6 +22,32 @@ type TargetConstraints struct {
 type PixelAspectPolicy struct {
 	MaxDistortion float64
 	MaxPadding    float64
+	Formula       FormulaPolicy
+}
+
+// FormulaParams defines numerator and denominator for derived aspect scaling.
+type FormulaParams struct {
+	Num int
+	Den int
+}
+
+// FormulaPolicy holds mode-specific formula parameters.
+type FormulaPolicy struct {
+	Default   FormulaParams
+	Halfblock FormulaParams
+}
+
+func formulaParams(spec V2Spec, policy PixelAspectPolicy) (int, int) {
+	if spec.CellW == 1 && spec.CellH == 2 {
+		if policy.Formula.Halfblock.Num > 0 && policy.Formula.Halfblock.Den > 0 {
+			return policy.Formula.Halfblock.Num, policy.Formula.Halfblock.Den
+		}
+		return 1, 2
+	}
+	if policy.Formula.Default.Num > 0 && policy.Formula.Default.Den > 0 {
+		return policy.Formula.Default.Num, policy.Formula.Default.Den
+	}
+	return 2, 3
 }
 
 // Plan describes the resolved terminal canvas, content layout, scaling, and padding.
@@ -56,7 +82,8 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 		canvasCols = c.ExplicitCols
 		targetW := canvasCols * spec.CellW
 		baseRenderW = pixelConstrainedSize(srcW, targetW, c.PixelPolicy.MaxPadding)
-		idealH := float64(baseRenderW) * float64(spec.CellH) * float64(srcH) * 2 / (float64(spec.CellW) * float64(srcW) * 3)
+		fNum, fDen := formulaParams(spec, c.PixelPolicy)
+		idealH := float64(baseRenderW) * float64(spec.CellH) * float64(srcH) * float64(fNum) / (float64(spec.CellW) * float64(srcW) * float64(fDen))
 		baseRenderH = pixelDerivedSize(srcH, idealH, spec.CellH, c.PixelPolicy.MaxDistortion)
 		canvasRows = max(1, (baseRenderH+spec.CellH-1)/spec.CellH)
 		padRight = targetW - baseRenderW
@@ -67,7 +94,8 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 		canvasRows = c.ExplicitRows
 		targetH := canvasRows * spec.CellH
 		baseRenderH = pixelConstrainedSize(srcH, targetH, c.PixelPolicy.MaxPadding)
-		idealW := float64(baseRenderH) * float64(spec.CellW) * float64(srcW) * 3 / (float64(spec.CellH) * float64(srcH) * 2)
+		fNum, fDen := formulaParams(spec, c.PixelPolicy)
+		idealW := float64(baseRenderH) * float64(spec.CellW) * float64(srcW) * float64(fDen) / (float64(spec.CellH) * float64(srcH) * float64(fNum))
 		baseRenderW = pixelDerivedSize(srcW, idealW, spec.CellW, c.PixelPolicy.MaxDistortion)
 		canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
 		padBottom = targetH - baseRenderH
@@ -120,7 +148,8 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			if k >= 1 && k*srcW <= targetW {
 				baseRenderW = k * srcW
 				padRight = targetW - baseRenderW
-				floatH := float64(baseRenderW*spec.CellH*srcH*2) / float64(spec.CellW*srcW*3)
+				fNum, fDen := formulaParams(spec, c.PixelPolicy)
+				floatH := float64(baseRenderW*spec.CellH*srcH*fNum) / float64(spec.CellW*srcW*fDen)
 				baseRenderH = max(1, int(math.Round(floatH)))
 				canvasRows = max(1, (baseRenderH+spec.CellH-1)/spec.CellH)
 				targetH := canvasRows * spec.CellH
@@ -145,7 +174,8 @@ func PlanRender(srcW, srcH int, c TargetConstraints, spec V2Spec) Plan {
 			if k >= 1 && k*srcH <= targetH {
 				baseRenderH = k * srcH
 				padBottom = targetH - baseRenderH
-				floatW := float64(baseRenderH*spec.CellW*srcW*3) / float64(spec.CellH*srcH*2)
+				fNum, fDen := formulaParams(spec, c.PixelPolicy)
+				floatW := float64(baseRenderH*spec.CellW*srcW*fDen) / float64(spec.CellH*srcH*fNum)
 				baseRenderW = max(1, int(math.Round(floatW)))
 				canvasCols = max(1, (baseRenderW+spec.CellW-1)/spec.CellW)
 				targetW := canvasCols * spec.CellW

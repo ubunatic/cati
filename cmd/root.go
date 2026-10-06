@@ -804,14 +804,23 @@ func padSourceImage(img image.Image, padCols, padRows int) image.Image {
 }
 
 func prepareRenderPlanImage(orig image.Image, constraints viewgeom.TargetConstraints, rc renderCfg) (image.Image, error) {
-	if viewgeom.IsPixelAspect(constraints.AspectMode) {
+	if viewgeom.IsPixelAspect(constraints.AspectMode) || constraints.AspectMode == "aligned" {
 		policy, err := spec.LoadPixelAspectPolicy()
 		if err != nil {
 			return nil, err
 		}
-		constraints.PixelPolicy = viewgeom.PixelAspectPolicy{MaxDistortion: policy.MaxDistortion, MaxPadding: policy.MaxPadding}
-		// Pixel aspect must retain source colors even when it needs to shrink.
-		rc.prescaler = prescaleNearestNeighbor
+		constraints.PixelPolicy = viewgeom.PixelAspectPolicy{
+			MaxDistortion: policy.MaxDistortion,
+			MaxPadding:    policy.MaxPadding,
+			Formula: viewgeom.FormulaPolicy{
+				Default:   viewgeom.FormulaParams{Num: policy.Formula.Default.Num, Den: policy.Formula.Default.Den},
+				Halfblock: viewgeom.FormulaParams{Num: policy.Formula.Halfblock.Num, Den: policy.Formula.Halfblock.Den},
+			},
+		}
+		if viewgeom.IsPixelAspect(constraints.AspectMode) {
+			// Pixel aspect must retain source colors even when it needs to shrink.
+			rc.prescaler = prescaleNearestNeighbor
+		}
 	}
 	if rc.gray {
 		orig = quadblock.ReduceColors(orig, rc.grayColors)

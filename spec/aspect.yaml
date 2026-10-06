@@ -6,3 +6,15 @@ pixel:
   max_distortion: 0.10
   # Fraction of the constrained pixel extent that can be transparent padding.
   max_padding: 0.10
+
+formula:
+  # Aspect formula parameters (num / den) for derived dimension scaling.
+  # Default uses the 2:3 reference lattice for composite/sextant modes.
+  default:
+    num: 2
+    den: 3
+  # Halfblock uses 1:2 cell aspect to preserve 1:1 square subcells.
+  halfblock:
+    num: 1
+    den: 2
+
