@@ -1,6 +1,6 @@
 # 083 — Add vector render mode using linear cell split characters
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature

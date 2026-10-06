@@ -391,7 +391,7 @@ func sortModeEntries(entries []renderModeEntry, sortKey string) ([]renderModeEnt
 		emojigPath := filepath.Join("testdata", "emojig-icon.svg")
 		emojig, err := halfblock.LoadImage(emojigPath)
 		if err != nil {
-			return nil, fmt.Errorf("load emojig logo %q: %w", emojigPath, err)
+			emojig = cati
 		}
 		// Phase 1: Sequential isolated measurement
 		items := make([]*renderedDemoItem, 0, len(entries))
@@ -681,7 +681,7 @@ func runModesDemoWithImages(out io.Writer, width int, smart, info bool, entries 
 		emojigPath := filepath.Join("testdata", "emojig-icon.svg")
 		emojig, err := halfblock.LoadImage(emojigPath)
 		if err != nil {
-			return fmt.Errorf("load emojig logo %q: %w", emojigPath, err)
+			emojig = cati
 		}
 		leftImg = cati
 		leftName = "cati logo"
