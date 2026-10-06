@@ -9,19 +9,19 @@
 ---
 
 ## 1. Problem & Motivation
-Review of the incoming quadblock optimization found two violations of the fast/reference output-parity contract. Partially transparent NRGBA images now produce incorrect RGB values in reconstructed images, affecting image evaluation. Nonzero image origins expose an existing reconstruction bug that the new fast path bypasses. Existing parity tests use opaque, origin-zero fixtures and miss both cases.
+Review of the incoming quadblock optimization found two violations of the fast/reference output-parity contract. Partially transparent NRGBA images now produce incorrect RGB values in both reconstructed images and direct ANSI rendering when the NRGBA input is preserved. This affects image evaluation and can visibly brighten terminal output. Nonzero image origins expose an existing reconstruction bug that the new fast path bypasses. Existing parity tests use opaque, origin-zero fixtures and miss both cases.
 
 ## 2. Technical Specification / Findings
 1. **New NRGBA regression:** `computeQuadCell` copies raw NRGBA bytes into `color.RGBA` for complete 2x2 cells. NRGBA stores unpremultiplied channels; the reference `safePixel` calls `toRGBA`, which obtains premultiplied channels from `Color.RGBA()`. For a constant 2x2 NRGBA image containing `(200,100,50,128)`, `RenderToImageJ(..., Options{}, 4)` produces `(200,100,50,128)` with `core.Fastpath=true`, versus `(100,50,25,128)` with it false. At width 3, the partial final cell takes `safePixel`, producing `(100,50,25,128)` in the last column while the first two columns remain `(200,100,50,128)`: a visible seam caused solely by cell bounds.
 2. **Existing origin bug, newly exposed as fast/reference divergence:** reference `RenderToImageJ` computes `px0 = b.Min.X + tc*2` and `py0 = b.Min.Y + tr*2`, then compares them with destination-relative `pixW` and `pixH`. For a constant 2x2 image bounded by `image.Rect(5,7,7,9)`, it skips every cell and returns transparent pixels. The incoming direct-write path correctly uses destination-relative coordinates, so fast and reference modes now differ. Fix the reference guard; do not reproduce its blank output in the fast path.
-
-Minimal reproducible input construction (run in a Go probe importing `image`, `image/color`, `v1/core`, and `v1/quadblock`):
 
 For a visible terminal reproduction, run `go run scripts/quadblock_fastpath_demo.go`.
 It renders the same 33x8 NRGBA image directly through `quadblock.Render` with
 `cols=0`, preserving the source representation. Fast output is brighter and its
 last partial cell is darker; regular output is uniform. This confirms the bug
 also affects ANSI output when scaling/conversion does not hide the NRGBA path.
+
+Minimal reproducible input construction (run in a Go probe importing `image`, `image/color`, `v1/core`, and `v1/quadblock`):
 
 ```go
 img := image.NewNRGBA(image.Rect(0, 0, 3, 2))
@@ -47,3 +47,24 @@ The existing full suite and quadblock race suite passed during review. Neither r
 - Verify the expected pixel values independently; do not merely compare two implementations that share the same mistake.
 - Follow the Rendering Bug Playbook and predict any existing golden impact before changes. No goldens were regenerated during review.
 - Run both fast and reference full suites, quadblock race tests, `make preflight`, and relevant benchmarks. Update the renderer documentation with the sampling/coordinate contract and accurate validation results.
+
+## 4. User terminal confirmation (2026-10-06)
+
+The user ran `go run scripts/quadblock_fastpath_demo.go` and supplied a screenshot
+of the actual terminal output. It confirms the predicted defect: the fast-path
+block on the left is brighter, with a narrow darker final column; the regular
+block on the right has uniform color. The script reports
+`ANSI output identical: false`. The captured ANSI bytes use foreground RGB
+`200;100;50` for complete fast-path cells and `100;50;25` for the partial final
+cell and all regular-path cells. Demo commit: `475e460`.
+
+The source is uniform, so the color change at the final cell is not source
+detail or a font-orientation issue. The stepped right edge reflects the odd
+pixel width; the regression is the color mismatch.
+
+Ordinary `cati image.png --fastpath=false` / `--fastpath=true` comparisons may
+hide this defect because image scaling/conversion replaces NRGBA with RGBA
+before cell sampling. The direct-render demo deliberately preserves NRGBA.
+This bug is not limited to SSIM reconstruction, despite the initial explanation
+in the investigation. Visual reproduction is confirmed; the production fix
+and its regression tests remain outstanding, so this ticket stays Open.
