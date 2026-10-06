@@ -223,6 +223,11 @@ func TestParseRenderMode(t *testing.T) {
 		}},
 		{"native sextant", "6", "2x3", nil},
 		{"three by three", "9", "3x3", nil},
+		{"octant", "octant", "octant", nil},
+		{"octant alias oct", "oct", "octant", nil},
+		{"vector", "vector", "vector", nil},
+		{"vector alias vec", "vec", "vector", nil},
+		{"vector alias v", "v", "vector", nil},
 		{"all", "a", "all", nil},
 		{"all plus", "A", "all+", nil},
 		{"z", "z", "z", nil},
@@ -1307,6 +1312,41 @@ func TestCLIGeometryEdgeCases(t *testing.T) {
 			t.Fatalf("renderChecked: %v", err)
 		}
 	})
+}
+
+func TestVectorAndOctantModesCLI(t *testing.T) {
+	testAssets := []string{
+		"testdata/solid_red_4x4.png",
+		"testdata/checkerboard_4x4.png",
+		"assets/cati_0001.png",
+	}
+	modes := []string{"vector", "vec", "v", "octant", "oct"}
+
+	for _, mode := range modes {
+		rc, err := parseRenderMode(mode)
+		if err != nil {
+			t.Fatalf("parseRenderMode(%q): %v", mode, err)
+		}
+		for _, asset := range testAssets {
+			t.Run(mode+"/"+filepath.Base(asset), func(t *testing.T) {
+				img, err := halfblock.LoadImage(asset)
+				if err != nil {
+					t.Fatalf("LoadImage(%s): %v", asset, err)
+				}
+				prepared, err := prepareExplicitGridImage(img, 12, 6, rc, "default")
+				if err != nil {
+					t.Fatalf("prepareExplicitGridImage(%s, %s): %v", mode, asset, err)
+				}
+				var buf strings.Builder
+				if err := renderChecked(&buf, prepared, rc); err != nil {
+					t.Fatalf("renderChecked(%s, %s): %v", mode, asset, err)
+				}
+				if buf.Len() == 0 {
+					t.Fatalf("renderChecked produced empty output for mode %s on asset %s", mode, asset)
+				}
+			})
+		}
+	}
 }
 
 func itoa(n int) string {
