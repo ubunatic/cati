@@ -88,6 +88,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 082 | [082-install-web-leaves-generated-files-in-the-tree-and-drops-code-highlighting.md](082-install-web-leaves-generated-files-in-the-tree-and-drops-code-highlighting.md) | install-web leaves generated files in the tree and drops code highlighting | Closed — install-web builds docs in a scratch tree (d034881); make check fails if install-web leaves git status dirty; verified tree clean and Go example highlighting kept |
 | 083 | [083-add-vector-render-mode-using-linear-cell-split-characters.md](083-add-vector-render-mode-using-linear-cell-split-characters.md) | Add vector render mode using linear cell split characters | Open |
 | 084 | [084-add-octant-render-mode-using-unicode-1cd0-block-characters.md](084-add-octant-render-mode-using-unicode-1cd0-block-characters.md) | Add octant render mode using Unicode 1CD0 block characters | Open |
+| 085 | [085-restore-the-logo-pixel-grid-visualizer-as-a-boxed-demo-on-the-cati-web-page.md](085-restore-the-logo-pixel-grid-visualizer-as-a-boxed-demo-on-the-cati-web-page.md) | Restore the logo pixel-grid visualizer as a boxed demo on the cati web page | Open |
 
 ## Archived
 
