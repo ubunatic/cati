@@ -151,6 +151,24 @@ func TestOctantAndVectorGlyphSets(t *testing.T) {
 	if !hasDiagonal {
 		t.Errorf("vector mode missing U+1FB3C..U+1FB6F linear diagonal shapes")
 	}
+
+	// Verify that hourglass and bowtie are exact complements
+	var hourglass, bowtie GlyphShape
+	for _, s := range vec.Shapes {
+		if s.Glyph == 0x1FB9A {
+			hourglass = s
+		} else if s.Glyph == 0x1FB9B {
+			bowtie = s
+		}
+	}
+	if hourglass.Glyph == 0 || bowtie.Glyph == 0 {
+		t.Fatalf("vector mode missing hourglass or bowtie glyphs")
+	}
+	for i := 0; i < 16; i++ {
+		if hourglass.Mask[i] == bowtie.Mask[i] {
+			t.Errorf("hourglass and bowtie masks at bit %d must be complements, got hourglass=%v bowtie=%v", i, hourglass.Mask[i], bowtie.Mask[i])
+		}
+	}
 }
 
 func equalInts(a, b []int) bool {

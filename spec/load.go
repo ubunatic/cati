@@ -673,178 +673,82 @@ func generatedVectorShapes() []GlyphShape {
 	return shapes
 }
 
+var vectorRuneMasks = map[rune]uint16{
+	' ': 0x0000, //   // 🬃
+	0x2503: 0x6666, // ┃ // block
+	0x2580: 0x00FF, // ▀ // block
+	0x2584: 0xFF00, // ▄ // block
+	0x2588: 0xFFFF, // █ // block
+	0x258C: 0x3333, // ▌ // block
+	0x2590: 0xCCCC, // ▐ // block
+	0x1FB03: 0x00F0, // 🬃 // block
+	0x1FB07: 0x0F00, // 🬇 // block
+	0x1FB0B: 0x0FF0, // 🬋 // block
+	0x1FB3C: 0x1000, // 🬼 // LOWER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO LOWER CENTRE
+	0x1FB3D: 0x7000, // 🬽 // LOWER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO LOWER RIGHT
+	0x1FB3E: 0x3100, // 🬾 // LOWER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER CENTRE
+	0x1FB3F: 0x7300, // 🬿 // LOWER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER RIGHT
+	0x1FB40: 0x3110, // 🭀 // LOWER LEFT BLOCK DIAGONAL UPPER LEFT TO LOWER CENTRE
+	0x1FB41: 0xFFFE, // 🭁 // LOWER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER CENTRE
+	0x1FB42: 0xFFFC, // 🭂 // LOWER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER RIGHT
+	0x1FB43: 0xFFEC, // 🭃 // LOWER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER CENTRE
+	0x1FB44: 0xFFC8, // 🭄 // LOWER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER RIGHT
+	0x1FB45: 0xFEEC, // 🭅 // LOWER RIGHT BLOCK DIAGONAL LOWER LEFT TO UPPER CENTRE
+	0x1FB46: 0xFF80, // 🭆 // LOWER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER MIDDLE RIGHT
+	0x1FB47: 0x8000, // 🭇 // LOWER RIGHT BLOCK DIAGONAL LOWER CENTRE TO LOWER MIDDLE RIGHT
+	0x1FB48: 0xE000, // 🭈 // LOWER RIGHT BLOCK DIAGONAL LOWER LEFT TO LOWER MIDDLE RIGHT
+	0x1FB49: 0xC800, // 🭉 // LOWER RIGHT BLOCK DIAGONAL LOWER CENTRE TO UPPER MIDDLE RIGHT
+	0x1FB4A: 0xEC00, // 🭊 // LOWER RIGHT BLOCK DIAGONAL LOWER LEFT TO UPPER MIDDLE RIGHT
+	0x1FB4B: 0xC880, // 🭋 // LOWER RIGHT BLOCK DIAGONAL LOWER CENTRE TO UPPER RIGHT
+	0x1FB4C: 0xFFF7, // 🭌 // LOWER LEFT BLOCK DIAGONAL UPPER CENTRE TO UPPER MIDDLE RIGHT
+	0x1FB4D: 0xFFF3, // 🭍 // LOWER LEFT BLOCK DIAGONAL UPPER LEFT TO UPPER MIDDLE RIGHT
+	0x1FB4E: 0xFF73, // 🭎 // LOWER LEFT BLOCK DIAGONAL UPPER CENTRE TO LOWER MIDDLE RIGHT
+	0x1FB4F: 0xFF31, // 🭏 // LOWER LEFT BLOCK DIAGONAL UPPER LEFT TO LOWER MIDDLE RIGHT
+	0x1FB50: 0xF773, // 🭐 // LOWER LEFT BLOCK DIAGONAL UPPER CENTRE TO LOWER RIGHT
+	0x1FB51: 0xFF10, // 🭑 // LOWER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER MIDDLE RIGHT
+	0x1FB52: 0xEFFF, // 🭒 // UPPER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO LOWER CENTRE
+	0x1FB53: 0x8FFF, // 🭓 // UPPER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO LOWER RIGHT
+	0x1FB54: 0xCEFF, // 🭔 // UPPER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER CENTRE
+	0x1FB55: 0x8CFF, // 🭕 // UPPER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER RIGHT
+	0x1FB56: 0xCEEF, // 🭖 // UPPER RIGHT BLOCK DIAGONAL UPPER LEFT TO LOWER CENTRE
+	0x1FB57: 0x0001, // 🭗 // UPPER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER CENTRE
+	0x1FB58: 0x0003, // 🭘 // UPPER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER RIGHT
+	0x1FB59: 0x0013, // 🭙 // UPPER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER CENTRE
+	0x1FB5A: 0x0037, // 🭚 // UPPER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER RIGHT
+	0x1FB5B: 0x0113, // 🭛 // UPPER LEFT BLOCK DIAGONAL LOWER LEFT TO UPPER CENTRE
+	0x1FB5C: 0x007F, // 🭜 // UPPER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER MIDDLE RIGHT
+	0x1FB5D: 0x7FFF, // 🭝 // UPPER LEFT BLOCK DIAGONAL LOWER CENTRE TO LOWER MIDDLE RIGHT
+	0x1FB5E: 0x1FFF, // 🭞 // UPPER LEFT BLOCK DIAGONAL LOWER LEFT TO LOWER MIDDLE RIGHT
+	0x1FB5F: 0x37FF, // 🭟 // UPPER LEFT BLOCK DIAGONAL LOWER CENTRE TO UPPER MIDDLE RIGHT
+	0x1FB60: 0x13FF, // 🭠 // UPPER LEFT BLOCK DIAGONAL LOWER LEFT TO UPPER MIDDLE RIGHT
+	0x1FB61: 0x377F, // 🭡 // UPPER LEFT BLOCK DIAGONAL LOWER CENTRE TO UPPER RIGHT
+	0x1FB62: 0x0008, // 🭢 // UPPER RIGHT BLOCK DIAGONAL UPPER CENTRE TO UPPER MIDDLE RIGHT
+	0x1FB63: 0x000C, // 🭣 // UPPER RIGHT BLOCK DIAGONAL UPPER LEFT TO UPPER MIDDLE RIGHT
+	0x1FB64: 0x008C, // 🭤 // UPPER RIGHT BLOCK DIAGONAL UPPER CENTRE TO LOWER MIDDLE RIGHT
+	0x1FB65: 0x00CE, // 🭥 // UPPER RIGHT BLOCK DIAGONAL UPPER LEFT TO LOWER MIDDLE RIGHT
+	0x1FB66: 0x088C, // 🭦 // UPPER RIGHT BLOCK DIAGONAL UPPER CENTRE TO LOWER RIGHT
+	0x1FB67: 0x00EF, // 🭧 // UPPER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER MIDDLE RIGHT
+	0x1FB68: 0xECCE, // 🭨 // UPPER AND RIGHT AND LOWER TRIANGULAR THREE QUARTERS BLOCK
+	0x1FB69: 0xFF90, // 🭩 // LEFT AND LOWER AND RIGHT TRIANGULAR THREE QUARTERS BLOCK
+	0x1FB6A: 0x7337, // 🭪 // UPPER AND LEFT AND LOWER TRIANGULAR THREE QUARTERS BLOCK
+	0x1FB6B: 0x09FF, // 🭫 // LEFT AND UPPER AND RIGHT TRIANGULAR THREE QUARTERS BLOCK
+	0x1FB6C: 0x1331, // 🭬 // LEFT TRIANGULAR ONE QUARTER BLOCK
+	0x1FB6D: 0x006F, // 🭭 // UPPER TRIANGULAR ONE QUARTER BLOCK
+	0x1FB6E: 0x8CC8, // 🭮 // RIGHT TRIANGULAR ONE QUARTER BLOCK
+	0x1FB6F: 0xF600, // 🭯 // LOWER TRIANGULAR ONE QUARTER BLOCK
+	0x1FB9A: 0xF66F, // 🮚 // UPPER AND LOWER TRIANGULAR HALF BLOCK
+	0x1FB9B: 0x0990, // 🮛 // LEFT AND RIGHT TRIANGULAR HALF BLOCK
+}
+
 func vectorRuneMask(r rune) []bool {
 	m := make([]bool, 16)
-	set := func(x, y int, val bool) {
-		if x >= 0 && x < 4 && y >= 0 && y < 4 {
-			m[y*4+x] = val
-		}
+	bits, ok := vectorRuneMasks[r]
+	if !ok {
+		return m
 	}
-
-	switch r {
-	case ' ':
-		// all false
-	case '█':
-		for y := 0; y < 4; y++ {
-			for x := 0; x < 4; x++ {
-				set(x, y, true)
-			}
-		}
-	case '▀':
-		for y := 0; y < 2; y++ {
-			for x := 0; x < 4; x++ {
-				set(x, y, true)
-			}
-		}
-	case '▄':
-		for y := 2; y < 4; y++ {
-			for x := 0; x < 4; x++ {
-				set(x, y, true)
-			}
-		}
-	case '▌':
-		for y := 0; y < 4; y++ {
-			for x := 0; x < 2; x++ {
-				set(x, y, true)
-			}
-		}
-	case '▐':
-		for y := 0; y < 4; y++ {
-			for x := 2; x < 4; x++ {
-				set(x, y, true)
-			}
-		}
-	case '┃':
-		for y := 0; y < 4; y++ {
-			set(1, y, true)
-			set(2, y, true)
-		}
-	case '🬋':
-		for x := 0; x < 4; x++ {
-			set(x, 1, true)
-			set(x, 2, true)
-		}
-	case '🬇':
-		for x := 0; x < 4; x++ {
-			set(x, 2, true)
-		}
-	case '🬃':
-		for x := 0; x < 4; x++ {
-			set(x, 1, true)
-		}
-	case '\U0001FB9A': // 🮚 upper-left to lower-right diagonal half block
-		for y := 0; y < 4; y++ {
-			for x := 0; x < 4; x++ {
-				if y < x {
-					set(x, y, true)
-				}
-			}
-		}
-	case '\U0001FB9B': // 🮛 lower-left to upper-right diagonal half block
-		for y := 0; y < 4; y++ {
-			for x := 0; x < 4; x++ {
-				if x+y < 4 {
-					set(x, y, true)
-				}
-			}
-		}
-	default:
-		// U+1FB3C..U+1FB6F: block diagonals, diagonal composites, triangular 3/4 and 1/4 blocks
-		if r >= 0x1FB3C && r <= 0x1FB6F {
-			idx := int(r - 0x1FB3C)
-			for y := 0; y < 4; y++ {
-				for x := 0; x < 4; x++ {
-					// 4x4 subpixel linear half-plane / triangular evaluation
-					switch idx {
-					// 0x1FB3C..0x1FB40: Lower-left to upper-right block diagonals
-					case 0: // 0x1FB3C: lower-left 1/4 diagonal
-						set(x, y, x+y >= 4)
-					case 1: // 0x1FB3D: lower-left 1/2 diagonal
-						set(x, y, x+y >= 3)
-					case 2: // 0x1FB3E: lower-left 3/4 diagonal
-						set(x, y, x+y >= 2)
-					case 3: // 0x1FB3F: upper-right 1/4 diagonal
-						set(x, y, x+y <= 0)
-					case 4: // 0x1FB40: upper-right 1/2 diagonal
-						set(x, y, x+y < 3)
-
-					// 0x1FB41..0x1FB45: Upper-left to lower-right block diagonals
-					case 5: // 0x1FB41: upper-left 1/4 diagonal
-						set(x, y, y < x-1)
-					case 6: // 0x1FB42: upper-left 1/2 diagonal
-						set(x, y, y < x)
-					case 7: // 0x1FB43: lower-right 1/4 diagonal
-						set(x, y, y > x+1)
-					case 8: // 0x1FB44: lower-right 1/2 diagonal
-						set(x, y, y > x)
-					case 9: // 0x1FB45: upper-right 1/2 diagonal
-						set(x, y, x >= y)
-
-					// 0x1FB46..0x1FB4B: Sloped 1/2 and 2 diagonals
-					case 10: // 0x1FB46: slope 2 upper-left fill
-						set(x, y, y < 2*x)
-					case 11: // 0x1FB47: slope 2 lower-right fill
-						set(x, y, y >= 2*x)
-					case 12: // 0x1FB48: slope 1/2 upper-left fill
-						set(x, y, 2*y < x)
-					case 13: // 0x1FB49: slope 1/2 lower-right fill
-						set(x, y, 2*y >= x)
-					case 14: // 0x1FB4A: slope -2 upper-right fill
-						set(x, y, y+2*x >= 4)
-					case 15: // 0x1FB4B: slope -2 lower-left fill
-						set(x, y, y+2*x < 4)
-
-					// 0x1FB4C..0x1FB5B: Sloped diagonal triangular half/quarter fills
-					case 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31:
-						step := idx - 16
-						set(x, y, (x*4+y) >= step)
-
-					// 0x1FB5C..0x1FB67: Block diagonal corner and edge composites
-					case 32: // top-left corner
-						set(x, y, x < 2 && y < 2)
-					case 33: // top-right corner
-						set(x, y, x >= 2 && y < 2)
-					case 34: // bottom-left corner
-						set(x, y, x < 2 && y >= 2)
-					case 35: // bottom-right corner
-						set(x, y, x >= 2 && y >= 2)
-					case 36: // top edge triangle
-						set(x, y, y < 2 && (x == 1 || x == 2))
-					case 37: // bottom edge triangle
-						set(x, y, y >= 2 && (x == 1 || x == 2))
-					case 38: // left edge triangle
-						set(x, y, x < 2 && (y == 1 || y == 2))
-					case 39: // right edge triangle
-						set(x, y, x >= 2 && (y == 1 || y == 2))
-					case 40: // center diamond
-						set(x, y, (x == 1 || x == 2) && (y == 1 || y == 2))
-					case 41: // outer corners
-						set(x, y, (x == 0 || x == 3) && (y == 0 || y == 3))
-					case 42: // top-left & bottom-right pair
-						set(x, y, (x < 2 && y < 2) || (x >= 2 && y >= 2))
-					case 43: // top-right & bottom-left pair
-						set(x, y, (x >= 2 && y < 2) || (x < 2 && y >= 2))
-
-					// 0x1FB68..0x1FB6F: Triangular 3/4 and 1/4 block shapes
-					case 44: // Top-left 3/4
-						set(x, y, x+y < 4 || x < 2)
-					case 45: // Top-right 3/4
-						set(x, y, x >= y || y < 2)
-					case 46: // Bottom-left 3/4
-						set(x, y, y >= x || x < 2)
-					case 47: // Bottom-right 3/4
-						set(x, y, x+y >= 3 || y >= 2)
-					case 48: // Top-left 1/4
-						set(x, y, x < 2 && y < 2 && x+y < 2)
-					case 49: // Top-right 1/4
-						set(x, y, x >= 2 && y < 2 && x-y >= 2)
-					case 50: // Bottom-left 1/4
-						set(x, y, x < 2 && y >= 2 && y-x >= 2)
-					case 51: // Bottom-right 1/4
-						set(x, y, x >= 2 && y >= 2 && x+y >= 5)
-					}
-				}
-			}
+	for i := 0; i < 16; i++ {
+		if (bits & (1 << i)) != 0 {
+			m[i] = true
 		}
 	}
 	return m
