@@ -91,6 +91,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 085 | [085-restore-the-logo-pixel-grid-visualizer-as-a-boxed-demo-on-the-cati-web-page.md](085-restore-the-logo-pixel-grid-visualizer-as-a-boxed-demo-on-the-cati-web-page.md) | Restore the logo pixel-grid visualizer as a boxed demo on the cati web page | Open |
 | 086 | [086-add-vec-and-oct-golden-render-tests-and-investigate-mask-orientation.md](086-add-vec-and-oct-golden-render-tests-and-investigate-mask-orientation.md) | Add vec and oct golden render tests and investigate mask orientation | Open |
 | 087 | [087-fix-halfblock-aspect-formula-distortion-and-move-formula-params-to-spec.md](087-fix-halfblock-aspect-formula-distortion-and-move-formula-params-to-spec.md) | Fix halfblock aspect formula distortion and move formula params to spec | Closed — Fixed halfblock aspect formula and moved formula parameters to spec/aspect.yaml |
+| 088 | [088-fix-quad-mode-aspect-formula-distortion-in-spec.md](088-fix-quad-mode-aspect-formula-distortion-in-spec.md) | Fix quad mode aspect formula distortion in spec | Closed — Fixed quad mode aspect formula in spec/aspect.yaml and planner |
 ## Archived
 
 | # | Title | Reason |
