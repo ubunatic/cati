@@ -133,6 +133,66 @@ modes:
     native_step: 1
     optimized: true
 
+  - name: vec2
+    description: "Chooses linear cell-split characters for 2x2 cell geometry."
+    renderer: glyph_union
+    cell: { w: 2, h: 2 }
+    glyph_sets: [vec2]
+    colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
+    optimized: true
+
+  - name: vec3
+    description: "Chooses linear cell-split characters for 2x3 cell geometry."
+    renderer: glyph_union
+    cell: { w: 2, h: 3 }
+    glyph_sets: [vec3]
+    colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
+    optimized: true
+
+  - name: vec4
+    description: "Chooses linear cell-split characters for 3x4 cell geometry."
+    renderer: glyph_union
+    cell: { w: 3, h: 4 }
+    glyph_sets: [vec4]
+    colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
+    optimized: true
+
+  - name: vec5
+    description: "Chooses linear cell-split characters for 3x5 cell geometry."
+    renderer: glyph_union
+    cell: { w: 3, h: 5 }
+    glyph_sets: [vec5]
+    colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
+    optimized: true
+
+  - name: vec6
+    description: "Chooses linear cell-split characters for 4x6 cell geometry."
+    renderer: glyph_union
+    cell: { w: 4, h: 6 }
+    glyph_sets: [vec6]
+    colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
+    optimized: true
+
+  - name: vec8
+    description: "Chooses linear cell-split characters for 4x8 cell geometry."
+    renderer: glyph_union
+    cell: { w: 4, h: 8 }
+    glyph_sets: [vec8]
+    colorer: fg_bg_sse
+    smart_step: native
+    native_step: 1
+    optimized: true
+
 glyph_sets:
   braille: ["generated:braille_2x4"]
   half: [" ", "▀", "▄", "█"]
@@ -143,6 +203,12 @@ glyph_sets:
   six: ["generated:sextant_2x3_with_columns"]
   octant: ["generated:octant_2x4"]
   vector: ["generated:vector_linear_splits"]
+  vec2: ["generated:vector_linear_splits"]
+  vec3: ["generated:vector_linear_splits"]
+  vec4: ["generated:vector_linear_splits"]
+  vec5: ["generated:vector_linear_splits"]
+  vec6: ["generated:vector_linear_splits"]
+  vec8: ["generated:vector_linear_splits"]
 
 colorers:
   top_bottom: half-block top/bottom foreground/background averages
@@ -205,6 +271,36 @@ set_registry:
     geometry: { w: 4, h: 4 }
     generated: vector_linear_splits
     optimized: true
+  - id: 52
+    name: vec2
+    geometry: { w: 2, h: 2 }
+    generated: vector_linear_splits
+    optimized: true
+  - id: 53
+    name: vec3
+    geometry: { w: 2, h: 3 }
+    generated: vector_linear_splits
+    optimized: true
+  - id: 54
+    name: vec4
+    geometry: { w: 3, h: 4 }
+    generated: vector_linear_splits
+    optimized: true
+  - id: 55
+    name: vec5
+    geometry: { w: 3, h: 5 }
+    generated: vector_linear_splits
+    optimized: true
+  - id: 56
+    name: vec6
+    geometry: { w: 4, h: 6 }
+    generated: vector_linear_splits
+    optimized: true
+  - id: 58
+    name: vec8
+    geometry: { w: 4, h: 8 }
+    generated: vector_linear_splits
+    optimized: true
   - id: 9
     name: ninelikes
     geometry: { w: 3, h: 3 }
@@ -252,14 +348,20 @@ set_registry:
     optimized: true
 
 # Exact, case-sensitive named unions. A name is resolved before '+' grammar.
-composition_order: [full, half, quad, quad+, bars, bars+, six, 2x3, 2x4, 3x3, octant, vector, all, all+, z, z+]
+composition_order: [full, half, quad, quad+, bars, bars+, six, 2x3, 2x4, 3x3, octant, vector, vec2, vec3, vec4, vec5, vec6, vec8, all, all+, z, z+]
 # Experimental compositions: listed and renderable, but skipped by
 # `cati --bench` unless selected with --mode.
-experimental: [all+, z, z+]
+experimental: [vec2, vec3, vec4, vec5, vec6, vec8, all+, z, z+]
 composition_info:
   2x4: "Uses full cells, sides and native 2x4 braille patterns at 2x4 geometry."
   octant: "Uses full cells and native 2x4 octant block characters (U+1CD00-U+1CDE5) at 2x4 geometry."
   vector: "Uses linear cell-split characters including block diagonals, triangles, and half blocks at 4x4 geometry."
+  vec2: "Uses linear cell-split characters at 2x2 geometry."
+  vec3: "Uses linear cell-split characters at 2x3 geometry."
+  vec4: "Uses linear cell-split characters at 3x4 geometry."
+  vec5: "Uses linear cell-split characters at 3x5 geometry."
+  vec6: "Uses linear cell-split characters at 4x6 geometry."
+  vec8: "Uses linear cell-split characters at 4x8 geometry."
   full: "Uses empty and full cells at 1x1 geometry."
   half: "Uses full cells and top/bottom halves at 1x2 geometry."
   quad: "Combines full cells, sides, halves and quadrants at 2x2 geometry."
@@ -280,6 +382,12 @@ compositions:
   vector: [0, 50]
   v: [0, 50]
   vec: [0, 50]
+  vec2: [0, 52]
+  vec3: [0, 53]
+  vec4: [0, 54]
+  vec5: [0, 55]
+  vec6: [0, 56]
+  vec8: [0, 58]
   f: [0]
   full: [0]
   "1": [0]

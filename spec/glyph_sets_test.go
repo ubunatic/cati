@@ -26,6 +26,12 @@ func TestResolveGlyphSetExpression(t *testing.T) {
 		{"vector", []int{0, 50}, 4, 4},
 		{"v", []int{0, 50}, 4, 4},
 		{"vec", []int{0, 50}, 4, 4},
+		{"vec2", []int{0, 52}, 2, 2},
+		{"vec3", []int{0, 53}, 2, 3},
+		{"vec4", []int{0, 54}, 3, 4},
+		{"vec5", []int{0, 55}, 3, 5},
+		{"vec6", []int{0, 56}, 4, 6},
+		{"vec8", []int{0, 58}, 4, 8},
 	}
 	for _, tt := range tests {
 		got, err := ResolveGlyphSetExpression(tt.expr)
@@ -204,6 +210,85 @@ func TestVectorStraightBarsAndQuadrants(t *testing.T) {
 		if got := masks[pair[0]] ^ masks[pair[1]]; got != 0xFFFF {
 			t.Errorf("%U XOR %U = %04X, want FFFF", pair[0], pair[1], got)
 		}
+	}
+}
+
+func TestVectorParameterizedGeometries(t *testing.T) {
+	geometries := []struct {
+		name string
+		w, h int
+	}{
+		{"vec2", 2, 2},
+		{"vec3", 2, 3},
+		{"vec4", 3, 4},
+		{"vec5", 3, 5},
+		{"vec6", 4, 6},
+		{"vec8", 4, 8},
+		{"vector", 4, 4},
+	}
+
+	for _, g := range geometries {
+		t.Run(g.name, func(t *testing.T) {
+			res, err := ResolveGlyphSetExpression(g.name)
+			if err != nil {
+				t.Fatalf("ResolveGlyphSetExpression(%q): %v", g.name, err)
+			}
+			if res.Geometry.W != g.w || res.Geometry.H != g.h {
+				t.Errorf("%s geometry = %dx%d, want %dx%d", g.name, res.Geometry.W, res.Geometry.H, g.w, g.h)
+			}
+
+			shapesByRune := make(map[rune][]bool, len(res.Shapes))
+			wantLen := g.w * g.h
+			for _, shape := range res.Shapes {
+				if len(shape.Mask) != wantLen {
+					t.Errorf("%s glyph %U mask length = %d, want %d", g.name, shape.Glyph, len(shape.Mask), wantLen)
+				}
+				shapesByRune[shape.Glyph] = shape.Mask
+			}
+
+			assertComplements := func(r1, r2 rune) {
+				m1, ok1 := shapesByRune[r1]
+				m2, ok2 := shapesByRune[r2]
+				if !ok1 || !ok2 {
+					t.Errorf("%s missing complement rune pair %U / %U", g.name, r1, r2)
+					return
+				}
+				for i := 0; i < wantLen; i++ {
+					if m1[i] == m2[i] {
+						t.Errorf("%s glyph pair %U and %U mask bit %d = %v, want complement", g.name, r1, r2, i, m1[i])
+					}
+				}
+			}
+
+			// Complement checks:
+			assertComplements(' ', '█')
+			assertComplements('▀', '▄')
+			assertComplements('▌', '▐')
+			assertComplements(0x1FB9A, 0x1FB9B) // hourglass & bowtie
+
+			// Triangular corners:
+			assertComplements(0x1FB6C, 0x1FB68)
+			assertComplements(0x1FB6D, 0x1FB69)
+			assertComplements(0x1FB6E, 0x1FB6A)
+			assertComplements(0x1FB6F, 0x1FB6B)
+
+			// Straight bars:
+			assertComplements(0x1FB82, '▆')
+			assertComplements('▂', 0x1FB85)
+			assertComplements('▎', 0x1FB8A)
+			assertComplements(0x1FB87, '▊')
+
+			// Quadrants (each 1-quadrant block is paired with its 3-quadrant inverse):
+			assertComplements('▘', '▟')
+			assertComplements('▝', '▙')
+			assertComplements('▖', '▜')
+			assertComplements('▗', '▛')
+
+			// 22 block diagonal pairs:
+			for k := rune(0); k < 22; k++ {
+				assertComplements(0x1FB3C+k, 0x1FB52+k)
+			}
+		})
 	}
 }
 

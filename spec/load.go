@@ -426,7 +426,7 @@ func parseGlyphSetShapes(def GlyphSetDef) ([]GlyphShape, error) {
 		case "octant_2x4":
 			return generatedOctantShapes(), nil
 		case "vector_linear_splits":
-			return generatedVectorShapes(), nil
+			return generatedVectorShapes(def.Geometry.W, def.Geometry.H), nil
 		default:
 			return nil, fmt.Errorf("unknown mask generator %q", def.Generated)
 		}
@@ -656,12 +656,222 @@ func generatedOctantShapes() []GlyphShape {
 	return shapes
 }
 
-func generatedVectorShapes() []GlyphShape {
+func generatedVectorShapes(w, h int) []GlyphShape {
+	invertMask := func(m []bool) []bool {
+		res := make([]bool, len(m))
+		for i, b := range m {
+			res[i] = !b
+		}
+		return res
+	}
+
+	evalMask := func(inside func(X, Y float64) bool) []bool {
+		mask := make([]bool, w*h)
+		const N = 32
+		const total = N * N
+		fw, fh := float64(w), float64(h)
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				count := 0
+				for sy := 0; sy < N; sy++ {
+					Y := (float64(y) + (float64(sy)+0.5)/float64(N)) / fh * fh
+					for sx := 0; sx < N; sx++ {
+						X := (float64(x) + (float64(sx)+0.5)/float64(N)) / fw * fw
+						if inside(X, Y) {
+							count++
+						}
+					}
+				}
+				if count*2 >= total {
+					mask[y*w+x] = true
+				}
+			}
+		}
+		return mask
+	}
+
+	shapesMap := make(map[rune][]bool)
+
+	// 1. Space and Full block
+	shapesMap[' '] = make([]bool, w*h)
+	fullMask := make([]bool, w*h)
+	for i := range fullMask {
+		fullMask[i] = true
+	}
+	shapesMap['█'] = fullMask
+
+	// 2. Halves
+	fw, fh := float64(w), float64(h)
+	topHalf := evalMask(func(X, Y float64) bool { return Y <= fh/2.0 })
+	shapesMap['▀'] = topHalf
+	shapesMap['▄'] = invertMask(topHalf)
+
+	leftHalf := evalMask(func(X, Y float64) bool { return X <= fw/2.0 })
+	shapesMap['▌'] = leftHalf
+	shapesMap['▐'] = invertMask(leftHalf)
+
+	// 3. Middle vertical bar & middle horizontal bars
+	shapesMap['┃'] = evalMask(func(X, Y float64) bool { return X >= fw/4.0 && X <= 3.0*fw/4.0 })
+	shapesMap[0x1FB03] = evalMask(func(X, Y float64) bool { return Y >= fh/4.0 && Y <= fh/2.0 })
+	shapesMap[0x1FB07] = evalMask(func(X, Y float64) bool { return Y >= fh/2.0 && Y <= 3.0*fh/4.0 })
+	shapesMap[0x1FB0B] = evalMask(func(X, Y float64) bool { return Y >= fh/4.0 && Y <= 3.0*fh/4.0 })
+
+	// 4. Straight bars (1/4 and 3/4)
+	upQuarter := evalMask(func(X, Y float64) bool { return Y <= fh/4.0 })
+	shapesMap[0x1FB82] = upQuarter
+	shapesMap['▆'] = invertMask(upQuarter)
+
+	lowQuarter := evalMask(func(X, Y float64) bool { return Y >= 3.0*fh/4.0 })
+	shapesMap['▂'] = lowQuarter
+	shapesMap[0x1FB85] = invertMask(lowQuarter)
+
+	leftQuarter := evalMask(func(X, Y float64) bool { return X <= fw/4.0 })
+	shapesMap['▎'] = leftQuarter
+	shapesMap[0x1FB8A] = invertMask(leftQuarter)
+
+	rightQuarter := evalMask(func(X, Y float64) bool { return X >= 3.0*fw/4.0 })
+	shapesMap[0x1FB87] = rightQuarter
+	shapesMap['▊'] = invertMask(rightQuarter)
+
+	// 5. Quadrants
+	ulQuad := evalMask(func(X, Y float64) bool { return X <= fw/2.0 && Y <= fh/2.0 })
+	urQuad := evalMask(func(X, Y float64) bool { return X >= fw/2.0 && Y <= fh/2.0 })
+	llQuad := evalMask(func(X, Y float64) bool { return X <= fw/2.0 && Y >= fh/2.0 })
+	lrQuad := evalMask(func(X, Y float64) bool { return X >= fw/2.0 && Y >= fh/2.0 })
+
+	shapesMap['▘'] = ulQuad
+	shapesMap['▝'] = urQuad
+	shapesMap['▖'] = llQuad
+	shapesMap['▗'] = lrQuad
+
+	diag1 := make([]bool, w*h)
+	diag2 := make([]bool, w*h)
+	for i := 0; i < w*h; i++ {
+		diag1[i] = ulQuad[i] || lrQuad[i]
+		diag2[i] = urQuad[i] || llQuad[i]
+	}
+	shapesMap['▚'] = diag1
+	shapesMap['▞'] = diag2
+
+	shapesMap['▛'] = invertMask(lrQuad)
+	shapesMap['▜'] = invertMask(llQuad)
+	shapesMap['▙'] = invertMask(urQuad)
+	shapesMap['▟'] = invertMask(ulQuad)
+
+	// 6. Hourglass & Bowtie
+	hourglass := evalMask(func(X, Y float64) bool {
+		xNorm, yNorm := X/fw, Y/fh
+		return (yNorm <= xNorm && yNorm <= 1.0-xNorm) || (yNorm >= xNorm && yNorm >= 1.0-xNorm)
+	})
+	shapesMap[0x1FB9A] = hourglass
+	shapesMap[0x1FB9B] = invertMask(hourglass)
+
+	// 7. Triangular Corner Blocks
+	leftTri := evalMask(func(X, Y float64) bool {
+		xNorm, yNorm := X/fw, Y/fh
+		return yNorm >= xNorm && yNorm <= 1.0-xNorm
+	})
+	shapesMap[0x1FB6C] = leftTri
+	shapesMap[0x1FB68] = invertMask(leftTri)
+
+	topTri := evalMask(func(X, Y float64) bool {
+		xNorm, yNorm := X/fw, Y/fh
+		return yNorm <= xNorm && yNorm <= 1.0-xNorm
+	})
+	shapesMap[0x1FB6D] = topTri
+	shapesMap[0x1FB69] = invertMask(topTri)
+
+	rightTri := evalMask(func(X, Y float64) bool {
+		xNorm, yNorm := X/fw, Y/fh
+		return yNorm <= xNorm && yNorm >= 1.0-xNorm
+	})
+	shapesMap[0x1FB6E] = rightTri
+	shapesMap[0x1FB6A] = invertMask(rightTri)
+
+	bottomTri := evalMask(func(X, Y float64) bool {
+		xNorm, yNorm := X/fw, Y/fh
+		return yNorm >= xNorm && yNorm >= 1.0-xNorm
+	})
+	shapesMap[0x1FB6F] = bottomTri
+	shapesMap[0x1FB6B] = invertMask(bottomTri)
+
+	// 8. 44 Block Diagonals (0x1FB3C .. 0x1FB67)
+	type vecPoint struct{ x, y float64 }
+	endpoints := map[string]vecPoint{
+		"UL":  {0, 0},
+		"UC":  {fw / 2.0, 0},
+		"UR":  {fw, 0},
+		"UML": {0, fh / 3.0},
+		"LML": {0, 2.0 * fh / 3.0},
+		"LL":  {0, fh},
+		"LC":  {fw / 2.0, fh},
+		"LR":  {fw, fh},
+		"UMR": {fw, fh / 3.0},
+		"LMR": {fw, 2.0 * fh / 3.0},
+	}
+	corners := map[string]vecPoint{
+		"LL": {0, fh},
+		"LR": {fw, fh},
+		"UL": {0, 0},
+		"UR": {fw, 0},
+	}
+
+	type diagDef struct {
+		r1, r2 rune
+		p1, p2 string
+		corner string
+	}
+
+	diagonals := []diagDef{
+		{0x1FB3C, 0x1FB52, "LML", "LC", "LL"},
+		{0x1FB3D, 0x1FB53, "LML", "LR", "LL"},
+		{0x1FB3E, 0x1FB54, "UML", "LC", "LL"},
+		{0x1FB3F, 0x1FB55, "UML", "LR", "LL"},
+		{0x1FB40, 0x1FB56, "UL", "LC", "LL"},
+		{0x1FB41, 0x1FB57, "UML", "UC", "LR"},
+		{0x1FB42, 0x1FB58, "UML", "UR", "LR"},
+		{0x1FB43, 0x1FB59, "LML", "UC", "LR"},
+		{0x1FB44, 0x1FB5A, "LML", "UR", "LR"},
+		{0x1FB45, 0x1FB5B, "LL", "UC", "LR"},
+		{0x1FB46, 0x1FB5C, "LML", "UMR", "LR"},
+		{0x1FB47, 0x1FB5D, "LC", "LMR", "LR"},
+		{0x1FB48, 0x1FB5E, "LL", "LMR", "LR"},
+		{0x1FB49, 0x1FB5F, "LC", "UMR", "LR"},
+		{0x1FB4A, 0x1FB60, "LL", "UMR", "LR"},
+		{0x1FB4B, 0x1FB61, "LC", "UR", "LR"},
+		{0x1FB4C, 0x1FB62, "UC", "UMR", "LL"},
+		{0x1FB4D, 0x1FB63, "UL", "UMR", "LL"},
+		{0x1FB4E, 0x1FB64, "UC", "LMR", "LL"},
+		{0x1FB4F, 0x1FB65, "UL", "LMR", "LL"},
+		{0x1FB50, 0x1FB66, "UC", "LR", "LL"},
+		{0x1FB51, 0x1FB67, "UML", "LMR", "LL"},
+	}
+
+	for _, d := range diagonals {
+		p1 := endpoints[d.p1]
+		p2 := endpoints[d.p2]
+		c := corners[d.corner]
+		dx := p2.x - p1.x
+		dy := p2.y - p1.y
+		sc := (c.x-p1.x)*dy - (c.y-p1.y)*dx
+
+		mask1 := evalMask(func(X, Y float64) bool {
+			s := (X-p1.x)*dy - (Y-p1.y)*dx
+			if sc >= 0 {
+				return s >= 0
+			}
+			return s <= 0
+		})
+
+		shapesMap[d.r1] = mask1
+		shapesMap[d.r2] = invertMask(mask1)
+	}
+
 	runes := []rune{
-		' ', '█', '▀', '▄', '▌', '▐', '┃', '🬋', '🬇', '🬃',
-		'\U0001FB82', '\U0001FB85', '▂', '▆', '▎', '▊', '\U0001FB87', '\U0001FB8A',
+		' ', '█', '▀', '▄', '▌', '▐', '┃', 0x1FB0B, 0x1FB07, 0x1FB03,
+		0x1FB82, 0x1FB85, '▂', '▆', '▎', '▊', 0x1FB87, 0x1FB8A,
 		'▖', '▗', '▘', '▙', '▚', '▛', '▜', '▝', '▞', '▟',
-		'\U0001FB9A', '\U0001FB9B',
+		0x1FB9A, 0x1FB9B,
 	}
 	for r := rune(0x1FB3C); r <= 0x1FB6F; r++ {
 		runes = append(runes, r)
@@ -669,109 +879,10 @@ func generatedVectorShapes() []GlyphShape {
 
 	shapes := make([]GlyphShape, 0, len(runes))
 	for _, r := range runes {
-		mask := vectorRuneMask(r)
+		mask := shapesMap[r]
 		shapes = append(shapes, GlyphShape{Glyph: r, Mask: mask})
 	}
 	return shapes
-}
-
-var vectorRuneMasks = map[rune]uint16{
-	' ':     0x0000, //   // 🬃
-	0x2503:  0x6666, // ┃ // block
-	0x2580:  0x00FF, // ▀ // block
-	0x2584:  0xFF00, // ▄ // block
-	0x2588:  0xFFFF, // █ // block
-	0x258C:  0x3333, // ▌ // block
-	0x2590:  0xCCCC, // ▐ // block
-	0x2582:  0xF000, // ▂ // lower quarter
-	0x2586:  0xFFF0, // ▆ // lower three quarters
-	0x258E:  0x1111, // ▎ // left quarter
-	0x258A:  0x7777, // ▊ // left three quarters
-	0x1FB82: 0x000F, // 🮂 // upper quarter
-	0x1FB85: 0x0FFF, // 🮅 // upper three quarters
-	0x1FB87: 0x8888, // 🮇 // right quarter
-	0x1FB8A: 0xEEEE, // 🮊 // right three quarters
-	0x2596:  0x3300, // ▖ // lower left
-	0x2597:  0xCC00, // ▗ // lower right
-	0x2598:  0x0033, // ▘ // upper left
-	0x2599:  0xFF33, // ▙ // upper left and lower half
-	0x259A:  0xCC33, // ▚ // upper left and lower right
-	0x259B:  0x33FF, // ▛ // upper half and lower left
-	0x259C:  0xCCFF, // ▜ // upper half and lower right
-	0x259D:  0x00CC, // ▝ // upper right
-	0x259E:  0x33CC, // ▞ // upper right and lower left
-	0x259F:  0xFFCC, // ▟ // upper right and lower half
-	0x1FB03: 0x00F0, // 🬃 // block
-	0x1FB07: 0x0F00, // 🬇 // block
-	0x1FB0B: 0x0FF0, // 🬋 // block
-	0x1FB3C: 0x1000, // 🬼 // LOWER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO LOWER CENTRE
-	0x1FB3D: 0x7000, // 🬽 // LOWER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO LOWER RIGHT
-	0x1FB3E: 0x3100, // 🬾 // LOWER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER CENTRE
-	0x1FB3F: 0x7300, // 🬿 // LOWER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER RIGHT
-	0x1FB40: 0x3110, // 🭀 // LOWER LEFT BLOCK DIAGONAL UPPER LEFT TO LOWER CENTRE
-	0x1FB41: 0xFFFE, // 🭁 // LOWER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER CENTRE
-	0x1FB42: 0xFFFC, // 🭂 // LOWER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER RIGHT
-	0x1FB43: 0xFFEC, // 🭃 // LOWER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER CENTRE
-	0x1FB44: 0xFFC8, // 🭄 // LOWER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER RIGHT
-	0x1FB45: 0xFEEC, // 🭅 // LOWER RIGHT BLOCK DIAGONAL LOWER LEFT TO UPPER CENTRE
-	0x1FB46: 0xFF80, // 🭆 // LOWER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER MIDDLE RIGHT
-	0x1FB47: 0x8000, // 🭇 // LOWER RIGHT BLOCK DIAGONAL LOWER CENTRE TO LOWER MIDDLE RIGHT
-	0x1FB48: 0xE000, // 🭈 // LOWER RIGHT BLOCK DIAGONAL LOWER LEFT TO LOWER MIDDLE RIGHT
-	0x1FB49: 0xC800, // 🭉 // LOWER RIGHT BLOCK DIAGONAL LOWER CENTRE TO UPPER MIDDLE RIGHT
-	0x1FB4A: 0xEC00, // 🭊 // LOWER RIGHT BLOCK DIAGONAL LOWER LEFT TO UPPER MIDDLE RIGHT
-	0x1FB4B: 0xC880, // 🭋 // LOWER RIGHT BLOCK DIAGONAL LOWER CENTRE TO UPPER RIGHT
-	0x1FB4C: 0xFFF7, // 🭌 // LOWER LEFT BLOCK DIAGONAL UPPER CENTRE TO UPPER MIDDLE RIGHT
-	0x1FB4D: 0xFFF3, // 🭍 // LOWER LEFT BLOCK DIAGONAL UPPER LEFT TO UPPER MIDDLE RIGHT
-	0x1FB4E: 0xFF73, // 🭎 // LOWER LEFT BLOCK DIAGONAL UPPER CENTRE TO LOWER MIDDLE RIGHT
-	0x1FB4F: 0xFF31, // 🭏 // LOWER LEFT BLOCK DIAGONAL UPPER LEFT TO LOWER MIDDLE RIGHT
-	0x1FB50: 0xF773, // 🭐 // LOWER LEFT BLOCK DIAGONAL UPPER CENTRE TO LOWER RIGHT
-	0x1FB51: 0xFF10, // 🭑 // LOWER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER MIDDLE RIGHT
-	0x1FB52: 0xEFFF, // 🭒 // UPPER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO LOWER CENTRE
-	0x1FB53: 0x8FFF, // 🭓 // UPPER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO LOWER RIGHT
-	0x1FB54: 0xCEFF, // 🭔 // UPPER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER CENTRE
-	0x1FB55: 0x8CFF, // 🭕 // UPPER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER RIGHT
-	0x1FB56: 0xCEEF, // 🭖 // UPPER RIGHT BLOCK DIAGONAL UPPER LEFT TO LOWER CENTRE
-	0x1FB57: 0x0001, // 🭗 // UPPER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER CENTRE
-	0x1FB58: 0x0003, // 🭘 // UPPER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER RIGHT
-	0x1FB59: 0x0013, // 🭙 // UPPER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER CENTRE
-	0x1FB5A: 0x0037, // 🭚 // UPPER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER RIGHT
-	0x1FB5B: 0x0113, // 🭛 // UPPER LEFT BLOCK DIAGONAL LOWER LEFT TO UPPER CENTRE
-	0x1FB5C: 0x007F, // 🭜 // UPPER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER MIDDLE RIGHT
-	0x1FB5D: 0x7FFF, // 🭝 // UPPER LEFT BLOCK DIAGONAL LOWER CENTRE TO LOWER MIDDLE RIGHT
-	0x1FB5E: 0x1FFF, // 🭞 // UPPER LEFT BLOCK DIAGONAL LOWER LEFT TO LOWER MIDDLE RIGHT
-	0x1FB5F: 0x37FF, // 🭟 // UPPER LEFT BLOCK DIAGONAL LOWER CENTRE TO UPPER MIDDLE RIGHT
-	0x1FB60: 0x13FF, // 🭠 // UPPER LEFT BLOCK DIAGONAL LOWER LEFT TO UPPER MIDDLE RIGHT
-	0x1FB61: 0x377F, // 🭡 // UPPER LEFT BLOCK DIAGONAL LOWER CENTRE TO UPPER RIGHT
-	0x1FB62: 0x0008, // 🭢 // UPPER RIGHT BLOCK DIAGONAL UPPER CENTRE TO UPPER MIDDLE RIGHT
-	0x1FB63: 0x000C, // 🭣 // UPPER RIGHT BLOCK DIAGONAL UPPER LEFT TO UPPER MIDDLE RIGHT
-	0x1FB64: 0x008C, // 🭤 // UPPER RIGHT BLOCK DIAGONAL UPPER CENTRE TO LOWER MIDDLE RIGHT
-	0x1FB65: 0x00CE, // 🭥 // UPPER RIGHT BLOCK DIAGONAL UPPER LEFT TO LOWER MIDDLE RIGHT
-	0x1FB66: 0x088C, // 🭦 // UPPER RIGHT BLOCK DIAGONAL UPPER CENTRE TO LOWER RIGHT
-	0x1FB67: 0x00EF, // 🭧 // UPPER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER MIDDLE RIGHT
-	0x1FB68: 0xECCE, // 🭨 // UPPER AND RIGHT AND LOWER TRIANGULAR THREE QUARTERS BLOCK
-	0x1FB69: 0xFF90, // 🭩 // LEFT AND LOWER AND RIGHT TRIANGULAR THREE QUARTERS BLOCK
-	0x1FB6A: 0x7337, // 🭪 // UPPER AND LEFT AND LOWER TRIANGULAR THREE QUARTERS BLOCK
-	0x1FB6B: 0x09FF, // 🭫 // LEFT AND UPPER AND RIGHT TRIANGULAR THREE QUARTERS BLOCK
-	0x1FB6C: 0x1331, // 🭬 // LEFT TRIANGULAR ONE QUARTER BLOCK
-	0x1FB6D: 0x006F, // 🭭 // UPPER TRIANGULAR ONE QUARTER BLOCK
-	0x1FB6E: 0x8CC8, // 🭮 // RIGHT TRIANGULAR ONE QUARTER BLOCK
-	0x1FB6F: 0xF600, // 🭯 // LOWER TRIANGULAR ONE QUARTER BLOCK
-	0x1FB9A: 0xF66F, // 🮚 // UPPER AND LOWER TRIANGULAR HALF BLOCK
-	0x1FB9B: 0x0990, // 🮛 // LEFT AND RIGHT TRIANGULAR HALF BLOCK
-}
-
-func vectorRuneMask(r rune) []bool {
-	m := make([]bool, 16)
-	bits, ok := vectorRuneMasks[r]
-	if !ok {
-		return m
-	}
-	for i := 0; i < 16; i++ {
-		if (bits & (1 << i)) != 0 {
-			m[i] = true
-		}
-	}
-	return m
 }
 
 func generatedSextantShapes() []GlyphShape {
