@@ -95,7 +95,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 089 | [089-fix-vector-mode-rune-mask-mapping-for-symbols-for-legacy-computing.md](089-fix-vector-mode-rune-mask-mapping-for-symbols-for-legacy-computing.md) | Fix vector mode rune mask mapping for Symbols for Legacy Computing | Closed — Corrected vector mode rune masks using exact perimeter geometry and complement pairs |
 | 090 | [090-support-parameterized-vector-mode-geometries-vec2-vec8.md](090-support-parameterized-vector-mode-geometries-vec2-vec8.md) | Support parameterized vector mode geometries (vec2..vec8) | Open |
 | 091 | [091-include-fractional-bars-and-quads-in-vector-mode-to-support-straight-lines.md](091-include-fractional-bars-and-quads-in-vector-mode-to-support-straight-lines.md) | Include fractional bars and quads in vector mode to support straight lines | Closed — Added 1/4 and 3/4 straight bars and quadrants to vector inventory; flat edges no longer render as diagonal sawtooth |
-| 093 | [093-fix-octant-glyph-to-subpixel-mapping.md](093-fix-octant-glyph-to-subpixel-mapping.md) | Fix octant glyph-to-subpixel mapping | In Progress — mapping corrected; awaiting user full-suite and visual validation |
+| 093 | [093-fix-octant-glyph-to-subpixel-mapping.md](093-fix-octant-glyph-to-subpixel-mapping.md) | Fix octant glyph-to-subpixel mapping | Closed — corrected all octant mappings; user confirmed visual result and full suite passed |
 ## Archived
 
 | # | Title | Reason |
