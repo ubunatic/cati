@@ -96,6 +96,12 @@ func loadNamedImage(ref string) (loadedImage, error) {
 			ensurePresetFixture(p.path)
 			img, err := halfblock.LoadImage(p.path)
 			if err != nil {
+				if p.name == "emojig" {
+					embedded, embErr := decodeEmbeddedLogo()
+					if embErr == nil {
+						return loadedImage{name: p.name, img: embedded}, nil
+					}
+				}
 				return loadedImage{}, fmt.Errorf("load preset %q (%s): %w", p.name, p.path, err)
 			}
 			return loadedImage{name: p.name, img: img}, nil
