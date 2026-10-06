@@ -33,4 +33,5 @@ Existing goldens remain unchanged; broader golden coverage remains tracked in #0
 Focused mapping/resolution tests, `go vet ./...`, `make install`, and
 `make preflight` passed. The installed binary successfully rendered the reported
 input; its appearance in the user's terminal still requires their validation.
-Keep this ticket In Progress until the user confirms full-suite and visual results.
+The user approved the visual result ("lgtm"). Keep this ticket In Progress until
+the full test-suite result is confirmed.
