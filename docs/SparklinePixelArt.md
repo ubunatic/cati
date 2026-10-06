@@ -43,6 +43,15 @@ that resolved geometry rather than inferring it from a mode name.
 
 `spark/vert` remains in the library and test suite as a useful scalar baseline.
 
+`vec` (`vector`, glyph set 50) uses a `4×4` row-major lattice. Its inventory
+includes linear diagonal and triangular splits, hourglass/bowtie complements,
+half/full blocks and space, straight 1/4 and 3/4 bars on all four sides
+(`🮂🮅▂▆▎▊🮇🮊`), and all ten quadrants (`▖▗▘▙▚▛▜▝▞▟`).
+Quarter bars cover one row or column; quadrants cover `2×2` rectangles.
+These exact straight masks let flat edges fit without repeated diagonal teeth.
+The regression test renders a cell with only its top row filled and requires
+an upper-quarter bar or its lower-three-quarter colour inversion.
+
 ### Removed Modes
 Earlier versions included `spark/upper`, `spark/right`, and `spark/left`.
 `spark/upper` and `spark/right` were redundant foreground/background inversions.

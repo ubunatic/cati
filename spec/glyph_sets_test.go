@@ -144,9 +144,6 @@ func TestOctantAndVectorGlyphSets(t *testing.T) {
 		if shape.Glyph >= 0x1FB00 && shape.Glyph <= 0x1FB3B && shape.Glyph != 0x1FB03 && shape.Glyph != 0x1FB07 && shape.Glyph != 0x1FB0B {
 			t.Errorf("vector mode unexpectedly includes pixel-like sextant rune %U", shape.Glyph)
 		}
-		if shape.Glyph == '▘' || shape.Glyph == '▝' || shape.Glyph == '▖' || shape.Glyph == '▗' {
-			t.Errorf("vector mode unexpectedly includes quadrant rune %c", shape.Glyph)
-		}
 	}
 	if !hasDiagonal {
 		t.Errorf("vector mode missing U+1FB3C..U+1FB6F linear diagonal shapes")
@@ -167,6 +164,45 @@ func TestOctantAndVectorGlyphSets(t *testing.T) {
 	for i := 0; i < 16; i++ {
 		if hourglass.Mask[i] == bowtie.Mask[i] {
 			t.Errorf("hourglass and bowtie masks at bit %d must be complements, got hourglass=%v bowtie=%v", i, hourglass.Mask[i], bowtie.Mask[i])
+		}
+	}
+}
+
+func TestVectorStraightBarsAndQuadrants(t *testing.T) {
+	vec, err := ResolveGlyphSetExpression("vector")
+	if err != nil {
+		t.Fatal(err)
+	}
+	masks := make(map[rune]uint16)
+	for _, shape := range vec.Shapes {
+		if _, exists := masks[shape.Glyph]; exists {
+			t.Errorf("duplicate vector rune %U", shape.Glyph)
+		}
+		if len(shape.Mask) != 16 {
+			t.Fatalf("%U mask length = %d, want 16", shape.Glyph, len(shape.Mask))
+		}
+		var bits uint16
+		for i, on := range shape.Mask {
+			if on {
+				bits |= 1 << i // Row-major bit index = y*4+x.
+			}
+		}
+		masks[shape.Glyph] = bits
+	}
+	want := map[rune]uint16{
+		0x1FB82: 0x000F, 0x1FB85: 0x0FFF, '▂': 0xF000, '▆': 0xFFF0,
+		'▎': 0x1111, '▊': 0x7777, 0x1FB87: 0x8888, 0x1FB8A: 0xEEEE,
+		'▖': 0x3300, '▗': 0xCC00, '▘': 0x0033, '▙': 0xFF33, '▚': 0xCC33,
+		'▛': 0x33FF, '▜': 0xCCFF, '▝': 0x00CC, '▞': 0x33CC, '▟': 0xFFCC,
+	}
+	for r, bits := range want {
+		if got, exists := masks[r]; !exists || got != bits {
+			t.Errorf("%U present=%v mask=%04X, want %04X", r, exists, got, bits)
+		}
+	}
+	for _, pair := range [][2]rune{{0x1FB82, '▆'}, {'▂', 0x1FB85}, {'▎', 0x1FB8A}, {0x1FB87, '▊'}} {
+		if got := masks[pair[0]] ^ masks[pair[1]]; got != 0xFFFF {
+			t.Errorf("%U XOR %U = %04X, want FFFF", pair[0], pair[1], got)
 		}
 	}
 }

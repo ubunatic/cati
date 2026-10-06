@@ -659,6 +659,8 @@ func generatedOctantShapes() []GlyphShape {
 func generatedVectorShapes() []GlyphShape {
 	runes := []rune{
 		' ', '█', '▀', '▄', '▌', '▐', '┃', '🬋', '🬇', '🬃',
+		'\U0001FB82', '\U0001FB85', '▂', '▆', '▎', '▊', '\U0001FB87', '\U0001FB8A',
+		'▖', '▗', '▘', '▙', '▚', '▛', '▜', '▝', '▞', '▟',
 		'\U0001FB9A', '\U0001FB9B',
 	}
 	for r := rune(0x1FB3C); r <= 0x1FB6F; r++ {
@@ -674,13 +676,31 @@ func generatedVectorShapes() []GlyphShape {
 }
 
 var vectorRuneMasks = map[rune]uint16{
-	' ': 0x0000, //   // 🬃
-	0x2503: 0x6666, // ┃ // block
-	0x2580: 0x00FF, // ▀ // block
-	0x2584: 0xFF00, // ▄ // block
-	0x2588: 0xFFFF, // █ // block
-	0x258C: 0x3333, // ▌ // block
-	0x2590: 0xCCCC, // ▐ // block
+	' ':     0x0000, //   // 🬃
+	0x2503:  0x6666, // ┃ // block
+	0x2580:  0x00FF, // ▀ // block
+	0x2584:  0xFF00, // ▄ // block
+	0x2588:  0xFFFF, // █ // block
+	0x258C:  0x3333, // ▌ // block
+	0x2590:  0xCCCC, // ▐ // block
+	0x2582:  0xF000, // ▂ // lower quarter
+	0x2586:  0xFFF0, // ▆ // lower three quarters
+	0x258E:  0x1111, // ▎ // left quarter
+	0x258A:  0x7777, // ▊ // left three quarters
+	0x1FB82: 0x000F, // 🮂 // upper quarter
+	0x1FB85: 0x0FFF, // 🮅 // upper three quarters
+	0x1FB87: 0x8888, // 🮇 // right quarter
+	0x1FB8A: 0xEEEE, // 🮊 // right three quarters
+	0x2596:  0x3300, // ▖ // lower left
+	0x2597:  0xCC00, // ▗ // lower right
+	0x2598:  0x0033, // ▘ // upper left
+	0x2599:  0xFF33, // ▙ // upper left and lower half
+	0x259A:  0xCC33, // ▚ // upper left and lower right
+	0x259B:  0x33FF, // ▛ // upper half and lower left
+	0x259C:  0xCCFF, // ▜ // upper half and lower right
+	0x259D:  0x00CC, // ▝ // upper right
+	0x259E:  0x33CC, // ▞ // upper right and lower left
+	0x259F:  0xFFCC, // ▟ // upper right and lower half
 	0x1FB03: 0x00F0, // 🬃 // block
 	0x1FB07: 0x0F00, // 🬇 // block
 	0x1FB0B: 0x0FF0, // 🬋 // block
