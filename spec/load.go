@@ -674,9 +674,9 @@ func generatedVectorShapes() []GlyphShape {
 }
 
 func vectorRuneMask(r rune) []bool {
-	m := make([]bool, 16)
+	m := make([]bool, 32)
 	set := func(x, y int, val bool) {
-		if x >= 0 && x < 4 && y >= 0 && y < 4 {
+		if x >= 0 && x < 4 && y >= 0 && y < 8 {
 			m[y*4+x] = val
 		}
 	}
@@ -685,65 +685,70 @@ func vectorRuneMask(r rune) []bool {
 	case ' ':
 		// all false
 	case '█':
-		for y := 0; y < 4; y++ {
+		for y := 0; y < 8; y++ {
 			for x := 0; x < 4; x++ {
 				set(x, y, true)
 			}
 		}
 	case '▀':
-		for y := 0; y < 2; y++ {
+		for y := 0; y < 4; y++ {
 			for x := 0; x < 4; x++ {
 				set(x, y, true)
 			}
 		}
 	case '▄':
-		for y := 2; y < 4; y++ {
+		for y := 4; y < 8; y++ {
 			for x := 0; x < 4; x++ {
 				set(x, y, true)
 			}
 		}
 	case '▌':
-		for y := 0; y < 4; y++ {
+		for y := 0; y < 8; y++ {
 			for x := 0; x < 2; x++ {
 				set(x, y, true)
 			}
 		}
 	case '▐':
-		for y := 0; y < 4; y++ {
+		for y := 0; y < 8; y++ {
 			for x := 2; x < 4; x++ {
 				set(x, y, true)
 			}
 		}
 	case '┃':
-		for y := 0; y < 4; y++ {
+		for y := 0; y < 8; y++ {
 			set(1, y, true)
 			set(2, y, true)
 		}
 	case '🬋':
-		for x := 0; x < 4; x++ {
-			set(x, 1, true)
-			set(x, 2, true)
+		for y := 2; y <= 5; y++ {
+			for x := 0; x < 4; x++ {
+				set(x, y, true)
+			}
 		}
 	case '🬇':
-		for x := 0; x < 4; x++ {
-			set(x, 2, true)
+		for y := 4; y <= 5; y++ {
+			for x := 0; x < 4; x++ {
+				set(x, y, true)
+			}
 		}
 	case '🬃':
-		for x := 0; x < 4; x++ {
-			set(x, 1, true)
-		}
-	case '\U0001FB9A': // 🮚 upper-left to lower-right diagonal half block
-		for y := 0; y < 4; y++ {
+		for y := 2; y <= 3; y++ {
 			for x := 0; x < 4; x++ {
-				if y < x {
+				set(x, y, true)
+			}
+		}
+	case '\U0001FB9A': // 🮚 upper-left diagonal half block (contains (0,0))
+		for y := 0; y < 8; y++ {
+			for x := 0; x < 4; x++ {
+				if 2*x+y <= 7 {
 					set(x, y, true)
 				}
 			}
 		}
-	case '\U0001FB9B': // 🮛 lower-left to upper-right diagonal half block
-		for y := 0; y < 4; y++ {
+	case '\U0001FB9B': // 🮛 lower-left diagonal half block (contains (0,7))
+		for y := 0; y < 8; y++ {
 			for x := 0; x < 4; x++ {
-				if x+y < 4 {
+				if y >= 2*x {
 					set(x, y, true)
 				}
 			}
@@ -752,96 +757,129 @@ func vectorRuneMask(r rune) []bool {
 		// U+1FB3C..U+1FB6F: block diagonals, diagonal composites, triangular 3/4 and 1/4 blocks
 		if r >= 0x1FB3C && r <= 0x1FB6F {
 			idx := int(r - 0x1FB3C)
-			for y := 0; y < 4; y++ {
+			for y := 0; y < 8; y++ {
 				for x := 0; x < 4; x++ {
-					// 4x4 subpixel linear half-plane / triangular evaluation
+					xn := (float64(x) + 0.5) / 4.0
+					yn := (float64(y) + 0.5) / 8.0
+
 					switch idx {
-					// 0x1FB3C..0x1FB40: Lower-left to upper-right block diagonals
-					case 0: // 0x1FB3C: lower-left 1/4 diagonal
-						set(x, y, x+y >= 4)
-					case 1: // 0x1FB3D: lower-left 1/2 diagonal
-						set(x, y, x+y >= 3)
-					case 2: // 0x1FB3E: lower-left 3/4 diagonal
-						set(x, y, x+y >= 2)
-					case 3: // 0x1FB3F: upper-right 1/4 diagonal
-						set(x, y, x+y <= 0)
-					case 4: // 0x1FB40: upper-right 1/2 diagonal
-						set(x, y, x+y < 3)
+					// 0x1FB3C..0x1FB40: Lower-left block diagonals (contains (0,7), i.e. xn=0, yn=1)
+					case 0: // 0x1FB3C: lower-left lower-mid-left (0, 0.67) to lower-centre (0.5, 1.0)
+						set(x, y, (yn-0.67) >= (1.0-0.67)/0.5*xn)
+					case 1: // 0x1FB3D: lower-left lower-mid-left (0, 0.67) to lower-right (1.0, 1.0)
+						set(x, y, (yn-0.67) >= (1.0-0.67)/1.0*xn)
+					case 2: // 0x1FB3E: lower-left upper-mid-left (0, 0.33) to lower-centre (0.5, 1.0)
+						set(x, y, (yn-0.33) >= (1.0-0.33)/0.5*xn)
+					case 3: // 0x1FB3F: lower-left upper-mid-left (0, 0.33) to lower-right (1.0, 1.0)
+						set(x, y, (yn-0.33) >= (1.0-0.33)/1.0*xn)
+					case 4: // 0x1FB40: lower-left upper-left (0, 0) to lower-centre (0.5, 1.0)
+						set(x, y, yn >= 2.0*xn)
 
-					// 0x1FB41..0x1FB45: Upper-left to lower-right block diagonals
-					case 5: // 0x1FB41: upper-left 1/4 diagonal
-						set(x, y, y < x-1)
-					case 6: // 0x1FB42: upper-left 1/2 diagonal
-						set(x, y, y < x)
-					case 7: // 0x1FB43: lower-right 1/4 diagonal
-						set(x, y, y > x+1)
-					case 8: // 0x1FB44: lower-right 1/2 diagonal
-						set(x, y, y > x)
-					case 9: // 0x1FB45: upper-right 1/2 diagonal
-						set(x, y, x >= y)
+					// 0x1FB41..0x1FB4B: Lower-right block diagonals (contains (3,7), i.e. xn=1, yn=1)
+					case 5: // 0x1FB41: lower-right upper-mid-left (0, 0.33) to upper-centre (0.5, 0)
+						set(x, y, yn >= 0.33*(1.0-xn/0.5))
+					case 6: // 0x1FB42: lower-right upper-mid-left (0, 0.33) to upper-right (1.0, 0)
+						set(x, y, yn >= 0.33*(1.0-xn))
+					case 7: // 0x1FB43: lower-right lower-mid-left (0, 0.67) to upper-centre (0.5, 0)
+						set(x, y, yn >= 0.67*(1.0-xn/0.5))
+					case 8: // 0x1FB44: lower-right lower-mid-left (0, 0.67) to upper-right (1.0, 0)
+						set(x, y, yn >= 0.67*(1.0-xn))
+					case 9: // 0x1FB45: lower-right lower-left (0, 1.0) to upper-centre (0.5, 0)
+						set(x, y, yn >= 1.0-xn/0.5)
+					case 10: // 0x1FB46: lower-right lower-mid-left (0, 0.67) to upper-mid-right (1.0, 0.33)
+						set(x, y, yn >= 0.67-0.34*xn)
+					case 11: // 0x1FB47: lower-right lower-centre (0.5, 1.0) to lower-mid-right (1.0, 0.67)
+						set(x, y, yn >= 1.0-0.66*(xn-0.5))
+					case 12: // 0x1FB48: lower-right lower-left (0, 1.0) to lower-mid-right (1.0, 0.67)
+						set(x, y, yn >= 1.0-0.33*xn)
+					case 13: // 0x1FB49: lower-right lower-centre (0.5, 1.0) to upper-mid-right (1.0, 0.33)
+						set(x, y, yn >= 1.0-1.34*(xn-0.5))
+					case 14: // 0x1FB4A: lower-right lower-left (0, 1.0) to upper-mid-right (1.0, 0.33)
+						set(x, y, yn >= 1.0-0.67*xn)
+					case 15: // 0x1FB4B: lower-right lower-centre (0.5, 1.0) to upper-right (1.0, 0)
+						set(x, y, yn >= 1.0-2.0*(xn-0.5))
 
-					// 0x1FB46..0x1FB4B: Sloped 1/2 and 2 diagonals
-					case 10: // 0x1FB46: slope 2 upper-left fill
-						set(x, y, y < 2*x)
-					case 11: // 0x1FB47: slope 2 lower-right fill
-						set(x, y, y >= 2*x)
-					case 12: // 0x1FB48: slope 1/2 upper-left fill
-						set(x, y, 2*y < x)
-					case 13: // 0x1FB49: slope 1/2 lower-right fill
-						set(x, y, 2*y >= x)
-					case 14: // 0x1FB4A: slope -2 upper-right fill
-						set(x, y, y+2*x >= 4)
-					case 15: // 0x1FB4B: slope -2 lower-left fill
-						set(x, y, y+2*x < 4)
+					// 0x1FB4C..0x1FB51: Lower-left block diagonals (contains (0,7), i.e. xn=0, yn=1)
+					case 16: // 0x1FB4C: lower-left upper-centre (0.5, 0) to upper-mid-right (1.0, 0.33)
+						set(x, y, yn >= 0.66*(xn-0.5))
+					case 17: // 0x1FB4D: lower-left upper-left (0, 0) to upper-mid-right (1.0, 0.33)
+						set(x, y, yn >= 0.33*xn)
+					case 18: // 0x1FB4E: lower-left upper-centre (0.5, 0) to lower-mid-right (1.0, 0.67)
+						set(x, y, yn >= 1.34*(xn-0.5))
+					case 19: // 0x1FB4F: lower-left upper-left (0, 0) to lower-mid-right (1.0, 0.67)
+						set(x, y, yn >= 0.67*xn)
+					case 20: // 0x1FB50: lower-left upper-centre (0.5, 0) to lower-right (1.0, 1.0)
+						set(x, y, yn >= 2.0*(xn-0.5))
+					case 21: // 0x1FB51: lower-left upper-mid-left (0, 0.33) to lower-mid-right (1.0, 0.67)
+						set(x, y, yn >= 0.33+0.34*xn)
 
-					// 0x1FB4C..0x1FB5B: Sloped diagonal triangular half/quarter fills
-					case 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31:
-						step := idx - 16
-						set(x, y, (x*4+y) >= step)
+					// 0x1FB52..0x1FB56: Upper-right block diagonals (contains (3,0), i.e. xn=1, yn=0)
+					case 22: // 0x1FB52: upper-right lower-mid-left (0, 0.67) to lower-centre (0.5, 1.0)
+						set(x, y, yn <= 0.67+0.66*xn)
+					case 23: // 0x1FB53: upper-right lower-mid-left (0, 0.67) to lower-right (1.0, 1.0)
+						set(x, y, yn <= 0.67+0.33*xn)
+					case 24: // 0x1FB54: upper-right upper-mid-left (0, 0.33) to lower-centre (0.5, 1.0)
+						set(x, y, yn <= 0.33+1.34*xn)
+					case 25: // 0x1FB55: upper-right upper-mid-left (0, 0.33) to lower-right (1.0, 1.0)
+						set(x, y, yn <= 0.33+0.67*xn)
+					case 26: // 0x1FB56: upper-right upper-left (0, 0) to lower-centre (0.5, 1.0)
+						set(x, y, yn <= 2.0*xn)
 
-					// 0x1FB5C..0x1FB67: Block diagonal corner and edge composites
-					case 32: // top-left corner
-						set(x, y, x < 2 && y < 2)
-					case 33: // top-right corner
-						set(x, y, x >= 2 && y < 2)
-					case 34: // bottom-left corner
-						set(x, y, x < 2 && y >= 2)
-					case 35: // bottom-right corner
-						set(x, y, x >= 2 && y >= 2)
-					case 36: // top edge triangle
-						set(x, y, y < 2 && (x == 1 || x == 2))
-					case 37: // bottom edge triangle
-						set(x, y, y >= 2 && (x == 1 || x == 2))
-					case 38: // left edge triangle
-						set(x, y, x < 2 && (y == 1 || y == 2))
-					case 39: // right edge triangle
-						set(x, y, x >= 2 && (y == 1 || y == 2))
-					case 40: // center diamond
-						set(x, y, (x == 1 || x == 2) && (y == 1 || y == 2))
-					case 41: // outer corners
-						set(x, y, (x == 0 || x == 3) && (y == 0 || y == 3))
-					case 42: // top-left & bottom-right pair
-						set(x, y, (x < 2 && y < 2) || (x >= 2 && y >= 2))
-					case 43: // top-right & bottom-left pair
-						set(x, y, (x >= 2 && y < 2) || (x < 2 && y >= 2))
+					// 0x1FB57..0x1FB61: Upper-left block diagonals (contains (0,0), i.e. xn=0, yn=0)
+					case 27: // 0x1FB57: upper-left upper-mid-left (0, 0.33) to upper-centre (0.5, 0)
+						set(x, y, yn <= 0.33*(1.0-xn/0.5))
+					case 28: // 0x1FB58: upper-left upper-mid-left (0, 0.33) to upper-right (1.0, 0)
+						set(x, y, yn <= 0.33*(1.0-xn))
+					case 29: // 0x1FB59: upper-left lower-mid-left (0, 0.67) to upper-centre (0.5, 0)
+						set(x, y, yn <= 0.67*(1.0-xn/0.5))
+					case 30: // 0x1FB5A: upper-left lower-mid-left (0, 0.67) to upper-right (1.0, 0)
+						set(x, y, yn <= 0.67*(1.0-xn))
+					case 31: // 0x1FB5B: upper-left lower-left (0, 1.0) to upper-centre (0.5, 0)
+						set(x, y, yn <= 1.0-xn/0.5)
+					case 32: // 0x1FB5C: upper-left lower-mid-left (0, 0.67) to upper-mid-right (1.0, 0.33)
+						set(x, y, yn <= 0.67-0.34*xn)
+					case 33: // 0x1FB5D: upper-left lower-centre (0.5, 1.0) to lower-mid-right (1.0, 0.67)
+						set(x, y, yn <= 1.0-0.66*(xn-0.5))
+					case 34: // 0x1FB5E: upper-left lower-left (0, 1.0) to lower-mid-right (1.0, 0.67)
+						set(x, y, yn <= 1.0-0.33*xn)
+					case 35: // 0x1FB5F: upper-left lower-centre (0.5, 1.0) to upper-mid-right (1.0, 0.33)
+						set(x, y, yn <= 1.0-1.34*(xn-0.5))
+					case 36: // 0x1FB60: upper-left lower-left (0, 1.0) to upper-mid-right (1.0, 0.33)
+						set(x, y, yn <= 1.0-0.67*xn)
+					case 37: // 0x1FB61: upper-left lower-centre (0.5, 1.0) to upper-right (1.0, 0)
+						set(x, y, yn <= 1.0-2.0*(xn-0.5))
+
+					// 0x1FB62..0x1FB67: Upper-right block diagonals (contains (3,0), i.e. xn=1, yn=0)
+					case 38: // 0x1FB62: upper-right upper-centre (0.5, 0) to upper-mid-right (1.0, 0.33)
+						set(x, y, yn <= 0.66*(xn-0.5))
+					case 39: // 0x1FB63: upper-right upper-left (0, 0) to upper-mid-right (1.0, 0.33)
+						set(x, y, yn <= 0.33*xn)
+					case 40: // 0x1FB64: upper-right upper-centre (0.5, 0) to lower-mid-right (1.0, 0.67)
+						set(x, y, yn <= 1.34*(xn-0.5))
+					case 41: // 0x1FB65: upper-right upper-left (0, 0) to lower-mid-right (1.0, 0.67)
+						set(x, y, yn <= 0.67*xn)
+					case 42: // 0x1FB66: upper-right upper-centre (0.5, 0) to lower-right (1.0, 1.0)
+						set(x, y, yn <= 2.0*(xn-0.5))
+					case 43: // 0x1FB67: upper-right upper-mid-left (0, 0.33) to lower-mid-right (1.0, 0.67)
+						set(x, y, yn <= 0.33+0.34*xn)
 
 					// 0x1FB68..0x1FB6F: Triangular 3/4 and 1/4 block shapes
-					case 44: // Top-left 3/4
-						set(x, y, x+y < 4 || x < 2)
-					case 45: // Top-right 3/4
-						set(x, y, x >= y || y < 2)
-					case 46: // Bottom-left 3/4
-						set(x, y, y >= x || x < 2)
-					case 47: // Bottom-right 3/4
-						set(x, y, x+y >= 3 || y >= 2)
-					case 48: // Top-left 1/4
-						set(x, y, x < 2 && y < 2 && x+y < 2)
-					case 49: // Top-right 1/4
-						set(x, y, x >= 2 && y < 2 && x-y >= 2)
-					case 50: // Bottom-left 1/4
-						set(x, y, x < 2 && y >= 2 && y-x >= 2)
-					case 51: // Bottom-right 1/4
-						set(x, y, x >= 2 && y >= 2 && x+y >= 5)
+					case 44: // 0x1FB68: Upper and right and lower 3/4
+						set(x, y, x >= 1 || y == 0 || y == 7)
+					case 45: // 0x1FB69: Left and lower and right 3/4
+						set(x, y, y >= 2 || x == 0 || x == 3)
+					case 46: // 0x1FB6A: Upper and left and lower 3/4
+						set(x, y, x <= 2 || y == 0 || y == 7)
+					case 47: // 0x1FB6B: Left and upper and right 3/4
+						set(x, y, y <= 5 || x == 0 || x == 3)
+					case 48: // 0x1FB6C: Left 1/4
+						set(x, y, x < 2 && (y >= 2 && y <= 5))
+					case 49: // 0x1FB6D: Upper 1/4
+						set(x, y, y < 4 && (x == 1 || x == 2))
+					case 50: // 0x1FB6E: Right 1/4
+						set(x, y, x >= 2 && (y >= 2 && y <= 5))
+					case 51: // 0x1FB6F: Lower 1/4
+						set(x, y, y >= 4 && (x == 1 || x == 2))
 					}
 				}
 			}

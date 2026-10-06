@@ -128,6 +128,8 @@ func TestGoldenRenders(t *testing.T) {
 		{"spark", "spark+quad"},
 		{"spark_best", "spark+six"},
 		{"sextant", "2x3"},
+		{"octant", "octant"},
+		{"vector", "vector"},
 	} {
 		rc, err := findRenderModeByName(pair.mode)
 		if err != nil {
@@ -552,7 +554,7 @@ func goldenNativeRenderToImage(scaled image.Image, rc renderCfg) image.Image {
 //	sextant:   2×3px/char → kX= 6, kY= 8 → 12×24
 func upscaleToCharRes(rendered image.Image, rc renderCfg) image.Image {
 	blockW, blockH := goldenCharBlock()
-	spec := rc.mode.viewSpec()
+	spec := rc.viewSpec()
 	kX := blockW / spec.CellW
 	kY := blockH / spec.CellH
 	if kX <= 1 && kY <= 1 {
