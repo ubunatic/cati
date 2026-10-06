@@ -97,6 +97,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 091 | [091-include-fractional-bars-and-quads-in-vector-mode-to-support-straight-lines.md](091-include-fractional-bars-and-quads-in-vector-mode-to-support-straight-lines.md) | Include fractional bars and quads in vector mode to support straight lines | Closed — Added 1/4 and 3/4 straight bars and quadrants to vector inventory; flat edges no longer render as diagonal sawtooth |
 | 092 | [092-custom-glyph-reconstruction-ignores-supplied-masks-skewing-ssim-for-glyph-union-modes.md](092-custom-glyph-reconstruction-ignores-supplied-masks-skewing-ssim-for-glyph-union-modes.md) | Custom glyph reconstruction ignores supplied masks, skewing SSIM for glyph_union modes | Open |
 | 093 | [093-fix-octant-glyph-to-subpixel-mapping.md](093-fix-octant-glyph-to-subpixel-mapping.md) | Fix octant glyph-to-subpixel mapping | Closed — corrected all octant mappings; user confirmed visual result and full suite passed |
+| 094 | [094-restore-quadblock-fastpath-parity-for-partial-alpha-and-nonzero-bounds.md](094-restore-quadblock-fastpath-parity-for-partial-alpha-and-nonzero-bounds.md) | Restore quadblock fastpath parity for partial alpha and nonzero bounds | Open |
 ## Archived
 
 | # | Title | Reason |
