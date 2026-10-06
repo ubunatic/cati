@@ -126,7 +126,7 @@ modes:
     aliases: [v, vec]
     description: "Chooses linear cell-split characters (diagonals, triangles, half blocks) for each cell."
     renderer: glyph_union
-    cell: { w: 4, h: 4 }
+    cell: { w: 4, h: 8 }
     glyph_sets: [vector]
     colorer: fg_bg_sse
     smart_step: native
@@ -202,7 +202,7 @@ set_registry:
     optimized: true
   - id: 50
     name: vectors
-    geometry: { w: 4, h: 4 }
+    geometry: { w: 4, h: 8 }
     generated: vector_linear_splits
     optimized: true
   - id: 9

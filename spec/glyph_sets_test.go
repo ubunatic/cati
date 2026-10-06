@@ -23,9 +23,9 @@ func TestResolveGlyphSetExpression(t *testing.T) {
 		{"4", []int{0, 1, 2, 4}, 2, 2},
 		{"octant", []int{0, 10}, 2, 4},
 		{"oct", []int{0, 10}, 2, 4},
-		{"vector", []int{0, 50}, 4, 4},
-		{"v", []int{0, 50}, 4, 4},
-		{"vec", []int{0, 50}, 4, 4},
+		{"vector", []int{0, 50}, 4, 8},
+		{"v", []int{0, 50}, 4, 8},
+		{"vec", []int{0, 50}, 4, 8},
 	}
 	for _, tt := range tests {
 		got, err := ResolveGlyphSetExpression(tt.expr)
@@ -130,8 +130,8 @@ func TestOctantAndVectorGlyphSets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveGlyphSetExpression(vector): %v", err)
 	}
-	if vec.Geometry.W != 4 || vec.Geometry.H != 4 {
-		t.Errorf("vector geometry = %dx%d, want 4x4", vec.Geometry.W, vec.Geometry.H)
+	if vec.Geometry.W != 4 || vec.Geometry.H != 8 {
+		t.Errorf("vector geometry = %dx%d, want 4x8", vec.Geometry.W, vec.Geometry.H)
 	}
 	if len(vec.Shapes) < 50 {
 		t.Errorf("vector shapes count = %d, want >= 50", len(vec.Shapes))
@@ -150,6 +150,67 @@ func TestOctantAndVectorGlyphSets(t *testing.T) {
 	}
 	if !hasDiagonal {
 		t.Errorf("vector mode missing U+1FB3C..U+1FB6F linear diagonal shapes")
+	}
+
+	// Verify mask orientation invariants for representative vector shapes:
+	// x=0..3 (left to right), y=0..7 (top to bottom).
+	vecShapeMap := make(map[rune][]bool, len(vec.Shapes))
+	for _, shape := range vec.Shapes {
+		vecShapeMap[shape.Glyph] = shape.Mask
+	}
+
+	// 1. U+1FB9A (🮚): upper-left diagonal half block contains top-left (0,0)
+	if mask, ok := vecShapeMap['\U0001FB9A']; ok {
+		if !mask[0*4+0] || mask[7*4+3] {
+			t.Errorf("U+1FB9A mask orientation incorrect: top-left (0,0)=%v, bottom-right (3,7)=%v", mask[0*4+0], mask[7*4+3])
+		}
+	} else {
+		t.Errorf("missing U+1FB9A shape")
+	}
+
+	// 2. U+1FB9B (🮛): lower-left diagonal half block contains bottom-left (0,7)
+	if mask, ok := vecShapeMap['\U0001FB9B']; ok {
+		if !mask[7*4+0] || mask[0*4+3] {
+			t.Errorf("U+1FB9B mask orientation incorrect: bottom-left (0,7)=%v, top-right (3,0)=%v", mask[7*4+0], mask[0*4+3])
+		}
+	} else {
+		t.Errorf("missing U+1FB9B shape")
+	}
+
+	// 3. U+1FB3C (🬼): lower-left block diagonal contains bottom-left (0,7)
+	if mask, ok := vecShapeMap[0x1FB3C]; ok {
+		if !mask[7*4+0] || mask[0*4+3] {
+			t.Errorf("U+1FB3C mask orientation incorrect: bottom-left (0,7)=%v, top-right (3,0)=%v", mask[7*4+0], mask[0*4+3])
+		}
+	} else {
+		t.Errorf("missing U+1FB3C shape")
+	}
+
+	// 4. U+1FB41 (🭁): lower-right block diagonal contains bottom-right (3,7)
+	if mask, ok := vecShapeMap[0x1FB41]; ok {
+		if !mask[7*4+3] || mask[0*4+0] {
+			t.Errorf("U+1FB41 mask orientation incorrect: bottom-right (3,7)=%v, top-left (0,0)=%v", mask[7*4+3], mask[0*4+0])
+		}
+	} else {
+		t.Errorf("missing U+1FB41 shape")
+	}
+
+	// 5. U+1FB57 (🭗): upper-left block diagonal contains top-left (0,0)
+	if mask, ok := vecShapeMap[0x1FB57]; ok {
+		if !mask[0*4+0] || mask[7*4+3] {
+			t.Errorf("U+1FB57 mask orientation incorrect: top-left (0,0)=%v, bottom-right (3,7)=%v", mask[0*4+0], mask[7*4+3])
+		}
+	} else {
+		t.Errorf("missing U+1FB57 shape")
+	}
+
+	// 6. U+1FB62 (🭢): upper-right block diagonal contains top-right (3,0)
+	if mask, ok := vecShapeMap[0x1FB62]; ok {
+		if !mask[0*4+3] || mask[7*4+0] {
+			t.Errorf("U+1FB62 mask orientation incorrect: top-right (3,0)=%v, bottom-left (0,7)=%v", mask[0*4+3], mask[7*4+0])
+		}
+	} else {
+		t.Errorf("missing U+1FB62 shape")
 	}
 }
 
