@@ -18,6 +18,7 @@ import (
 	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/internal/viewgeom"
 	"ubunatic.com/cati/spec"
+	"ubunatic.com/cati/v1/core"
 	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
 
@@ -177,6 +178,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.AddCommand(modesCommand())
 
 	registerRootCompletion(root)
+	registerFastpathFlag(root)
 
 	return root
 }
@@ -284,6 +286,7 @@ func NewPlay() *cobra.Command {
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
 	root.Flags().StringVarP(&crop, "crop", "c", "", "crop final playback output in terminal cells: W:H, W:H:X:Y, auto|a|1|true, or [l|c|r],[t|m|b]")
 	root.Flags().StringVar(&timeRange, "range", "", `playback window: "5s" plays first 5 s; "5s:7s" plays 5 s-7 s (supports s/m/h suffixes, bare seconds, mm:ss)`)
+	registerFastpathFlag(root)
 
 	return root
 }
@@ -352,7 +355,24 @@ func NewBrowse() *cobra.Command {
 	root.Flags().BoolVar(&smart, "smart", false, "choose the best nearby width by PSNR (static renders; slow)")
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
 
+	registerFastpathFlag(root)
 	return root
+}
+
+// registerFastpathFlag applies an explicit override before any renderer starts.
+// An omitted flag preserves the process default read from CATI_FASTPATH.
+func registerFastpathFlag(root *cobra.Command) {
+	root.PersistentFlags().Bool("fastpath", core.Fastpath, "enable optimized rendering paths (false = reference paths; defaults to CATI_FASTPATH)")
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.Flags().Changed("fastpath") {
+			value, err := cmd.Flags().GetBool("fastpath")
+			if err != nil {
+				return err
+			}
+			core.Fastpath = value
+		}
+		return nil
+	}
 }
 
 func forwardSubcommand(name, executable, short string) *cobra.Command {
@@ -374,6 +394,7 @@ func isNotFound(err error) bool {
 
 func forwardCommand(executable string, args []string) error {
 	c := exec.Command(executable, args...)
+	c.Env = fastpathEnvironment()
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
@@ -386,6 +407,7 @@ func forwardCommand(executable string, args []string) error {
 		return err
 	}
 	c = exec.Command(filepath.Join(filepath.Dir(self), executable), args...)
+	c.Env = fastpathEnvironment()
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
@@ -394,6 +416,14 @@ func forwardCommand(executable string, args []string) error {
 		return exec.ErrNotFound
 	}
 	return err2
+}
+
+func fastpathEnvironment() []string {
+	value := "0"
+	if core.Fastpath {
+		value = "1"
+	}
+	return append(os.Environ(), "CATI_FASTPATH="+value)
 }
 
 func singleArgIsDir(args []string) bool {

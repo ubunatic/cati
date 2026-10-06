@@ -112,7 +112,12 @@ loops yet.
 
 Optimised code paths (direct `Pix` access, append-based ANSI formatting) are
 gated by one shared flag, `core.Fastpath`, read once from `CATI_FASTPATH`
-(`0` = simple reference paths; default on). The simple path is the reference:
+(`0` = simple reference paths; default on). `cati`, `catiplay`, and `catibrowse`
+accept `--fastpath=false` to disable these paths or `--fastpath=true` (also
+`--fastpath`) to enable them, overriding the environment for that invocation.
+An omitted flag preserves the environment default. Forwarded playback/browser
+commands inherit the selection. `cati --bench` still measures both paths.
+The simple path is the reference:
 change and reason about it first, then make the fast path follow. Fast paths
 must be output-identical; each split has a parity test that toggles
 `core.Fastpath`. Check the whole suite on the simple paths with:
