@@ -17,6 +17,12 @@ Review of the incoming quadblock optimization found two violations of the fast/r
 
 Minimal reproducible input construction (run in a Go probe importing `image`, `image/color`, `v1/core`, and `v1/quadblock`):
 
+For a visible terminal reproduction, run `go run scripts/quadblock_fastpath_demo.go`.
+It renders the same 33x8 NRGBA image directly through `quadblock.Render` with
+`cols=0`, preserving the source representation. Fast output is brighter and its
+last partial cell is darker; regular output is uniform. This confirms the bug
+also affects ANSI output when scaling/conversion does not hide the NRGBA path.
+
 ```go
 img := image.NewNRGBA(image.Rect(0, 0, 3, 2))
 for y := 0; y < 2; y++ {
