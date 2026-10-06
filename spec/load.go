@@ -612,14 +612,10 @@ func generatedOctantShapes() []GlyphShape {
 	preexisting := map[int]rune{
 		0x00: ' ',          // empty
 		0xFF: '█',          // full block (U+2588)
-		0x01: '\U0001FB00', // single top-left octant (U+1FB00)
-		0x02: '\U0001FB01', // single top-right octant (U+1FB01)
-		0x04: '\U0001FB02', // single upper-mid-left octant (U+1FB02)
-		0x08: '\U0001FB04', // single upper-mid-right octant (U+1FB04)
-		0x10: '\U0001FB05', // single lower-mid-left octant (U+1FB05)
-		0x20: '\U0001FB06', // single lower-mid-right octant (U+1FB06)
-		0x40: '\U0001FB08', // single bot-left octant (U+1FB08)
-		0x80: '\U0001FB09', // single bot-right octant (U+1FB09)
+		0x01: '\U0001CEA8', // left half upper one quarter
+		0x02: '\U0001CEAB', // right half upper one quarter
+		0x40: '\U0001CEA3', // left half lower one quarter
+		0x80: '\U0001CEA0', // right half lower one quarter
 		0x05: '▘',          // top-left quad (U+2598)
 		0x0A: '▝',          // top-right quad (U+259D)
 		0x50: '▖',          // bot-left quad (U+2596)
@@ -628,14 +624,18 @@ func generatedOctantShapes() []GlyphShape {
 		0xF0: '▄',          // bottom half (U+2584)
 		0x55: '▌',          // left half (U+258C)
 		0xAA: '▐',          // right half (U+2590)
-		0x03: '▔',          // upper 1/4 bar (U+2594)
+		0x03: '\U0001FB82', // upper 1/4 bar
 		0xC0: '▂',          // lower 1/4 bar (U+2582)
-		0x3C: '\U0001FB0B', // middle 1/2 bar (U+1FB0B)
-		0x0C: '\U0001FB03', // upper-middle 1/4 bar (U+1FB03)
-		0x30: '\U0001FB07', // lower-middle 1/4 bar (U+1FB07)
-		0xE0: '▃',          // lower 3/8 bar (U+2583)
+		0x14: '\U0001FBE6', // middle left one quarter
+		0x28: '\U0001FBE7', // middle right one quarter
+		0x5A: '▞',          // top-right and bottom-left quadrants
+		0xA5: '▚',          // top-left and bottom-right quadrants
+		0x5F: '▛',          // all quadrants except bottom-right
+		0xAF: '▜',          // all quadrants except bottom-left
+		0xF5: '▙',          // all quadrants except top-right
+		0xFA: '▟',          // all quadrants except top-left
 		0xFC: '▆',          // lower 3/4 bar (U+2586)
-		0x3F: '▇',          // upper 3/4 bar (U+2587)
+		0x3F: '\U0001FB85', // upper 3/4 bar
 	}
 	shapes := make([]GlyphShape, 256)
 	octantIdx := 0

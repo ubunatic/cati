@@ -52,6 +52,18 @@ These exact straight masks let flat edges fit without repeated diagonal teeth.
 The regression test renders a cell with only its top row filled and requires
 an upper-quarter bar or its lower-three-quarter colour inversion.
 
+`oct` (`octant`, glyph set 10) uses exact `2×4` row-major coverage, numbered
+1,2 across the top row through 7,8 across the bottom. Its 256 patterns combine
+230 native octant glyphs (U+1CD00–U+1CDE5) with 26 exact block shapes, including
+quadrants, quarter bars, middle rectangles, and corner eighth rectangles.
+The corner rectangles use U+1CEA0/U+1CEA3/U+1CEA8/U+1CEAB; sextants have thirds
+of a cell and cannot substitute for octants. Sequential native assignment skips
+only the 26 masks actually represented by those exact shapes. An independent
+Unicode-number oracle tests every native mapping plus all 26 reserved shapes.
+Issue #093 corrects the earlier inventory, whose invalid reservations displaced
+227 native mappings; foreground/background fitting must use the same coverage
+that the emitted glyph displays.
+
 ### Removed Modes
 Earlier versions included `spark/upper`, `spark/right`, and `spark/left`.
 `spark/upper` and `spark/right` were redundant foreground/background inversions.

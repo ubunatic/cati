@@ -1,6 +1,6 @@
 # 093 — Fix octant glyph-to-subpixel mapping
 
-**Status**: Open
+**Status**: In Progress — mapping corrected; awaiting user full-suite and visual validation
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Bug
@@ -20,3 +20,17 @@ The reserved table also confuses sextants with octants and fractional block heig
 **Goal**: Correct every octant glyph-to-subpixel mapping and verify rendering, or stop and report when blocked on a user decision or denied permission. Done means all 256 masks have independently verified Unicode coverage, regression tests detect the current errors, the reported render is checked, and relevant documentation and justified golden coverage are updated under the Rendering Bug Playbook.
 
 Before implementation, check live code and recent commits and re-verify the audit against [Unicode data](https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt). Run focused tests, the full suite, and required build/preflight checks; do not regenerate goldens merely to make tests pass.
+
+## 4. Delivery (2026-10-06)
+
+At the user's request, implemented the bounded inventory correction directly;
+the user owns the full test suite and terminal visual validation. Corrected all
+26 reserved entries; the independent Unicode oracle now verifies all 230 native
+octants and all reserved shapes. The new regression test reproduced the mapping
+errors before the fix and passes afterward; the production audit reports
+230 correct native mappings and zero incorrect. Updated SparklinePixelArt.md.
+Existing goldens remain unchanged; broader golden coverage remains tracked in #086.
+Focused mapping/resolution tests, `go vet ./...`, `make install`, and
+`make preflight` passed. The installed binary successfully rendered the reported
+input; its appearance in the user's terminal still requires their validation.
+Keep this ticket In Progress until the user confirms full-suite and visual results.
