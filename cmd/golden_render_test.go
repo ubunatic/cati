@@ -128,6 +128,8 @@ func TestGoldenRenders(t *testing.T) {
 		{"spark", "spark+quad"},
 		{"spark_best", "spark+six"},
 		{"sextant", "2x3"},
+		{"octant", "octant"},
+		{"vector", "vector"},
 	} {
 		rc, err := findRenderModeByName(pair.mode)
 		if err != nil {
