@@ -92,6 +92,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 086 | [086-add-vec-and-oct-golden-render-tests-and-investigate-mask-orientation.md](086-add-vec-and-oct-golden-render-tests-and-investigate-mask-orientation.md) | Add vec and oct golden render tests and investigate mask orientation | Open |
 | 087 | [087-fix-halfblock-aspect-formula-distortion-and-move-formula-params-to-spec.md](087-fix-halfblock-aspect-formula-distortion-and-move-formula-params-to-spec.md) | Fix halfblock aspect formula distortion and move formula params to spec | Closed — Fixed halfblock aspect formula and moved formula parameters to spec/aspect.yaml |
 | 088 | [088-fix-quad-mode-aspect-formula-distortion-in-spec.md](088-fix-quad-mode-aspect-formula-distortion-in-spec.md) | Fix quad mode aspect formula distortion in spec | Closed — Fixed quad mode aspect formula in spec/aspect.yaml and planner |
+| 089 | [089-fix-vector-mode-rune-mask-mapping-for-symbols-for-legacy-computing.md](089-fix-vector-mode-rune-mask-mapping-for-symbols-for-legacy-computing.md) | Fix vector mode rune mask mapping for Symbols for Legacy Computing | Closed — Corrected vector mode rune masks using exact perimeter geometry and complement pairs |
 ## Archived
 
 | # | Title | Reason |
