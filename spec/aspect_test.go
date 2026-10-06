@@ -11,10 +11,11 @@ import (
 )
 
 func TestPixelAspectPolicyLoader(t *testing.T) {
-	formulaYAML := "\nformula: {default: {num: 2, den: 3}, halfblock: {num: 1, den: 2}}"
+	formulaYAML := "\nformula: {default: {num: 2, den: 3}, halfblock: {num: 1, den: 2}, quad: {num: 1, den: 2}}"
 	defaultFormula := FormulaPolicy{
 		Default:   FormulaParams{Num: 2, Den: 3},
 		Halfblock: FormulaParams{Num: 1, Den: 2},
+		Quad:      FormulaParams{Num: 1, Den: 2},
 	}
 	for _, tc := range []struct {
 		name, document string
@@ -26,7 +27,7 @@ func TestPixelAspectPolicyLoader(t *testing.T) {
 		{"missing field", "pixel: {max_padding: 0.1}" + formulaYAML, PixelAspectPolicy{}, true},
 		{"missing object", "{}", PixelAspectPolicy{}, true},
 		{"missing formula", "pixel: {max_distortion: 0.1, max_padding: 0.1}", PixelAspectPolicy{}, true},
-		{"formula zero num", "pixel: {max_distortion: 0.1, max_padding: 0.1}, formula: {default: {num: 0, den: 3}, halfblock: {num: 1, den: 2}}", PixelAspectPolicy{}, true},
+		{"formula zero num", "pixel: {max_distortion: 0.1, max_padding: 0.1}, formula: {default: {num: 0, den: 3}, halfblock: {num: 1, den: 2}, quad: {num: 1, den: 2}}", PixelAspectPolicy{}, true},
 		{"unknown field", "pixel: {max_distortion: 0.1, max_padding: 0.1, typo: 1}" + formulaYAML, PixelAspectPolicy{}, true},
 		{"negative", "pixel: {max_distortion: -0.1, max_padding: 0.1}" + formulaYAML, PixelAspectPolicy{}, true},
 		{"too large", "pixel: {max_distortion: 1.1, max_padding: 0.1}" + formulaYAML, PixelAspectPolicy{}, true},
@@ -59,6 +60,7 @@ func TestPixelAspectEmbeddedSchemaAndFidelity(t *testing.T) {
 		Formula struct {
 			Default   map[string]int `yaml:"default"`
 			Halfblock map[string]int `yaml:"halfblock"`
+			Quad      map[string]int `yaml:"quad"`
 		} `yaml:"formula"`
 	}
 	if err := yaml.Unmarshal(data, &document); err != nil {
@@ -117,7 +119,8 @@ func TestPixelAspectEmbeddedSchemaAndFidelity(t *testing.T) {
 		t.Fatalf("loader differs from embedded YAML: %+v, %v", loaded, err)
 	}
 	if loaded.Formula.Default.Num != document.Formula.Default["num"] || loaded.Formula.Default.Den != document.Formula.Default["den"] ||
-		loaded.Formula.Halfblock.Num != document.Formula.Halfblock["num"] || loaded.Formula.Halfblock.Den != document.Formula.Halfblock["den"] {
+		loaded.Formula.Halfblock.Num != document.Formula.Halfblock["num"] || loaded.Formula.Halfblock.Den != document.Formula.Halfblock["den"] ||
+		loaded.Formula.Quad.Num != document.Formula.Quad["num"] || loaded.Formula.Quad.Den != document.Formula.Quad["den"] {
 		t.Fatalf("loader formula differs from embedded YAML: %+v", loaded)
 	}
 }

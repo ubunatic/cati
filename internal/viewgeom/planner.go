@@ -35,12 +35,19 @@ type FormulaParams struct {
 type FormulaPolicy struct {
 	Default   FormulaParams
 	Halfblock FormulaParams
+	Quad      FormulaParams
 }
 
 func formulaParams(spec V2Spec, policy PixelAspectPolicy) (int, int) {
 	if spec.CellW == 1 && spec.CellH == 2 {
 		if policy.Formula.Halfblock.Num > 0 && policy.Formula.Halfblock.Den > 0 {
 			return policy.Formula.Halfblock.Num, policy.Formula.Halfblock.Den
+		}
+		return 1, 2
+	}
+	if spec.CellW == 2 && spec.CellH == 2 {
+		if policy.Formula.Quad.Num > 0 && policy.Formula.Quad.Den > 0 {
+			return policy.Formula.Quad.Num, policy.Formula.Quad.Den
 		}
 		return 1, 2
 	}

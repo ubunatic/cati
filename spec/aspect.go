@@ -21,6 +21,7 @@ type FormulaParams struct {
 type FormulaPolicy struct {
 	Default   FormulaParams `yaml:"default"`
 	Halfblock FormulaParams `yaml:"halfblock"`
+	Quad      FormulaParams `yaml:"quad"`
 }
 
 // PixelAspectPolicy owns the fractional limits for integer pixel snapping and
@@ -60,6 +61,10 @@ func loadPixelAspectPolicy(files fs.FS) (PixelAspectPolicy, error) {
 				Num *int `yaml:"num"`
 				Den *int `yaml:"den"`
 			} `yaml:"halfblock"`
+			Quad struct {
+				Num *int `yaml:"num"`
+				Den *int `yaml:"den"`
+			} `yaml:"quad"`
 		} `yaml:"formula"`
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
@@ -75,11 +80,13 @@ func loadPixelAspectPolicy(files fs.FS) (PixelAspectPolicy, error) {
 		return PixelAspectPolicy{}, fmt.Errorf("aspect policy: pixel.max_distortion and pixel.max_padding are required")
 	}
 	if document.Formula.Default.Num == nil || document.Formula.Default.Den == nil ||
-		document.Formula.Halfblock.Num == nil || document.Formula.Halfblock.Den == nil {
-		return PixelAspectPolicy{}, fmt.Errorf("aspect policy: formula.default and formula.halfblock (num, den) are required")
+		document.Formula.Halfblock.Num == nil || document.Formula.Halfblock.Den == nil ||
+		document.Formula.Quad.Num == nil || document.Formula.Quad.Den == nil {
+		return PixelAspectPolicy{}, fmt.Errorf("aspect policy: formula.default, formula.halfblock, and formula.quad (num, den) are required")
 	}
 	if *document.Formula.Default.Num <= 0 || *document.Formula.Default.Den <= 0 ||
-		*document.Formula.Halfblock.Num <= 0 || *document.Formula.Halfblock.Den <= 0 {
+		*document.Formula.Halfblock.Num <= 0 || *document.Formula.Halfblock.Den <= 0 ||
+		*document.Formula.Quad.Num <= 0 || *document.Formula.Quad.Den <= 0 {
 		return PixelAspectPolicy{}, fmt.Errorf("aspect policy: formula parameters must be positive integers")
 	}
 	policy := PixelAspectPolicy{
@@ -88,6 +95,7 @@ func loadPixelAspectPolicy(files fs.FS) (PixelAspectPolicy, error) {
 		Formula: FormulaPolicy{
 			Default:   FormulaParams{Num: *document.Formula.Default.Num, Den: *document.Formula.Default.Den},
 			Halfblock: FormulaParams{Num: *document.Formula.Halfblock.Num, Den: *document.Formula.Halfblock.Den},
+			Quad:      FormulaParams{Num: *document.Formula.Quad.Num, Den: *document.Formula.Quad.Den},
 		},
 	}
 	if math.IsNaN(policy.MaxDistortion) || math.IsInf(policy.MaxDistortion, 0) || policy.MaxDistortion < 0 || policy.MaxDistortion > 1 || math.IsNaN(policy.MaxPadding) || math.IsInf(policy.MaxPadding, 0) || policy.MaxPadding < 0 || policy.MaxPadding >= 1 {

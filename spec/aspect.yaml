@@ -17,4 +17,9 @@ formula:
   halfblock:
     num: 1
     den: 2
+  # Quad mode uses 1:2 cell aspect (2x horizontal stretch on 1:2 subpixels).
+  quad:
+    num: 1
+    den: 2
+
 

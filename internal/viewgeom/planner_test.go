@@ -341,7 +341,24 @@ func pixelPolicy(t *testing.T) PixelAspectPolicy {
 		Formula: FormulaPolicy{
 			Default:   FormulaParams{Num: policy.Formula.Default.Num, Den: policy.Formula.Default.Den},
 			Halfblock: FormulaParams{Num: policy.Formula.Halfblock.Num, Den: policy.Formula.Halfblock.Den},
+			Quad:      FormulaParams{Num: policy.Formula.Quad.Num, Den: policy.Formula.Quad.Den},
 		},
+	}
+}
+
+func TestPlanRender_Quad(t *testing.T) {
+	quadSpec := NewV2CellRatio(2, 2, 2, 1)
+	c := TargetConstraints{
+		ExplicitCols: 4,
+		AspectMode:   "pixel",
+		PixelPolicy:  pixelPolicy(t),
+	}
+	plan := PlanRender(4, 4, c, quadSpec)
+	if plan.CanvasCols != 4 || plan.CanvasRows != 2 {
+		t.Errorf("Canvas = %dx%d, want 4x2", plan.CanvasCols, plan.CanvasRows)
+	}
+	if plan.RenderW != 8 || plan.RenderH != 4 {
+		t.Errorf("Render size = %dx%d, want 8x4", plan.RenderW, plan.RenderH)
 	}
 }
 

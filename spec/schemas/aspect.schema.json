@@ -18,7 +18,7 @@
     "formula": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["default", "halfblock"],
+      "required": ["default", "halfblock", "quad"],
       "properties": {
         "default": {
           "type": "object",
@@ -30,6 +30,15 @@
           }
         },
         "halfblock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["num", "den"],
+          "properties": {
+            "num": { "type": "integer", "minimum": 1 },
+            "den": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "quad": {
           "type": "object",
           "additionalProperties": false,
           "required": ["num", "den"],

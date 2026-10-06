@@ -815,6 +815,7 @@ func prepareRenderPlanImage(orig image.Image, constraints viewgeom.TargetConstra
 			Formula: viewgeom.FormulaPolicy{
 				Default:   viewgeom.FormulaParams{Num: policy.Formula.Default.Num, Den: policy.Formula.Default.Den},
 				Halfblock: viewgeom.FormulaParams{Num: policy.Formula.Halfblock.Num, Den: policy.Formula.Halfblock.Den},
+				Quad:      viewgeom.FormulaParams{Num: policy.Formula.Quad.Num, Den: policy.Formula.Quad.Den},
 			},
 		}
 		if viewgeom.IsPixelAspect(constraints.AspectMode) {

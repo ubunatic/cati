@@ -1052,10 +1052,16 @@ func TestCLIDoom1S2Render(t *testing.T) {
 			wantCols:  160,
 		},
 		{
-			name:      "aspect pixel width 160 quad distortion",
+			name:      "aspect pixel width 160 quad",
 			args:      []string{"assets/doom1.png", "-W", "160", "-m", "quad", "--aspect", "pixel"},
-			wantLines: 67,
+			wantLines: 50,
 			wantCols:  160,
+		},
+		{
+			name:      "aspect pixel checkerboard width 4 quad",
+			args:      []string{"testdata/checkerboard_4x4.png", "-W", "4", "-m", "quad", "--aspect", "pixel"},
+			wantLines: 2,
+			wantCols:  4,
 		},
 		{
 			name:      "aspect pixel height only 3x3",
