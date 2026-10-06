@@ -41,3 +41,23 @@ func BenchmarkRenderToImageSerial(b *testing.B) {
 		_ = RenderToImage(img, Options{})
 	}
 }
+
+func BenchmarkRenderParallel(b *testing.B) {
+	img := quadBenchmarkImage(256, 256)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := RenderJ(io.Discard, img, Options{}, 8); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkRenderToImageParallel(b *testing.B) {
+	img := quadBenchmarkImage(256, 256)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = RenderToImageJ(img, Options{}, 8)
+	}
+}

@@ -16,8 +16,10 @@ import (
 	"image/color"
 	"io"
 	"math"
+	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"ubunatic.com/cati/v1/core"
@@ -1001,6 +1003,150 @@ func RenderToImageJ(img image.Image, opts Options, jobs int) *image.RGBA {
 		return dst
 	}
 
+	if core.Fastpath {
+		for tr := 0; tr < trRows; tr++ {
+			py0 := tr * 2
+			py1 := py0 + 1
+			row0Off := py0 * dst.Stride
+			row1Off := py1 * dst.Stride
+			for tc := 0; tc < tcCols; tc++ {
+				c := cells[tr*tcCols+tc]
+				px0 := tc * 2
+				px1 := px0 + 1
+
+				if px0 >= pixW || py0 >= pixH {
+					continue
+				}
+
+				mask := charToMask(c.ch)
+				bg := c.bg
+				if !c.hasBG {
+					bg = color.RGBA{}
+				}
+				fg := c.fg
+				if !c.hasFG {
+					fg = bg
+				}
+
+				switch c.ch {
+				case '▌':
+					off00 := row0Off + px0*4
+					off01 := row0Off + px1*4
+					off10 := row1Off + px0*4
+					off11 := row1Off + px1*4
+
+					if px0 < pixW && py0 < pixH {
+						src := safePixel(img, b.Min.X+px0, b.Min.Y+py0, b)
+						if src.A != 0 {
+							dst.Pix[off00] = fg.R
+							dst.Pix[off00+1] = fg.G
+							dst.Pix[off00+2] = fg.B
+							dst.Pix[off00+3] = fg.A
+						}
+					}
+					if px1 < pixW && py0 < pixH {
+						src := safePixel(img, b.Min.X+px1, b.Min.Y+py0, b)
+						if src.A != 0 {
+							dst.Pix[off01] = bg.R
+							dst.Pix[off01+1] = bg.G
+							dst.Pix[off01+2] = bg.B
+							dst.Pix[off01+3] = bg.A
+						}
+					}
+					if px0 < pixW && py1 < pixH {
+						src := safePixel(img, b.Min.X+px0, b.Min.Y+py1, b)
+						if src.A != 0 {
+							dst.Pix[off10] = fg.R
+							dst.Pix[off10+1] = fg.G
+							dst.Pix[off10+2] = fg.B
+							dst.Pix[off10+3] = fg.A
+						}
+					}
+					if px1 < pixW && py1 < pixH {
+						src := safePixel(img, b.Min.X+px1, b.Min.Y+py1, b)
+						if src.A != 0 {
+							dst.Pix[off11] = bg.R
+							dst.Pix[off11+1] = bg.G
+							dst.Pix[off11+2] = bg.B
+							dst.Pix[off11+3] = bg.A
+						}
+					}
+				case '▐':
+					off00 := row0Off + px0*4
+					off01 := row0Off + px1*4
+					off10 := row1Off + px0*4
+					off11 := row1Off + px1*4
+
+					if px0 < pixW && py0 < pixH {
+						src := safePixel(img, b.Min.X+px0, b.Min.Y+py0, b)
+						if src.A != 0 {
+							dst.Pix[off00] = bg.R
+							dst.Pix[off00+1] = bg.G
+							dst.Pix[off00+2] = bg.B
+							dst.Pix[off00+3] = bg.A
+						}
+					}
+					if px1 < pixW && py0 < pixH {
+						src := safePixel(img, b.Min.X+px1, b.Min.Y+py0, b)
+						if src.A != 0 {
+							dst.Pix[off01] = fg.R
+							dst.Pix[off01+1] = fg.G
+							dst.Pix[off01+2] = fg.B
+							dst.Pix[off01+3] = fg.A
+						}
+					}
+					if px0 < pixW && py1 < pixH {
+						src := safePixel(img, b.Min.X+px0, b.Min.Y+py1, b)
+						if src.A != 0 {
+							dst.Pix[off10] = bg.R
+							dst.Pix[off10+1] = bg.G
+							dst.Pix[off10+2] = bg.B
+							dst.Pix[off10+3] = bg.A
+						}
+					}
+					if px1 < pixW && py1 < pixH {
+						src := safePixel(img, b.Min.X+px1, b.Min.Y+py1, b)
+						if src.A != 0 {
+							dst.Pix[off11] = fg.R
+							dst.Pix[off11+1] = fg.G
+							dst.Pix[off11+2] = fg.B
+							dst.Pix[off11+3] = fg.A
+						}
+					}
+				default:
+					qBit := [4]uint8{bitUL, bitUR, bitLL, bitLR}
+					qPX := [4]int{px0, px1, px0, px1}
+					qPY := [4]int{py0, py0, py1, py1}
+					qOff := [4]int{
+						row0Off + px0*4,
+						row0Off + px1*4,
+						row1Off + px0*4,
+						row1Off + px1*4,
+					}
+
+					for q := 0; q < 4; q++ {
+						px, py := qPX[q], qPY[q]
+						if px < pixW && py < pixH {
+							src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
+							if src.A != 0 {
+								target := bg
+								if mask&qBit[q] != 0 {
+									target = fg
+								}
+								off := qOff[q]
+								dst.Pix[off] = target.R
+								dst.Pix[off+1] = target.G
+								dst.Pix[off+2] = target.B
+								dst.Pix[off+3] = target.A
+							}
+						}
+					}
+				}
+			}
+		}
+		return dst
+	}
+
 	quadBit := [4]uint8{bitUL, bitUR, bitLL, bitLR}
 	qDX := [4]int{0, 1, 0, 1}
 	qDY := [4]int{0, 0, 1, 1}
@@ -1089,11 +1235,6 @@ func computeQuadCellsJ(img image.Image, b image.Rectangle, opts Options, tcCols,
 		return cells, nil
 	}
 
-	type diagTask struct {
-		tr int
-		tc int
-	}
-
 	workerN := jobs
 	if workerN > core.MaxWorkers() {
 		workerN = core.MaxWorkers()
@@ -1101,35 +1242,41 @@ func computeQuadCellsJ(img image.Image, b image.Rectangle, opts Options, tcCols,
 	if workerN > 10 {
 		workerN = 10
 	}
+	if workerN > trRows {
+		workerN = trRows
+	}
 
-	tasks := make(chan diagTask, workerN*2)
+	rowProgress := make([]atomic.Int32, trRows)
+	var nextRow atomic.Int32
 	var wg sync.WaitGroup
 
 	for range workerN {
+		wg.Add(1)
 		go func() {
-			for task := range tasks {
-				cells[task.tr*tcCols+task.tc] = computeQuadCell(img, b, opts, cells, task.tr, task.tc, tcCols, trRows)
-				if opts.OnProgress != nil {
-					progress.Done()
+			defer wg.Done()
+			for {
+				tr := int(nextRow.Add(1) - 1)
+				if tr >= trRows {
+					return
 				}
-				wg.Done()
+				for tc := 0; tc < tcCols; tc++ {
+					if tr > 0 {
+						target := int32(tc + 1)
+						for rowProgress[tr-1].Load() < target {
+							runtime.Gosched()
+						}
+					}
+					cells[tr*tcCols+tc] = computeQuadCell(img, b, opts, cells, tr, tc, tcCols, trRows)
+					rowProgress[tr].Store(int32(tc + 1))
+					if opts.OnProgress != nil {
+						progress.Done()
+					}
+				}
 			}
 		}()
 	}
 
-	for diag := 0; diag < tcCols+trRows-1; diag++ {
-		firstTC := max(0, diag-(trRows-1))
-		lastTC := min(tcCols-1, diag)
-		if firstTC > lastTC {
-			continue
-		}
-		for tc := firstTC; tc <= lastTC; tc++ {
-			wg.Add(1)
-			tasks <- diagTask{tr: diag - tc, tc: tc}
-		}
-		wg.Wait()
-	}
-	close(tasks)
+	wg.Wait()
 	return cells, nil
 }
 
@@ -1145,28 +1292,55 @@ func computeQuadCell(img image.Image, b image.Rectangle, opts Options, cells []q
 		if rgba, ok := img.(*image.RGBA); ok {
 			minX, minY := rgba.Rect.Min.X, rgba.Rect.Min.Y
 			maxX, maxY := rgba.Rect.Max.X, rgba.Rect.Max.Y
-			stride := rgba.Stride
-			pix := rgba.Pix
-
-			sampleRGBA := func(x, y int) color.RGBA {
-				if x < minX || x >= maxX || y < minY || y >= maxY {
-					return color.RGBA{}
+			if px0 >= minX && px1 < maxX && py0 >= minY && py1 < maxY {
+				stride := rgba.Stride
+				pix := rgba.Pix
+				off0 := (py0-minY)*stride + (px0-minX)*4
+				off1 := (py1-minY)*stride + (px0-minX)*4
+				if a := pix[off0+3]; a != 0 {
+					pixels[0] = color.RGBA{R: pix[off0], G: pix[off0+1], B: pix[off0+2], A: a}
 				}
-				off := (y-minY)*stride + (x-minX)*4
-				if off >= 0 && off+3 < len(pix) {
-					a := pix[off+3]
-					if a == 0 {
-						return color.RGBA{}
-					}
-					return color.RGBA{R: pix[off], G: pix[off+1], B: pix[off+2], A: a}
+				if a := pix[off0+7]; a != 0 {
+					pixels[1] = color.RGBA{R: pix[off0+4], G: pix[off0+5], B: pix[off0+6], A: a}
 				}
-				return color.RGBA{}
+				if a := pix[off1+3]; a != 0 {
+					pixels[2] = color.RGBA{R: pix[off1], G: pix[off1+1], B: pix[off1+2], A: a}
+				}
+				if a := pix[off1+7]; a != 0 {
+					pixels[3] = color.RGBA{R: pix[off1+4], G: pix[off1+5], B: pix[off1+6], A: a}
+				}
+			} else {
+				pixels[0] = safePixel(rgba, px0, py0, b)
+				pixels[1] = safePixel(rgba, px1, py0, b)
+				pixels[2] = safePixel(rgba, px0, py1, b)
+				pixels[3] = safePixel(rgba, px1, py1, b)
 			}
-
-			pixels[0] = sampleRGBA(px0, py0)
-			pixels[1] = sampleRGBA(px1, py0)
-			pixels[2] = sampleRGBA(px0, py1)
-			pixels[3] = sampleRGBA(px1, py1)
+		} else if nrgba, ok := img.(*image.NRGBA); ok {
+			minX, minY := nrgba.Rect.Min.X, nrgba.Rect.Min.Y
+			maxX, maxY := nrgba.Rect.Max.X, nrgba.Rect.Max.Y
+			if px0 >= minX && px1 < maxX && py0 >= minY && py1 < maxY {
+				stride := nrgba.Stride
+				pix := nrgba.Pix
+				off0 := (py0-minY)*stride + (px0-minX)*4
+				off1 := (py1-minY)*stride + (px0-minX)*4
+				if a := pix[off0+3]; a != 0 {
+					pixels[0] = color.RGBA{R: pix[off0], G: pix[off0+1], B: pix[off0+2], A: a}
+				}
+				if a := pix[off0+7]; a != 0 {
+					pixels[1] = color.RGBA{R: pix[off0+4], G: pix[off0+5], B: pix[off0+6], A: a}
+				}
+				if a := pix[off1+3]; a != 0 {
+					pixels[2] = color.RGBA{R: pix[off1], G: pix[off1+1], B: pix[off1+2], A: a}
+				}
+				if a := pix[off1+7]; a != 0 {
+					pixels[3] = color.RGBA{R: pix[off1+4], G: pix[off1+5], B: pix[off1+6], A: a}
+				}
+			} else {
+				pixels[0] = safePixel(nrgba, px0, py0, b)
+				pixels[1] = safePixel(nrgba, px1, py0, b)
+				pixels[2] = safePixel(nrgba, px0, py1, b)
+				pixels[3] = safePixel(nrgba, px1, py1, b)
+			}
 		} else {
 			pixels[0] = samplePixel(img, px0, py0, b, opts)
 			pixels[1] = samplePixel(img, px1, py0, b, opts)
