@@ -89,15 +89,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 083 | [083-add-vector-render-mode-using-linear-cell-split-characters.md](083-add-vector-render-mode-using-linear-cell-split-characters.md) | Add vector render mode using linear cell split characters | Closed |
 | 084 | [084-add-octant-render-mode-using-unicode-1cd0-block-characters.md](084-add-octant-render-mode-using-unicode-1cd0-block-characters.md) | Add octant render mode using Unicode 1CD0 block characters | Closed |
 | 085 | [085-restore-the-logo-pixel-grid-visualizer-as-a-boxed-demo-on-the-cati-web-page.md](085-restore-the-logo-pixel-grid-visualizer-as-a-boxed-demo-on-the-cati-web-page.md) | Restore the logo pixel-grid visualizer as a boxed demo on the cati web page | Open |
-<<<<<<< HEAD
-| 083 | [083-add-vector-render-mode-using-linear-cell-split-characters.md](083-add-vector-render-mode-using-linear-cell-split-characters.md) | Add vector render mode using linear cell split characters | Open |
-| 084 | [084-add-octant-render-mode-using-unicode-1cd0-block-characters.md](084-add-octant-render-mode-using-unicode-1cd0-block-characters.md) | Add octant render mode using Unicode 1CD0 block characters | Open |
-| 085 | [085-restore-the-logo-pixel-grid-visualizer-as-a-boxed-demo-on-the-cati-web-page.md](085-restore-the-logo-pixel-grid-visualizer-as-a-boxed-demo-on-the-cati-web-page.md) | Restore the logo pixel-grid visualizer as a boxed demo on the cati web page | Open |
-=======
-| 083 | [083-add-vector-render-mode-using-linear-cell-split-characters.md](083-add-vector-render-mode-using-linear-cell-split-characters.md) | Add vector render mode using linear cell split characters | Closed |
-| 084 | [084-add-octant-render-mode-using-unicode-1cd0-block-characters.md](084-add-octant-render-mode-using-unicode-1cd0-block-characters.md) | Add octant render mode using Unicode 1CD0 block characters | Closed |
->>>>>>> github/main
-
+| 086 | [086-add-vec-and-oct-golden-render-tests-and-investigate-mask-orientation.md](086-add-vec-and-oct-golden-render-tests-and-investigate-mask-orientation.md) | Add vec and oct golden render tests and investigate mask orientation | Open |
 ## Archived
 
 | # | Title | Reason |
