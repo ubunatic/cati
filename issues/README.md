@@ -90,6 +90,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 084 | [084-add-octant-render-mode-using-unicode-1cd0-block-characters.md](084-add-octant-render-mode-using-unicode-1cd0-block-characters.md) | Add octant render mode using Unicode 1CD0 block characters | Closed |
 | 085 | [085-restore-the-logo-pixel-grid-visualizer-as-a-boxed-demo-on-the-cati-web-page.md](085-restore-the-logo-pixel-grid-visualizer-as-a-boxed-demo-on-the-cati-web-page.md) | Restore the logo pixel-grid visualizer as a boxed demo on the cati web page | Open |
 | 086 | [086-add-vec-and-oct-golden-render-tests-and-investigate-mask-orientation.md](086-add-vec-and-oct-golden-render-tests-and-investigate-mask-orientation.md) | Add vec and oct golden render tests and investigate mask orientation | Open |
+| 087 | [087-fix-halfblock-aspect-formula-distortion-and-move-formula-params-to-spec.md](087-fix-halfblock-aspect-formula-distortion-and-move-formula-params-to-spec.md) | Fix halfblock aspect formula distortion and move formula params to spec | Closed — Fixed halfblock aspect formula and moved formula parameters to spec/aspect.yaml |
 ## Archived
 
 | # | Title | Reason |
