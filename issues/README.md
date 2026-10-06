@@ -94,7 +94,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 088 | [088-fix-quad-mode-aspect-formula-distortion-in-spec.md](088-fix-quad-mode-aspect-formula-distortion-in-spec.md) | Fix quad mode aspect formula distortion in spec | Closed — Fixed quad mode aspect formula in spec/aspect.yaml and planner |
 | 089 | [089-fix-vector-mode-rune-mask-mapping-for-symbols-for-legacy-computing.md](089-fix-vector-mode-rune-mask-mapping-for-symbols-for-legacy-computing.md) | Fix vector mode rune mask mapping for Symbols for Legacy Computing | Closed — Corrected vector mode rune masks using exact perimeter geometry and complement pairs |
 | 090 | [090-support-parameterized-vector-mode-geometries-vec2-vec8.md](090-support-parameterized-vector-mode-geometries-vec2-vec8.md) | Support parameterized vector mode geometries (vec2..vec8) | Open |
-| 091 | [091-include-fractional-bars-and-quads-in-vector-mode-to-support-straight-lines.md](091-include-fractional-bars-and-quads-in-vector-mode-to-support-straight-lines.md) | Include fractional bars and quads in vector mode to support straight lines | Open |
+| 091 | [091-include-fractional-bars-and-quads-in-vector-mode-to-support-straight-lines.md](091-include-fractional-bars-and-quads-in-vector-mode-to-support-straight-lines.md) | Include fractional bars and quads in vector mode to support straight lines | Closed — Added 1/4 and 3/4 straight bars and quadrants to vector inventory; flat edges no longer render as diagonal sawtooth |
 ## Archived
 
 | # | Title | Reason |

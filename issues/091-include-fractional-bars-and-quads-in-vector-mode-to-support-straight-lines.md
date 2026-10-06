@@ -1,6 +1,6 @@
 # 091 — Include fractional bars and quads in vector mode to support straight lines
 
-**Status**: Open
+**Status**: Closed — Added 1/4 and 3/4 straight bars and quadrants to vector inventory; flat edges no longer render as diagonal sawtooth
 **Priority**: P1 (High)
 **Severity**: Major
 **Category**: Bug
