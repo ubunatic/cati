@@ -82,6 +82,14 @@ Adding a new set then means: add `glyph_sets/NN-name.yaml`, add one record to
 - The working tree had uncommitted edits to `spec/render_modes.yaml` and `cmd/modes.go`
   when this was filed (2026-10-08); land or drop those first.
 
+### Decisions (host, 2026-10-08)
+- `cycle:` stays a separate ordered list in `render_modes.yaml` (its order differs).
+- Aliases move onto the composition records (`aliases: [vector, v, vec]` on `vec6`,
+  `[oct]` on `octant`); the loader expands them so `RenderModesSpec.Compositions` and
+  every CLI name resolve exactly as before.
+- Do not stage or overwrite other sessions' uncommitted edits in `cmd/modes.go` /
+  `spec/render_modes.yaml` (2x4 `[0, 1, 8]` → `[0, 8]`, issue 097 work).
+
 ## 4. Implementation & Verification Plan
 /goal Split the render-mode spec as proposed (adjusted by the open questions), with no
 change in behaviour, and verify it — or stop and report when blocked on a user decision
