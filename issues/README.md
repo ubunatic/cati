@@ -99,6 +99,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 093 | [093-fix-octant-glyph-to-subpixel-mapping.md](093-fix-octant-glyph-to-subpixel-mapping.md) | Fix octant glyph-to-subpixel mapping | Closed — corrected all octant mappings; user confirmed visual result and full suite passed |
 | 094 | [094-restore-quadblock-fastpath-parity-for-partial-alpha-and-nonzero-bounds.md](094-restore-quadblock-fastpath-parity-for-partial-alpha-and-nonzero-bounds.md) | Restore quadblock fastpath parity for partial alpha and nonzero bounds | Closed — restored NRGBA premultiplication and destination-relative coordinate bounds parity; full suite and preflight green |
 | 095 | [095-add-cati-glyphs-command-to-inspect-glyph-masks-and-reconstructed-pixels.md](095-add-cati-glyphs-command-to-inspect-glyph-masks-and-reconstructed-pixels.md) | Add cati glyphs command to inspect glyph masks and reconstructed pixels | Closed |
+| 096 | [096-tune-vec3-and-vec4-vector-glyph-tips-with-hand-drawn-masks.md](096-tune-vec3-and-vec4-vector-glyph-tips-with-hand-drawn-masks.md) | Tune vec3 and vec4 vector glyph tips with hand-drawn masks | Open |
 ## Archived
 
 | # | Title | Reason |
