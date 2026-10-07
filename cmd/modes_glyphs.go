@@ -31,7 +31,7 @@ func modesGlyphsCommand() *cobra.Command {
 			return inspectGlyphs(cmd.OutOrStdout(), args[0], format, grid)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "ascii", "mask preview format: ascii (# foreground, . background) or halfblock")
+	cmd.Flags().StringVar(&format, "format", "halfblock", "mask preview format: halfblock or ascii (# foreground, . background)")
 	cmd.Flags().IntVar(&grid, "grid", 8, "number of card columns in grid layout (default: 8)")
 	return cmd
 }

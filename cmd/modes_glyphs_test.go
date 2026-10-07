@@ -62,7 +62,7 @@ func TestModesGlyphsSelectors(t *testing.T) {
 func fmtCodepoint(r rune) string { return fmt.Sprintf("U+%04X", r) }
 
 func TestModesGlyphsHalfCards(t *testing.T) {
-	out, err := executeGlyphs("half", "--grid", "1")
+	asciiOut, err := executeGlyphs("half", "--format", "ascii", "--grid", "1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,18 +72,21 @@ func TestModesGlyphsHalfCards(t *testing.T) {
 		"'▀' U+2580 1x2\n┌─┐\n│#│\n│.│\n└─┘",
 		"'▄' U+2584 1x2\n┌─┐\n│.│\n│#│\n└─┘",
 	} {
-		if !strings.Contains(out, card) {
+		if !strings.Contains(asciiOut, card) {
 			t.Fatalf("missing card %q", card)
 		}
 	}
 
-	// Test default grid (8 columns side-by-side)
+	// Test default format (halfblock) and default grid (8 columns side-by-side)
 	gridOut, err := executeGlyphs("half")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(gridOut, "␠ (space) U+0020 1x2    '█' U+2588 1x2    '▀' U+2580 1x2    '▄' U+2584 1x2") {
 		t.Fatalf("expected grid layout in %s", gridOut)
+	}
+	if !strings.Contains(gridOut, "│ │                     │█│               │▀│               │▄│") {
+		t.Fatalf("expected halfblock glyph preview in %s", gridOut)
 	}
 }
 
@@ -94,7 +97,7 @@ func TestModesGlyphsGeneratedOrientation(t *testing.T) {
 		{"brailles", "'⠈' U+2808 2x4\n┌──┐\n│.#│\n│..│\n│..│\n│..│\n└──┘"},
 	} {
 		t.Run(tc.selector, func(t *testing.T) {
-			out, err := executeGlyphs(tc.selector, "--grid", "1")
+			out, err := executeGlyphs(tc.selector, "--format", "ascii", "--grid", "1")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -155,9 +158,13 @@ func TestModesGlyphsErrorsAndHelp(t *testing.T) {
 			t.Fatal(out)
 		}
 	}
-	out, err := executeGlyphs("half", "--format", "halfblock")
+	out, err := executeGlyphs("half")
 	if err != nil || !strings.Contains(out, "│▀│") {
 		t.Fatalf("%s %v", out, err)
+	}
+	asciiOut, err := executeGlyphs("half", "--format", "ascii")
+	if err != nil || !strings.Contains(asciiOut, "│#│") {
+		t.Fatalf("%s %v", asciiOut, err)
 	}
 }
 
