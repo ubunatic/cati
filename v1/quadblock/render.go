@@ -8,6 +8,9 @@
 //
 // Use RenderOpts with an Options value to enable quality variants.
 // Apply ReduceColors to the scaled image before rendering for palette modes.
+//
+// Image loading is not duplicated in this package — use [halfblock.LoadImage]
+// or [halfblock.RasterizeSVG] to decode a source image before calling Render.
 package quadblock
 
 import (

@@ -1,3 +1,11 @@
+// Package sextant renders images into the terminal using Unicode sextant
+// block characters (U+1FB00–U+1FB3B) combined with 24-bit ANSI true-color
+// escape sequences.
+//
+// Each terminal cell encodes a 2×3 pixel grid.
+//
+// Image loading is not duplicated in this package — use [halfblock.LoadImage]
+// or [halfblock.RasterizeSVG] to decode a source image before calling Render.
 package sextant
 
 import (

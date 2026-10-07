@@ -1,6 +1,6 @@
 # 034 — quadblock and sextant have no image loader, must import halfblock.LoadImage
 
-**Status**: Open
+**Status**: Closed
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Documentation
