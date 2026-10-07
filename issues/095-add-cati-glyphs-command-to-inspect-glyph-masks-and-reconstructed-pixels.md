@@ -1,6 +1,6 @@
 # 095 — Add cati glyphs command to inspect glyph masks and reconstructed pixels
 
-**Status**: In Progress
+**Status**: Closed
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Feature
@@ -21,8 +21,8 @@ Rather than fragmenting the CLI with a separate top-level command competing with
 
 ## 2. Technical Specification / Findings
 1. **Command Integration (`cmd/modes.go` / `cmd/modes_glyphs.go`)**:
-   - `cati modes glyphs [mode|expr]` (or `cati modes --glyphs [mode|expr]`): Lists the glyph inventory for a named mode (e.g. `oct`, `vec`, `half`, `six`) or debug expression (e.g. `d10,50`), displaying each glyph, codepoint, dimensions ($W \times H$), and a visual ASCII/halfblock subpixel mask card.
-   - `cati modes test [image|pattern] -m <mode>` (or `cati modes --reconstruct` / `cati modes -i <image> --diff`): Renders test inputs or preset patterns (single-cell asymmetric probes, diagonal cuts, multi-cell grids) and displays a side-by-side terminal comparison of **Source Pixels (1:1)** vs **Reconstructed Pixels (1:1)** alongside the glyph output and metric summary.
+   - `cati modes glyphs [mode|expr]`: Lists the glyph inventory for a named mode (e.g. `oct`, `vec`, `half`, `six`) or debug expression (e.g. `d10,50`), displaying each glyph, codepoint, dimensions ($W \times H$), and a visual ASCII/halfblock subpixel mask card (`--format ascii|halfblock`).
+   - `cati modes test [image|pattern] [-m mode|expr]`: Renders custom images (positional or `-i/--image`) or built-in probe patterns and displays a side-by-side terminal comparison of **Source Pixels (1:1)** vs **Reconstructed Pixels (1:1)** alongside the glyph output and MSE/PSNR/SSIM summary.
 2. **Data Flow**:
    - Uses `spec.ResolveGlyphSetExpression` to obtain authoritative shapes and geometry.
    - Uses `sparkline.RenderToGrid` / `sparkline.RenderToImageWithOptions` for glyph selection and faithful mask reconstruction.
@@ -37,8 +37,8 @@ M1 implemented: `cati modes glyphs [mode|expr]` resolves inventories from the
 spec and prints bordered ASCII or halfblock mask cards (`--format`). No selector
 lists compositions and registered sets. Tests cover selector grammar, ordering,
 geometry, mask orientation, errors, help, and an independent PNG fixture with
-embedded metadata. M1 command tests and preflight passed. M2 reconstruction
-probes are now implemented; M3 verification of the complete feature remains.
+embedded metadata. M1 command tests and preflight passed. All three milestones
+are complete.
 
 M2 implemented: `cati modes test [pattern|image] [-m mode|expr]` runs all three
 default demonstrations or one selected pattern/image, with `-i/--image` and
@@ -50,6 +50,19 @@ exact octant probes and the numerically explained lossy vector diagonal.
 Verification passed: `go test ./cmd/... ./internal/metrics/...`, `make test`
 (both fastpath configurations), `make preflight`, and installed CLI smoke checks.
 
-- **M1 (Glyph Inventory & Subpixel Mask Cards)**: Add `cati modes glyphs [mode|id]` (or `cati modes --glyphs`) displaying character, codepoint, and visual subpixel mask cards for any resolved mode or glyph set.
-- **M2 (Reconstruction Probe Comparison)**: Add `cati modes test` / `--reconstruct` comparing 1:1 Source Pixels vs Reconstructed Pixels side-by-side with emitted glyph art.
-- **M3 (Tests, Preflight & Docs)**: Comprehensive unit tests in `cmd/modes_test.go`, verify `make preflight` and CLI help.
+- [x] **M1 (Glyph Inventory & Subpixel Mask Cards)**: Delivered in `e900675` with `cmd/modes_glyphs.go`, comprehensive tests, an independent PNG fixture, and documentation.
+- [x] **M2 (Reconstruction Probe Comparison)**: Delivered in `ffc87d5` with `cmd/modes_probe.go`, built-in probe/asymmetric, diag/vector, and grid/multi patterns, custom images, mode expressions, shared MSE/PSNR semantics, and three independent PNG fixtures.
+- [x] **M3 (Final Verification & Closure)**: Final tests and preflight passed; delivery documentation and issue indexes synchronized.
+
+## 4. Final Verification — 2026-10-07
+
+- `go test ./...` passed at delivery commit `ffc87d5`; command tests completed in 60.227s. All packages passed or reported no test files.
+- `make preflight` passed: built and installed cati, catiplay, catibrowse and examples; `go vet ./...` passed; demo-widths reported `OK: no render errors`.
+- M1/M2 also passed `make test` in both default and reference (`CATI_FASTPATH=0`) configurations, focused command/metric tests, and installed CLI smoke checks for help, presets, glyph cards, and custom-image unions.
+- Tests verify mask orientation, inventory ordering, authoritative glyph reconstruction, nonzero bounds, alpha handling, transparent padding, ANSI panel alignment, errors, metrics, and metadata-bearing golden pixels. Existing renderer goldens remain unchanged.
+- Documentation covers delivered syntax, presets, 1:1 pixel semantics, and metric limits in `docs/System.md`, `docs/SparklinePixelArt.md`, and `docs/ImageQualityMetrics.md`.
+
+SSIM is explicitly unavailable below 8x8; larger-image SSIM uses complete 8x8
+windows only. The vector diagonal's expected fitting loss is documented and
+tested (RGBA8 MSE 1012.796875). No unresolved work remains for this ticket;
+related issues such as #086 and #055 retain their separate scope.
