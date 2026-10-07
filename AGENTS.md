@@ -16,6 +16,12 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
 
 - Agentic Loop Practices @docs/AgenticLoop.md,
   5-phase loop (Advisory -> Dev -> Review -> Hygiene -> Retro), zero zombie guarantee
+- Bash/Shell @docs/Bash.md,
+  Read before multi-line shell: Make recipes, embedded scripts
+  No ";", break before then/else/docs
+  No "if [[]]", No "if []", Use "if test"
+  smart indent!
+  Use git -C/make -C, not cd
 - Canary-first development @docs/Canary.md,
   probe external mechanisms before building features on them
 - Git @docs/Git.md,

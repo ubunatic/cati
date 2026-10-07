@@ -145,3 +145,6 @@ edit-baby: ⚙️  ## open baby vid in Kdenlive
 
 open-assets: ⚙️  ## open assets in file browser
 	open assets
+
+test-q1: 🤖  # run tests under Quota-1 enforcement
+	harnez exec --quota-1 -- $(MAKE) test

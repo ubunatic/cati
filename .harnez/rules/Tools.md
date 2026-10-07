@@ -18,6 +18,9 @@ subagents in a sprint skip it unless their skill requires it at the end; the hos
 ## Editing Discipline
 - Prefer structured patch tools (`apply_patch`) or whole-block replacements over
   narrow string substitution edits.
+- Codex `apply_patch`: patch one file per call, and re-read the exact lines
+  (`harnez read -L`) right before patching. Several operations on one file, or
+  stale context, fail the patch and can end the whole turn.
 - When making multi-line edits, ensure sufficient surrounding context lines to
   avoid ambiguous pattern matches.
 - **Reading & Context Discipline (Recommended for Large Files)**: Prefer
@@ -32,9 +35,13 @@ subagents in a sprint skip it unless their skill requires it at the end; the hos
 Applies when this project has an `issues/` tracker. To search existing issues,
 compute the next ticket number, or allocate one, use `harnez find` / `harnez issues`
 instead of `ls issues/`, `find`, or raw grep:
-- `harnez find -d <repo> issues -a status:open` — list active open issues (use `-I` for visual overview PNG card)
-- `harnez find -d <repo> issues "<query>"` — fuzzy search across titles and body text (use `-I` for visual overview)
-- `harnez issues show -d <repo> <n> -I` — render single issue as styled visual PNG card (inspect via `view_file`)
+- `harnez find -d <repo> issues -a status:open` — list active open issues as text.
+- `harnez find -d <repo> issues "<query>"` — fuzzy search across titles and body text.
+- `harnez issues show -d <repo> <n>` — read a single issue as text.
+- Use text for routine issue discovery and document reads. Render PNG cards with
+  `-I/--image` only when the user explicitly requests image output; do not add it
+  for an assumed token benefit. `harnez read --auto` always returns text.
+  Existing PNG documentation links may still be inspected as documentation.
 - `harnez find -d <repo> issues next` — report the next free ticket number (read-only)
 - `harnez issues new -d <repo> "<title>"` — run this right away; it reserves the number and creates the ticket skeleton.
 - Open the printed file and fill it in, keeping its schema; do not search for a template first.
@@ -46,8 +53,8 @@ instead of `ls issues/`, `find`, or raw grep:
 
 ## Harnez Agent
 - Prefer loaded `mcp__harnez__*` tools for lifecycle actions; otherwise use `harnez agent` via Bash (see the local Subagent Policy).
-- A requested model such as `terra:low` or `luna` is a Harnez agent model (see `harnez agent models`); dispatch it with `harnez agent start --model <name>`, regardless of `subagent_mode`.
-- Start: `harnez agent start --name <name> --role <role> --model <model> -p <prompt>`. Wait on it with your host's own tool: Claude Bash `run_in_background: true`; agy a background task; Codex `exec_command`, then `write_stdin` on the returned `session_id` until an exit code. After 60s it may detach and print the same host-specific reattach steps.
+- A requested model such as `sol:low` or `luna` is a Harnez agent model (see `harnez agent models`); dispatch it with `harnez agent start --model <name>`, regardless of `subagent_mode`.
+- Start: `harnez agent start --name <name> --role <role> --model <model> -p <prompt>`; roles are `orchestrator`, `developer`, `reviewer` and `advisor`. Run it with `HTO=0` in your session background, one call per worker, so it never detaches: Claude Bash `run_in_background: true` (jobs stop after 30 minutes; size worker turns to finish before that); agy `run_command` with a small `WaitMsBeforeAsync`; Codex `exec_command`, then `write_stdin` on the returned `session_id` until an exit code. Never use shell `&`, `nohup` or a status/log polling loop; see `harnez agent start --help`.
 - List: `harnez agent list`.
 - Status: `harnez agent status --name <session>`.
 - Wait: `harnez agent wait <session>` (session is positional).
