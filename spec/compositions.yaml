@@ -43,7 +43,7 @@ compositions:
     experimental: false
   - name: 2x4
     aliases: []
-    sets: [fulls, sides, brailles]
+    sets: [fulls, brailles]
     info: "Uses full cells, sides and native 2x4 braille patterns at 2x4 geometry."
     experimental: false
   - name: 3x3
