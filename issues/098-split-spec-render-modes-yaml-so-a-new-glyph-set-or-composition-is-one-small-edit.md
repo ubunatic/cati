@@ -113,6 +113,19 @@ M1 is now three commits, each green on its own:
   collision, unused set).
 - **M1c (vector shapes file):** `vector_shapes:` → `glyph_shapes/vector.yaml`.
 
+### M1a delivered: glyph set files (4551e48 on `issue-098-m1`)
+20 files in `spec/glyph_sets/`, `glyph_set.schema.json`, loader `LoadRenderModesFrom(fs.FS)`,
+tests for duplicate id, prefix ≠ id, invalid file, missing directory. Host check: `go vet`
+and `go test ./...` green; all 114 `cati modes glyphs` baselines and `cati modes -l` are
+byte-identical. Each set file has an `order:` field because the registry order is not
+the ID order.
+
+### M1b Pre-Work (host review of M1a)
+- Drop the "every set is used by a composition" check. `mbars` (45) is reserved for #014
+  and is consumed on its own by `cati modes glyphs mbars`; every registry set is
+  previewable that way. Keep the other M1b checks (unknown set name, alias collision).
+- Add a test that two set files with the same `order:` value fail to load.
+
 ## 4. Implementation & Verification Plan
 /goal Split the render-mode spec as proposed (adjusted by the open questions), with no
 change in behaviour, and verify it — or stop and report when blocked on a user decision
@@ -122,7 +135,7 @@ Done when:
 - `cati modes glyphs` output for every composition and set is byte-identical before
   and after (capture it first), and no golden changes.
 - Schemas cover every new file; spec integrity tests check: unique IDs, file prefix =
-  ID, every composition set name exists, every set is used by some composition or mode.
+  ID, unique `order:`, every composition set name exists, no alias collides with a name.
 - `docs/Design.md` §3.1 file map, `docs/Spec.md` if needed, and
   `docs/SparklinePixelArt.md` references to `render_modes.yaml` sections are updated.
 - `go vet ./...`, `go test ./...`, `make preflight` pass.
