@@ -251,13 +251,14 @@ type SmartRenderPolicy struct {
 }
 
 type RenderModesSpec struct {
+	Schema           string              `yaml:"$schema"`
 	Cycle            []string            `yaml:"cycle"`
 	Modes            []RenderModeDef     `yaml:"modes"`
 	GlyphSets        map[string][]string `yaml:"glyph_sets"`
 	Colorers         map[string]string   `yaml:"colorers"`
 	Renderers        map[string]string   `yaml:"renderers"`
 	Smart            SmartRenderPolicy   `yaml:"smart"`
-	SetRegistry      []GlyphSetDef       `yaml:"set_registry"`
+	SetRegistry      []GlyphSetDef       `yaml:"-"`
 	Compositions     map[string][]int    `yaml:"compositions"`
 	CompositionInfo  map[string]string   `yaml:"composition_info"`
 	CompositionOrder []string            `yaml:"composition_order"`
@@ -266,13 +267,26 @@ type RenderModesSpec struct {
 }
 
 func LoadRenderModes() (RenderModesSpec, error) {
+	return LoadRenderModesFrom(FS)
+}
+
+// LoadRenderModesFrom loads render mode metadata and glyph set files from fsys.
+func LoadRenderModesFrom(fsys fs.FS) (RenderModesSpec, error) {
 	var spec RenderModesSpec
-	data, err := fs.ReadFile(FS, "render_modes.yaml")
+	data, err := fs.ReadFile(fsys, "render_modes.yaml")
 	if err != nil {
 		return spec, err
 	}
-	if err = yaml.Unmarshal(data, &spec); err != nil {
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	if err = decoder.Decode(&spec); err != nil {
 		return spec, err
+	}
+	if err = loadGlyphRegistry(fsys, &spec); err != nil {
+		return RenderModesSpec{}, err
+	}
+	if len(spec.SetRegistry) == 0 {
+		return spec, nil
 	}
 	if err = validateGlyphRegistry(spec); err != nil {
 		return RenderModesSpec{}, err
@@ -281,7 +295,9 @@ func LoadRenderModes() (RenderModesSpec, error) {
 }
 
 type GlyphSetDef struct {
+	Schema      string             `yaml:"$schema"`
 	ID          int                `yaml:"id"`
+	Order       int                `yaml:"order"`
 	Name        string             `yaml:"name"`
 	Geometry    RenderModeGeometry `yaml:"geometry"`
 	Glyphs      []string           `yaml:"glyphs"`
@@ -289,6 +305,40 @@ type GlyphSetDef struct {
 	Generated   string             `yaml:"generated"`
 	Approximate bool               `yaml:"approximate"`
 	Optimized   bool               `yaml:"optimized"`
+}
+
+func loadGlyphRegistry(fsys fs.FS, spec *RenderModesSpec) error {
+	files, err := fs.Glob(fsys, "glyph_sets/*.yaml")
+	if err != nil {
+		return fmt.Errorf("list glyph set files: %w", err)
+	}
+	spec.SetRegistry = nil
+	for _, file := range files {
+		data, err := fs.ReadFile(fsys, file)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", file, err)
+		}
+		var def GlyphSetDef
+		decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+		decoder.KnownFields(true)
+		if err := decoder.Decode(&def); err != nil {
+			return fmt.Errorf("%s: %w", file, err)
+		}
+		if def.Schema == "" {
+			return fmt.Errorf("%s: missing $schema", file)
+		}
+		prefix := strings.TrimSuffix(strings.TrimPrefix(file, "glyph_sets/"), ".yaml")
+		idText, _, ok := strings.Cut(prefix, "-")
+		id, parseErr := strconv.Atoi(idText)
+		if !ok || parseErr != nil || id != def.ID {
+			return fmt.Errorf("%s: filename ID prefix does not match id %d", file, def.ID)
+		}
+		spec.SetRegistry = append(spec.SetRegistry, def)
+	}
+	sort.SliceStable(spec.SetRegistry, func(i, j int) bool {
+		return spec.SetRegistry[i].Order < spec.SetRegistry[j].Order
+	})
+	return nil
 }
 
 type GlyphShape struct {

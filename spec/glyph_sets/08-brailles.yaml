@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=../schemas/glyph_set.schema.json
+$schema: ../schemas/glyph_set.schema.json
+id: 8
+order: 5
+name: brailles
+geometry: { w: 2, h: 4 }
+generated: braille_2x4
+optimized: true

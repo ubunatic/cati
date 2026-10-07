@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../schemas/glyph_set.schema.json
+$schema: ../schemas/glyph_set.schema.json
+id: 44
+order: 16
+name: bars
+geometry: { w: 4, h: 4 }
+glyphs: [" ", "▂", "▄", "▆", "▎", "▌", "▊"]
+masks: {" ": "0000000000000000", "▂": "0000000000001111", "▄": "0000000011111111", "▆": "0000111111111111", "▎": "1000100010001000", "▌": "1100110011001100", "▊": "1110111011101110"}
+optimized: true

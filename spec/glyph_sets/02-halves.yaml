@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../schemas/glyph_set.schema.json
+$schema: ../schemas/glyph_set.schema.json
+id: 2
+order: 2
+name: halves
+geometry: { w: 1, h: 2 }
+glyphs: [" ", "▀", "▄"]
+masks: {" ": "00", "▀": "10", "▄": "01"}
+optimized: true

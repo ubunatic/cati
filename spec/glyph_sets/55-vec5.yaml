@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=../schemas/glyph_set.schema.json
+$schema: ../schemas/glyph_set.schema.json
+id: 55
+order: 10
+name: vec5
+geometry: { w: 3, h: 5 }
+generated: vector_linear_splits
+optimized: true

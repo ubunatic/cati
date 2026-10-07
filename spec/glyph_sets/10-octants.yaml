@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=../schemas/glyph_set.schema.json
+$schema: ../schemas/glyph_set.schema.json
+id: 10
+order: 6
+name: octants
+geometry: { w: 2, h: 4 }
+generated: octant_2x4
+optimized: true

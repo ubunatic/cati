@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=../schemas/glyph_set.schema.json
+$schema: ../schemas/glyph_set.schema.json
+id: 15
+order: 15
+name: vmbars
+geometry: { w: 2, h: 4 }
+approximate: true
+glyphs: [" ", "🬋", "🬇", "🬃"]
+masks: {" ": "00000000", "🬋": "00111100", "🬇": "00010100", "🬃": "00101000"}
+optimized: true

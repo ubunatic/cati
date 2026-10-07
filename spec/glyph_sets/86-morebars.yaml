@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../schemas/glyph_set.schema.json
+$schema: ../schemas/glyph_set.schema.json
+id: 86
+order: 18
+name: morebars
+geometry: { w: 8, h: 8 }
+glyphs: [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "▎", "▍", "▌", "▋", "▊"]
+generated: unicode_bars
+optimized: true

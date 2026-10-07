@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cati glyph set definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "id", "order", "name", "geometry"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "integer", "minimum": 0 },
+    "order": { "type": "integer", "minimum": 0 },
+    "name": { "type": "string", "minLength": 1 },
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["w", "h"],
+      "properties": {
+        "w": { "type": "integer", "minimum": 1 },
+        "h": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "glyphs": { "type": "array", "items": { "type": "string" } },
+    "masks": { "type": "object", "additionalProperties": { "type": "string", "pattern": "^[01]+$" } },
+    "generated": { "enum": ["sextant_2x3", "unicode_bars", "braille_2x4", "octant_2x4", "vector_linear_splits"] },
+    "approximate": { "type": "boolean" },
+    "optimized": { "type": "boolean" }
+  }
+}

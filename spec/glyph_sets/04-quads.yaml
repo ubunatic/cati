@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../schemas/glyph_set.schema.json
+$schema: ../schemas/glyph_set.schema.json
+id: 4
+order: 3
+name: quads
+geometry: { w: 2, h: 2 }
+glyphs: [" ", "▘", "▝", "▖", "▗", "▚", "▞", "▛", "▜", "▙", "▟"]
+masks: {" ": "0000", "▘": "1000", "▝": "0100", "▖": "0010", "▗": "0001", "▚": "1001", "▞": "0110", "▛": "1110", "▜": "1101", "▙": "1011", "▟": "0111"}
+optimized: true

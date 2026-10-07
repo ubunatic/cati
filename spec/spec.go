@@ -7,7 +7,7 @@ import (
 	"io/fs"
 )
 
-//go:embed *.yaml schemas
+//go:embed *.yaml schemas glyph_sets/*.yaml
 var root embed.FS
 
 // FS is the embedded spec filesystem. Paths are relative to the spec/ directory,
