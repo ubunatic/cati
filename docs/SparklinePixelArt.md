@@ -103,7 +103,9 @@ leaving a notch. To
 fix a glyph, edit its line there. Where no rule fits a small size, draw the mask
 by hand with `masks: { 3x5: ["...", "#..", ...] }` ('#' on, '.' off, top row
 first); it replaces the computed mask at that size only, and glyphs that `invert`
-it follow. Draw what the font shows at that size, because the mask decides which
+it follow unless they carry their own drawing. At 3×5 the thin corner diagonals
+(`🬽🬾🭀🭈🭉🭋🭘🭙🭛🭣🭤🭦`) are drawn with every pixel at least about ⅓ covered, so their
+tips stay visible; their drawn inverses overlap their partners on purpose. Draw what the font shows at that size, because the mask decides which
 cells get the glyph. First drawn: the tips of `🭬🭮` at 3×5 (`vec5`), whose 42%
 centre-pixel coverage left them off (`TestVectorDrawnMasksAreUsed`). The sextant middle-row glyphs `🬃🬇🬋`
 (U+1FB03/07/0B) are left half, right half and full width of the middle third;

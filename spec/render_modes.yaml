@@ -416,7 +416,9 @@ compositions:
 # Hand tuning: masks: { 3x5: ["...", "#..", ...] } replaces the computed mask at
 # that size only ('#' on, '.' off, one string per row, top first). Draw what the
 # font shows at that size: the mask decides which cells get the glyph. A glyph
-# with invert: follows its source, so tune the source instead.
+# with invert: follows its source unless it has its own masks: for that size.
+# At 3x5, thin corner diagonals are drawn with every pixel that is at least
+# about 1/3 covered, so their tips stay visible.
 # List order is the glyph inventory order.
 vector_shapes:
   points:
@@ -463,10 +465,31 @@ vector_shapes:
     - { glyph: "🮚", polys: [[UL, UR, C], [LL, C, LR]] }    # U+1FB9A UPPER AND LOWER TRIANGULAR HALF BLOCK
     - { glyph: "🮛", invert: "🮚" }                          # U+1FB9B LEFT AND RIGHT TRIANGULAR HALF BLOCK
     - { glyph: "🬼", split: [LML, LC, LL] }                 # U+1FB3C LOWER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO LOWER CENTRE
-    - { glyph: "🬽", split: [LML, LR, LL] }                 # U+1FB3D LOWER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO LOWER RIGHT
-    - { glyph: "🬾", split: [UML, LC, LL] }                 # U+1FB3E LOWER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER CENTRE
+    - glyph: "🬽"                                           # U+1FB3D LOWER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO LOWER RIGHT
+      split: [LML, LR, LL]
+      masks:
+        3x5: ["...",
+              "...",
+              "...",
+              "#..",
+              "##."]
+    - glyph: "🬾"                                           # U+1FB3E LOWER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER CENTRE
+      split: [UML, LC, LL]
+      masks:
+        3x5: ["...",
+              "...",
+              "#..",
+              "#..",
+              "#.."]
     - { glyph: "🬿", split: [UML, LR, LL] }                 # U+1FB3F LOWER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER RIGHT
-    - { glyph: "🭀", split: [UL, LC, LL] }                  # U+1FB40 LOWER LEFT BLOCK DIAGONAL UPPER LEFT TO LOWER CENTRE
+    - glyph: "🭀"                                           # U+1FB40 LOWER LEFT BLOCK DIAGONAL UPPER LEFT TO LOWER CENTRE
+      split: [UL, LC, LL]
+      masks:
+        3x5: ["...",
+              "#..",
+              "#..",
+              "#..",
+              "##."]
     - { glyph: "🭁", split: [UML, UC, LR] }                 # U+1FB41 LOWER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER CENTRE
     - { glyph: "🭂", split: [UML, UR, LR] }                 # U+1FB42 LOWER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER RIGHT
     - { glyph: "🭃", split: [LML, UC, LR] }                 # U+1FB43 LOWER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER CENTRE
@@ -474,10 +497,31 @@ vector_shapes:
     - { glyph: "🭅", split: [LL, UC, LR] }                  # U+1FB45 LOWER RIGHT BLOCK DIAGONAL LOWER LEFT TO UPPER CENTRE
     - { glyph: "🭆", split: [LML, UMR, LR] }                # U+1FB46 LOWER RIGHT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER MIDDLE RIGHT
     - { glyph: "🭇", split: [LC, LMR, LR] }                 # U+1FB47 LOWER RIGHT BLOCK DIAGONAL LOWER CENTRE TO LOWER MIDDLE RIGHT
-    - { glyph: "🭈", split: [LL, LMR, LR] }                 # U+1FB48 LOWER RIGHT BLOCK DIAGONAL LOWER LEFT TO LOWER MIDDLE RIGHT
-    - { glyph: "🭉", split: [LC, UMR, LR] }                 # U+1FB49 LOWER RIGHT BLOCK DIAGONAL LOWER CENTRE TO UPPER MIDDLE RIGHT
+    - glyph: "🭈"                                           # U+1FB48 LOWER RIGHT BLOCK DIAGONAL LOWER LEFT TO LOWER MIDDLE RIGHT
+      split: [LL, LMR, LR]
+      masks:
+        3x5: ["...",
+              "...",
+              "...",
+              "..#",
+              ".##"]
+    - glyph: "🭉"                                           # U+1FB49 LOWER RIGHT BLOCK DIAGONAL LOWER CENTRE TO UPPER MIDDLE RIGHT
+      split: [LC, UMR, LR]
+      masks:
+        3x5: ["...",
+              "...",
+              "..#",
+              "..#",
+              "..#"]
     - { glyph: "🭊", split: [LL, UMR, LR] }                 # U+1FB4A LOWER RIGHT BLOCK DIAGONAL LOWER LEFT TO UPPER MIDDLE RIGHT
-    - { glyph: "🭋", split: [LC, UR, LR] }                  # U+1FB4B LOWER RIGHT BLOCK DIAGONAL LOWER CENTRE TO UPPER RIGHT
+    - glyph: "🭋"                                           # U+1FB4B LOWER RIGHT BLOCK DIAGONAL LOWER CENTRE TO UPPER RIGHT
+      split: [LC, UR, LR]
+      masks:
+        3x5: ["...",
+              "..#",
+              "..#",
+              "..#",
+              ".##"]
     - { glyph: "🭌", split: [UC, UMR, LL] }                 # U+1FB4C LOWER LEFT BLOCK DIAGONAL UPPER CENTRE TO UPPER MIDDLE RIGHT
     - { glyph: "🭍", split: [UL, UMR, LL] }                 # U+1FB4D LOWER LEFT BLOCK DIAGONAL UPPER LEFT TO UPPER MIDDLE RIGHT
     - { glyph: "🭎", split: [UC, LMR, LL] }                 # U+1FB4E LOWER LEFT BLOCK DIAGONAL UPPER CENTRE TO LOWER MIDDLE RIGHT
@@ -490,10 +534,31 @@ vector_shapes:
     - { glyph: "🭕", invert: "🬿" }                          # U+1FB55 UPPER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER RIGHT
     - { glyph: "🭖", invert: "🭀" }                          # U+1FB56 UPPER RIGHT BLOCK DIAGONAL UPPER LEFT TO LOWER CENTRE
     - { glyph: "🭗", invert: "🭁" }                          # U+1FB57 UPPER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER CENTRE
-    - { glyph: "🭘", invert: "🭂" }                          # U+1FB58 UPPER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER RIGHT
-    - { glyph: "🭙", invert: "🭃" }                          # U+1FB59 UPPER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER CENTRE
+    - glyph: "🭘"                                           # U+1FB58 UPPER LEFT BLOCK DIAGONAL UPPER MIDDLE LEFT TO UPPER RIGHT
+      invert: "🭂"
+      masks:
+        3x5: ["##.",
+              "#..",
+              "...",
+              "...",
+              "..."]
+    - glyph: "🭙"                                           # U+1FB59 UPPER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER CENTRE
+      invert: "🭃"
+      masks:
+        3x5: ["#..",
+              "#..",
+              "#..",
+              "...",
+              "..."]
     - { glyph: "🭚", invert: "🭄" }                          # U+1FB5A UPPER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER RIGHT
-    - { glyph: "🭛", invert: "🭅" }                          # U+1FB5B UPPER LEFT BLOCK DIAGONAL LOWER LEFT TO UPPER CENTRE
+    - glyph: "🭛"                                           # U+1FB5B UPPER LEFT BLOCK DIAGONAL LOWER LEFT TO UPPER CENTRE
+      invert: "🭅"
+      masks:
+        3x5: ["##.",
+              "#..",
+              "#..",
+              "#..",
+              "..."]
     - { glyph: "🭜", invert: "🭆" }                          # U+1FB5C UPPER LEFT BLOCK DIAGONAL LOWER MIDDLE LEFT TO UPPER MIDDLE RIGHT
     - { glyph: "🭝", invert: "🭇" }                          # U+1FB5D UPPER LEFT BLOCK DIAGONAL LOWER CENTRE TO LOWER MIDDLE RIGHT
     - { glyph: "🭞", invert: "🭈" }                          # U+1FB5E UPPER LEFT BLOCK DIAGONAL LOWER LEFT TO LOWER MIDDLE RIGHT
@@ -501,10 +566,31 @@ vector_shapes:
     - { glyph: "🭠", invert: "🭊" }                          # U+1FB60 UPPER LEFT BLOCK DIAGONAL LOWER LEFT TO UPPER MIDDLE RIGHT
     - { glyph: "🭡", invert: "🭋" }                          # U+1FB61 UPPER LEFT BLOCK DIAGONAL LOWER CENTRE TO UPPER RIGHT
     - { glyph: "🭢", invert: "🭌" }                          # U+1FB62 UPPER RIGHT BLOCK DIAGONAL UPPER CENTRE TO UPPER MIDDLE RIGHT
-    - { glyph: "🭣", invert: "🭍" }                          # U+1FB63 UPPER RIGHT BLOCK DIAGONAL UPPER LEFT TO UPPER MIDDLE RIGHT
-    - { glyph: "🭤", invert: "🭎" }                          # U+1FB64 UPPER RIGHT BLOCK DIAGONAL UPPER CENTRE TO LOWER MIDDLE RIGHT
+    - glyph: "🭣"                                           # U+1FB63 UPPER RIGHT BLOCK DIAGONAL UPPER LEFT TO UPPER MIDDLE RIGHT
+      invert: "🭍"
+      masks:
+        3x5: [".##",
+              "..#",
+              "...",
+              "...",
+              "..."]
+    - glyph: "🭤"                                           # U+1FB64 UPPER RIGHT BLOCK DIAGONAL UPPER CENTRE TO LOWER MIDDLE RIGHT
+      invert: "🭎"
+      masks:
+        3x5: ["..#",
+              "..#",
+              "..#",
+              "...",
+              "..."]
     - { glyph: "🭥", invert: "🭏" }                          # U+1FB65 UPPER RIGHT BLOCK DIAGONAL UPPER LEFT TO LOWER MIDDLE RIGHT
-    - { glyph: "🭦", invert: "🭐" }                          # U+1FB66 UPPER RIGHT BLOCK DIAGONAL UPPER CENTRE TO LOWER RIGHT
+    - glyph: "🭦"                                           # U+1FB66 UPPER RIGHT BLOCK DIAGONAL UPPER CENTRE TO LOWER RIGHT
+      invert: "🭐"
+      masks:
+        3x5: [".##",
+              "..#",
+              "..#",
+              "..#",
+              "..."]
     - { glyph: "🭧", invert: "🭑" }                          # U+1FB67 UPPER RIGHT BLOCK DIAGONAL UPPER MIDDLE LEFT TO LOWER MIDDLE RIGHT
     - { glyph: "🭨", invert: "🭬" }                          # U+1FB68 UPPER AND RIGHT AND LOWER TRIANGULAR THREE QUARTERS BLOCK
     - { glyph: "🭩", invert: "🭭" }                          # U+1FB69 LEFT AND LOWER AND RIGHT TRIANGULAR THREE QUARTERS BLOCK

@@ -45,7 +45,7 @@ func (f CellFrac) check(node *yaml.Node) error {
 // VectorShapeDef describes one glyph of a vector_linear_splits set. Rects and
 // Polys form a union; Split and Invert stand alone; no field means empty.
 // Masks holds hand-drawn masks keyed by geometry ("3x5"), one string per row
-// ('#' on, '.' off); at that geometry it replaces the computed mask.
+// ('#' on, '.' off); at that geometry it replaces the computed or inverted mask.
 type VectorShapeDef struct {
 	Glyph  string              `yaml:"glyph"`
 	Rects  [][4]CellFrac       `yaml:"rects"`
@@ -122,9 +122,6 @@ func vectorShapes(vs VectorShapesSpec, w, h int) ([]GlyphShape, error) {
 			return nil, fmt.Errorf("vector glyph %q mixes rects/polys, split and invert", def.Glyph)
 		}
 		if def.Invert != "" {
-			if len(def.Masks) > 0 {
-				return nil, fmt.Errorf("vector glyph %q: draw masks on %q, which it inverts", def.Glyph, def.Invert)
-			}
 			continue // resolved below, once every direct shape exists
 		}
 		drawn, err := drawnMask(def, w, h)
@@ -199,6 +196,14 @@ func vectorShapes(vs VectorShapesSpec, w, h int) ([]GlyphShape, error) {
 		target := []rune(def.Invert)
 		if len(target) != 1 || byGlyph[target[0]].Invert != "" || masks[target[0]] == nil {
 			return nil, fmt.Errorf("vector glyph %q inverts %q, which must be a listed non-invert glyph", def.Glyph, def.Invert)
+		}
+		drawn, err := drawnMask(def, w, h)
+		if err != nil {
+			return nil, err
+		}
+		if drawn != nil {
+			masks[r] = drawn
+			continue
 		}
 		inv := make([]bool, w*h)
 		for i, on := range masks[target[0]] {
