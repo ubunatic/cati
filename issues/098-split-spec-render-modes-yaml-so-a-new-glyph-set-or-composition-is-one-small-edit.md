@@ -126,6 +126,28 @@ the ID order.
   previewable that way. Keep the other M1b checks (unknown set name, alias collision).
 - Add a test that two set files with the same `order:` value fail to load.
 
+### M1 delivered: compositions file and vector shapes file
+M1b d7d3eea (`compositions.yaml`, aliases on records, schema, tests for duplicate order,
+unknown set, alias collision), M1c 7d39cfb (`glyph_shapes/vector.yaml`, schema).
+`render_modes.yaml` is down to 235 lines. Host check on 7d39cfb: `go vet`, `go test ./...`
+green; all 114 baselines and `cati modes -l` byte-identical.
+
+### M2 Pre-Work (host review of M1)
+- `issue-098-m1` is not a descendant of `main` (main has ticket-only commits after
+  e2dcb27). Rebase the branch onto `main` in the worktree first; no conflicts expected.
+- Docs in the worktree, one commit: Design.md §3.1 file map (the three new files, the
+  `glyph_sets/` and `glyph_shapes/` dirs and their schemas, "how to add a set": one
+  file + one record), Spec.md only if it names `render_modes.yaml` sections, and every
+  reference to `set_registry:`, `compositions:`, `composition_info:`, `vector_shapes:`
+  in docs/ (`harnez find docs`).
+- `make preflight` in the worktree.
+- Integration in /home/uwe/projects/cati, exactly: `git stash push -- spec/render_modes.yaml`,
+  `git merge --ff-only issue-098-m1`, set the `2x4` record in `spec/compositions.yaml` to
+  `sets: [fulls, brailles]` and leave it **uncommitted**, `git stash drop`. Never touch
+  or stage `cmd/modes.go`. Then `make install`.
+- Close with `harnez issues close 98 "<real outcome>"`; its commit stages only the
+  ticket and `issues/README.md`.
+
 ## 4. Implementation & Verification Plan
 /goal Split the render-mode spec as proposed (adjusted by the open questions), with no
 change in behaviour, and verify it — or stop and report when blocked on a user decision
