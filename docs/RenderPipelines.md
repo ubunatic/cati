@@ -123,7 +123,7 @@ src (2x2 pixels)
 
 ## 4. Sextant Pipeline (`sextant`)
 
-The sextant mode divides each terminal cell into a 2x3 sub-pixel grid, mapping to the Unicode sextant block glyphs (U+1FBF0–U+1FBF9) and utilizing fallback half-blocks where needed.
+The sextant mode divides each terminal cell into a 2x3 sub-pixel grid, mapping to the Unicode sextant block glyphs (U+1FB00–U+1FB3B). The four masks Unicode leaves out of that range use older blocks: the left and right columns are `▌`/`▐`, the full cell is `█` in the foreground color, and the empty cell is a space in the background color.
 
 ### Process Flow
 ```mermaid

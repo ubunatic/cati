@@ -139,13 +139,12 @@ func init() {
 	sextantRunes[leftColumnMask] = '▌'
 	sextantRuneByMask[rightColumnMask] = '▐'
 	sextantRunes[rightColumnMask] = '▐'
-	// Empty and full cells are emitted as spaces with an optional color escape;
-	// keeping them in the table makes the candidate set complete while
-	// scoreMask handles their special display semantics below.
+	// The empty cell is a space in the background color; the full cell is █ in
+	// the foreground color, like the quad and half renderers.
 	sextantRuneByMask[0] = ' '
 	sextantRunes[0] = ' '
-	sextantRuneByMask[0b111111] = ' '
-	sextantRunes[0b111111] = ' '
+	sextantRuneByMask[0b111111] = '█'
+	sextantRunes[0b111111] = '█'
 }
 
 // leftColumnMask / rightColumnMask are the two full-column patterns that map to
@@ -705,22 +704,6 @@ func scoreMask(pixels [6]color.RGBA, mask uint8) (cellResult, int) {
 		score += rgbaDist2(p, target)
 	}
 
-	if mask == 0 || mask == 0b111111 {
-		cell.ch = ' '
-		cell.mask = 0
-		if mask == 0 && cell.bg.A == 0 {
-			if bgN > 0 {
-				cell.bg = bg
-				cell.hasBG = true
-			}
-		}
-		if mask == 0b111111 && cell.bg.A == 0 {
-			if fgN > 0 {
-				cell.bg = fg
-				cell.hasBG = true
-			}
-		}
-	}
 	return cell, score
 }
 
@@ -883,18 +866,6 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 			cell.hasBG = true
 		}
 
-		if m == 0 || m == 0b111111 {
-			cell.ch = ' '
-			cell.mask = 0
-			if m == 0 && !cell.hasBG && bgN > 0 {
-				cell.bg = color.RGBA{R: uint8(bgR), G: uint8(bgG), B: uint8(bgB), A: 255}
-				cell.hasBG = true
-			}
-			if m == 0b111111 && !cell.hasBG && fgN > 0 {
-				cell.bg = color.RGBA{R: uint8(fgR), G: uint8(fgG), B: uint8(fgB), A: 255}
-				cell.hasBG = true
-			}
-		}
 
 		overlap := bits.OnesCount8(m & preferred)
 		pop := bits.OnesCount8(m)

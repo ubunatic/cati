@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"ubunatic.com/cati/v1/core"
 	"ubunatic.com/cati/v1/halfblock"
 )
 
@@ -94,6 +95,22 @@ func TestSextantModeChoosesBestRepresentableMask(t *testing.T) {
 				t.Fatalf("chooseCell(2x3) mask = %06b, want %06b", cell.mask, tc.mask)
 			}
 		})
+	}
+}
+
+// TestSextantFullCellIsFullBlock: a solid cell is █ in the foreground color,
+// not a space painted with a background escape, on both selection paths.
+func TestSextantFullCellIsFullBlock(t *testing.T) {
+	saved := core.Fastpath
+	defer func() { core.Fastpath = saved }()
+	red := color.RGBA{R: 200, A: 255}
+	pixels := [6]color.RGBA{red, red, red, red, red, red}
+	for _, fast := range []bool{true, false} {
+		core.Fastpath = fast
+		cell := chooseCell(pixels, ModeSextant)
+		if cell.ch != '█' || cell.mask != 0b111111 || !cell.hasFG || cell.fg != red || cell.hasBG {
+			t.Fatalf("fastpath=%v: solid cell = %+v, want █ with fg %v and no bg", fast, cell, red)
+		}
 	}
 }
 
