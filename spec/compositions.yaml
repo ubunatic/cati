@@ -1,0 +1,108 @@
+# yaml-language-server: $schema=schemas/compositions.schema.json
+$schema: schemas/compositions.schema.json
+compositions:
+  - name: full
+    aliases: [f, "1", 1x1]
+    sets: [fulls]
+    info: "Uses empty and full cells at 1x1 geometry."
+    experimental: false
+  - name: half
+    aliases: [h, h2, "2", 1x2]
+    sets: [fulls, halves]
+    info: "Uses full cells and top/bottom halves at 1x2 geometry."
+    experimental: false
+  - name: quad
+    aliases: [q, "4"]
+    sets: [fulls, sides, halves, quads]
+    info: "Combines full cells, sides, halves and quadrants at 2x2 geometry."
+    experimental: false
+  - name: quad+
+    aliases: [Q]
+    sets: [fulls, sides, halves, quads, vbars, vmbars]
+    info: "Adds quarter-height and split-middle approximations to quad at 2x4 geometry."
+    experimental: false
+  - name: bars
+    aliases: [b]
+    sets: [fulls, sides, halves, quads, bars]
+    info: "Adds reduced horizontal and vertical bars to quad at 4x4 geometry."
+    experimental: false
+  - name: bars+
+    aliases: [B]
+    sets: [fulls, sides, halves, quads, morebars]
+    info: "Adds the non-hairline eighth bars to quad at 8x8 geometry."
+    experimental: false
+  - name: six
+    aliases: [x]
+    sets: [fulls, sides, halves, quads, sextants]
+    info: "Combines full cells, sides, halves, quadrants and sextants at 2x6 geometry."
+    experimental: false
+  - name: 2x3
+    aliases: [s2, "6"]
+    sets: [fulls, sides, sextants]
+    info: "Uses full cells, sides and native sextants at 2x3 geometry."
+    experimental: false
+  - name: 2x4
+    aliases: []
+    sets: [fulls, sides, brailles]
+    info: "Uses full cells, sides and native 2x4 braille patterns at 2x4 geometry."
+    experimental: false
+  - name: 3x3
+    aliases: ["9"]
+    sets: [fulls, sides, sextants, ninelikes]
+    info: "Combines native sextants with approximate 3x3 line shapes at actual 6x3 geometry."
+    experimental: false
+  - name: octant
+    aliases: [oct]
+    sets: [fulls, octants]
+    info: "Uses full cells and native 2x4 octant block characters (U+1CD00-U+1CDE5) at 2x4 geometry."
+    experimental: false
+  - name: vec2
+    aliases: []
+    sets: [fulls, vec2]
+    info: "Uses linear cell-split characters at 2x2 geometry."
+    experimental: true
+  - name: vec3
+    aliases: []
+    sets: [fulls, vec3]
+    info: "Uses linear cell-split characters at 2x3 geometry."
+    experimental: true
+  - name: vec4
+    aliases: []
+    sets: [fulls, vec4]
+    info: "Uses linear cell-split characters at 3x4 geometry."
+    experimental: true
+  - name: vec5
+    aliases: []
+    sets: [fulls, vec5]
+    info: "Uses linear cell-split characters at 3x5 geometry."
+    experimental: true
+  - name: vec6
+    aliases: [vector, v, vec]
+    sets: [fulls, vec6]
+    info: "Uses linear cell-split characters including block diagonals, triangles, and half blocks at 4x6 geometry."
+    experimental: false
+  - name: vec8
+    aliases: []
+    sets: [fulls, vec8]
+    info: "Uses linear cell-split characters at 4x8 geometry."
+    experimental: true
+  - name: all
+    aliases: [a]
+    sets: [fulls, sides, halves, quads, sextants, ninelikes]
+    info: "Combines quad, sextant and approximate 3x3 families at 6x6 geometry."
+    experimental: false
+  - name: all+
+    aliases: [A]
+    sets: [fulls, sides, halves, quads, sextants, ninelikes, bars]
+    info: "Adds reduced 4x4 bars to all at 12x12 geometry."
+    experimental: true
+  - name: z
+    aliases: []
+    sets: [fulls, sides, halves, quads, sextants, ninelikes, morebars]
+    info: "Adds non-hairline eighth bars to all at 24x24 geometry."
+    experimental: true
+  - name: z+
+    aliases: [Z]
+    sets: [fulls, sides, halves, quads, sextants, ninelikes, allbars]
+    info: "Adds every eighth bar, including hairlines, to all at 24x24 geometry."
+    experimental: true

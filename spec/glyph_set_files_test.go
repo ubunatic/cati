@@ -46,9 +46,17 @@ func TestLoadRenderModesGlyphSetFileErrors(t *testing.T) {
 			name: "duplicate id",
 			files: map[string]string{
 				"glyph_sets/00-fulls.yaml": glyphSetFixture,
-				"glyph_sets/00-copy.yaml":  strings.ReplaceAll(glyphSetFixture, "name: fulls", "name: copy"),
+				"glyph_sets/00-copy.yaml":  strings.ReplaceAll(strings.ReplaceAll(glyphSetFixture, "name: fulls", "name: copy"), "order: 0", "order: 1"),
 			},
 			want: "duplicate glyph set ID 0",
+		},
+		{
+			name: "duplicate order",
+			files: map[string]string{
+				"glyph_sets/00-fulls.yaml": glyphSetFixture,
+				"glyph_sets/01-sides.yaml": strings.ReplaceAll(strings.ReplaceAll(glyphSetFixture, "id: 0", "id: 1"), "name: fulls", "name: sides"),
+			},
+			want: "duplicate glyph set order 0",
 		},
 		{
 			name:  "filename prefix mismatch",

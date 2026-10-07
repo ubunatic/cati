@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cati glyph compositions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "compositions"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "compositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "aliases", "sets", "info", "experimental"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "aliases": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "sets": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+          "info": { "type": "string", "minLength": 1 },
+          "experimental": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

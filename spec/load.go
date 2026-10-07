@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"sort"
@@ -259,10 +260,10 @@ type RenderModesSpec struct {
 	Renderers        map[string]string   `yaml:"renderers"`
 	Smart            SmartRenderPolicy   `yaml:"smart"`
 	SetRegistry      []GlyphSetDef       `yaml:"-"`
-	Compositions     map[string][]int    `yaml:"compositions"`
-	CompositionInfo  map[string]string   `yaml:"composition_info"`
-	CompositionOrder []string            `yaml:"composition_order"`
-	Experimental     []string            `yaml:"experimental"`
+	Compositions     map[string][]int    `yaml:"-"`
+	CompositionInfo  map[string]string   `yaml:"-"`
+	CompositionOrder []string            `yaml:"-"`
+	Experimental     []string            `yaml:"-"`
 	VectorShapes     VectorShapesSpec    `yaml:"vector_shapes"`
 }
 
@@ -283,6 +284,9 @@ func LoadRenderModesFrom(fsys fs.FS) (RenderModesSpec, error) {
 		return spec, err
 	}
 	if err = loadGlyphRegistry(fsys, &spec); err != nil {
+		return RenderModesSpec{}, err
+	}
+	if err = loadCompositions(fsys, &spec); err != nil {
 		return RenderModesSpec{}, err
 	}
 	if len(spec.SetRegistry) == 0 {
@@ -313,6 +317,7 @@ func loadGlyphRegistry(fsys fs.FS, spec *RenderModesSpec) error {
 		return fmt.Errorf("list glyph set files: %w", err)
 	}
 	spec.SetRegistry = nil
+	orders := make(map[int]string, len(files))
 	for _, file := range files {
 		data, err := fs.ReadFile(fsys, file)
 		if err != nil {
@@ -333,11 +338,95 @@ func loadGlyphRegistry(fsys fs.FS, spec *RenderModesSpec) error {
 		if !ok || parseErr != nil || id != def.ID {
 			return fmt.Errorf("%s: filename ID prefix does not match id %d", file, def.ID)
 		}
+		if previous, exists := orders[def.Order]; exists {
+			return fmt.Errorf("%s: duplicate glyph set order %d (also %s)", file, def.Order, previous)
+		}
+		orders[def.Order] = file
 		spec.SetRegistry = append(spec.SetRegistry, def)
 	}
 	sort.SliceStable(spec.SetRegistry, func(i, j int) bool {
 		return spec.SetRegistry[i].Order < spec.SetRegistry[j].Order
 	})
+	return nil
+}
+
+type CompositionFile struct {
+	Schema       string           `yaml:"$schema"`
+	Compositions []CompositionDef `yaml:"compositions"`
+}
+
+type CompositionDef struct {
+	Name         string   `yaml:"name"`
+	Aliases      []string `yaml:"aliases"`
+	Sets         []string `yaml:"sets"`
+	Info         string   `yaml:"info"`
+	Experimental bool     `yaml:"experimental"`
+}
+
+func loadCompositions(fsys fs.FS, spec *RenderModesSpec) error {
+	data, err := fs.ReadFile(fsys, "compositions.yaml")
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			spec.Compositions = map[string][]int{}
+			spec.CompositionInfo = map[string]string{}
+			spec.CompositionOrder = nil
+			spec.Experimental = nil
+			return nil
+		}
+		return fmt.Errorf("read compositions.yaml: %w", err)
+	}
+	var doc CompositionFile
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&doc); err != nil {
+		return fmt.Errorf("compositions.yaml: %w", err)
+	}
+	if doc.Schema == "" {
+		return fmt.Errorf("compositions.yaml: missing $schema")
+	}
+	sets := make(map[string]int, len(spec.SetRegistry))
+	for _, set := range spec.SetRegistry {
+		sets[set.Name] = set.ID
+	}
+	spec.Compositions = make(map[string][]int)
+	spec.CompositionInfo = make(map[string]string)
+	spec.CompositionOrder = nil
+	spec.Experimental = nil
+	claimed := make(map[string]string)
+	for _, comp := range doc.Compositions {
+		if comp.Name == "" {
+			return fmt.Errorf("compositions.yaml: empty composition name")
+		}
+		if owner, exists := claimed[comp.Name]; exists {
+			return fmt.Errorf("compositions.yaml: composition name %q collides with %s", comp.Name, owner)
+		}
+		claimed[comp.Name] = "a composition name or alias"
+		ids := make([]int, 0, len(comp.Sets))
+		seen := make(map[int]bool)
+		for _, name := range comp.Sets {
+			id, ok := sets[name]
+			if !ok {
+				return fmt.Errorf("compositions.yaml: composition %q references unknown glyph set %q", comp.Name, name)
+			}
+			if !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+		spec.CompositionOrder = append(spec.CompositionOrder, comp.Name)
+		spec.CompositionInfo[comp.Name] = comp.Info
+		if comp.Experimental {
+			spec.Experimental = append(spec.Experimental, comp.Name)
+		}
+		spec.Compositions[comp.Name] = ids
+		for _, alias := range comp.Aliases {
+			if owner, exists := claimed[alias]; exists {
+				return fmt.Errorf("compositions.yaml: alias %q for %q collides with %s", alias, comp.Name, owner)
+			}
+			claimed[alias] = "a composition name or alias"
+			spec.Compositions[alias] = append([]int(nil), ids...)
+		}
+	}
 	return nil
 }
 
