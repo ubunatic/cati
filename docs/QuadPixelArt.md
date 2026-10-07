@@ -235,6 +235,20 @@ For each 2×2 cell:
 This is the "grayscale-as-base + colour overlay" approach: luminance drives the
 structure; colour is derived from the real pixel values.
 
+### Fast path & alpha premultiplication contract
+
+When `core.Fastpath` is enabled (the default), `computeQuadCell` directly samples
+raw image buffers (`*image.RGBA` and `*image.NRGBA`).
+- **NRGBA premultiplication**: `*image.NRGBA` stores unpremultiplied channels.
+  The fast path applies exact integer premultiplication:
+  `uint8((uint32(c) * 0x101 * uint32(a) / 0xff) >> 8)`.
+  This preserves 100% byte-for-byte parity between fast interior cells and
+  partial edge cells that go through `safePixel` / `toRGBA`.
+- **Coordinate parity**: image reconstruction (`RenderToImageJ`) evaluates
+  destination-relative cell coordinates `(px0 = tc*2, py0 = tr*2)` regardless
+  of whether source `Bounds().Min` is non-zero, correctly handling sub-images
+  with translated origins.
+
 ---
 
 ## Package structure
