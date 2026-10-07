@@ -47,6 +47,7 @@ type modesFilter struct {
 
 func modesCommand() *cobra.Command {
 	var width int
+	var renderMode string
 	var smart bool
 	var info bool
 	var listOnly bool
@@ -142,6 +143,9 @@ func modesCommand() *cobra.Command {
 					modeNames = append(modeNames, arg)
 				}
 			}
+			if renderMode != "" {
+				modeNames = append(modeNames, renderMode)
+			}
 
 			var inputImages []loadedImage
 			for _, ref := range inputRefs {
@@ -201,7 +205,8 @@ func modesCommand() *cobra.Command {
 			return runModesDemoWithImages(cmd.OutOrStdout(), width, smart, info, entries, filter, inputImages)
 		},
 	}
-	cmd.Flags().IntVarP(&width, "width", "w", 0, "target width of each logo demo (0 with --smart or -l lists modes only)")
+	cmd.Flags().IntVarP(&width, "width", "W", 0, "target width of each logo demo (0 with --smart or -l lists modes only)")
+	cmd.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode to demo (same values as cati --mode)")
 	cmd.Flags().BoolVar(&smart, "smart", false, "choose the best nearby width by PSNR")
 	cmd.Flags().BoolVar(&info, "info", false, "explain each mode and list its supported Unicode shapes")
 	cmd.Flags().BoolVarP(&listOnly, "list", "l", false, "list mode names without rendering logo demos")
