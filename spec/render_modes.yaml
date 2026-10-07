@@ -413,6 +413,10 @@ compositions:
 #   split:  [P1, P2, FILL]            half-plane of line P1-P2 on FILL's side
 #   invert: "<glyph>"                 exact complement of another entry
 #   {}                                empty (space)
+# Hand tuning: masks: { 3x5: ["...", "#..", ...] } replaces the computed mask at
+# that size only ('#' on, '.' off, one string per row, top first). Draw what the
+# font shows at that size: the mask decides which cells get the glyph. A glyph
+# with invert: follows its source, so tune the source instead.
 # List order is the glyph inventory order.
 vector_shapes:
   points:
@@ -506,7 +510,21 @@ vector_shapes:
     - { glyph: "🭩", invert: "🭭" }                          # U+1FB69 LEFT AND LOWER AND RIGHT TRIANGULAR THREE QUARTERS BLOCK
     - { glyph: "🭪", invert: "🭮" }                          # U+1FB6A UPPER AND LEFT AND LOWER TRIANGULAR THREE QUARTERS BLOCK
     - { glyph: "🭫", invert: "🭯" }                          # U+1FB6B LEFT AND UPPER AND RIGHT TRIANGULAR THREE QUARTERS BLOCK
-    - { glyph: "🭬", polys: [[UL, C, LL]] }                 # U+1FB6C LEFT TRIANGULAR ONE QUARTER BLOCK
+    - glyph: "🭬"                                           # U+1FB6C LEFT TRIANGULAR ONE QUARTER BLOCK
+      polys: [[UL, C, LL]]
+      masks:
+        3x5: ["...",
+              "#..",
+              "##.",
+              "#..",
+              "..."]
     - { glyph: "🭭", polys: [[UL, UR, C]] }                 # U+1FB6D UPPER TRIANGULAR ONE QUARTER BLOCK
-    - { glyph: "🭮", polys: [[UR, LR, C]] }                 # U+1FB6E RIGHT TRIANGULAR ONE QUARTER BLOCK
+    - glyph: "🭮"                                           # U+1FB6E RIGHT TRIANGULAR ONE QUARTER BLOCK
+      polys: [[UR, LR, C]]
+      masks:
+        3x5: ["...",
+              "..#",
+              ".##",
+              "..#",
+              "..."]
     - { glyph: "🭯", polys: [[LL, C, LR]] }                 # U+1FB6F LOWER TRIANGULAR ONE QUARTER BLOCK

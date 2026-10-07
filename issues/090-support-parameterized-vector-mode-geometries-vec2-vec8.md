@@ -53,5 +53,7 @@ Fixed modes `vec2..vec8` keep their geometry; retargeting `vec` is a spec-only e
 - Rect edges snap to pixel boundaries (.5 up). At odd sizes `▖` (3x5) was notched:
   50%-covered edge pixels on, the 25% corner pixel off. Now quadrant pairs tile their
   half exactly at every vec geometry; vec6/vec8 masks unchanged; no golden changed.
+- Hand-drawn per-size masks (`masks: { 3x5: [...] }` on a glyph line) override the
+  computed mask; first use: tips of 🭬/🭮 at 3x5. More user tuning to follow.
 - The `diag` reconstruction probe is now one 4x6 `vec6` cell and reconstructs exactly
   (golden `testdata/reconstruction_probes/diag.png` regenerated from the fixture script).

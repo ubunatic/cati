@@ -44,12 +44,15 @@ func (f CellFrac) check(node *yaml.Node) error {
 
 // VectorShapeDef describes one glyph of a vector_linear_splits set. Rects and
 // Polys form a union; Split and Invert stand alone; no field means empty.
+// Masks holds hand-drawn masks keyed by geometry ("3x5"), one string per row
+// ('#' on, '.' off); at that geometry it replaces the computed mask.
 type VectorShapeDef struct {
-	Glyph  string        `yaml:"glyph"`
-	Rects  [][4]CellFrac `yaml:"rects"`
-	Polys  [][]string    `yaml:"polys"`
-	Split  []string      `yaml:"split"`
-	Invert string        `yaml:"invert"`
+	Glyph  string              `yaml:"glyph"`
+	Rects  [][4]CellFrac       `yaml:"rects"`
+	Polys  [][]string          `yaml:"polys"`
+	Split  []string            `yaml:"split"`
+	Invert string              `yaml:"invert"`
+	Masks  map[string][]string `yaml:"masks"`
 }
 
 type VectorShapesSpec struct {
@@ -119,7 +122,18 @@ func vectorShapes(vs VectorShapesSpec, w, h int) ([]GlyphShape, error) {
 			return nil, fmt.Errorf("vector glyph %q mixes rects/polys, split and invert", def.Glyph)
 		}
 		if def.Invert != "" {
+			if len(def.Masks) > 0 {
+				return nil, fmt.Errorf("vector glyph %q: draw masks on %q, which it inverts", def.Glyph, def.Invert)
+			}
 			continue // resolved below, once every direct shape exists
+		}
+		drawn, err := drawnMask(def, w, h)
+		if err != nil {
+			return nil, err
+		}
+		if drawn != nil {
+			masks[r] = drawn
+			continue
 		}
 		var inside func(X, Y float64) bool
 		switch {
@@ -201,6 +215,34 @@ func vectorShapes(vs VectorShapesSpec, w, h int) ([]GlyphShape, error) {
 }
 
 func snap(v float64) float64 { return math.Floor(v + 0.5) }
+
+// drawnMask validates every hand-drawn mask of def and returns the one for
+// w x h, or nil when none is drawn for that geometry.
+func drawnMask(def VectorShapeDef, w, h int) ([]bool, error) {
+	var found []bool
+	for key, rows := range def.Masks {
+		var mw, mh int
+		if _, err := fmt.Sscanf(key, "%dx%d", &mw, &mh); err != nil || fmt.Sprintf("%dx%d", mw, mh) != key || mw <= 0 || mh <= 0 {
+			return nil, fmt.Errorf("vector glyph %q: mask key %q must be <w>x<h>", def.Glyph, key)
+		}
+		if len(rows) != mh {
+			return nil, fmt.Errorf("vector glyph %q: %s mask has %d rows, want %d", def.Glyph, key, len(rows), mh)
+		}
+		mask := make([]bool, 0, mw*mh)
+		for y, row := range rows {
+			if len(row) != mw || strings.Trim(row, "#.") != "" {
+				return nil, fmt.Errorf("vector glyph %q: %s mask row %d %q must be %d of '#' or '.'", def.Glyph, key, y+1, row, mw)
+			}
+			for _, c := range row {
+				mask = append(mask, c == '#')
+			}
+		}
+		if mw == w && mh == h {
+			found = mask
+		}
+	}
+	return found, nil
+}
 
 // insideConvex reports whether (X, Y) lies in the convex polygon, edges included,
 // for either winding order.

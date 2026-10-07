@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -314,13 +315,18 @@ func TestVectorShapesRejectInvalidDefinitions(t *testing.T) {
 	one := CellFrac{1, 1}
 	points := map[string][2]CellFrac{"UL": {}, "LR": {one, one}}
 	for name, glyphs := range map[string][]VectorShapeDef{
-		"two runes":      {{Glyph: "ab"}},
-		"duplicate":      {{Glyph: "a"}, {Glyph: "a"}},
-		"mixed kinds":    {{Glyph: "a", Rects: [][4]CellFrac{{{}, {}, half, half}}, Invert: "b"}},
-		"unknown point":  {{Glyph: "a", Split: []string{"UL", "XX", "LR"}}},
-		"short split":    {{Glyph: "a", Split: []string{"UL", "LR"}}},
-		"invert missing": {{Glyph: "a", Invert: "b"}},
-		"invert chain":   {{Glyph: "a"}, {Glyph: "b", Invert: "a"}, {Glyph: "c", Invert: "b"}},
+		"two runes":       {{Glyph: "ab"}},
+		"duplicate":       {{Glyph: "a"}, {Glyph: "a"}},
+		"mixed kinds":     {{Glyph: "a", Rects: [][4]CellFrac{{{}, {}, half, half}}, Invert: "b"}},
+		"unknown point":   {{Glyph: "a", Split: []string{"UL", "XX", "LR"}}},
+		"short split":     {{Glyph: "a", Split: []string{"UL", "LR"}}},
+		"invert missing":  {{Glyph: "a", Invert: "b"}},
+		"invert chain":    {{Glyph: "a"}, {Glyph: "b", Invert: "a"}, {Glyph: "c", Invert: "b"}},
+		"masks on invert": {{Glyph: "a"}, {Glyph: "b", Invert: "a", Masks: map[string][]string{"1x1": {"#"}}}},
+		"mask key":        {{Glyph: "a", Masks: map[string][]string{"3by5": {"#"}}}},
+		"mask rows":       {{Glyph: "a", Masks: map[string][]string{"1x2": {"#"}}}},
+		"mask width":      {{Glyph: "a", Masks: map[string][]string{"2x1": {"#"}}}},
+		"mask char":       {{Glyph: "a", Masks: map[string][]string{"1x1": {"x"}}}},
 	} {
 		if _, err := vectorShapes(VectorShapesSpec{Points: points, Glyphs: glyphs}, 4, 4); err == nil {
 			t.Errorf("%s: want error", name)
@@ -371,6 +377,62 @@ func TestVectorSextantsMatchUnicodeSegments(t *testing.T) {
 			wantMask := scaleMask(want[shape.Glyph], sextant, g)
 			if !slices.Equal(shape.Mask, wantMask) {
 				t.Errorf("%dx%d %c %U mask %v, want %v", g.W, g.H, shape.Glyph, shape.Glyph, shape.Mask, wantMask)
+			}
+		}
+	}
+}
+
+// TestVectorDrawnMasksAreUsed checks every hand-drawn mask in the spec: its size
+// belongs to a vector set, the generator returns it unchanged, and a glyph that
+// inverts it gets the exact complement.
+func TestVectorDrawnMasksAreUsed(t *testing.T) {
+	rm, err := LoadRenderModes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sizes := make(map[string]bool)
+	for _, def := range rm.SetRegistry {
+		if def.Generated == "vector_linear_splits" {
+			sizes[fmt.Sprintf("%dx%d", def.Geometry.W, def.Geometry.H)] = true
+		}
+	}
+	for _, def := range rm.VectorShapes.Glyphs {
+		for key, rows := range def.Masks {
+			if !sizes[key] {
+				t.Errorf("%s: mask size %s matches no vector set", def.Glyph, key)
+				continue
+			}
+			var w, h int
+			fmt.Sscanf(key, "%dx%d", &w, &h)
+			shapes, err := vectorShapes(rm.VectorShapes, w, h)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []bool{}
+			for _, row := range rows {
+				for _, c := range row {
+					want = append(want, c == '#')
+				}
+			}
+			for _, shape := range shapes {
+				if string(shape.Glyph) == def.Glyph && !slices.Equal(shape.Mask, want) {
+					t.Errorf("%s %s: generator mask %v, want drawn %v", def.Glyph, key, shape.Mask, want)
+				}
+			}
+			for _, inv := range rm.VectorShapes.Glyphs {
+				if inv.Invert != def.Glyph {
+					continue
+				}
+				for _, shape := range shapes {
+					if string(shape.Glyph) != inv.Glyph {
+						continue
+					}
+					for i := range want {
+						if shape.Mask[i] == want[i] {
+							t.Errorf("%s %s: inverse %s pixel %d not complemented", def.Glyph, key, inv.Glyph, i)
+						}
+					}
+				}
 			}
 		}
 	}
