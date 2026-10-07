@@ -19,6 +19,7 @@
 - [Render Experiment Lessons](RenderExperimentLessons.md)
 - [Rendering Bug & Golden Playbook](RenderingBugPlaybook.md)
 - [Codespaces Workbench Color Study](studies/codespaces-color-rendering.md)
+- [Vector Glyph Continuity Study](studies/2026-10-07-vector-glyph-continuity.md)
 - [Go Conventions](Go.md)
 - [Make Conventions](Make.md)
 <!-- TOC_END -->
