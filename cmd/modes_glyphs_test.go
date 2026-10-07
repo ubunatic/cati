@@ -62,30 +62,39 @@ func TestModesGlyphsSelectors(t *testing.T) {
 func fmtCodepoint(r rune) string { return fmt.Sprintf("U+%04X", r) }
 
 func TestModesGlyphsHalfCards(t *testing.T) {
-	out, err := executeGlyphs("half")
+	out, err := executeGlyphs("half", "--grid", "1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, card := range []string{
-		"␠ (space) U+0020 1x2\n+-+\n|.|\n|.|\n+-+",
-		"'█' U+2588 1x2\n+-+\n|#|\n|#|\n+-+",
-		"'▀' U+2580 1x2\n+-+\n|#|\n|.|\n+-+",
-		"'▄' U+2584 1x2\n+-+\n|.|\n|#|\n+-+",
+		"␠ (space) U+0020 1x2\n┌─┐\n│.│\n│.│\n└─┘",
+		"'█' U+2588 1x2\n┌─┐\n│#│\n│#│\n└─┘",
+		"'▀' U+2580 1x2\n┌─┐\n│#│\n│.│\n└─┘",
+		"'▄' U+2584 1x2\n┌─┐\n│.│\n│#│\n└─┘",
 	} {
 		if !strings.Contains(out, card) {
 			t.Fatalf("missing card %q", card)
 		}
 	}
+
+	// Test default grid (8 columns side-by-side)
+	gridOut, err := executeGlyphs("half")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(gridOut, "␠ (space) U+0020 1x2    '█' U+2588 1x2    '▀' U+2580 1x2    '▄' U+2584 1x2") {
+		t.Fatalf("expected grid layout in %s", gridOut)
+	}
 }
 
 func TestModesGlyphsGeneratedOrientation(t *testing.T) {
 	for _, tc := range []struct{ selector, card string }{
-		{"sextants", "'🬀' U+1FB00 2x3\n+--+\n|#.|\n|..|\n|..|\n+--+"},
-		{"oct", "'▘' U+2598 2x4\n+--+\n|#.|\n|#.|\n|..|\n|..|\n+--+"},
-		{"brailles", "'⠈' U+2808 2x4\n+--+\n|.#|\n|..|\n|..|\n|..|\n+--+"},
+		{"sextants", "'🬀' U+1FB00 2x3\n┌──┐\n│#.│\n│..│\n│..│\n└──┘"},
+		{"oct", "'▘' U+2598 2x4\n┌──┐\n│#.│\n│#.│\n│..│\n│..│\n└──┘"},
+		{"brailles", "'⠈' U+2808 2x4\n┌──┐\n│.#│\n│..│\n│..│\n│..│\n└──┘"},
 	} {
 		t.Run(tc.selector, func(t *testing.T) {
-			out, err := executeGlyphs(tc.selector)
+			out, err := executeGlyphs(tc.selector, "--grid", "1")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -102,10 +111,10 @@ func TestGlyphMaskPreview(t *testing.T) {
 		w, h               int
 		mask               []bool
 	}{
-		{"quadrant", "ascii", "+--+\n|#.|\n|..|\n+--+", 2, 2, []bool{true, false, false, false}},
-		{"asymmetric sextant", "ascii", "+--+\n|#.|\n|.#|\n|..|\n+--+", 2, 3, []bool{true, false, false, true, false, false}},
-		{"halfblock combinations", "halfblock", "+----+\n| ▀▄█|\n+----+", 4, 2, []bool{false, true, false, true, false, false, true, true}},
-		{"odd height", "halfblock", "+--+\n|▀▄|\n|▀ |\n+--+", 2, 3, []bool{true, false, false, true, true, false}},
+		{"quadrant", "ascii", "┌──┐\n│#.│\n│..│\n└──┘", 2, 2, []bool{true, false, false, false}},
+		{"asymmetric sextant", "ascii", "┌──┐\n│#.│\n│.#│\n│..│\n└──┘", 2, 3, []bool{true, false, false, true, false, false}},
+		{"halfblock combinations", "halfblock", "┌────┐\n│ ▀▄█│\n└────┘", 4, 2, []bool{false, true, false, true, false, false, true, true}},
+		{"odd height", "halfblock", "┌──┐\n│▀▄│\n│▀ │\n└──┘", 2, 3, []bool{true, false, false, true, true, false}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := glyphMaskPreview(tc.mask, tc.w, tc.h, tc.format)
@@ -128,7 +137,11 @@ func TestGlyphMaskPreview(t *testing.T) {
 }
 
 func TestModesGlyphsErrorsAndHelp(t *testing.T) {
-	for _, args := range [][]string{{"unknown"}, {"d999"}, {"d10,"}, {"half+"}, {"half", "quad"}, {"--format", "bad"}, {"--image", "missing.png"}, {"--width", "3"}} {
+	for _, args := range [][]string{
+		{"unknown"}, {"d999"}, {"d10,"}, {"half+"}, {"half", "quad"},
+		{"--format", "bad"}, {"--image", "missing.png"}, {"--width", "3"},
+		{"half", "--grid", "0"}, {"half", "--grid", "-1"},
+	} {
 		if _, err := executeGlyphs(args...); err == nil {
 			t.Fatalf("accepted %v", args)
 		}
@@ -143,7 +156,7 @@ func TestModesGlyphsErrorsAndHelp(t *testing.T) {
 		}
 	}
 	out, err := executeGlyphs("half", "--format", "halfblock")
-	if err != nil || !strings.Contains(out, "|▀|") {
+	if err != nil || !strings.Contains(out, "│▀│") {
 		t.Fatalf("%s %v", out, err)
 	}
 }
@@ -154,7 +167,7 @@ var errGlyphWrite = errors.New("glyph writer failed")
 
 func (glyphFailWriter) Write([]byte) (int, error) { return 0, errGlyphWrite }
 func TestModesGlyphsWriterErrors(t *testing.T) {
-	if err := inspectGlyphs(glyphFailWriter{}, "half", "ascii"); !errors.Is(err, errGlyphWrite) {
+	if err := inspectGlyphs(glyphFailWriter{}, "half", "ascii", 8); !errors.Is(err, errGlyphWrite) {
 		t.Fatal(err)
 	}
 	if err := listGlyphSelectors(glyphFailWriter{}); !errors.Is(err, errGlyphWrite) {

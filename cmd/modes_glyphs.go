@@ -12,6 +12,7 @@ import (
 
 func modesGlyphsCommand() *cobra.Command {
 	var format string
+	var grid int
 	cmd := &cobra.Command{
 		Use:   "glyphs [mode|expr]",
 		Short: "inspect glyph inventories and subpixel masks",
@@ -21,13 +22,17 @@ func modesGlyphsCommand() *cobra.Command {
 			if format != "ascii" && format != "halfblock" {
 				return fmt.Errorf("invalid --format %q: use ascii or halfblock", format)
 			}
+			if grid < 1 {
+				return fmt.Errorf("invalid --grid %d: must be >= 1", grid)
+			}
 			if len(args) == 0 {
 				return listGlyphSelectors(cmd.OutOrStdout())
 			}
-			return inspectGlyphs(cmd.OutOrStdout(), args[0], format)
+			return inspectGlyphs(cmd.OutOrStdout(), args[0], format, grid)
 		},
 	}
 	cmd.Flags().StringVar(&format, "format", "ascii", "mask preview format: ascii (# foreground, . background) or halfblock")
+	cmd.Flags().IntVar(&grid, "grid", 8, "number of card columns in grid layout (default: 8)")
 	return cmd
 }
 
@@ -52,7 +57,7 @@ func listGlyphSelectors(w io.Writer) error {
 	return err
 }
 
-func inspectGlyphs(w io.Writer, expression, format string) error {
+func inspectGlyphs(w io.Writer, expression, format string, grid int) error {
 	resolution, err := spec.ResolveGlyphSetExpression(expression)
 	if err != nil {
 		return err
@@ -61,6 +66,10 @@ func inspectGlyphs(w io.Writer, expression, format string) error {
 	if _, err := fmt.Fprintf(w, "Glyph inventory: %s\nSets: %v | Glyphs: %d | Geometry: %dx%d | Approximate: %t\n", expression, resolution.IDs, len(resolution.Shapes), geo.W, geo.H, resolution.Approximate); err != nil {
 		return err
 	}
+	if grid < 1 {
+		grid = 8
+	}
+	var cards [][]string
 	for _, shape := range resolution.Shapes {
 		preview, err := glyphMaskPreview(shape.Mask, geo.W, geo.H, format)
 		if err != nil {
@@ -74,7 +83,12 @@ func inspectGlyphs(w io.Writer, expression, format string) error {
 		} else {
 			label = fmt.Sprintf("'%c'", shape.Glyph)
 		}
-		if _, err := fmt.Fprintf(w, "\n%s U+%04X %dx%d\n%s\n", label, shape.Glyph, geo.W, geo.H, preview); err != nil {
+		cardHeader := fmt.Sprintf("%s U+%04X %dx%d", label, shape.Glyph, geo.W, geo.H)
+		cardLines := append([]string{cardHeader}, strings.Split(preview, "\n")...)
+		cards = append(cards, cardLines)
+	}
+	for _, line := range formatCardsGrid(cards, grid, 0) {
+		if _, err := fmt.Fprintln(w, line); err != nil {
 			return err
 		}
 	}
@@ -94,10 +108,11 @@ func glyphMaskPreview(mask []bool, width, height int, format string) (string, er
 		return "", fmt.Errorf("invalid mask format %q", format)
 	}
 	var b strings.Builder
-	border := "+" + strings.Repeat("-", width) + "+"
-	b.WriteString(border)
+	topBorder := "┌" + strings.Repeat("─", width) + "┐"
+	bottomBorder := "└" + strings.Repeat("─", width) + "┘"
+	b.WriteString(topBorder)
 	for y := 0; y < height; y += step {
-		b.WriteString("\n|")
+		b.WriteString("\n│")
 		for x := 0; x < width; x++ {
 			top := mask[y*width+x]
 			if step == 1 {
@@ -120,9 +135,9 @@ func glyphMaskPreview(mask []bool, width, height int, format string) (string, er
 				b.WriteByte(' ')
 			}
 		}
-		b.WriteByte('|')
+		b.WriteString("│")
 	}
 	b.WriteByte('\n')
-	b.WriteString(border)
+	b.WriteString(bottomBorder)
 	return b.String(), nil
 }
