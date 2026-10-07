@@ -201,7 +201,7 @@ func modesCommand() *cobra.Command {
 			return runModesDemoWithImages(cmd.OutOrStdout(), width, smart, info, entries, filter, inputImages)
 		},
 	}
-	cmd.Flags().IntVarP(&width, "width", "w", 12, "target width of each logo demo (0 with --smart or -l lists modes only)")
+	cmd.Flags().IntVarP(&width, "width", "w", 0, "target width of each logo demo (0 with --smart or -l lists modes only)")
 	cmd.Flags().BoolVar(&smart, "smart", false, "choose the best nearby width by PSNR")
 	cmd.Flags().BoolVar(&info, "info", false, "explain each mode and list its supported Unicode shapes")
 	cmd.Flags().BoolVarP(&listOnly, "list", "l", false, "list mode names without rendering logo demos")
@@ -225,10 +225,10 @@ func modesCommand() *cobra.Command {
 	cmd.Flags().StringVar(&presetAliasFlag, "preset", "", "alias for --sample")
 	cmd.Flags().BoolVar(&benchmarkFlag, "benchmark", false, "run dataset benchmark scorecard across test assets")
 	cmd.Flags().BoolVar(&suiteFlag, "suite", false, "alias for --benchmark")
-	cmd.Flags().StringVar(&colsFlag, "cols", "auto", "grid layout columns: auto (1-3 based on terminal width) or explicit number 1, 2, 3...")
+	cmd.Flags().StringVar(&colsFlag, "cols", "", "grid layout columns: auto (1-3 based on terminal width) or explicit number 1, 2, 3...")
 	cmd.AddCommand(modesGlyphsCommand())
 	cmd.AddCommand(modesProbeCommand())
-	return cmd
+	return applyCLIDefaultsUnder(cmd, "cati")
 }
 
 func isImageFileOrPreset(arg string) bool {

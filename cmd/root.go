@@ -145,18 +145,17 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 		},
 	}
 
-	root.Flags().BoolVar(&ansiMode, "ansi", true, "render with 24-bit ANSI true-color (default)")
+	root.Flags().BoolVar(&ansiMode, "ansi", false, "render with 24-bit ANSI true-color")
 	root.Flags().BoolVarP(&recursive, "recursive", "r", false, "recurse into subdirectories")
 	root.Flags().BoolVar(&noHeader, "no-header", false, "suppress filename headers between images")
-	root.Flags().StringVarP(&playVal, "play", "p", "", "playback mode: once|repeat|preview (default \"once\")")
-	root.Flags().Lookup("play").NoOptDefVal = "once"
+	root.Flags().StringVarP(&playVal, "play", "p", "", "playback mode: once|repeat|preview")
 	root.Flags().BoolVarP(&interactMode, "interactive", "i", false, "interactive viewer: +/- zoom, arrow keys pan, q quit")
 	root.Flags().IntVar(&fps, "fps", 0, "legacy playback frames per second")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
 	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
 	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
-	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned|pixel|contain")
+	root.Flags().StringVar(&aspect, "aspect", "", "source aspect mapping into target cell grid: default|aligned|pixel|contain")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six, oct|octant, v|vec|vector")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -166,7 +165,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	root.Flags().StringVar(&timeRange, "range", "", `playback window: "5s" plays first 5 s; "5s:7s" plays 5 s–7 s (supports s/m/h suffixes, bare seconds, mm:ss)`)
 	root.Flags().BoolVar(&inputTest, "input-test", false, "")
 	root.Flags().BoolVar(&bench, "bench", false, "benchmark render speed on one image or video file")
-	root.Flags().DurationVar(&benchBudget, "bench-budget", 3*time.Second, "total time budget for an image --bench, split across modes and fast/simple paths (each mode always renders at least once)")
+	root.Flags().DurationVar(&benchBudget, "bench-budget", 0, "total time budget for an image --bench, split across modes and fast/simple paths (each mode always renders at least once)")
 	// Hide the debug flag from help output.
 	_ = root.Flags().MarkHidden("input-test")
 	_ = root.Flags().MarkHidden("play")
@@ -180,7 +179,7 @@ Use "cati play" for media playback and "cati browse" for the preview browser.`,
 	registerRootCompletion(root)
 	registerFastpathFlag(root)
 
-	return root
+	return applyCLIDefaults(root)
 }
 
 // NewPlay returns the root command for the catiplay binary.
@@ -268,17 +267,16 @@ func NewPlay() *cobra.Command {
 		},
 	}
 
-	root.Flags().BoolVar(&ansiMode, "ansi", true, "render with 24-bit ANSI true-color (default)")
+	root.Flags().BoolVar(&ansiMode, "ansi", false, "render with 24-bit ANSI true-color")
 	root.Flags().BoolVarP(&recursive, "recursive", "r", false, "recurse into subdirectories")
-	root.Flags().StringVarP(&playVal, "play", "p", "", "playback mode: once|repeat|preview (default \"once\")")
-	root.Flags().Lookup("play").NoOptDefVal = "once"
+	root.Flags().StringVarP(&playVal, "play", "p", "", "playback mode: once|repeat|preview")
 	root.Flags().BoolVarP(&legacyInteractive, "interactive", "i", false, "legacy compatibility: interactive mode is the default")
 	root.Flags().IntVar(&fps, "fps", 0, "frames per second (0 = auto: native fps for video, 15 for images)")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for async render work (0 = auto)")
 	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
 	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
-	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned|pixel|contain")
+	root.Flags().StringVar(&aspect, "aspect", "", "source aspect mapping into target cell grid: default|aligned|pixel|contain")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six, oct|octant, v|vec|vector")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -288,7 +286,7 @@ func NewPlay() *cobra.Command {
 	root.Flags().StringVar(&timeRange, "range", "", `playback window: "5s" plays first 5 s; "5s:7s" plays 5 s-7 s (supports s/m/h suffixes, bare seconds, mm:ss)`)
 	registerFastpathFlag(root)
 
-	return root
+	return applyCLIDefaults(root)
 }
 
 // NewBrowse returns the root command for the catibrowse binary.
@@ -342,13 +340,13 @@ func NewBrowse() *cobra.Command {
 		},
 	}
 
-	root.Flags().BoolVar(&ansiMode, "ansi", true, "render with 24-bit ANSI true-color (default)")
+	root.Flags().BoolVar(&ansiMode, "ansi", false, "render with 24-bit ANSI true-color")
 	root.Flags().BoolVarP(&legacyInteractive, "interactive", "i", false, "legacy compatibility: browser mode is the default")
 	root.Flags().IntVarP(&jobs, "jobs", "j", 0, "parallel worker count for thumbnail and async render work (0 = auto)")
 	root.Flags().IntVarP(&width, "width", "W", 0, "target image width in terminal columns (0 = auto)")
 	root.Flags().IntVarP(&height, "height", "H", 0, "target image height in terminal rows (0 = auto)")
 	root.Flags().StringVar(&pad, "pad", "", "transparently pad source image in pixels (<cols>,<rows>)")
-	root.Flags().StringVar(&aspect, "aspect", "default", "source aspect mapping into target cell grid: default|aligned|pixel|contain")
+	root.Flags().StringVar(&aspect, "aspect", "", "source aspect mapping into target cell grid: default|aligned|pixel|contain")
 	root.Flags().StringVarP(&renderMode, "mode", "m", "", "render mode: h|half, hs|half/split, q|quad, s|spark, sq|spark+quad, x|six, xh|six+half, sx|spark+six, oct|octant, v|vec|vector")
 	root.Flags().StringVarP(&prescaler, "prescaler", "S", "", "resize prescaler: nn|nearest-neighbor, pyramid")
 	root.Flags().BoolVar(&fullComp, "full-comp", false, "compare render quality against original source pixels (slow)")
@@ -356,7 +354,7 @@ func NewBrowse() *cobra.Command {
 	root.Flags().StringVarP(&initialZoom, "zoom", "z", "", `initial zoom: "0" = fit to viewport, "1", "1.0", "100%", "1:1" (k=1), "w" = scale to term width, "h" = scale to term height`)
 
 	registerFastpathFlag(root)
-	return root
+	return applyCLIDefaults(root)
 }
 
 // registerFastpathFlag applies an explicit override before any renderer starts.

@@ -63,11 +63,13 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
 > **`spec/` is application code. Treat it with the same rigour as Go source.**
 
 Full reference: @docs/Spec.md — read it before touching any `spec/` file or its Go loaders.
+cati specifics (file map, loader contract for missing/invalid files, CLI defaults): @docs/Design.md §3.
 
 Rules:
 - **Spec is always readable** — Go loaders must not crash or silently degrade when the spec file exists; if the file is missing the app degrades gracefully (raw key names shown, no panic)
 - **No Go fallbacks** — do not maintain hardcoded copies of spec content in Go (button labels, action names, key sequences); the spec file is the only source
 - **All keys must be specced** — every key that triggers an action must have a `keys:` entry in the button that owns it; undocumented hardcoded keys are a bug (exception: structural keys marked with a comment, e.g. Enter to open, Tab to cycle, `\x03` Ctrl-C safeguard)
+- **CLI defaults live in spec** — register every cobra flag with its zero value in Go; any non-zero default (and `NoOptDefVal`) goes in `spec/cli.yaml` `defaults:`, keyed by command path (e.g. `cati modes glyphs`). `TestCLIDefaultsNotHardcoded` fails on a hardcoded default (exception: `--fastpath`, which defaults to `CATI_FASTPATH`)
 - **All objects must be used** — every button in `buttons.yaml` must appear in a view row or `hidden_keys:`; every action in the schema enum must have a Go handler
 - **No stale properties** — removing a button means removing it from `views.yaml`, its action from the schema enum (if unused), and its Go handler
 - **Write spec integrity tests** — see `docs/Spec.md §6` for the required test matrix; add tests whenever a new action or button is introduced

@@ -11,3 +11,28 @@ flags:
     long: --bench-budget
     description: Total time budget for an image --bench, split across modes and fast/simple paths; each mode renders at least once
     handler: runMediaBenchmark
+
+# Default values of CLI flags, keyed by command path (as cobra prints it) and
+# long flag name. Go registers every flag with its zero value; applyCLIDefaults
+# (cmd/cli_defaults.go) applies these before parsing. A flag whose default is
+# its zero value (false, 0, "") needs no entry.
+# Exception: --fastpath defaults to the CATI_FASTPATH environment value.
+defaults:
+  cati:
+    ansi: { default: "true" }
+    aspect: { default: default }
+    bench-budget: { default: 3s }
+    play: { no_opt: once }
+  cati modes:
+    cols: { default: auto }
+    width: { default: "12" }
+  cati modes glyphs:
+    format: { default: halfblock }
+    grid: { default: "6" }
+  catiplay:
+    ansi: { default: "true" }
+    aspect: { default: default }
+    play: { no_opt: once }
+  catibrowse:
+    ansi: { default: "true" }
+    aspect: { default: default }

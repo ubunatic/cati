@@ -19,6 +19,25 @@
         },
         "additionalProperties": false
       }
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Flag defaults keyed by command path, then long flag name (without --).",
+      "propertyNames": { "pattern": "^cati[a-z]*( [a-z][a-z-]*)*$" },
+      "additionalProperties": {
+        "type": "object",
+        "minProperties": 1,
+        "propertyNames": { "pattern": "^[a-z][a-z-]*$" },
+        "additionalProperties": {
+          "type": "object",
+          "minProperties": 1,
+          "properties": {
+            "default": { "type": "string", "description": "value applied via pflag Set and shown in --help" },
+            "no_opt": { "type": "string", "description": "value used when the flag is given without an argument" }
+          },
+          "additionalProperties": false
+        }
+      }
     }
   }
 }

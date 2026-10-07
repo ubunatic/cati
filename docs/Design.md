@@ -41,6 +41,7 @@ All user-facing configuration, styling, labelling, and layout lives in `spec/`. 
 | `spec/theme.yaml` | `schemas/theme.schema.json` | Semantic style tokens (primary, secondary, active, …) |
 | `spec/controls.yaml` | `schemas/controls.schema.json` | Tunable runtime controls with get/set action names |
 | `spec/config.yaml` | `schemas/config.schema.json` | App config defaults — read by `loadSpecConfigDefaults()` as the base layer before user config |
+| `spec/cli.yaml` | `schemas/cli.schema.json` | CLI flag defaults per command path (§3.10) and flag→handler ownership |
 | `spec/about.yaml` | — | About page content (loaded by `spec.LoadYamlView()` via `parseYamlView`) |
 
 All of these files are loaded through typed helpers in `spec/load.go`. The `cmd/` package keeps only thin adapters such as `loadViewButtonRows()` and `loadViewKeyRows()` so the browser logic still works with simple string templates, but the spec content itself is no longer line-parsed in Go.
@@ -240,6 +241,31 @@ controls:
 
 Adding, removing, or reordering controls in `controls.yaml` changes the settings form directly.
 Every declared getter and setter must have a registered Go handler; unknown bindings fail startup.
+
+### 3.10 `spec/cli.yaml` — CLI flag defaults
+
+Every non-zero default of a cobra flag lives in `cli.yaml` `defaults:`, keyed by command path
+as cobra prints it (`cati`, `cati modes glyphs`, `catiplay`, …) and long flag name. Go registers
+each flag with its zero value; `applyCLIDefaults` (`cmd/cli_defaults.go`) walks the command tree
+and calls `pflag.Value.Set`, so `--help` shows the spec value. `no_opt` sets `NoOptDefVal`
+(e.g. bare `--play` means `once`).
+
+```yaml
+defaults:
+  cati modes glyphs:
+    format: { default: halfblock }
+    grid: { default: "6" }
+```
+
+- Help strings must not repeat the default; cobra appends `(default …)` itself.
+- Subtrees built on their own (`modesCommand()`, used directly by tests) apply their defaults
+  with `applyCLIDefaultsUnder(cmd, "cati")`, because their command path lacks the binary name.
+- Missing `cli.yaml`: flags keep zero values. Invalid `cli.yaml` (unknown field, unparsable value,
+  e.g. `grid: eight`): every command of that binary fails in `PersistentPreRunE`.
+- Exception: `--fastpath` defaults to the `CATI_FASTPATH` environment value, read at runtime.
+- Guards: `TestCLIDefaultsNotHardcoded` builds the trees without the spec and rejects any
+  non-zero Go default; `TestSpecCLIDefaultsIntegrity` requires every spec entry to name an
+  existing flag and to be applied as written.
 
 ---
 

@@ -31,8 +31,8 @@ func modesGlyphsCommand() *cobra.Command {
 			return inspectGlyphs(cmd.OutOrStdout(), args[0], format, grid)
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "halfblock", "mask preview format: halfblock or ascii (# foreground, . background)")
-	cmd.Flags().IntVar(&grid, "grid", 8, "number of card columns in grid layout (default: 8)")
+	cmd.Flags().StringVar(&format, "format", "", "mask preview format: halfblock or ascii (# foreground, . background)")
+	cmd.Flags().IntVar(&grid, "grid", 0, "number of card columns in grid layout")
 	return cmd
 }
 
@@ -65,9 +65,6 @@ func inspectGlyphs(w io.Writer, expression, format string, grid int) error {
 	geo := resolution.Geometry
 	if _, err := fmt.Fprintf(w, "Glyph inventory: %s\nSets: %v | Glyphs: %d | Geometry: %dx%d | Approximate: %t\n", expression, resolution.IDs, len(resolution.Shapes), geo.W, geo.H, resolution.Approximate); err != nil {
 		return err
-	}
-	if grid < 1 {
-		grid = 8
 	}
 	var cards [][]string
 	for _, shape := range resolution.Shapes {

@@ -17,6 +17,8 @@ Issue 076's audit found several stable policy and interface values currently dec
 Resolve ownership for these candidates from issue 076 §B:
 
 - CLI flag declarations and metadata (defaults, help, hidden flags, and completion).
+  **Defaults decided and done (2026-10-07):** spec-owned in `spec/cli.yaml` `defaults:`, see
+  [Design.md §3.10](../docs/Design.md). Help text, hidden flags and completion remain open.
 - Zoom thresholds and step policy.
 - Option values and their declarative ownership.
 - Playback fallback frame rate (15 vs. 24 FPS).
