@@ -8,15 +8,17 @@ weight: 60
 ## Glyph mask inspection
 
 Use `cati modes glyphs half`, `cati modes glyphs oct`, or
-`cati modes glyphs d10,50 --format halfblock` to inspect masks supplied by
+`cati modes glyphs d10,50` to inspect masks supplied by
 `spec.ResolveGlyphSetExpression`. Cards preserve deterministic inventory order,
 implicit set 0, duplicate removal, and LCM-normalized geometry: `six` is 2x6,
 while `2x3` is 2x3. Previews read row-major foreground coverage directly,
-without glyph fitting or terminal aspect scaling. ASCII cards use `#`/`.`;
-halfblock cards use space/`▀`/`▄`/`█`, padding an odd final row with background.
-Borders preserve empty rows and columns. These are declared masks, not font
-rasterizations. The independent asymmetric 2x3 PNG fixture verifies orientation
-and both preview formats; regenerate it with `go run scripts/glyph_mask_fixture.go`.
+without glyph fitting or terminal aspect scaling. Default halfblock cards use
+space/`▀`/`▄`/`█`, packing two mask rows into one terminal row and padding an odd
+final row with background. `--format ascii` cards use `#`/`.`.
+Unicode box-drawing borders (`┌──┐`, `│...│`, `└──┘`) preserve empty rows and
+columns. `--grid <cols>` (default: 8) arranges cards into aligned horizontal
+rows. The independent asymmetric 2x3 PNG fixture verifies orientation and both
+preview formats; regenerate it with `go run scripts/glyph_mask_fixture.go`.
 
 ## Reconstruction probes
 

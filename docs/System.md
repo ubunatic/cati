@@ -304,9 +304,11 @@ The CLI render geometry pipeline uses a unified derivation model across static r
 Without a selector it lists compositions, aliases, and registered sets. Selectors
 use the case-sensitive spec grammar: `half`, `oct`, `vec`, `octants`,
 `half+sextants`, or `d10,50`. Cards show the character (space as `␠`),
-codepoint, common geometry, and a bordered mask. `--format ascii` (default)
-uses `#` for foreground and `.` for background; `--format halfblock` packs two
-mask rows into one terminal row. Demo flags remain local to the parent command.
+codepoint, common geometry, and a Unicode box-bordered mask (`┌──┐`, `│...│`, `└──┘`).
+Default `--format halfblock` packs two mask rows into one terminal row;
+`--format ascii` uses `#` for foreground and `.` for background. `--grid <cols>`
+(default: 8) controls the number of card columns in the horizontal grid layout.
+Demo flags remain local to the parent command.
 
 `cati modes test [pattern|image] [-m mode|expr]` compares emitted glyph art
 with side-by-side source and reconstructed pixels rendered by halfblock at 1:1.
