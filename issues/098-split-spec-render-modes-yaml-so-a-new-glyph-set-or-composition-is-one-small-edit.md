@@ -1,6 +1,6 @@
 # 098 — Split spec/render_modes.yaml so a new glyph set or composition is one small edit
 
-**Status**: Open
+**Status**: Closed — render_modes.yaml split into compositions.yaml, glyph_sets/ and glyph_shapes/; CLI glyph outputs byte-identical, no golden changed; M2 docs and preflight passed
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Refactor

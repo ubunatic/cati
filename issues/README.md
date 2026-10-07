@@ -101,7 +101,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 095 | [095-add-cati-glyphs-command-to-inspect-glyph-masks-and-reconstructed-pixels.md](095-add-cati-glyphs-command-to-inspect-glyph-masks-and-reconstructed-pixels.md) | Add cati glyphs command to inspect glyph masks and reconstructed pixels | Closed |
 | 096 | [096-tune-vec3-and-vec4-vector-glyph-tips-with-hand-drawn-masks.md](096-tune-vec3-and-vec4-vector-glyph-tips-with-hand-drawn-masks.md) | Tune vec3 and vec4 vector glyph tips with hand-drawn masks | Open |
 | 097 | [097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md](097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md) | 2x4 braille mode must be dot-only: no full block, no background color | Open |
-| 098 | [098-split-spec-render-modes-yaml-so-a-new-glyph-set-or-composition-is-one-small-edit.md](098-split-spec-render-modes-yaml-so-a-new-glyph-set-or-composition-is-one-small-edit.md) | Split spec/render_modes.yaml so a new glyph set or composition is one small edit | Open |
+| 098 | [098-split-spec-render-modes-yaml-so-a-new-glyph-set-or-composition-is-one-small-edit.md](098-split-spec-render-modes-yaml-so-a-new-glyph-set-or-composition-is-one-small-edit.md) | Split spec/render_modes.yaml so a new glyph set or composition is one small edit | Closed — render_modes.yaml split into compositions.yaml, glyph_sets/ and glyph_shapes/; CLI glyph outputs byte-identical, no golden changed; M2 docs and preflight passed |
 ## Archived
 
 | # | Title | Reason |
