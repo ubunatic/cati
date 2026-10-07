@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -58,9 +59,10 @@ type VectorShapesSpec struct {
 
 type cellPoint struct{ x, y float64 }
 
-// vectorShapes rasterizes the spec's vector shapes at w x h. A pixel is on when
-// at least half of its 32x32 supersamples fall inside the shape (boundaries
-// inclusive); invert entries are exact complements.
+// vectorShapes rasterizes the spec's vector shapes at w x h. Rect edges snap to
+// pixel boundaries; otherwise a pixel is on when at least half of its 32x32
+// supersamples fall inside the shape (boundaries inclusive); invert entries are
+// exact complements.
 func vectorShapes(vs VectorShapesSpec, w, h int) ([]GlyphShape, error) {
 	fw, fh := float64(w), float64(h)
 	point := func(name string) (cellPoint, error) {
@@ -145,7 +147,9 @@ func vectorShapes(vs VectorShapesSpec, w, h int) ([]GlyphShape, error) {
 		default:
 			var parts []func(X, Y float64) bool
 			for _, rc := range def.Rects {
-				x0, y0, x1, y1 := rc[0].of(fw), rc[1].of(fh), rc[2].of(fw), rc[3].of(fh)
+				// Rect edges snap to pixel boundaries (.5 rounds up), so odd
+				// geometries keep rectangles rectangular and halves complementary.
+				x0, y0, x1, y1 := snap(rc[0].of(fw)), snap(rc[1].of(fh)), snap(rc[2].of(fw)), snap(rc[3].of(fh))
 				parts = append(parts, func(X, Y float64) bool { return X >= x0 && X <= x1 && Y >= y0 && Y <= y1 })
 			}
 			for _, names := range def.Polys {
@@ -195,6 +199,8 @@ func vectorShapes(vs VectorShapesSpec, w, h int) ([]GlyphShape, error) {
 	}
 	return shapes, nil
 }
+
+func snap(v float64) float64 { return math.Floor(v + 0.5) }
 
 // insideConvex reports whether (X, Y) lies in the convex polygon, edges included,
 // for either winding order.

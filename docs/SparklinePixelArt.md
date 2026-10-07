@@ -94,7 +94,12 @@ Every vector glyph's shape lives in `vector_shapes:` at the end of
 `spec/render_modes.yaml`, in cell fractions (`rects`, convex `polys` over named
 `points`, a half-plane `split`, or the exact `invert` of another glyph). One
 definition serves every `vec*` geometry: `vectorShapes` (`spec/vector_shapes.go`)
-supersamples each pixel 32×32 and turns it on at ≥50% coverage of the union. To
+supersamples each pixel 32×32 and turns it on at ≥50% coverage of the union.
+Rectangle edges first snap to the nearest pixel boundary (.5 rounds up), so at
+odd sizes (`vec3` 2×3, `vec4` 3×4, `vec5` 3×5) quadrants stay rectangles and two
+quadrants tile their half block exactly (`TestVectorQuadrantsTileHalves`); without
+the snap, half-covered edge pixels turned on and the 25% corner pixel stayed off,
+leaving a notch. To
 fix a glyph, edit its line there. The sextant middle-row glyphs `🬃🬇🬋`
 (U+1FB03/07/0B) are left half, right half and full width of the middle third;
 `TestVectorSextantsMatchUnicodeSegments` checks them against the sextant

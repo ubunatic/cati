@@ -375,3 +375,35 @@ func TestVectorSextantsMatchUnicodeSegments(t *testing.T) {
 		}
 	}
 }
+
+// TestVectorQuadrantsTileHalves checks every vector set geometry, odd ones
+// included: two quadrants fill their half block exactly, without overlap.
+func TestVectorQuadrantsTileHalves(t *testing.T) {
+	rm, err := LoadRenderModes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, def := range rm.SetRegistry {
+		if def.Generated != "vector_linear_splits" {
+			continue
+		}
+		w, h := def.Geometry.W, def.Geometry.H
+		shapes, err := vectorShapes(rm.VectorShapes, w, h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		masks := make(map[rune][]bool)
+		for _, shape := range shapes {
+			masks[shape.Glyph] = shape.Mask
+		}
+		for _, tile := range [][3]rune{{'▘', '▝', '▀'}, {'▖', '▗', '▄'}, {'▘', '▖', '▌'}, {'▝', '▗', '▐'}} {
+			a, b, whole := masks[tile[0]], masks[tile[1]], masks[tile[2]]
+			for i := range whole {
+				if a[i] && b[i] || (a[i] || b[i]) != whole[i] {
+					t.Errorf("%s %dx%d: %c + %c != %c at pixel %d", def.Name, w, h, tile[0], tile[1], tile[2], i)
+					break
+				}
+			}
+		}
+	}
+}
