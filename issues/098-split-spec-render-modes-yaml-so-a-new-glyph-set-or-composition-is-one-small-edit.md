@@ -90,6 +90,17 @@ Adding a new set then means: add `glyph_sets/NN-name.yaml`, add one record to
 - Do not stage or overwrite other sessions' uncommitted edits in `cmd/modes.go` /
   `spec/render_modes.yaml` (2x4 `[0, 1, 8]` → `[0, 8]`, issue 097 work).
 
+### M1 Pre-Work (host review of dev098 plan)
+- Keep the renderer name map `glyph_sets:` in `render_modes.yaml` as mode data; it is
+  not the same as the registry (`half` includes `█`, set `halves` does not). No new
+  "compatibility view" layer. Only `set_registry:` moves to `glyph_sets/`.
+- Work in an isolated worktree of HEAD on a branch. Integration into the main tree:
+  `git stash push -- spec/render_modes.yaml`, fast-forward `main`, then re-apply the
+  other session's change as an **uncommitted** edit in `compositions.yaml`
+  (2x4 sets `[fulls, brailles]`) and drop that stash. Never touch `cmd/modes.go`.
+- Milestones: M1 = baselines + split + loader + schemas + tests, committed.
+  M2 = docs + full verification + integration + close.
+
 ## 4. Implementation & Verification Plan
 /goal Split the render-mode spec as proposed (adjusted by the open questions), with no
 change in behaviour, and verify it — or stop and report when blocked on a user decision
