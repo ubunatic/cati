@@ -347,6 +347,10 @@ func renderToImageWithOptions(img image.Image, outCols, outRows int, opts Option
 			} else {
 				cell = findBestCellWithCandidates(img, b, x0, x1, y0, y1, opts.Mode, custom)
 			}
+			if len(custom) == 0 {
+				cell.HasMask = false
+				cell.MaskFn = nil
+			}
 
 			for y := y0; y <= y1; y++ {
 				for x := x0; x <= x1; x++ {
@@ -412,10 +416,13 @@ func parallelRows(rows, jobs int, renderRow func(int)) {
 }
 
 type cellResult struct {
-	Ch  rune
-	FG  color.RGBA
-	BG  color.RGBA
-	Err float64
+	Ch      rune
+	FG      color.RGBA
+	BG      color.RGBA
+	Err     float64
+	Mask    mask128
+	HasMask bool
+	MaskFn  func(x, y, w, h int) bool
 }
 
 type candidate struct {
@@ -881,7 +888,7 @@ func findBestCandidate(img image.Image, _ image.Rectangle, x0, x1, y0, y1 int, c
 			(err == best.Err && fgTransparent < bestFGTransparent) ||
 			(err == best.Err && fgTransparent == bestFGTransparent && splitPenalty < bestSplitPenalty)
 		if better {
-			best = cellResult{Ch: cand.ch, FG: fgAvg, BG: bgAvg, Err: err}
+			best = cellResult{Ch: cand.ch, FG: fgAvg, BG: bgAvg, Err: err, MaskFn: cand.mask, HasMask: true}
 			bestFGTransparent = fgTransparent
 			bestSplitPenalty = splitPenalty
 		}
@@ -909,7 +916,15 @@ func avgColorOpaque(sum acc, n int) color.RGBA {
 // reconstruction: an emitted foreground or background escape still paints
 // that terminal region. Unpainted regions remain transparent.
 func reconstructedCellColor(cell cellResult, x, y, width, height int) color.RGBA {
-	if maskContains(cell.Ch, x, y, width, height) {
+	var isFG bool
+	if cell.MaskFn != nil {
+		isFG = cell.MaskFn(x, y, width, height)
+	} else if cell.HasMask {
+		isFG = cell.Mask.contains(x, y, width)
+	} else {
+		isFG = maskContains(cell.Ch, x, y, width, height)
+	}
+	if isFG {
 		if cell.FG.A != 0 {
 			return cell.FG
 		}

@@ -595,3 +595,120 @@ func TestRender_SampleImages(t *testing.T) {
 		})
 	}
 }
+
+func TestQuadblock_NRGBAAlphaPremultiplicationParity(t *testing.T) {
+	// Verify exact equivalence of nrgbaToRGBA with toRGBA(color.NRGBA{...}) across all alpha and RGB values.
+	for a := 0; a <= 255; a++ {
+		for _, v := range []uint8{0, 1, 50, 100, 128, 200, 254, 255} {
+			c := color.NRGBA{R: v, G: 255 - v, B: uint8(a), A: uint8(a)}
+			want := toRGBA(c)
+			got := nrgbaToRGBA(c.R, c.G, c.B, c.A)
+			if got != want {
+				t.Fatalf("nrgbaToRGBA(%d,%d,%d,%d) = %+v, want %+v", c.R, c.G, c.B, c.A, got, want)
+			}
+		}
+	}
+}
+
+func TestQuadblockFastpathParity_NRGBAAndNonzeroBounds(t *testing.T) {
+	prev := core.Fastpath
+	defer func() { core.Fastpath = prev }()
+
+	testCases := []struct {
+		name string
+		img  image.Image
+	}{
+		{
+			name: "NRGBA 3x2 partial alpha",
+			img: func() image.Image {
+				img := image.NewNRGBA(image.Rect(0, 0, 3, 2))
+				for y := 0; y < 2; y++ {
+					for x := 0; x < 3; x++ {
+						img.SetNRGBA(x, y, color.NRGBA{R: 200, G: 100, B: 50, A: 128})
+					}
+				}
+				return img
+			}(),
+		},
+		{
+			name: "NRGBA 33x8 uniform partial alpha",
+			img: func() image.Image {
+				img := image.NewNRGBA(image.Rect(0, 0, 33, 8))
+				for y := 0; y < 8; y++ {
+					for x := 0; x < 33; x++ {
+						img.SetNRGBA(x, y, color.NRGBA{R: 200, G: 100, B: 50, A: 128})
+					}
+				}
+				return img
+			}(),
+		},
+		{
+			name: "NRGBA 7x5 translated bounds Rect(5,7,12,12)",
+			img: func() image.Image {
+				img := image.NewNRGBA(image.Rect(5, 7, 12, 12))
+				for y := 7; y < 12; y++ {
+					for x := 5; x < 12; x++ {
+						img.SetNRGBA(x, y, color.NRGBA{R: uint8(x * 20), G: uint8(y * 20), B: 100, A: uint8(100 + (x+y)*5)})
+					}
+				}
+				return img
+			}(),
+		},
+		{
+			name: "RGBA translated subimage with parent stride",
+			img: func() image.Image {
+				parent := image.NewRGBA(image.Rect(0, 0, 20, 20))
+				for y := 0; y < 20; y++ {
+					for x := 0; x < 20; x++ {
+						parent.SetRGBA(x, y, color.RGBA{R: uint8(x * 12), G: uint8(y * 12), B: 150, A: 255})
+					}
+				}
+				return parent.SubImage(image.Rect(4, 6, 15, 17))
+			}(),
+		},
+		{
+			name: "NRGBA translated subimage with parent stride",
+			img: func() image.Image {
+				parent := image.NewNRGBA(image.Rect(0, 0, 20, 20))
+				for y := 0; y < 20; y++ {
+					for x := 0; x < 20; x++ {
+						parent.SetNRGBA(x, y, color.NRGBA{R: uint8(x * 12), G: uint8(y * 12), B: 150, A: uint8(50 + x*5)})
+					}
+				}
+				return parent.SubImage(image.Rect(3, 5, 14, 18))
+			}(),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, jobs := range []int{1, 4} {
+				// 1. Compare RenderToImageJ output
+				core.Fastpath = true
+				fastImg := RenderToImageJ(tc.img, Options{Jobs: jobs}, jobs)
+				core.Fastpath = false
+				refImg := RenderToImageJ(tc.img, Options{Jobs: jobs}, jobs)
+
+				if !imagesEqual(fastImg, refImg) {
+					t.Fatalf("RenderToImageJ (jobs=%d) fast != ref for %s", jobs, tc.name)
+				}
+
+				// 2. Compare Render ANSI output
+				var fastBuf, refBuf strings.Builder
+				core.Fastpath = true
+				if err := Render(&fastBuf, tc.img, 0, Options{Jobs: jobs, NoLinePrefix: true}); err != nil {
+					t.Fatalf("Render fast: %v", err)
+				}
+				core.Fastpath = false
+				if err := Render(&refBuf, tc.img, 0, Options{Jobs: jobs, NoLinePrefix: true}); err != nil {
+					t.Fatalf("Render ref: %v", err)
+				}
+
+				if fastBuf.String() != refBuf.String() {
+					t.Fatalf("Render ANSI (jobs=%d) fast != ref for %s", jobs, tc.name)
+				}
+			}
+		})
+	}
+}
+

@@ -555,3 +555,154 @@ func TestRenderToGridHeightConstrainedGridWidth(t *testing.T) {
 		t.Errorf("grid.Height = %d, want 10", grid.Height)
 	}
 }
+
+func TestCustomGlyphReconstructionFaithfulMasks(t *testing.T) {
+	// Seed case from Issue 092: Asymmetric 2x4 octant U+1CD00 (mask at (0,1)).
+	octant3Mask := []bool{
+		false, false,
+		true, false,
+		false, false,
+		false, false,
+	}
+	emptyMask := []bool{
+		false, false,
+		false, false,
+		false, false,
+		false, false,
+	}
+	opts := Options{
+		CellW:   2,
+		CellH:   4,
+		AspectX: 1,
+		Shapes: []Shape{
+			{Ch: ' ', Width: 2, Height: 4, Mask: emptyMask},
+			{Ch: 0x1CD00, Width: 2, Height: 4, Mask: octant3Mask},
+		},
+	}
+
+	red := color.RGBA{R: 255, G: 0, B: 0, A: 255}
+	blue := color.RGBA{R: 0, G: 0, B: 255, A: 255}
+
+	img := image.NewRGBA(image.Rect(0, 0, 2, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 2; x++ {
+			if x == 0 && y == 1 {
+				img.SetRGBA(x, y, red)
+			} else {
+				img.SetRGBA(x, y, blue)
+			}
+		}
+	}
+
+	for _, jobs := range []int{1, 4} {
+		reconstructed, err := RenderToImageWithOptionsJ(img, 1, 1, opts, jobs)
+		if err != nil {
+			t.Fatalf("RenderToImageWithOptionsJ (jobs=%d): %v", jobs, err)
+		}
+
+		for y := 0; y < 4; y++ {
+			for x := 0; x < 2; x++ {
+				got := color.RGBAModel.Convert(reconstructed.At(x, y)).(color.RGBA)
+				var want color.RGBA
+				if x == 0 && y == 1 {
+					want = red
+				} else {
+					want = blue
+				}
+				if got != want {
+					t.Errorf("jobs=%d pixel(%d,%d) = %+v, want %+v", jobs, x, y, got, want)
+				}
+			}
+		}
+	}
+}
+
+func TestCustomGlyphReconstructionVectorAndUnevenDimensions(t *testing.T) {
+	// 4x4 vector shape with upper-left diagonal split
+	diagMask := []bool{
+		true, true, true, false,
+		true, true, false, false,
+		true, false, false, false,
+		false, false, false, false,
+	}
+	emptyMask := make([]bool, 16)
+	opts := Options{
+		CellW:   4,
+		CellH:   4,
+		AspectX: 1,
+		Shapes: []Shape{
+			{Ch: ' ', Width: 4, Height: 4, Mask: emptyMask},
+			{Ch: '🮘', Width: 4, Height: 4, Mask: diagMask},
+		},
+	}
+
+	fg := color.RGBA{R: 10, G: 200, B: 30, A: 255}
+	bg := color.RGBA{R: 50, G: 60, B: 220, A: 255}
+
+	// 1. Exact 4x4 cell
+	img4x4 := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			if diagMask[y*4+x] {
+				img4x4.SetRGBA(x, y, fg)
+			} else {
+				img4x4.SetRGBA(x, y, bg)
+			}
+		}
+	}
+
+	recon4x4, err := RenderToImageWithOptions(img4x4, 1, 1, opts)
+	if err != nil {
+		t.Fatalf("RenderToImageWithOptions 4x4: %v", err)
+	}
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			got := color.RGBAModel.Convert(recon4x4.At(x, y)).(color.RGBA)
+			var want color.RGBA
+			if diagMask[y*4+x] {
+				want = fg
+			} else {
+				want = bg
+			}
+			if got != want {
+				t.Fatalf("4x4 pixel(%d,%d) = %+v, want %+v", x, y, got, want)
+			}
+		}
+	}
+
+	// 2. Uneven 5x7 cell dimensions
+	img5x7 := image.NewRGBA(image.Rect(0, 0, 5, 7))
+	for y := 0; y < 7; y++ {
+		for x := 0; x < 5; x++ {
+			sx := min(3, x*4/5)
+			sy := min(3, y*4/7)
+			if diagMask[sy*4+sx] {
+				img5x7.SetRGBA(x, y, fg)
+			} else {
+				img5x7.SetRGBA(x, y, bg)
+			}
+		}
+	}
+
+	recon5x7, err := RenderToImageWithOptions(img5x7, 1, 1, opts)
+	if err != nil {
+		t.Fatalf("RenderToImageWithOptions 5x7: %v", err)
+	}
+	for y := 0; y < 7; y++ {
+		for x := 0; x < 5; x++ {
+			got := color.RGBAModel.Convert(recon5x7.At(x, y)).(color.RGBA)
+			sx := min(3, x*4/5)
+			sy := min(3, y*4/7)
+			var want color.RGBA
+			if diagMask[sy*4+sx] {
+				want = fg
+			} else {
+				want = bg
+			}
+			if got != want {
+				t.Fatalf("5x7 pixel(%d,%d) = %+v, want %+v", x, y, got, want)
+			}
+		}
+	}
+}
+

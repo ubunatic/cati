@@ -1,6 +1,6 @@
 # 094 — Restore quadblock fastpath parity for partial alpha and nonzero bounds
 
-**Status**: Open
+**Status**: Closed — restored NRGBA premultiplication and destination-relative coordinate bounds parity; full suite and preflight green
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug
@@ -100,3 +100,14 @@ before cell sampling. The direct-render demo deliberately preserves NRGBA.
 This bug is not limited to SSIM reconstruction, despite the initial explanation
 in the investigation. Visual reproduction is confirmed; the production fix
 and its regression tests remain outstanding, so this ticket stays Open.
+
+## 5. Delivery (2026-10-07)
+
+- Implemented `nrgbaToRGBA` using exact premultiplication formula `uint8((uint32(c)*0x101*uint32(a)/0xff) >> 8)`.
+- Applied NRGBA conversion in `safePixel` and `computeQuadCell` fast paths.
+- Corrected `RenderToImageJ` reference loop to use destination-relative coordinates `px0 := tc*2` and `py0 := tr*2`.
+- Added differential unit test sweeping all alpha values 0..255 and verifying zero difference against `Color.RGBA()`.
+- Added parity tests covering partial alpha, nonzero origins `image.Rect(5,7,12,12)`, and translated subimages with parent stride for both serial and worker execution.
+- Verified `scripts/quadblock_fastpath_demo.go` now outputs `ANSI output identical: true`.
+- Zero existing goldens changed. `go test ./...` and `make preflight` passed green.
+

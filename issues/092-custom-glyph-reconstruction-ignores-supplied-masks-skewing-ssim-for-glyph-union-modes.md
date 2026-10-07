@@ -1,6 +1,6 @@
 # 092 — Custom glyph reconstruction ignores supplied masks, skewing SSIM for glyph_union modes
 
-**Status**: Open
+**Status**: Closed — preserved custom candidate masks in cellResult and reconstruction; full suite and preflight green
 **Priority**: P2 (Medium)
 **Severity**: Major
 **Category**: Bug
@@ -112,3 +112,13 @@ Done means:
   regenerate goldens merely to pass tests.
 - Run focused regression tests, the full suite, and required build/preflight
   checks. Record validation and close this ticket only after completion.
+
+## 4. Delivery (2026-10-07)
+
+- Extended `cellResult` with `Mask mask128`, `HasMask bool`, and `MaskFn func(...) bool`.
+- Updated `findBestCandidateFast` (both 64-bit and 128-bit solver kernels) and `findBestCandidate` to record the winning candidate's mask into `cellResult`.
+- Updated `reconstructedCellColor` to evaluate `cell.MaskFn` and `cell.Mask.contains(x, y, w)` when custom shapes are active, preserving `maskContains` for built-in modes.
+- Added regression tests covering the asymmetric 2x4 octant seed case (verifying pixel (0,1) red and all other 7 pixels blue), 4x4 vector mode diagonal split, uneven 5x7 cell dimensions, and worker parity (`jobs=4`).
+- Updated `docs/SparklinePixelArt.md` with the reconstruction coverage model.
+- Zero existing goldens changed. `go test ./...` and `make preflight` passed green.
+

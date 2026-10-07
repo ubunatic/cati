@@ -14,6 +14,14 @@ type mask128 struct {
 	hi uint64
 }
 
+func (m mask128) contains(x, y, w int) bool {
+	idx := y*w + x
+	if idx < 64 {
+		return (m.lo & (uint64(1) << idx)) != 0
+	}
+	return (m.hi & (uint64(1) << (idx - 64))) != 0
+}
+
 type bitCandidate struct {
 	ch   rune
 	mask mask128
@@ -189,6 +197,7 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 	bestFGTrans := math.MaxInt
 	bestSplitPenalty := math.MaxInt
 	var bestCh rune = ' '
+	var bestMask mask128
 	var bestFG, bestBG color.RGBA
 
 	const transparentPixelCost = 195075 // 3 * 255 * 255
@@ -273,6 +282,7 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 				bestFGTrans = fgTrans
 				bestSplitPenalty = splitPenalty
 				bestCh = cand.ch
+				bestMask = cand.mask
 				if fgN > 0 {
 					bestFG = color.RGBA{R: fgAvgR, G: fgAvgG, B: fgAvgB, A: 255}
 				} else {
@@ -378,6 +388,7 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 				bestFGTrans = fgTrans
 				bestSplitPenalty = splitPenalty
 				bestCh = cand.ch
+				bestMask = cand.mask
 				if fgN > 0 {
 					bestFG = color.RGBA{R: fgAvgR, G: fgAvgG, B: fgAvgB, A: 255}
 				} else {
@@ -396,9 +407,11 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 	}
 
 	return cellResult{
-		Ch:  bestCh,
-		FG:  bestFG,
-		BG:  bestBG,
-		Err: float64(bestErrInt),
+		Ch:      bestCh,
+		FG:      bestFG,
+		BG:      bestBG,
+		Err:     float64(bestErrInt),
+		Mask:    bestMask,
+		HasMask: true,
 	}
 }

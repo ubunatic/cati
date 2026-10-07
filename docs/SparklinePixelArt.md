@@ -98,9 +98,11 @@ levels to two-dimensional candidate masks. For each terminal cell it:
 Callers can supply a validated inventory through `sparkline.Options.Shapes`.
 Each `sparkline.Shape` has an arbitrary-size row-major `[]bool` mask, so high
 geometries such as 24x24 are not constrained by a machine-word bit mask.
-`RenderToImageWithOptions` and its worker variant use exactly the same custom
-candidates as ANSI rendering. Non-divisible smart candidate widths partition
-the complete source extent proportionally, including the final pixel column.
+`RenderToImageWithOptions` and its worker variant carry each chosen custom candidate's
+exact mask and geometry directly into pixel reconstruction, ensuring SSIM and quality
+evaluations faithfully score the represented coverage rather than guessing by rune.
+Non-divisible smart candidate widths partition the complete source extent proportionally,
+including the final pixel column.
 
 `half/split` uses a `2×2` block. `spark` and `spark+quad` use `4×8`.
 `six+half` uses `2×6`, and `spark+six` uses `4×24`. Quad candidates in
