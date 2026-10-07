@@ -26,6 +26,10 @@
 **Learning:** Re-counting pixel matching coverage and neighbor continuity by iterating over pixel slices for every candidate pair in `pickBestPair()` consumed 26.7% of quadblock CPU execution time. Variadic slice allocation headers in 2-pixel color averaging (`avgRGB()`) added an additional 10.3% flat CPU overhead.
 **Action:** Compute candidate frequency counts in a single pass in `collectUnique()`, evaluate pair weights `weights[k] = counts[k]*4 + m[k]` directly over fixed candidate arrays (`[4]color.RGBA`), introduce `avgRGB2()` for 2-pixel color averaging, and fastpath 2x2 subpixel sampling on `*image.RGBA` images in `computeQuadCell()`.
 
-## 2026-10-05 - Lock-Free Wavefront Scheduling and Direct Slice Fastpath in Parallel Quadblock
+## 2026-10-05 - Lock-Lock Free Wavefront Scheduling and Direct Slice Fastpath in Parallel Quadblock
 **Learning:** Enforcing quadblock cell dependency constraints via per-diagonal channels and WaitGroup barriers (`wg.Wait()` per diagonal) causes severe thread contention (220+ barriers/frame) and destroys CPU cache prefetching.
 **Action:** Replace per-diagonal channel barriers with a lock-free wavefront scheduler using atomic row progress counters (`atomic.Int32`) and direct `*image.RGBA` / `*image.NRGBA` 2x2 subpixel sampling in `computeQuadCell`, increasing parallel rendering throughput by 35-47%.
+
+## 2026-10-07 - Precomputed Mask Subset Sums and Division LUT in Sextant Cell Solver
+**Learning:** Performing 6 integer division (IDIV) operations per mask evaluation and iterating over set bit indices (`maskBitIndices[fgOpaque]`) inside 64-candidate sextant search loops consumed >90% of total CPU time.
+**Action:** Precompute division lookups (`divTable[7][1531]uint8`) at `init()`, calculate subset sums (`sumR[64]`) prior to the candidate loop, detect uniform opaque cells upfront, and early exit when `bestScore == 0` with maximum overlap/popcount, reducing sextant render latency by ~68% (33ms to 10.6ms).
