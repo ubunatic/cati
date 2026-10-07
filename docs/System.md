@@ -300,6 +300,14 @@ The CLI render geometry pipeline uses a unified derivation model across static r
 
 ### Quality Benchmarking & Two-Phase Execution (`cati modes`)
 
+`cati modes glyphs [mode|expr]` inspects glyph masks without loading images.
+Without a selector it lists compositions, aliases, and registered sets. Selectors
+use the case-sensitive spec grammar: `half`, `oct`, `vec`, `octants`,
+`half+sextants`, or `d10,50`. Cards show the character (space as `␠`),
+codepoint, common geometry, and a bordered mask. `--format ascii` (default)
+uses `#` for foreground and `.` for background; `--format halfblock` packs two
+mask rows into one terminal row. Demo flags remain local to the parent command.
+
 The `cati modes` CLI command provides side-by-side visual and metric analysis across all registered render modes and dynamic candidate solvers (`--smart`).
 
 1. **Two-Phase Decoupled Pipeline**:

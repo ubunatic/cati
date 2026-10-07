@@ -32,7 +32,14 @@ Rather than fragmenting the CLI with a separate top-level command competing with
 **Goal**: `/goal Implement glyph inventory mask inspection and pixel reconstruction probes integrated into "cati modes", and verify with automated tests and preflight, or stop and report when blocked on a user decision or denied permission.`
 
 ### Milestones
+
+M1 implemented: `cati modes glyphs [mode|expr]` resolves inventories from the
+spec and prints bordered ASCII or halfblock mask cards (`--format`). No selector
+lists compositions and registered sets. Tests cover selector grammar, ordering,
+geometry, mask orientation, errors, help, and an independent PNG fixture with
+embedded metadata. M1 command tests and preflight passed. M2 reconstruction
+probes and M3 verification of the complete feature remain.
+
 - **M1 (Glyph Inventory & Subpixel Mask Cards)**: Add `cati modes glyphs [mode|id]` (or `cati modes --glyphs`) displaying character, codepoint, and visual subpixel mask cards for any resolved mode or glyph set.
 - **M2 (Reconstruction Probe Comparison)**: Add `cati modes test` / `--reconstruct` comparing 1:1 Source Pixels vs Reconstructed Pixels side-by-side with emitted glyph art.
 - **M3 (Tests, Preflight & Docs)**: Comprehensive unit tests in `cmd/modes_test.go`, verify `make preflight` and CLI help.
-

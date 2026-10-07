@@ -226,6 +226,7 @@ func modesCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&benchmarkFlag, "benchmark", false, "run dataset benchmark scorecard across test assets")
 	cmd.Flags().BoolVar(&suiteFlag, "suite", false, "alias for --benchmark")
 	cmd.Flags().StringVar(&colsFlag, "cols", "auto", "grid layout columns: auto (1-3 based on terminal width) or explicit number 1, 2, 3...")
+	cmd.AddCommand(modesGlyphsCommand())
 	return cmd
 }
 
