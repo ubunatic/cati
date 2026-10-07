@@ -57,3 +57,10 @@ Fixed modes `vec2..vec8` keep their geometry; retargeting `vec` is a spec-only e
   computed mask; first use: tips of 🭬/🭮 at 3x5. More user tuning to follow.
 - The `diag` reconstruction probe is now one 4x6 `vec6` cell and reconstructs exactly
   (golden `testdata/reconstruction_probes/diag.png` regenerated from the fixture script).
+- vec6 jaggies on flat edges (`cati assets/doom1.png -W 100 --crop 8:3:46:24 -m vec6`
+  gave `🮂🮂🮂🭩🭂🭍🭩🮂`): at 4x6 `🮂` snaps to 2 rows, so no glyph had a 1-row top edge.
+  Per-glyph scores with the real renderer: on a 1-row bar, 🭘/🭂 (84k) beat 🮂 (116k).
+  A 1-row drawn 🮂 only moved the teeth to the 2-row cells. Fix: eighth bars
+  `▔▇🮃▅▃🮄▁🮆` in the inventory, after the quarters so ties keep older glyphs; output
+  is now `🮂🮂🮂▔▔▔▔🮂`. `TestVectorEveryRowBoundaryHasStraightBar` requires a straight
+  bar at every row boundary of every vector set. No golden changed.

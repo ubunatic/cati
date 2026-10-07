@@ -481,3 +481,42 @@ func TestVectorQuadrantsTileHalves(t *testing.T) {
 		}
 	}
 }
+
+// TestVectorEveryRowBoundaryHasStraightBar guards against diagonal "teeth" on
+// flat edges: for every row boundary k, some glyph covers exactly the rows above
+// k (or, with fg/bg swapped, exactly the rows below). Without the eighth bars,
+// vec6 (4x6) had no 1-row top bar because 🮂 snaps 1.5 rows to 2.
+func TestVectorEveryRowBoundaryHasStraightBar(t *testing.T) {
+	rm, err := LoadRenderModes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, def := range rm.SetRegistry {
+		if def.Generated != "vector_linear_splits" {
+			continue
+		}
+		w, h := def.Geometry.W, def.Geometry.H
+		shapes, err := vectorShapes(rm.VectorShapes, w, h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for k := 1; k < h; k++ {
+			found := false
+			for _, shape := range shapes {
+				top, bottom := true, true
+				for i, on := range shape.Mask {
+					above := i/w < k
+					top = top && on == above
+					bottom = bottom && on == !above
+				}
+				if top || bottom {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("%s %dx%d: no straight bar with its edge at row %d", def.Name, w, h, k)
+			}
+		}
+	}
+}

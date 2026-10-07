@@ -87,7 +87,7 @@ that resolved geometry rather than inferring it from a mode name.
 the spec, so retargeting `vec` is a spec-only change. The vector inventory
 includes linear diagonal and triangular splits, hourglass/bowtie complements,
 half/full blocks and space, straight 1/4 and 3/4 bars on all four sides
-(`🮂🮅▂▆▎▊🮇🮊`), and all ten quadrants (`▖▗▘▙▚▛▜▝▞▟`); at `4×4` these masks
+(`🮂🮅▂▆▎▊🮇🮊`), horizontal eighth bars (`▔▇🮃▅▃🮄▁🮆`), and all ten quadrants (`▖▗▘▙▚▛▜▝▞▟`); at `4×4` these masks
 are exact (`TestVectorStraightBarsAndQuadrants` checks the shapes directly).
 
 Every vector glyph's shape lives in `vector_shapes:` at the end of
@@ -115,6 +115,14 @@ Quarter bars cover one row or column; quadrants cover `2×2` rectangles.
 These exact straight masks let flat edges fit without repeated diagonal teeth.
 The regression test renders a cell with only its top row filled and requires
 an upper-quarter bar or its lower-three-quarter colour inversion.
+Snapping makes the quarter bars uneven at 4×6 (`vec6`): `🮂` covers 2 rows
+(1.5 rounds up) while `▂` covers 1. Until 2026-10-07 vec6 had no 1-row top
+edge, so a 1-row bright bar (the doom1.png HUD rule, `--crop 8:3:46:24`) was
+fitted with diagonal teeth `🭩🭂🭍`. The eighth bars close every gap: for every
+row boundary of every vector set some glyph is a straight bar with its edge
+exactly there (`TestVectorEveryRowBoundaryHasStraightBar`). They come after the
+quarters in the list, so where snapping makes masks identical the older glyph
+wins the tie and small sets render as before.
 
 `oct` (`octant`, glyph set 10) uses exact `2×4` row-major coverage, numbered
 1,2 across the top row through 7,8 across the bottom. Its 256 patterns combine
