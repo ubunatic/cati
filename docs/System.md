@@ -308,6 +308,19 @@ codepoint, common geometry, and a bordered mask. `--format ascii` (default)
 uses `#` for foreground and `.` for background; `--format halfblock` packs two
 mask rows into one terminal row. Demo flags remain local to the parent command.
 
+`cati modes test [pattern|image] [-m mode|expr]` compares emitted glyph art
+with side-by-side source and reconstructed pixels rendered by halfblock at 1:1.
+No input runs `probe` (oct), `diag` (vec), and `grid` (oct); `--mode` overrides
+their defaults. Aliases are `asymmetric`, `vector`, and `multi` respectively;
+`--list-patterns` lists them. A positional file or `-i/--image PATH` loads a
+custom image (default mode oct); use `--image` to disambiguate a pattern-named
+file. These input forms are mutually exclusive. Mode expressions use the same
+case-sensitive resolver as `glyphs`.
+Images retain their pixels and receive transparent right/bottom padding to
+whole cells before selection. Pixel panels and metrics use only the original
+extent; the header reports the padding and glyph grid size. No automatic
+terminal fitting occurs, so wide images produce wide output.
+
 The `cati modes` CLI command provides side-by-side visual and metric analysis across all registered render modes and dynamic candidate solvers (`--smart`).
 
 1. **Two-Phase Decoupled Pipeline**:

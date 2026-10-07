@@ -436,3 +436,34 @@ func TestRenderQuality_ZeroValue(t *testing.T) {
 		t.Error("zero RenderQuality should have all fields zero")
 	}
 }
+
+func TestMSERGBA8(t *testing.T) {
+	black := solidImage(2, 2, color.RGBA{A: 255})
+	white := solidImage(2, 2, color.RGBA{R: 255, G: 255, B: 255, A: 255})
+	if got := MSE(black, white); got != 3*255*255/4.0 {
+		t.Fatal(got)
+	}
+	if MSE(black, black) != 0 || !math.IsInf(PSNR(black, black), 1) {
+		t.Fatal("identity")
+	}
+	shifted := image.NewRGBA(image.Rect(5, 7, 7, 9))
+	for y := 7; y < 9; y++ {
+		for x := 5; x < 7; x++ {
+			shifted.SetRGBA(x, y, color.RGBA{A: 255})
+		}
+	}
+	if MSE(black, shifted) != 0 {
+		t.Fatal("bounds origins")
+	}
+	for _, other := range []image.Image{image.NewRGBA(image.Rectangle{}), solidImage(1, 1, color.RGBA{})} {
+		if !math.IsNaN(MSE(black, other)) || PSNR(black, other) != 0 {
+			t.Fatal("invalid dimensions")
+		}
+	}
+	alpha := image.NewNRGBA(image.Rect(0, 0, 2, 2))
+	alpha.SetNRGBA(0, 0, color.NRGBA{R: 200, A: 128})
+	// One premultiplied red=100 and alpha=128 sample among sixteen channels.
+	if got := MSE(alpha, image.NewRGBA(image.Rect(0, 0, 2, 2))); got != (100*100+128*128)/16.0 {
+		t.Fatal(got)
+	}
+}

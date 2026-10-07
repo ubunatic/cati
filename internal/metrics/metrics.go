@@ -56,9 +56,23 @@ type RenderQuality struct {
 // conversion to 8-bit channels; alpha is included as a fourth channel. The peak value is 255. Identical images return
 // +Inf. Images with different dimensions or no pixels return 0.
 func PSNR(a, b image.Image) float64 {
+	mse := MSE(a, b)
+	if math.IsNaN(mse) {
+		return 0
+	}
+	if mse == 0 {
+		return math.Inf(1)
+	}
+	return 10 * math.Log10((255*255)/mse)
+}
+
+// MSE compares premultiplied RGBA channels converted to 8-bit values,
+// averaging squared error over all pixels and all four channels. Different
+// dimensions or empty images return NaN. Bounds origins may differ.
+func MSE(a, b image.Image) float64 {
 	ab, bb := a.Bounds(), b.Bounds()
 	if ab.Dx() != bb.Dx() || ab.Dy() != bb.Dy() || ab.Dx() <= 0 || ab.Dy() <= 0 {
-		return 0
+		return math.NaN()
 	}
 	var sum float64
 	for y := 0; y < ab.Dy(); y++ {
@@ -75,11 +89,7 @@ func PSNR(a, b image.Image) float64 {
 			}
 		}
 	}
-	if sum == 0 {
-		return math.Inf(1)
-	}
-	mse := sum / float64(ab.Dx()*ab.Dy()*4)
-	return 10 * math.Log10((255*255)/mse)
+	return sum / (float64(ab.Dx()) * float64(ab.Dy()) * 4)
 }
 
 // luma returns the BT.709 luminance of c in [0, 1].

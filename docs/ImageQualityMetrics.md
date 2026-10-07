@@ -80,6 +80,19 @@ $$\text{MSE}(x, y) = \frac{1}{N \cdot C} \sum_{i=1}^{N} \sum_{c=1}^{C} \big(x_{i
 
 ### 3.2 Peak Signal-to-Noise Ratio (PSNR)
 
+The reconstruction probe command reports `metrics.MSE` over premultiplied RGBA
+values converted to 8-bit channels, including alpha as the fourth channel.
+`metrics.PSNR` uses the same MSE and a peak of 255. MSE returns NaN for empty
+or dimension-mismatched images; PSNR retains its existing return value of 0
+for those inputs. Equal images have MSE 0 and PSNR +Inf. Bounds origins may
+differ; comparison uses corresponding relative pixels. Probe metrics exclude
+transparent cell padding.
+
+Probe SSIM uses the existing luminance metric's non-overlapping 8x8 windows.
+It reports `N/A (<8x8)` if either dimension is below eight, since the metric
+otherwise returns 1 without comparing any window. For larger images it ignores
+incomplete edge windows; MSE and PSNR still include all source pixels.
+
 PSNR expresses MSE logarithmically relative to the maximum possible signal power ($MAX_I = 255$ for 8-bit channels):
 
 $$\text{PSNR} = 10 \cdot \log_{10} \left( \frac{MAX_I^2}{\text{MSE}} \right) = 20 \cdot \log_{10}(MAX_I) - 10 \cdot \log_{10}(\text{MSE})$$

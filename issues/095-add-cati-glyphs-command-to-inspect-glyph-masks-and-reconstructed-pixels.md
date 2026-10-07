@@ -38,7 +38,17 @@ spec and prints bordered ASCII or halfblock mask cards (`--format`). No selector
 lists compositions and registered sets. Tests cover selector grammar, ordering,
 geometry, mask orientation, errors, help, and an independent PNG fixture with
 embedded metadata. M1 command tests and preflight passed. M2 reconstruction
-probes and M3 verification of the complete feature remain.
+probes are now implemented; M3 verification of the complete feature remains.
+
+M2 implemented: `cati modes test [pattern|image] [-m mode|expr]` runs all three
+default demonstrations or one selected pattern/image, with `-i/--image` and
+`--list-patterns` support. Glyph selection and reconstruction share spec masks
+and a transparently padded cell grid. Source and reconstruction panels retain
+1:1 pixels; metrics exclude padding and report RGBA8 MSE/PSNR and luminance
+SSIM (unavailable below 8x8). Independent metadata-bearing PNG fixtures cover
+exact octant probes and the numerically explained lossy vector diagonal.
+Verification passed: `go test ./cmd/... ./internal/metrics/...`, `make test`
+(both fastpath configurations), `make preflight`, and installed CLI smoke checks.
 
 - **M1 (Glyph Inventory & Subpixel Mask Cards)**: Add `cati modes glyphs [mode|id]` (or `cati modes --glyphs`) displaying character, codepoint, and visual subpixel mask cards for any resolved mode or glyph set.
 - **M2 (Reconstruction Probe Comparison)**: Add `cati modes test` / `--reconstruct` comparing 1:1 Source Pixels vs Reconstructed Pixels side-by-side with emitted glyph art.

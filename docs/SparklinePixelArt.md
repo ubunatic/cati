@@ -18,6 +18,29 @@ Borders preserve empty rows and columns. These are declared masks, not font
 rasterizations. The independent asymmetric 2x3 PNG fixture verifies orientation
 and both preview formats; regenerate it with `go run scripts/glyph_mask_fixture.go`.
 
+## Reconstruction probes
+
+`cati modes test` runs the three demonstrations from `scripts/reconstruct_demo.go`:
+a single asymmetric octant pixel, a vector diagonal, and a 6x2 octant cell grid.
+Use `cati modes test probe -m d10,50` or `cati modes test -i image.png -m vec`
+to select another authoritative inventory or custom source. Presets are generated
+in memory, so they work in an installed binary outside the repository.
+
+Both glyph output and reconstruction use identical custom shapes, cell geometry,
+and grid dimensions. Normalize source bounds to zero and transparently pad to
+whole cells without resampling; crop reconstruction to the original extent for
+the 1:1 pixel panels and metrics. ANSI-aware padding aligns the panels, including
+empty rows. RGBA normalization preserves premultiplied alpha semantics and
+avoids the NRGBA luminance discrepancy tracked by #055.
+
+Octant presets reconstruct exactly. The 4x4 vector diagonal does not: the chosen
+split retains five green pixels, while green pixel (0,2) joins ten purple pixels
+in a background group with rounded mean RGB (109,38,168). Its RGBA8 MSE is
+1012.796875. Independent PNG fixtures record these expected pixels, with mode,
+pattern, and geometry metadata. Regenerate only these fixtures with
+`go run scripts/reconstruction_probe_fixtures.go`; existing render goldens are
+unaffected. Small-image SSIM is reported as unavailable rather than perfect.
+
 
 This document captures the architecture, design decisions, optimal-split algorithm, scanning traversal, and testing harness for the **Cati** sparkline rendering mode.
 
