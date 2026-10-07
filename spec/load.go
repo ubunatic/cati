@@ -262,6 +262,7 @@ type RenderModesSpec struct {
 	CompositionInfo  map[string]string   `yaml:"composition_info"`
 	CompositionOrder []string            `yaml:"composition_order"`
 	Experimental     []string            `yaml:"experimental"`
+	VectorShapes     VectorShapesSpec    `yaml:"vector_shapes"`
 }
 
 func LoadRenderModes() (RenderModesSpec, error) {
@@ -343,7 +344,7 @@ func ResolveGlyphSetExpression(expression string) (GlyphSetResolution, error) {
 	res.Optimized = (res.Geometry.W * res.Geometry.H) <= 128
 	for _, id := range normalized {
 		def := defs[id]
-		for _, shape := range glyphSetShapes(def) {
+		for _, shape := range glyphSetShapes(def, rm.VectorShapes) {
 			if containsRune(res.Glyphs, shape.Glyph) {
 				continue
 			}
@@ -372,7 +373,7 @@ func validateGlyphRegistry(rm RenderModesSpec) error {
 		}
 		defs[def.ID] = def
 		names[def.Name] = def.ID
-		shapes, err := parseGlyphSetShapes(def)
+		shapes, err := parseGlyphSetShapes(def, rm.VectorShapes)
 		if err != nil {
 			return fmt.Errorf("glyph set %d (%s): %w", def.ID, def.Name, err)
 		}
@@ -409,12 +410,12 @@ func validateGlyphRegistry(rm RenderModesSpec) error {
 	return nil
 }
 
-func glyphSetShapes(def GlyphSetDef) []GlyphShape {
-	shapes, _ := parseGlyphSetShapes(def)
+func glyphSetShapes(def GlyphSetDef, vs VectorShapesSpec) []GlyphShape {
+	shapes, _ := parseGlyphSetShapes(def, vs)
 	return shapes
 }
 
-func parseGlyphSetShapes(def GlyphSetDef) ([]GlyphShape, error) {
+func parseGlyphSetShapes(def GlyphSetDef, vs VectorShapesSpec) ([]GlyphShape, error) {
 	if def.Generated != "" {
 		switch def.Generated {
 		case "sextant_2x3":
@@ -426,7 +427,7 @@ func parseGlyphSetShapes(def GlyphSetDef) ([]GlyphShape, error) {
 		case "octant_2x4":
 			return generatedOctantShapes(), nil
 		case "vector_linear_splits":
-			return generatedVectorShapes(def.Geometry.W, def.Geometry.H), nil
+			return vectorShapes(vs, def.Geometry.W, def.Geometry.H)
 		default:
 			return nil, fmt.Errorf("unknown mask generator %q", def.Generated)
 		}
@@ -652,235 +653,6 @@ func generatedOctantShapes() []GlyphShape {
 			octantIdx++
 		}
 		shapes[mask] = GlyphShape{Glyph: r, Mask: m}
-	}
-	return shapes
-}
-
-func generatedVectorShapes(w, h int) []GlyphShape {
-	invertMask := func(m []bool) []bool {
-		res := make([]bool, len(m))
-		for i, b := range m {
-			res[i] = !b
-		}
-		return res
-	}
-
-	evalMask := func(inside func(X, Y float64) bool) []bool {
-		mask := make([]bool, w*h)
-		const N = 32
-		const total = N * N
-		fw, fh := float64(w), float64(h)
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
-				count := 0
-				for sy := 0; sy < N; sy++ {
-					Y := (float64(y) + (float64(sy)+0.5)/float64(N)) / fh * fh
-					for sx := 0; sx < N; sx++ {
-						X := (float64(x) + (float64(sx)+0.5)/float64(N)) / fw * fw
-						if inside(X, Y) {
-							count++
-						}
-					}
-				}
-				if count*2 >= total {
-					mask[y*w+x] = true
-				}
-			}
-		}
-		return mask
-	}
-
-	shapesMap := make(map[rune][]bool)
-
-	// 1. Space and Full block
-	shapesMap[' '] = make([]bool, w*h)
-	fullMask := make([]bool, w*h)
-	for i := range fullMask {
-		fullMask[i] = true
-	}
-	shapesMap['█'] = fullMask
-
-	// 2. Halves
-	fw, fh := float64(w), float64(h)
-	topHalf := evalMask(func(X, Y float64) bool { return Y <= fh/2.0 })
-	shapesMap['▀'] = topHalf
-	shapesMap['▄'] = invertMask(topHalf)
-
-	leftHalf := evalMask(func(X, Y float64) bool { return X <= fw/2.0 })
-	shapesMap['▌'] = leftHalf
-	shapesMap['▐'] = invertMask(leftHalf)
-
-	// 3. Middle vertical bar & middle horizontal bars
-	shapesMap['┃'] = evalMask(func(X, Y float64) bool { return X >= fw/4.0 && X <= 3.0*fw/4.0 })
-	shapesMap[0x1FB03] = evalMask(func(X, Y float64) bool { return Y >= fh/4.0 && Y <= fh/2.0 })
-	shapesMap[0x1FB07] = evalMask(func(X, Y float64) bool { return Y >= fh/2.0 && Y <= 3.0*fh/4.0 })
-	shapesMap[0x1FB0B] = evalMask(func(X, Y float64) bool { return Y >= fh/4.0 && Y <= 3.0*fh/4.0 })
-
-	// 4. Straight bars (1/4 and 3/4)
-	upQuarter := evalMask(func(X, Y float64) bool { return Y <= fh/4.0 })
-	shapesMap[0x1FB82] = upQuarter
-	shapesMap['▆'] = invertMask(upQuarter)
-
-	lowQuarter := evalMask(func(X, Y float64) bool { return Y >= 3.0*fh/4.0 })
-	shapesMap['▂'] = lowQuarter
-	shapesMap[0x1FB85] = invertMask(lowQuarter)
-
-	leftQuarter := evalMask(func(X, Y float64) bool { return X <= fw/4.0 })
-	shapesMap['▎'] = leftQuarter
-	shapesMap[0x1FB8A] = invertMask(leftQuarter)
-
-	rightQuarter := evalMask(func(X, Y float64) bool { return X >= 3.0*fw/4.0 })
-	shapesMap[0x1FB87] = rightQuarter
-	shapesMap['▊'] = invertMask(rightQuarter)
-
-	// 5. Quadrants
-	ulQuad := evalMask(func(X, Y float64) bool { return X <= fw/2.0 && Y <= fh/2.0 })
-	urQuad := evalMask(func(X, Y float64) bool { return X >= fw/2.0 && Y <= fh/2.0 })
-	llQuad := evalMask(func(X, Y float64) bool { return X <= fw/2.0 && Y >= fh/2.0 })
-	lrQuad := evalMask(func(X, Y float64) bool { return X >= fw/2.0 && Y >= fh/2.0 })
-
-	shapesMap['▘'] = ulQuad
-	shapesMap['▝'] = urQuad
-	shapesMap['▖'] = llQuad
-	shapesMap['▗'] = lrQuad
-
-	diag1 := make([]bool, w*h)
-	diag2 := make([]bool, w*h)
-	for i := 0; i < w*h; i++ {
-		diag1[i] = ulQuad[i] || lrQuad[i]
-		diag2[i] = urQuad[i] || llQuad[i]
-	}
-	shapesMap['▚'] = diag1
-	shapesMap['▞'] = diag2
-
-	shapesMap['▛'] = invertMask(lrQuad)
-	shapesMap['▜'] = invertMask(llQuad)
-	shapesMap['▙'] = invertMask(urQuad)
-	shapesMap['▟'] = invertMask(ulQuad)
-
-	// 6. Hourglass & Bowtie
-	hourglass := evalMask(func(X, Y float64) bool {
-		xNorm, yNorm := X/fw, Y/fh
-		return (yNorm <= xNorm && yNorm <= 1.0-xNorm) || (yNorm >= xNorm && yNorm >= 1.0-xNorm)
-	})
-	shapesMap[0x1FB9A] = hourglass
-	shapesMap[0x1FB9B] = invertMask(hourglass)
-
-	// 7. Triangular Corner Blocks
-	leftTri := evalMask(func(X, Y float64) bool {
-		xNorm, yNorm := X/fw, Y/fh
-		return yNorm >= xNorm && yNorm <= 1.0-xNorm
-	})
-	shapesMap[0x1FB6C] = leftTri
-	shapesMap[0x1FB68] = invertMask(leftTri)
-
-	topTri := evalMask(func(X, Y float64) bool {
-		xNorm, yNorm := X/fw, Y/fh
-		return yNorm <= xNorm && yNorm <= 1.0-xNorm
-	})
-	shapesMap[0x1FB6D] = topTri
-	shapesMap[0x1FB69] = invertMask(topTri)
-
-	rightTri := evalMask(func(X, Y float64) bool {
-		xNorm, yNorm := X/fw, Y/fh
-		return yNorm <= xNorm && yNorm >= 1.0-xNorm
-	})
-	shapesMap[0x1FB6E] = rightTri
-	shapesMap[0x1FB6A] = invertMask(rightTri)
-
-	bottomTri := evalMask(func(X, Y float64) bool {
-		xNorm, yNorm := X/fw, Y/fh
-		return yNorm >= xNorm && yNorm >= 1.0-xNorm
-	})
-	shapesMap[0x1FB6F] = bottomTri
-	shapesMap[0x1FB6B] = invertMask(bottomTri)
-
-	// 8. 44 Block Diagonals (0x1FB3C .. 0x1FB67)
-	type vecPoint struct{ x, y float64 }
-	endpoints := map[string]vecPoint{
-		"UL":  {0, 0},
-		"UC":  {fw / 2.0, 0},
-		"UR":  {fw, 0},
-		"UML": {0, fh / 3.0},
-		"LML": {0, 2.0 * fh / 3.0},
-		"LL":  {0, fh},
-		"LC":  {fw / 2.0, fh},
-		"LR":  {fw, fh},
-		"UMR": {fw, fh / 3.0},
-		"LMR": {fw, 2.0 * fh / 3.0},
-	}
-	corners := map[string]vecPoint{
-		"LL": {0, fh},
-		"LR": {fw, fh},
-		"UL": {0, 0},
-		"UR": {fw, 0},
-	}
-
-	type diagDef struct {
-		r1, r2 rune
-		p1, p2 string
-		corner string
-	}
-
-	diagonals := []diagDef{
-		{0x1FB3C, 0x1FB52, "LML", "LC", "LL"},
-		{0x1FB3D, 0x1FB53, "LML", "LR", "LL"},
-		{0x1FB3E, 0x1FB54, "UML", "LC", "LL"},
-		{0x1FB3F, 0x1FB55, "UML", "LR", "LL"},
-		{0x1FB40, 0x1FB56, "UL", "LC", "LL"},
-		{0x1FB41, 0x1FB57, "UML", "UC", "LR"},
-		{0x1FB42, 0x1FB58, "UML", "UR", "LR"},
-		{0x1FB43, 0x1FB59, "LML", "UC", "LR"},
-		{0x1FB44, 0x1FB5A, "LML", "UR", "LR"},
-		{0x1FB45, 0x1FB5B, "LL", "UC", "LR"},
-		{0x1FB46, 0x1FB5C, "LML", "UMR", "LR"},
-		{0x1FB47, 0x1FB5D, "LC", "LMR", "LR"},
-		{0x1FB48, 0x1FB5E, "LL", "LMR", "LR"},
-		{0x1FB49, 0x1FB5F, "LC", "UMR", "LR"},
-		{0x1FB4A, 0x1FB60, "LL", "UMR", "LR"},
-		{0x1FB4B, 0x1FB61, "LC", "UR", "LR"},
-		{0x1FB4C, 0x1FB62, "UC", "UMR", "LL"},
-		{0x1FB4D, 0x1FB63, "UL", "UMR", "LL"},
-		{0x1FB4E, 0x1FB64, "UC", "LMR", "LL"},
-		{0x1FB4F, 0x1FB65, "UL", "LMR", "LL"},
-		{0x1FB50, 0x1FB66, "UC", "LR", "LL"},
-		{0x1FB51, 0x1FB67, "UML", "LMR", "LL"},
-	}
-
-	for _, d := range diagonals {
-		p1 := endpoints[d.p1]
-		p2 := endpoints[d.p2]
-		c := corners[d.corner]
-		dx := p2.x - p1.x
-		dy := p2.y - p1.y
-		sc := (c.x-p1.x)*dy - (c.y-p1.y)*dx
-
-		mask1 := evalMask(func(X, Y float64) bool {
-			s := (X-p1.x)*dy - (Y-p1.y)*dx
-			if sc >= 0 {
-				return s >= 0
-			}
-			return s <= 0
-		})
-
-		shapesMap[d.r1] = mask1
-		shapesMap[d.r2] = invertMask(mask1)
-	}
-
-	runes := []rune{
-		' ', '█', '▀', '▄', '▌', '▐', '┃', 0x1FB0B, 0x1FB07, 0x1FB03,
-		0x1FB82, 0x1FB85, '▂', '▆', '▎', '▊', 0x1FB87, 0x1FB8A,
-		'▖', '▗', '▘', '▙', '▚', '▛', '▜', '▝', '▞', '▟',
-		0x1FB9A, 0x1FB9B,
-	}
-	for r := rune(0x1FB3C); r <= 0x1FB6F; r++ {
-		runes = append(runes, r)
-	}
-
-	shapes := make([]GlyphShape, 0, len(runes))
-	for _, r := range runes {
-		mask := shapesMap[r]
-		shapes = append(shapes, GlyphShape{Glyph: r, Mask: mask})
 	}
 	return shapes
 }

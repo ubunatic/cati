@@ -3,7 +3,7 @@
   "title": "Cati render modes spec",
   "type": "object",
   "additionalProperties": false,
-  "required": ["cycle", "modes", "glyph_sets", "colorers", "renderers", "smart", "set_registry", "composition_order", "composition_info", "compositions"],
+  "required": ["cycle", "modes", "glyph_sets", "colorers", "renderers", "smart", "set_registry", "composition_order", "composition_info", "compositions", "vector_shapes"],
   "properties": {
     "cycle": {
       "type": "array",
@@ -101,9 +101,48 @@
         "type": "array",
         "items": { "type": "integer", "minimum": 0 }
       }
+    },
+    "vector_shapes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["points", "glyphs"],
+      "properties": {
+        "points": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/cellPoint" }
+        },
+        "glyphs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["glyph"],
+            "properties": {
+              "glyph": { "type": "string", "minLength": 1 },
+              "rects": {
+                "type": "array",
+                "items": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "$ref": "#/$defs/cellFrac" } }
+              },
+              "polys": {
+                "type": "array",
+                "items": { "type": "array", "minItems": 3, "items": { "type": "string", "minLength": 1 } }
+              },
+              "split": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "string", "minLength": 1 } },
+              "invert": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {
+    "cellFrac": {
+      "oneOf": [
+        { "type": "number", "minimum": 0, "maximum": 1 },
+        { "type": "string", "pattern": "^[0-9]+/[1-9][0-9]*$" }
+      ]
+    },
+    "cellPoint": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/cellFrac" } },
     "geometry": {
       "type": "object",
       "additionalProperties": false,

@@ -43,6 +43,12 @@ Fixed modes `vec2..vec8` keep their geometry; retargeting `vec` is a spec-only e
 - `TestSpecRenderModesIntegrity` reads each mode's `aliases` and requires them to select
   that mode, and requires a `glyph_union` mode's `cell` to equal its resolved geometry.
 - No test names `vec`/`v`/`vector`; the 4x4 straight-bar test calls
-  `generatedVectorShapes(4, 4)` directly.
+  `vectorShapes(spec, 4, 4)` directly.
+- Vector shapes moved from Go (`generatedVectorShapes`) to `vector_shapes:` in
+  `spec/render_modes.yaml`. Masks stayed identical at 2x2..6x9, except two tie pixels:
+  at 3x5 (vec5) and 1x1 the centre pixel of `▚`/`▞` is exactly 50% covered and is now
+  on (coverage of the union) where the old OR of quadrant masks left it off.
+- Sextants `🬃🬇🬋` fixed in the spec to their Unicode segments (middle third, left/right/
+  full); no golden changed (no golden renders a vector mode except `diag`, an exact `🭄`).
 - The `diag` reconstruction probe is now one 4x6 `vec6` cell and reconstructs exactly
   (golden `testdata/reconstruction_probes/diag.png` regenerated from the fixture script).

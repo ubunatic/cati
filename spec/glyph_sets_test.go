@@ -1,6 +1,11 @@
 package spec
 
-import "testing"
+import (
+	"slices"
+	"testing"
+
+	"gopkg.in/yaml.v3"
+)
 
 func TestResolveGlyphSetExpression(t *testing.T) {
 	tests := []struct {
@@ -168,11 +173,20 @@ func TestOctantAndVectorGlyphSets(t *testing.T) {
 	}
 }
 
-// TestVectorStraightBarsAndQuadrants checks the generator at 4x4, where every
-// bar and quadrant boundary falls on a pixel edge; no render mode is involved.
+// TestVectorStraightBarsAndQuadrants checks the spec's vector shapes at 4x4,
+// where every bar and quadrant boundary falls on a pixel edge; no render mode
+// is involved.
 func TestVectorStraightBarsAndQuadrants(t *testing.T) {
+	rm, err := LoadRenderModes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	shapes, err := vectorShapes(rm.VectorShapes, 4, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
 	masks := make(map[rune]uint16)
-	for _, shape := range generatedVectorShapes(4, 4) {
+	for _, shape := range shapes {
 		if _, exists := masks[shape.Glyph]; exists {
 			t.Errorf("duplicate vector rune %U", shape.Glyph)
 		}
@@ -293,4 +307,71 @@ func equalInts(a, b []int) bool {
 		}
 	}
 	return true
+}
+
+func TestVectorShapesRejectInvalidDefinitions(t *testing.T) {
+	half := CellFrac{1, 2}
+	one := CellFrac{1, 1}
+	points := map[string][2]CellFrac{"UL": {}, "LR": {one, one}}
+	for name, glyphs := range map[string][]VectorShapeDef{
+		"two runes":      {{Glyph: "ab"}},
+		"duplicate":      {{Glyph: "a"}, {Glyph: "a"}},
+		"mixed kinds":    {{Glyph: "a", Rects: [][4]CellFrac{{{}, {}, half, half}}, Invert: "b"}},
+		"unknown point":  {{Glyph: "a", Split: []string{"UL", "XX", "LR"}}},
+		"short split":    {{Glyph: "a", Split: []string{"UL", "LR"}}},
+		"invert missing": {{Glyph: "a", Invert: "b"}},
+		"invert chain":   {{Glyph: "a"}, {Glyph: "b", Invert: "a"}, {Glyph: "c", Invert: "b"}},
+	} {
+		if _, err := vectorShapes(VectorShapesSpec{Points: points, Glyphs: glyphs}, 4, 4); err == nil {
+			t.Errorf("%s: want error", name)
+		}
+	}
+}
+
+func TestCellFracParsesNumbersAndFractions(t *testing.T) {
+	var doc struct {
+		V []CellFrac `yaml:"v"`
+	}
+	if err := yaml.Unmarshal([]byte("v: [0, 1/3, 0.25, 1]"), &doc); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []float64{0, 2, 1.5, 6} {
+		if got := doc.V[i].of(6); got != want {
+			t.Errorf("v[%d] of 6 = %v, want %v", i, got, want)
+		}
+	}
+	for _, bad := range []string{"v: [2]", "v: [3/2]", "v: [1/0]", "v: [x]"} {
+		if err := yaml.Unmarshal([]byte(bad), &doc); err == nil {
+			t.Errorf("%s: want error", bad)
+		}
+	}
+}
+
+// TestVectorSextantsMatchUnicodeSegments checks every sextant rune of the
+// vector set against the sextant generator, which follows the Unicode names.
+func TestVectorSextantsMatchUnicodeSegments(t *testing.T) {
+	rm, err := LoadRenderModes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := make(map[rune][]bool)
+	for _, shape := range generatedSextantShapes() {
+		want[shape.Glyph] = shape.Mask
+	}
+	sextant := RenderModeGeometry{W: 2, H: 3}
+	for _, g := range []RenderModeGeometry{{W: 2, H: 3}, {W: 4, H: 6}} {
+		shapes, err := vectorShapes(rm.VectorShapes, g.W, g.H)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, shape := range shapes {
+			if shape.Glyph < 0x1FB00 || shape.Glyph > 0x1FB3B {
+				continue
+			}
+			wantMask := scaleMask(want[shape.Glyph], sextant, g)
+			if !slices.Equal(shape.Mask, wantMask) {
+				t.Errorf("%dx%d %c %U mask %v, want %v", g.W, g.H, shape.Glyph, shape.Glyph, shape.Mask, wantMask)
+			}
+		}
+	}
 }

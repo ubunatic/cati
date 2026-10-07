@@ -88,7 +88,17 @@ the spec, so retargeting `vec` is a spec-only change. The vector inventory
 includes linear diagonal and triangular splits, hourglass/bowtie complements,
 half/full blocks and space, straight 1/4 and 3/4 bars on all four sides
 (`🮂🮅▂▆▎▊🮇🮊`), and all ten quadrants (`▖▗▘▙▚▛▜▝▞▟`); at `4×4` these masks
-are exact (`TestVectorStraightBarsAndQuadrants` checks the generator directly).
+are exact (`TestVectorStraightBarsAndQuadrants` checks the shapes directly).
+
+Every vector glyph's shape lives in `vector_shapes:` at the end of
+`spec/render_modes.yaml`, in cell fractions (`rects`, convex `polys` over named
+`points`, a half-plane `split`, or the exact `invert` of another glyph). One
+definition serves every `vec*` geometry: `vectorShapes` (`spec/vector_shapes.go`)
+supersamples each pixel 32×32 and turns it on at ≥50% coverage of the union. To
+fix a glyph, edit its line there. The sextant middle-row glyphs `🬃🬇🬋`
+(U+1FB03/07/0B) are left half, right half and full width of the middle third;
+`TestVectorSextantsMatchUnicodeSegments` checks them against the sextant
+generator. Until 2026-10-07 they were full-width bands at ¼–½, ½–¾ and ¼–¾.
 Quarter bars cover one row or column; quadrants cover `2×2` rectangles.
 These exact straight masks let flat edges fit without repeated diagonal teeth.
 The regression test renders a cell with only its top row filled and requires
