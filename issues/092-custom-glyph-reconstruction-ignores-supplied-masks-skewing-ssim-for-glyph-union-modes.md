@@ -21,31 +21,50 @@ the same coverage and geometry as selection, rather than a separate incomplete
 guess based on Unicode code points.
 
 ## 2. Technical Specification / Findings
-Targeted inspection on 2026-10-06 confirmed:
+Re-verified against HEAD `f59b299` on 2026-10-07 (paths and line numbers as of that commit).
 
-- `v1/sparkline/render.go:candidatesForShapes` turns each supplied `Shape.Mask`
-  into a row-major coverage predicate. Custom-glyph selection uses this predicate.
-- `renderToImageWithOptions` selects cells using those custom candidates, then
-  paints pixels through `reconstructedCellColor`. That helper calls
-  `maskContains(cell.Ch, ...)`, losing the selected custom mask.
-- `maskContains` recognizes standard blocks/quadrants and sextants, but defaults
-  to `true` for unknown glyphs. Native octants and many vector glyphs therefore
-  reconstruct as full foreground blocks, discarding their background regions.
-  For example, U+1CD00 represents only octant 3 (mask 0x04 on a 2×4 lattice),
-  yet the rune-only reconstruction paints all eight regions as foreground.
-  Even a recognized rune can reconstruct incorrectly if the caller supplied
-  different coverage; the supplied inventory must remain authoritative.
-- Both serial and worker custom-shape reconstruction share this painting path.
-  `cmd/ssim.go` passes glyph options to these APIs; `cmd/smart_render.go`
-  also uses custom-shape reconstruction. Consequently, correcting glyph selection
-  alone does not correct the image used for quality evaluation.
+**Data flow (selection vs reconstruction):**
 
-The magnitude and direction of SSIM distortion depend on the selected glyphs,
-colors, and input; do not assume scores always rise or fall. #093 fixed octant
-glyph-to-mask definitions, but did not fix this reconstruction data flow.
-This investigation establishes the code-path mismatch, not a measured corpus-wide
-score impact. This is reconstruction of modeled glyph coverage, not a requirement
-to rasterize terminal fonts or parse ANSI output.
+```
+spec/load.go ResolveGlyphSets      -> GlyphShape{Glyph, Mask} scaled to LCM geometry (scaleMask)
+cmd/interactive.go glyphOptions    -> sparkline.Options{CellW/H = geometry, AspectX: 1, Shapes}
+sparkline candidatesForShapes      -> candidate.mask(x,y,w,h): nearest sample
+                                      sx = min(W-1, x*W/w), sy = min(H-1, y*H/h)
+selection  (render.go ~337-344)    -> makeBitCandidates(custom, cw, ch) | findBestCandidate
+                                      -> cellResult{Ch, FG, BG, Err}   (mask is dropped here)
+reconstruction (render.go ~353)    -> reconstructedCellColor -> maskContains(cell.Ch, ...)
+```
+
+- `cellResult` (`v1/sparkline/render.go:414`) and `bitCandidate`
+  (`v1/sparkline/solver.go:17`) carry only the rune, so the selected coverage is
+  lost before painting. `maskContains` (`render.go:453`) returns `true` for any rune
+  outside its block/quadrant/sextant table.
+- **Probe proof (live code):** a 2x4 RGBA image with octant 3 `(x=0,y=1)` red and
+  the rest blue, rendered with `Shapes = {U+1CD00 mask[2]=true, ' ' empty}` at 1x1
+  cells. Selection picks U+1CD00 with FG=red and BG=blue (zero error). Reconstruction
+  paints **all 8 pixels red**, so the BG region is lost. That is 7 of 8 pixels wrong.
+- **Recognized runes still diverge.** Even when `maskContains` knows the rune, it uses
+  its own region formulas (`sextantRegion`: `col=(x*2)/w`, `row=(y*3)/h`; sparks:
+  `(h-y)*8 <= level*h`). These differ from the shape's nearest-sample scaling
+  when the cell size is not a multiple of the shape geometry. They also ignore
+  any custom coverage supplied for that rune.
+- **Uneven cells:** `ssim.go`/`smart_render.go` use `outCols = ceilDiv(Dx, CellW)`. The
+  renderer then splits cells as `tc*pixW/outCols`, so edge and interior cells can
+  be smaller than the glyph geometry. Some mask columns or rows are then never
+  sampled. Selection and reconstruction must both use the same
+  `candidate.mask(x, y, cw, ch)` for that exact cell size.
+- **Consumers:** `cmd/ssim.go:69/71` (serial and `-j` workers) and
+  `cmd/smart_render.go:146` call `RenderToImageWithOptions[J]`. Both use the same
+  `renderRow` closure, so one fix covers both. The ANSI `Render` path emits only the
+  rune and is not affected.
+- **Out of scope:** built-in `Mode` paths (no `Shapes`) choose only runes that
+  `maskContains` knows. Their behavior must stay byte-identical. That also means the
+  sparkline goldens must not change.
+
+The magnitude and direction of the SSIM distortion depend on the input, so no
+corpus-wide score impact has been measured. #093 fixed the octant
+definitions but did not touch this path. This issue covers reconstruction of
+modeled coverage only. It does not cover font rasterization.
 
 ## 3. Implementation & Verification Plan
 **Goal**: Make custom-glyph reconstruction faithfully paint the selected glyph's
@@ -54,7 +73,14 @@ and verify the resulting quality-evaluation path, or stop and report when blocke
 on a user decision or denied permission.
 
 Before implementation, check live code and recent commits; re-verify the findings
-against HEAD. Keep the fix centered on carrying or resolving the authoritative
+against HEAD.
+
+**Proposed shape of the fix:** have the solver return the winning candidate's index
+(or its `mask128` for the cell's `cw x ch`) alongside the rune. Then
+`renderToImageWithOptions` paints with `custom[idx].mask(x-x0, y-y0, cw, ch)` when
+`len(custom) > 0`. Keep `maskContains` for built-in modes only. Don't add rune
+lookup tables for vector or octant glyphs. If the coverage is unavailable (for
+example, an index out of range), return an error. Never fall back to a full block. Keep the fix centered on carrying or resolving the authoritative
 selected coverage through reconstruction, with the same coordinate scaling as
 selection. Avoid a second hardcoded vector/octant mask inventory. Unsupported
 coverage must not silently become a full block, and reconstruction failures must
@@ -62,9 +88,14 @@ not produce plausible quality scores from a substitute source image.
 
 Done means:
 
+- **Golden prediction (Playbook step 3):** zero existing goldens change, because
+  `TestGoldenRenders` uses built-in modes only. Any golden diff means the model is
+  wrong. Stop and go back to the analysis.
 - Regression tests first reproduce the current defect using an asymmetric
   native octant and vector shape with distinct foreground/background colors.
   Assert exact reconstructed pixels against independently known coverage.
+  Seed case: the probe above. Expect red at `(0,1)` and blue everywhere else;
+  today the test fails because all 8 pixels are red.
 - All resolved octant and vector shapes reconstruct consistently with their
   supplied masks. Cover custom coverage for an already-recognized rune, unions
   with scaled geometry, empty/full shapes, color inversion, transparency, and

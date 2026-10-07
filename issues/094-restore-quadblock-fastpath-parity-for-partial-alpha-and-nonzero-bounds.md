@@ -15,6 +15,38 @@ Review of the incoming quadblock optimization found two violations of the fast/r
 1. **New NRGBA regression:** `computeQuadCell` copies raw NRGBA bytes into `color.RGBA` for complete 2x2 cells. NRGBA stores unpremultiplied channels; the reference `safePixel` calls `toRGBA`, which obtains premultiplied channels from `Color.RGBA()`. For a constant 2x2 NRGBA image containing `(200,100,50,128)`, `RenderToImageJ(..., Options{}, 4)` produces `(200,100,50,128)` with `core.Fastpath=true`, versus `(100,50,25,128)` with it false. At width 3, the partial final cell takes `safePixel`, producing `(100,50,25,128)` in the last column while the first two columns remain `(200,100,50,128)`: a visible seam caused solely by cell bounds.
 2. **Existing origin bug, newly exposed as fast/reference divergence:** reference `RenderToImageJ` computes `px0 = b.Min.X + tc*2` and `py0 = b.Min.Y + tr*2`, then compares them with destination-relative `pixW` and `pixH`. For a constant 2x2 image bounded by `image.Rect(5,7,7,9)`, it skips every cell and returns transparent pixels. The incoming direct-write path correctly uses destination-relative coordinates, so fast and reference modes now differ. Fix the reference guard; do not reproduce its blank output in the fast path.
 
+**Code locations (HEAD `f59b299`, `v1/quadblock/render.go`):**
+
+- `computeQuadCell` (~1287): the fast branch runs only when `core.Fastpath &&
+  Blend == BlendNone`. Its `*image.NRGBA` sub-branch (~1324) copies raw bytes
+  for interior 2x2 cells. Edge cells (`px1`/`py1` outside `Rect`) go through
+  `safePixel` and are converted correctly, which is why the seam appears.
+  The `*image.RGBA` sub-branch is correct, because RGBA is already premultiplied.
+  Blend modes always use `samplePixel` and are not affected.
+- Reference conversion: `toRGBA` (~71) gives `uint8((R*0x101*A/0xff) >> 8)`.
+  For R=200, A=128 that is `25808 >> 8 = 100`. The fix must copy this exact
+  formula, either inline or through `color.NRGBA{...}.RGBA()`. Plain
+  `R*A/255` gives the same result for this case but can differ by 1 in other
+  cases. The regression test must cover all A values from 0 to 255 for a few
+  R values, so no rounding difference can slip through.
+- Bounds: the reference loop (~1160) builds absolute `px0 = b.Min.X + tc*2` and
+  compares it with the relative `pixW`. The fast loop (~1011) uses relative
+  `px0 = tc*2`, which is correct. The fix is to make the reference loop use
+  relative coordinates (`px0 := tc*2`). The inner writes already use
+  `tc*2+dx` with `b.Min` offsets. `computeQuadCell` and the fast loop already
+  use absolute or relative coordinates correctly, including `SubImage` with a
+  parent `Stride`.
+- ANSI: `quadblock.Render` builds the grid from the same `computeQuadCell` cells,
+  so the NRGBA error reaches the terminal output. The bounds bug is limited to
+  `RenderToImageJ` with the reference path.
+
+**Golden prediction (Playbook step 3):** expected: zero existing goldens change.
+Quad goldens render `scaled` images through `goldenNativeRenderToImage`
+(`cmd/golden_render_test.go:525`), and those images are expected to be RGBA with
+origin-zero bounds. Before the fix, confirm the concrete image type that
+`scaled` has in the golden and upscale tests (~line 681 uses `src` directly). Any
+golden diff means the model is wrong. Stop and go back to the analysis.
+
 For a visible terminal reproduction, run `go run scripts/quadblock_fastpath_demo.go`.
 It renders the same 33x8 NRGBA image directly through `quadblock.Render` with
 `cols=0`, preserving the source representation. Fast output is brighter and its
