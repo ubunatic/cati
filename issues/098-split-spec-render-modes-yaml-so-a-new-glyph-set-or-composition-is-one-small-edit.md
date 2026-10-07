@@ -101,6 +101,18 @@ Adding a new set then means: add `glyph_sets/NN-name.yaml`, add one record to
 - Milestones: M1 = baselines + split + loader + schemas + tests, committed.
   M2 = docs + full verification + integration + close.
 
+### M1 attempt 1 (2026-10-08)
+Baselines captured in `/tmp/cati-098-session` (119 files, HEAD binary). Worktree
+`/tmp/cati-098-m1`, branch `issue-098-m1`. No commit: the worker stopped after 3 min.
+M1 is now three commits, each green on its own:
+- **M1a (glyph set files):** `set_registry:` → `glyph_sets/NN-name.yaml`, embed, loader,
+  `glyph_set.schema.json`, set-file tests (duplicate id, prefix ≠ id, missing dir,
+  invalid file names the file).
+- **M1b (compositions file):** `compositions`, `composition_order`, `composition_info`,
+  `experimental` → `compositions.yaml` records with aliases; tests (unknown set, alias
+  collision, unused set).
+- **M1c (vector shapes file):** `vector_shapes:` → `glyph_shapes/vector.yaml`.
+
 ## 4. Implementation & Verification Plan
 /goal Split the render-mode spec as proposed (adjusted by the open questions), with no
 change in behaviour, and verify it — or stop and report when blocked on a user decision
