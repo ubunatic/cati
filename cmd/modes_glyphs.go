@@ -66,9 +66,13 @@ func inspectGlyphs(w io.Writer, expression, format string) error {
 		if err != nil {
 			return err
 		}
-		label := fmt.Sprintf("%q", shape.Glyph)
+		var label string
 		if shape.Glyph == ' ' {
 			label = "␠ (space)"
+		} else if shape.Glyph < 32 || shape.Glyph == 0x7f {
+			label = fmt.Sprintf("%q", shape.Glyph)
+		} else {
+			label = fmt.Sprintf("'%c'", shape.Glyph)
 		}
 		if _, err := fmt.Fprintf(w, "\n%s U+%04X %dx%d\n%s\n", label, shape.Glyph, geo.W, geo.H, preview); err != nil {
 			return err
