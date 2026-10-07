@@ -53,12 +53,14 @@ This document captures the architecture, design decisions, optimal-split algorit
 Sparkline-family modes display scalar gradients and pixel grids in the terminal
 by mapping each terminal cell's source block to the Unicode glyph and two
 colours that minimise reconstruction error. The canonical mode surface is
-declared in `spec/render_modes.yaml`; Go keeps the scoring and rendering code.
+declared in `spec/render_modes.yaml`; named compositions live in
+`spec/compositions.yaml`, while Go keeps the scoring and rendering code.
 
 ### Composable set registry
 
-`spec/render_modes.yaml` also owns the stable glyph-set registry (IDs 0, 1, 2,
-4, 6, 9, 14, 15, 44, 45, 86, and 88). `spec.ResolveGlyphSetExpression` inserts
+The stable glyph-set registry (IDs 0, 1, 2, 4, 6, 9, 14, 15, 44, 45, 86, and
+88) lives one file per set under `spec/glyph_sets/`.
+`spec.ResolveGlyphSetExpression` inserts
 set 0, removes duplicate IDs, sorts numerically, and computes common geometry
 with an LCM per axis. This keeps a `3x3` label honest when its union is really
 `6x3`, and distinguishes exact standard coverage from experimental
@@ -82,16 +84,16 @@ that resolved geometry rather than inferring it from a mode name.
 `spark/vert` remains in the library and test suite as a useful scalar baseline.
 
 `vec`, `v` and `vector` are aliases of a fixed mode, currently `vec6` (glyph set 56,
-`4×6`), declared in `spec/render_modes.yaml` (`compositions` and the mode's
-`aliases`). Tests use the fixed modes `vec2`…`vec8` and read alias targets from
+`4×6`), declared in `spec/compositions.yaml` and the mode's `aliases` in
+`spec/render_modes.yaml`. Tests use the fixed modes `vec2`…`vec8` and read alias targets from
 the spec, so retargeting `vec` is a spec-only change. The vector inventory
 includes linear diagonal and triangular splits, hourglass/bowtie complements,
 half/full blocks and space, straight 1/4 and 3/4 bars on all four sides
 (`🮂🮅▂▆▎▊🮇🮊`), horizontal eighth bars (`▔▇🮃▅▃🮄▁🮆`), and all ten quadrants (`▖▗▘▙▚▛▜▝▞▟`); at `4×4` these masks
 are exact (`TestVectorStraightBarsAndQuadrants` checks the shapes directly).
 
-Every vector glyph's shape lives in `vector_shapes:` at the end of
-`spec/render_modes.yaml`, in cell fractions (`rects`, convex `polys` over named
+Every vector glyph's shape lives in `spec/glyph_shapes/vector.yaml`, in cell
+fractions (`rects`, convex `polys` over named
 `points`, a half-plane `split`, or the exact `invert` of another glyph). One
 definition serves every `vec*` geometry: `vectorShapes` (`spec/vector_shapes.go`)
 supersamples each pixel 32×32 and turns it on at ≥50% coverage of the union.

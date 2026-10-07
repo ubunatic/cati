@@ -51,7 +51,7 @@ When a convex circular curve enters only a fraction of a terminal cell:
 
 ### Why Mode `z` Differs from `z+`
 
-In `spec/render_modes.yaml` and `docs/SetIdeas.md`:
+In the relevant `spec/glyph_sets/NN-name.yaml` files and `docs/SetIdeas.md`:
 * **Set 86 (`morebars`, used in `z` and `bars+`)**: Explicitly omits `▏` (1/8 hairline) and `▉` (7/8) to avoid hairline spikes on curved edges.
 * **Set 88 (`allbars`, used in `z+`)**: Includes all 8th-step bars as an exhaustive debug union.
 

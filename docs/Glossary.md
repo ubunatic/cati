@@ -71,7 +71,7 @@ When evaluating terminal image rendering, information loss occurs at two distinc
 ## 4. Glyph Sets & Registry Architecture
 
 ### Glyph Set
-* A curated, cohesive collection of Unicode characters defined in `spec/render_modes.yaml` with a shared subpixel geometry and semantic category (e.g., Set 0 Half Blocks, Set 4 Quadrants, Set 6 Sextants, Set 86 Smooth Horizontal Bars).
+* A curated, cohesive collection of Unicode characters defined in its `spec/glyph_sets/NN-name.yaml` file with a shared subpixel geometry and semantic category (e.g., Set 0 Half Blocks, Set 4 Quadrants, Set 6 Sextants, Set 86 Smooth Horizontal Bars).
 
 ### Composed Mode
 * A render mode formed by combining multiple glyph sets (e.g. `spark+six`, `quad+spark`). Solvers match target subpixel bitmaps against the union of glyphs from all constituent sets.

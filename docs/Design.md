@@ -43,8 +43,14 @@ All user-facing configuration, styling, labelling, and layout lives in `spec/`. 
 | `spec/config.yaml` | `schemas/config.schema.json` | App config defaults — read by `loadSpecConfigDefaults()` as the base layer before user config |
 | `spec/cli.yaml` | `schemas/cli.schema.json` | CLI flag defaults per command path (§3.10) and flag→handler ownership |
 | `spec/about.yaml` | — | About page content (loaded by `spec.LoadYamlView()` via `parseYamlView`) |
+| `spec/render_modes.yaml` | `schemas/render_modes.schema.json` | Render modes, renderer glyph-name map, colorers, renderers, smart policy, and ordered cycle |
+| `spec/compositions.yaml` | `schemas/compositions.schema.json` | Named glyph-set compositions, aliases, descriptions, and experimental status; record order is composition order |
+| `spec/glyph_sets/NN-name.yaml` | `schemas/glyph_set.schema.json` | One stable glyph-set registry entry per file; numeric filename prefix sets registry order and must match `id:` |
+| `spec/glyph_shapes/vector.yaml` | `schemas/glyph_shapes.schema.json` | Shared vector glyph points, shapes, and hand-drawn masks |
 
 All of these files are loaded through typed helpers in `spec/load.go`. The `cmd/` package keeps only thin adapters such as `loadViewButtonRows()` and `loadViewKeyRows()` so the browser logic still works with simple string templates, but the spec content itself is no longer line-parsed in Go.
+
+To add a glyph set, add one `glyph_sets/NN-name.yaml` registry file and one named composition record in `compositions.yaml`. Add it to the renderer name map in `render_modes.yaml` only when renderer-backed modes need it. Composition records name sets by their `name:` fields; aliases resolve to the same set union.
 
 `config.yaml` is the canonical source for all six initial settings values. `controls.yaml` declares editable control metadata and does not repeat runtime defaults. The user's `~/.config/cati/config` values override these spec defaults.
 
