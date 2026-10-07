@@ -264,7 +264,7 @@ type RenderModesSpec struct {
 	CompositionInfo  map[string]string   `yaml:"-"`
 	CompositionOrder []string            `yaml:"-"`
 	Experimental     []string            `yaml:"-"`
-	VectorShapes     VectorShapesSpec    `yaml:"vector_shapes"`
+	VectorShapes     VectorShapesSpec    `yaml:"-"`
 }
 
 func LoadRenderModes() (RenderModesSpec, error) {
@@ -287,6 +287,9 @@ func LoadRenderModesFrom(fsys fs.FS) (RenderModesSpec, error) {
 		return RenderModesSpec{}, err
 	}
 	if err = loadCompositions(fsys, &spec); err != nil {
+		return RenderModesSpec{}, err
+	}
+	if err = loadVectorShapes(fsys, &spec); err != nil {
 		return RenderModesSpec{}, err
 	}
 	if len(spec.SetRegistry) == 0 {
@@ -427,6 +430,33 @@ func loadCompositions(fsys fs.FS, spec *RenderModesSpec) error {
 			spec.Compositions[alias] = append([]int(nil), ids...)
 		}
 	}
+	return nil
+}
+
+type VectorShapesFile struct {
+	Schema       string           `yaml:"$schema"`
+	VectorShapes VectorShapesSpec `yaml:"vector_shapes"`
+}
+
+func loadVectorShapes(fsys fs.FS, spec *RenderModesSpec) error {
+	const file = "glyph_shapes/vector.yaml"
+	data, err := fs.ReadFile(fsys, file)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read %s: %w", file, err)
+	}
+	var doc VectorShapesFile
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&doc); err != nil {
+		return fmt.Errorf("%s: %w", file, err)
+	}
+	if doc.Schema == "" {
+		return fmt.Errorf("%s: missing $schema", file)
+	}
+	spec.VectorShapes = doc.VectorShapes
 	return nil
 }
 
