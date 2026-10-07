@@ -446,7 +446,14 @@ vector_shapes:
     - { glyph: "┃", rects: [[1/4, 0, 3/4, 1]] }            # U+2503 BOX DRAWINGS HEAVY VERTICAL
     - { glyph: "🬋", rects: [[0, 1/3, 1, 2/3]] }            # U+1FB0B BLOCK SEXTANT-34
     - { glyph: "🬇", rects: [[1/2, 1/3, 1, 2/3]] }          # U+1FB07 BLOCK SEXTANT-4
-    - { glyph: "🬃", rects: [[0, 1/3, 1/2, 2/3]] }          # U+1FB03 BLOCK SEXTANT-3
+    - glyph: "🬃"                                           # U+1FB03 BLOCK SEXTANT-3
+      rects: [[0, 1/3, 1/2, 2/3]]
+      masks:
+        3x5: ["...",
+              "...",
+              "#..",
+              "...",
+              "..."]
     - { glyph: "🮂", rects: [[0, 0, 1, 1/4]] }              # U+1FB82 UPPER ONE QUARTER BLOCK
     - { glyph: "🮅", invert: "▂" }                          # U+1FB85 UPPER THREE QUARTERS BLOCK
     - { glyph: "▂", rects: [[0, 3/4, 1, 1]] }              # U+2582 LOWER ONE QUARTER BLOCK
