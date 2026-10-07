@@ -303,16 +303,16 @@ The CLI render geometry pipeline uses a unified derivation model across static r
 `cati modes glyphs [mode|expr]` inspects glyph masks without loading images.
 Without a selector it lists compositions, aliases, and registered sets. Selectors
 use the case-sensitive spec grammar: `half`, `oct`, `vec`, `octants`,
-`half+sextants`, or `d10,50`. Cards show the character (space as `␠`),
+`half+sextants`, or `d10,56`. Cards show the character (space as `␠`),
 codepoint, common geometry, and a Unicode box-bordered mask (`┌──┐`, `│...│`, `└──┘`).
 Default `--format halfblock` packs two mask rows into one terminal row;
 `--format ascii` uses `#` for foreground and `.` for background. `--grid <cols>`
-(default: 8) controls the number of card columns in the horizontal grid layout.
+(default in `spec/cli.yaml`) controls the number of card columns in the horizontal grid layout.
 Demo flags remain local to the parent command.
 
 `cati modes test [pattern|image] [-m mode|expr]` compares emitted glyph art
 with side-by-side source and reconstructed pixels rendered by halfblock at 1:1.
-No input runs `probe` (oct), `diag` (vec), and `grid` (oct); `--mode` overrides
+No input runs `probe` (oct), `diag` (vec6, one 4x6 cell), and `grid` (oct); `--mode` overrides
 their defaults. Aliases are `asymmetric`, `vector`, and `multi` respectively;
 `--list-patterns` lists them. A positional file or `-i/--image PATH` loads a
 custom image (default mode oct); use `--image` to disambiguate a pattern-named

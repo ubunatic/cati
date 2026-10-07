@@ -44,18 +44,18 @@ func main() {
 	}
 	showReconstruction("octant 1-cell", octImg, octRes.Shapes, octRes.Geometry.W, octRes.Geometry.H)
 
-	// Demo 2: Vector Mode (4x4 lattice) - Diagonal split pattern
-	fmt.Println("\n[Demo 2: Vector Mode (vec, 4x4)] - Diagonal upper-left triangle, green on purple")
-	vecRes, err := spec.ResolveGlyphSetExpression("vector")
+	// Demo 2: Vector Mode (vec6, 4x6 lattice) - Diagonal split pattern
+	fmt.Println("\n[Demo 2: Vector Mode (vec6, 4x6)] - Diagonal upper-left triangle, green on purple")
+	vecRes, err := spec.ResolveGlyphSetExpression("vec6")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to resolve vector shapes: %v\n", err)
 		return
 	}
-	vecImg := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	vecImg := image.NewRGBA(image.Rect(0, 0, vecRes.Geometry.W, vecRes.Geometry.H))
 	green := color.RGBA{R: 0, G: 220, B: 50, A: 255}
 	purple := color.RGBA{R: 120, G: 20, B: 180, A: 255}
-	for y := 0; y < 4; y++ {
-		for x := 0; x < 4; x++ {
+	for y := 0; y < vecRes.Geometry.H; y++ {
+		for x := 0; x < vecRes.Geometry.W; x++ {
 			if x+y < 3 {
 				vecImg.SetRGBA(x, y, green)
 			} else {

@@ -36,7 +36,7 @@ func TestModesProbeDefaultsAndSelectors(t *testing.T) {
 		t.Fatal(out)
 	}
 	for _, pattern := range []string{"probe", "asymmetric", "diag", "vector", "grid", "multi"} {
-		for _, mode := range []string{"oct", "vec", "half", "d10,50"} {
+		for _, mode := range []string{"oct", "vec6", "half", "d10,56"} {
 			t.Run(pattern+"/"+mode, func(t *testing.T) {
 				out, err := executeProbe(pattern, "-m", mode)
 				if err != nil {
@@ -63,7 +63,7 @@ func TestModesProbeSourcePatterns(t *testing.T) {
 	for _, tc := range []struct {
 		name, alias string
 		w, h        int
-	}{{"probe", "asymmetric", 2, 4}, {"diag", "vector", 4, 4}, {"grid", "multi", 12, 8}} {
+	}{{"probe", "asymmetric", 2, 4}, {"diag", "vector", 4, 6}, {"grid", "multi", 12, 8}} {
 		a, _, err := probeSource(tc.name)
 		if err != nil {
 			t.Fatal(err)

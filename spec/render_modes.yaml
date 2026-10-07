@@ -10,7 +10,7 @@ cycle:
   - 2x3
   - 3x3
   - octant
-  - vector
+  - vec6
   - all
   - all+
   - z
@@ -122,17 +122,6 @@ modes:
     native_step: 1
     optimized: true
 
-  - name: vector
-    aliases: [v, vec]
-    description: "Chooses linear cell-split characters (diagonals, triangles, half blocks) for each cell."
-    renderer: glyph_union
-    cell: { w: 4, h: 4 }
-    glyph_sets: [vector]
-    colorer: fg_bg_sse
-    smart_step: native
-    native_step: 1
-    optimized: true
-
   - name: vec2
     description: "Chooses linear cell-split characters for 2x2 cell geometry."
     renderer: glyph_union
@@ -174,7 +163,8 @@ modes:
     optimized: true
 
   - name: vec6
-    description: "Chooses linear cell-split characters for 4x6 cell geometry."
+    aliases: [v, vec, vector]
+    description: "Chooses linear cell-split characters (diagonals, triangles, half blocks) for 4x6 cell geometry."
     renderer: glyph_union
     cell: { w: 4, h: 6 }
     glyph_sets: [vec6]
@@ -202,7 +192,6 @@ glyph_sets:
   spark_horizontal: ["▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
   six: ["generated:sextant_2x3_with_columns"]
   octant: ["generated:octant_2x4"]
-  vector: ["generated:vector_linear_splits"]
   vec2: ["generated:vector_linear_splits"]
   vec3: ["generated:vector_linear_splits"]
   vec4: ["generated:vector_linear_splits"]
@@ -265,11 +254,6 @@ set_registry:
     name: octants
     geometry: { w: 2, h: 4 }
     generated: octant_2x4
-    optimized: true
-  - id: 50
-    name: vectors
-    geometry: { w: 4, h: 4 }
-    generated: vector_linear_splits
     optimized: true
   - id: 52
     name: vec2
@@ -348,19 +332,18 @@ set_registry:
     optimized: true
 
 # Exact, case-sensitive named unions. A name is resolved before '+' grammar.
-composition_order: [full, half, quad, quad+, bars, bars+, six, 2x3, 2x4, 3x3, octant, vector, vec2, vec3, vec4, vec5, vec6, vec8, all, all+, z, z+]
+composition_order: [full, half, quad, quad+, bars, bars+, six, 2x3, 2x4, 3x3, octant, vec2, vec3, vec4, vec5, vec6, vec8, all, all+, z, z+]
 # Experimental compositions: listed and renderable, but skipped by
 # `cati --bench` unless selected with --mode.
-experimental: [vec2, vec3, vec4, vec5, vec6, vec8, all+, z, z+]
+experimental: [vec2, vec3, vec4, vec5, vec8, all+, z, z+]
 composition_info:
   2x4: "Uses full cells, sides and native 2x4 braille patterns at 2x4 geometry."
   octant: "Uses full cells and native 2x4 octant block characters (U+1CD00-U+1CDE5) at 2x4 geometry."
-  vector: "Uses linear cell-split characters including block diagonals, triangles, and half blocks at 4x4 geometry."
   vec2: "Uses linear cell-split characters at 2x2 geometry."
   vec3: "Uses linear cell-split characters at 2x3 geometry."
   vec4: "Uses linear cell-split characters at 3x4 geometry."
   vec5: "Uses linear cell-split characters at 3x5 geometry."
-  vec6: "Uses linear cell-split characters at 4x6 geometry."
+  vec6: "Uses linear cell-split characters including block diagonals, triangles, and half blocks at 4x6 geometry."
   vec8: "Uses linear cell-split characters at 4x8 geometry."
   full: "Uses empty and full cells at 1x1 geometry."
   half: "Uses full cells and top/bottom halves at 1x2 geometry."
@@ -379,9 +362,10 @@ compositions:
   2x4: [0, 1, 8]
   octant: [0, 10]
   oct: [0, 10]
-  vector: [0, 50]
-  v: [0, 50]
-  vec: [0, 50]
+  # vector, v and vec are aliases of the default vector mode, vec6.
+  vector: [0, 56]
+  v: [0, 56]
+  vec: [0, 56]
   vec2: [0, 52]
   vec3: [0, 53]
   vec4: [0, 54]

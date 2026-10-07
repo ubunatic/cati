@@ -23,9 +23,6 @@ func TestResolveGlyphSetExpression(t *testing.T) {
 		{"4", []int{0, 1, 2, 4}, 2, 2},
 		{"octant", []int{0, 10}, 2, 4},
 		{"oct", []int{0, 10}, 2, 4},
-		{"vector", []int{0, 50}, 4, 4},
-		{"v", []int{0, 50}, 4, 4},
-		{"vec", []int{0, 50}, 4, 4},
 		{"vec2", []int{0, 52}, 2, 2},
 		{"vec3", []int{0, 53}, 2, 3},
 		{"vec4", []int{0, 54}, 3, 4},
@@ -132,12 +129,9 @@ func TestOctantAndVectorGlyphSets(t *testing.T) {
 		t.Errorf("octant mode missing U+1CD00..U+1CDE5 characters")
 	}
 
-	vec, err := ResolveGlyphSetExpression("vector")
+	vec, err := ResolveGlyphSetExpression("vec6")
 	if err != nil {
-		t.Fatalf("ResolveGlyphSetExpression(vector): %v", err)
-	}
-	if vec.Geometry.W != 4 || vec.Geometry.H != 4 {
-		t.Errorf("vector geometry = %dx%d, want 4x4", vec.Geometry.W, vec.Geometry.H)
+		t.Fatalf("ResolveGlyphSetExpression(vec6): %v", err)
 	}
 	if len(vec.Shapes) < 50 {
 		t.Errorf("vector shapes count = %d, want >= 50", len(vec.Shapes))
@@ -167,20 +161,18 @@ func TestOctantAndVectorGlyphSets(t *testing.T) {
 	if hourglass.Glyph == 0 || bowtie.Glyph == 0 {
 		t.Fatalf("vector mode missing hourglass or bowtie glyphs")
 	}
-	for i := 0; i < 16; i++ {
+	for i := range hourglass.Mask {
 		if hourglass.Mask[i] == bowtie.Mask[i] {
 			t.Errorf("hourglass and bowtie masks at bit %d must be complements, got hourglass=%v bowtie=%v", i, hourglass.Mask[i], bowtie.Mask[i])
 		}
 	}
 }
 
+// TestVectorStraightBarsAndQuadrants checks the generator at 4x4, where every
+// bar and quadrant boundary falls on a pixel edge; no render mode is involved.
 func TestVectorStraightBarsAndQuadrants(t *testing.T) {
-	vec, err := ResolveGlyphSetExpression("vector")
-	if err != nil {
-		t.Fatal(err)
-	}
 	masks := make(map[rune]uint16)
-	for _, shape := range vec.Shapes {
+	for _, shape := range generatedVectorShapes(4, 4) {
 		if _, exists := masks[shape.Glyph]; exists {
 			t.Errorf("duplicate vector rune %U", shape.Glyph)
 		}
@@ -224,7 +216,6 @@ func TestVectorParameterizedGeometries(t *testing.T) {
 		{"vec5", 3, 5},
 		{"vec6", 4, 6},
 		{"vec8", 4, 8},
-		{"vector", 4, 4},
 	}
 
 	for _, g := range geometries {

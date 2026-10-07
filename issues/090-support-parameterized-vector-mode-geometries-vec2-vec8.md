@@ -35,3 +35,14 @@ A Python prototype of the generator ran in-session for all six geometries.
 2. Add `vec2..vec8` glyph sets and modes in `spec/render_modes.yaml` (mark experimental).
 3. Spec tests: per geometry, mask length = w*h, complement pairs XOR to all-ones.
 4. Do after #091 so straight-line glyphs are included in every geometry.
+
+## 4. Decision 2026-10-07: `vec` is an alias of a fixed mode
+The separate 4x4 `vector` mode and glyph set 50 are removed. `vector`, `v` and `vec`
+are aliases of `vec6` (4x6), which joins the default cycle and leaves `experimental`.
+Fixed modes `vec2..vec8` keep their geometry; retargeting `vec` is a spec-only edit:
+- `TestSpecRenderModesIntegrity` reads each mode's `aliases` and requires them to select
+  that mode, and requires a `glyph_union` mode's `cell` to equal its resolved geometry.
+- No test names `vec`/`v`/`vector`; the 4x4 straight-bar test calls
+  `generatedVectorShapes(4, 4)` directly.
+- The `diag` reconstruction probe is now one 4x6 `vec6` cell and reconstructs exactly
+  (golden `testdata/reconstruction_probes/diag.png` regenerated from the fixture script).

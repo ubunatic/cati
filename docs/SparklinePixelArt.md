@@ -24,7 +24,7 @@ preview formats; regenerate it with `go run scripts/glyph_mask_fixture.go`.
 
 `cati modes test` runs the three demonstrations from `scripts/reconstruct_demo.go`:
 a single asymmetric octant pixel, a vector diagonal, and a 6x2 octant cell grid.
-Use `cati modes test probe -m d10,50` or `cati modes test -i image.png -m vec`
+Use `cati modes test probe -m d10,56` or `cati modes test -i image.png -m vec`
 to select another authoritative inventory or custom source. Presets are generated
 in memory, so they work in an installed binary outside the repository.
 
@@ -35,10 +35,10 @@ the 1:1 pixel panels and metrics. ANSI-aware padding aligns the panels, includin
 empty rows. RGBA normalization preserves premultiplied alpha semantics and
 avoids the NRGBA luminance discrepancy tracked by #055.
 
-Octant presets reconstruct exactly. The 4x4 vector diagonal does not: the chosen
-split retains five green pixels, while green pixel (0,2) joins ten purple pixels
-in a background group with rounded mean RGB (109,38,168). Its RGBA8 MSE is
-1012.796875. Independent PNG fixtures record these expected pixels, with mode,
+All three presets reconstruct exactly. The vector diagonal is one `vec6` cell
+(4x6): its green triangle `x+y<3` is the complement of the U+1FB44 `🭄` mask, so
+MSE is 0. (Until 2026-10-07 it was a 4x4 cell on the old 4x4 `vector` set and lost
+pixel (0,2), MSE 1012.796875.) Independent PNG fixtures record these expected pixels, with mode,
 pattern, and geometry metadata. Regenerate only these fixtures with
 `go run scripts/reconstruction_probe_fixtures.go`; existing render goldens are
 unaffected. Small-image SSIM is reported as unavailable rather than perfect.
@@ -81,10 +81,14 @@ that resolved geometry rather than inferring it from a mode name.
 
 `spark/vert` remains in the library and test suite as a useful scalar baseline.
 
-`vec` (`vector`, glyph set 50) uses a `4×4` row-major lattice. Its inventory
+`vec`, `v` and `vector` are aliases of a fixed mode, currently `vec6` (glyph set 56,
+`4×6`), declared in `spec/render_modes.yaml` (`compositions` and the mode's
+`aliases`). Tests use the fixed modes `vec2`…`vec8` and read alias targets from
+the spec, so retargeting `vec` is a spec-only change. The vector inventory
 includes linear diagonal and triangular splits, hourglass/bowtie complements,
 half/full blocks and space, straight 1/4 and 3/4 bars on all four sides
-(`🮂🮅▂▆▎▊🮇🮊`), and all ten quadrants (`▖▗▘▙▚▛▜▝▞▟`).
+(`🮂🮅▂▆▎▊🮇🮊`), and all ten quadrants (`▖▗▘▙▚▛▜▝▞▟`); at `4×4` these masks
+are exact (`TestVectorStraightBarsAndQuadrants` checks the generator directly).
 Quarter bars cover one row or column; quadrants cover `2×2` rectangles.
 These exact straight masks let flat edges fit without repeated diagonal teeth.
 The regression test renders a cell with only its top row filled and requires

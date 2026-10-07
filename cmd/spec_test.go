@@ -113,6 +113,26 @@ func TestSpecRenderModesIntegrity(t *testing.T) {
 		if mode.Cell.W <= 0 || mode.Cell.H <= 0 {
 			t.Fatalf("render mode %q has invalid cell geometry %dx%d", mode.Name, mode.Cell.W, mode.Cell.H)
 		}
+		// glyph_union renders at the set_registry geometry; cell must not drift from it.
+		if mode.Renderer == "glyph_union" {
+			res, err := spec.ResolveGlyphSetExpression(mode.Name)
+			if err != nil {
+				t.Fatalf("render mode %q: %v", mode.Name, err)
+			}
+			if mode.Cell != res.Geometry {
+				t.Errorf("render mode %q cell %dx%d, but its glyph sets render at %dx%d (set_registry geometry)", mode.Name, mode.Cell.W, mode.Cell.H, res.Geometry.W, res.Geometry.H)
+			}
+		}
+		// Aliases are redirects (e.g. vec -> the default vector mode); read the
+		// pairs from the spec so retargeting an alias needs no test change.
+		for _, alias := range mode.Aliases {
+			rc, err := parseRenderMode(alias)
+			if err != nil {
+				t.Errorf("render mode %q alias %q: %v", mode.Name, alias, err)
+			} else if got := rcModeName(rc); got != mode.Name {
+				t.Errorf("render mode alias %q selects %q, want %q", alias, got, mode.Name)
+			}
+		}
 		if mode.SmartStep != "terminal-column" && mode.SmartStep != "native" {
 			t.Fatalf("render mode %q has invalid smart step %q", mode.Name, mode.SmartStep)
 		}

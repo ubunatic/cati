@@ -24,8 +24,8 @@ func executeGlyphs(args ...string) (string, error) {
 
 func TestModesGlyphsSelectors(t *testing.T) {
 	for _, tc := range []struct{ selector, geometry string }{
-		{"half", "1x2"}, {"h", "1x2"}, {"oct", "2x4"}, {"vec", "4x4"},
-		{"octants", "2x4"}, {"d10", "2x4"}, {"d10,50", "4x4"},
+		{"half", "1x2"}, {"h", "1x2"}, {"oct", "2x4"}, {"vec6", "4x6"},
+		{"octants", "2x4"}, {"d10", "2x4"}, {"d10,56", "4x12"},
 		{"half+sextants", "2x6"}, {"six", "2x6"}, {"2x3", "2x3"}, {"2x4", "2x4"},
 	} {
 		t.Run(tc.selector, func(t *testing.T) {
@@ -52,8 +52,8 @@ func TestModesGlyphsSelectors(t *testing.T) {
 			}
 		})
 	}
-	a, _ := executeGlyphs("d50,10,10")
-	b, _ := executeGlyphs("d10,50")
+	a, _ := executeGlyphs("d56,10,10")
+	b, _ := executeGlyphs("d10,56")
 	if a[strings.Index(a, "\n"):] != b[strings.Index(b, "\n"):] {
 		t.Fatal("union normalization differs")
 	}

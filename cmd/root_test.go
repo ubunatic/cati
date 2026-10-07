@@ -225,9 +225,7 @@ func TestParseRenderMode(t *testing.T) {
 		{"three by three", "9", "3x3", nil},
 		{"octant", "octant", "octant", nil},
 		{"octant alias oct", "oct", "octant", nil},
-		{"vector", "vector", "vector", nil},
-		{"vector alias vec", "vec", "vector", nil},
-		{"vector alias v", "v", "vector", nil},
+		{"vector 4x6", "vec6", "vec6", nil},
 		{"all", "a", "all", nil},
 		{"all plus", "A", "all+", nil},
 		{"z", "z", "z", nil},
@@ -1338,7 +1336,7 @@ func TestVectorAndOctantModesCLI(t *testing.T) {
 		"testdata/checkerboard_4x4.png",
 		"assets/cati_0001.png",
 	}
-	modes := []string{"vector", "vec", "v", "octant", "oct"}
+	modes := []string{"vec6", "octant", "oct"}
 
 	for _, mode := range modes {
 		rc, err := parseRenderMode(mode)

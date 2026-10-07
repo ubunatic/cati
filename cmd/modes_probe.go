@@ -20,7 +20,7 @@ type probePattern struct{ name, mode, description string }
 
 var probePatterns = []probePattern{
 	{"probe", "oct", "asymmetric: 2x4 red pixel at (0,1) on blue"},
-	{"diag", "vec", "vector: 4x4 green upper-left diagonal on purple"},
+	{"diag", "vec6", "vector: 4x6 green upper-left diagonal on purple"},
 	{"grid", "oct", "multi: 12x8 yellow pattern on dark background"},
 }
 
@@ -95,7 +95,7 @@ func probeSource(name string) (*image.RGBA, string, error) {
 	w, h, mode := 2, 4, "oct"
 	fg, bg := color.RGBA{R: 255, A: 255}, color.RGBA{G: 50, B: 200, A: 255}
 	if canonical == "diag" {
-		w, h, mode = 4, 4, "vec"
+		w, h, mode = 4, 6, "vec6"
 		fg, bg = color.RGBA{G: 220, B: 50, A: 255}, color.RGBA{R: 120, G: 20, B: 180, A: 255}
 	}
 	if canonical == "grid" {
