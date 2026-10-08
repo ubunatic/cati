@@ -1157,8 +1157,8 @@ func RenderToImageJ(img image.Image, opts Options, jobs int) *image.RGBA {
 	for tr := 0; tr < trRows; tr++ {
 		for tc := 0; tc < tcCols; tc++ {
 			c := cells[tr*tcCols+tc]
-			px0 := b.Min.X + tc*2
-			py0 := b.Min.Y + tr*2
+			px0 := tc * 2
+			py0 := tr * 2
 			if px0 >= pixW || py0 >= pixH {
 				continue
 			}
@@ -1327,16 +1327,16 @@ func computeQuadCell(img image.Image, b image.Rectangle, opts Options, cells []q
 				off0 := (py0-minY)*stride + (px0-minX)*4
 				off1 := (py1-minY)*stride + (px0-minX)*4
 				if a := pix[off0+3]; a != 0 {
-					pixels[0] = color.RGBA{R: pix[off0], G: pix[off0+1], B: pix[off0+2], A: a}
+					pixels[0] = toRGBA(color.NRGBA{R: pix[off0], G: pix[off0+1], B: pix[off0+2], A: a})
 				}
 				if a := pix[off0+7]; a != 0 {
-					pixels[1] = color.RGBA{R: pix[off0+4], G: pix[off0+5], B: pix[off0+6], A: a}
+					pixels[1] = toRGBA(color.NRGBA{R: pix[off0+4], G: pix[off0+5], B: pix[off0+6], A: a})
 				}
 				if a := pix[off1+3]; a != 0 {
-					pixels[2] = color.RGBA{R: pix[off1], G: pix[off1+1], B: pix[off1+2], A: a}
+					pixels[2] = toRGBA(color.NRGBA{R: pix[off1], G: pix[off1+1], B: pix[off1+2], A: a})
 				}
 				if a := pix[off1+7]; a != 0 {
-					pixels[3] = color.RGBA{R: pix[off1+4], G: pix[off1+5], B: pix[off1+6], A: a}
+					pixels[3] = toRGBA(color.NRGBA{R: pix[off1+4], G: pix[off1+5], B: pix[off1+6], A: a})
 				}
 			} else {
 				pixels[0] = safePixel(nrgba, px0, py0, b)

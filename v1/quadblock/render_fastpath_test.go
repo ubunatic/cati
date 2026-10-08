@@ -34,6 +34,21 @@ func TestFastpathDifferentialParity(t *testing.T) {
 		}
 	}
 
+	nrgbaPartialAlphaImg := image.NewNRGBA(rect)
+	for y := range 32 {
+		for x := range 32 {
+			nrgbaPartialAlphaImg.SetNRGBA(x, y, color.NRGBA{R: 200, G: 100, B: 50, A: 128})
+		}
+	}
+
+	subRect := image.Rect(5, 7, 37, 39)
+	nrgbaSubImg := image.NewNRGBA(subRect)
+	for y := 7; y < 39; y++ {
+		for x := 5; x < 37; x++ {
+			nrgbaSubImg.SetNRGBA(x, y, color.NRGBA{R: uint8(x * 5), G: uint8(y * 8), B: uint8((x + y) * 4), A: 255})
+		}
+	}
+
 	testCases := []struct {
 		name string
 		img  image.Image
@@ -41,6 +56,8 @@ func TestFastpathDifferentialParity(t *testing.T) {
 		{"RGBA Image", rgbaImg},
 		{"NRGBA Image", nrgbaImg},
 		{"Gray Image", grayImg},
+		{"NRGBA Partial Alpha Image", nrgbaPartialAlphaImg},
+		{"NRGBA Nonzero Bounds Image", nrgbaSubImg},
 	}
 
 	for _, tc := range testCases {
@@ -67,7 +84,7 @@ func TestFastpathDifferentialParity(t *testing.T) {
 
 			// Check ANSI string rendering parity
 			if !bytes.Equal(bufFast.Bytes(), bufSimple.Bytes()) {
-				t.Fatalf("Render ANSI output mismatch between Fastpath and Fallback for %s", tc.name)
+				t.Fatalf("Render ANSI output mismatch between Fastpath and Fallback for %s:\nFast:\n%q\nSimple:\n%q", tc.name, bufFast.String(), bufSimple.String())
 			}
 
 			// Check RenderToImage pixel parity
