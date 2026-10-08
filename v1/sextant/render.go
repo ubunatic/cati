@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode/utf8"
 
 	"ubunatic.com/cati/internal/imgutil"
@@ -789,6 +790,13 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 	var totalSumR, totalSumG, totalSumB int
 	var totalSqSum int
 
+	firstOpaque := -1
+	allOpaqueEqual := true
+
+	var lumas [6]int
+	var sumLuma int
+	var opaqueCount int
+
 	for i := 0; i < 6; i++ {
 		p := pixels[i]
 		if p.A == 0 {
@@ -796,39 +804,95 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 			continue
 		}
 		opaqueMask |= bitForIdxTable[i]
+		opaqueCount++
+		if firstOpaque < 0 {
+			firstOpaque = i
+		} else if p != pixels[firstOpaque] {
+			allOpaqueEqual = false
+		}
 		r, g, b := int(p.R), int(p.G), int(p.B)
 		pr[i], pg[i], pb[i] = r, g, b
 		totalSumR += r
 		totalSumG += g
 		totalSumB += b
 		totalSqSum += r*r + g*g + b*b
+
+		l := 2126*r + 7152*g + 722*b
+		lumas[i] = l
+		sumLuma += l
 	}
 
 	if opaqueMask == 0 {
 		return cellResult{ch: ' ', mask: 0, transparent: true}
 	}
 
-	preferred := directMask(pixels)
+	if allOpaqueEqual {
+		m := opaqueMask
+		firstP := pixels[firstOpaque]
+		if m == 0b111111 {
+			return cellResult{ch: ' ', mask: 0, bg: firstP, hasBG: true}
+		}
+		return cellResult{ch: sextantRunes[m], mask: m, fg: firstP, hasFG: true}
+	}
+
+	var preferred uint8
+	for i := 0; i < 6; i++ {
+		if pixels[i].A != 0 {
+			if lumas[i]*opaqueCount >= sumLuma {
+				preferred |= bitForIdxTable[i]
+			}
+		}
+	}
+
+	transPenalty := bits.OnesCount8(transMask) * transparentOverpaintPenalty
 
 	bestScore := math.MaxInt
-	var bestCell cellResult
+	bestMask := uint8(0)
 	bestPreferredOverlap := -1
 	bestPopcount := -1
+	var bestFgR, bestFgG, bestFgB int
+	var bestBgR, bestBgG, bestBgB int
+	var bestFgN, bestBgN int
 
 	for _, mask := range masks {
 		m := mask & 0b111111
 		fgOpaque := m & opaqueMask
-		bgOpaque := (^m) & opaqueMask
 		fgN := bits.OnesCount8(fgOpaque)
-		bgN := bits.OnesCount8(bgOpaque)
+		bgN := opaqueCount - fgN
 
 		var fgSumR, fgSumG, fgSumB int
 		entry := &maskBitIndices[fgOpaque]
-		for idx := 0; idx < entry.count; idx++ {
-			i := entry.indices[idx]
-			fgSumR += pr[i]
-			fgSumG += pg[i]
-			fgSumB += pb[i]
+		switch entry.count {
+		case 0:
+		case 1:
+			i0 := entry.indices[0]
+			fgSumR = pr[i0]
+			fgSumG = pg[i0]
+			fgSumB = pb[i0]
+		case 2:
+			i0, i1 := entry.indices[0], entry.indices[1]
+			fgSumR = pr[i0] + pr[i1]
+			fgSumG = pg[i0] + pg[i1]
+			fgSumB = pb[i0] + pb[i1]
+		case 3:
+			i0, i1, i2 := entry.indices[0], entry.indices[1], entry.indices[2]
+			fgSumR = pr[i0] + pr[i1] + pr[i2]
+			fgSumG = pg[i0] + pg[i1] + pg[i2]
+			fgSumB = pb[i0] + pb[i1] + pb[i2]
+		case 4:
+			i0, i1, i2, i3 := entry.indices[0], entry.indices[1], entry.indices[2], entry.indices[3]
+			fgSumR = pr[i0] + pr[i1] + pr[i2] + pr[i3]
+			fgSumG = pg[i0] + pg[i1] + pg[i2] + pg[i3]
+			fgSumB = pb[i0] + pb[i1] + pb[i2] + pb[i3]
+		case 5:
+			i0, i1, i2, i3, i4 := entry.indices[0], entry.indices[1], entry.indices[2], entry.indices[3], entry.indices[4]
+			fgSumR = pr[i0] + pr[i1] + pr[i2] + pr[i3] + pr[i4]
+			fgSumG = pg[i0] + pg[i1] + pg[i2] + pg[i3] + pg[i4]
+			fgSumB = pb[i0] + pb[i1] + pb[i2] + pb[i3] + pb[i4]
+		case 6:
+			fgSumR = totalSumR
+			fgSumG = totalSumG
+			fgSumB = totalSumB
 		}
 
 		var bgSumR, bgSumG, bgSumB int
@@ -863,37 +927,14 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 		}
 
 		if bgN > 0 {
-			transCount := bits.OnesCount8(transMask)
-			score += transCount * transparentOverpaintPenalty
+			score += transPenalty
 		} else {
 			transFGCount := bits.OnesCount8(m & transMask)
 			score += transFGCount * transparentOverpaintPenalty
 		}
 
-		cell := cellResult{
-			ch:   sextantRunes[m],
-			mask: m,
-		}
-		if fgN > 0 {
-			cell.fg = color.RGBA{R: uint8(fgR), G: uint8(fgG), B: uint8(fgB), A: 255}
-			cell.hasFG = true
-		}
-		if bgN > 0 {
-			cell.bg = color.RGBA{R: uint8(bgR), G: uint8(bgG), B: uint8(bgB), A: 255}
-			cell.hasBG = true
-		}
-
-		if m == 0 || m == 0b111111 {
-			cell.ch = ' '
-			cell.mask = 0
-			if m == 0 && !cell.hasBG && bgN > 0 {
-				cell.bg = color.RGBA{R: uint8(bgR), G: uint8(bgG), B: uint8(bgB), A: 255}
-				cell.hasBG = true
-			}
-			if m == 0b111111 && !cell.hasBG && fgN > 0 {
-				cell.bg = color.RGBA{R: uint8(fgR), G: uint8(fgG), B: uint8(fgB), A: 255}
-				cell.hasBG = true
-			}
+		if score > bestScore {
+			continue
 		}
 
 		overlap := bits.OnesCount8(m & preferred)
@@ -905,9 +946,38 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 
 		if better {
 			bestScore = score
-			bestCell = cell
+			bestMask = m
 			bestPreferredOverlap = overlap
 			bestPopcount = pop
+			bestFgR, bestFgG, bestFgB = fgR, fgG, fgB
+			bestBgR, bestBgG, bestBgB = bgR, bgG, bgB
+			bestFgN, bestBgN = fgN, bgN
+		}
+	}
+
+	bestCell := cellResult{
+		ch:   sextantRunes[bestMask],
+		mask: bestMask,
+	}
+	if bestFgN > 0 {
+		bestCell.fg = color.RGBA{R: uint8(bestFgR), G: uint8(bestFgG), B: uint8(bestFgB), A: 255}
+		bestCell.hasFG = true
+	}
+	if bestBgN > 0 {
+		bestCell.bg = color.RGBA{R: uint8(bestBgR), G: uint8(bestBgG), B: uint8(bestBgB), A: 255}
+		bestCell.hasBG = true
+	}
+
+	if bestMask == 0 || bestMask == 0b111111 {
+		bestCell.ch = ' '
+		bestCell.mask = 0
+		if bestMask == 0 && !bestCell.hasBG && bestBgN > 0 {
+			bestCell.bg = color.RGBA{R: uint8(bestBgR), G: uint8(bestBgG), B: uint8(bestBgB), A: 255}
+			bestCell.hasBG = true
+		}
+		if bestMask == 0b111111 && !bestCell.hasBG && bestFgN > 0 {
+			bestCell.bg = color.RGBA{R: uint8(bestFgR), G: uint8(bestFgG), B: uint8(bestFgB), A: 255}
+			bestCell.hasBG = true
 		}
 	}
 
@@ -1023,8 +1093,6 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 			}
 		}
 	} else {
-		var wg sync.WaitGroup
-		jobsCh := make(chan int)
 		workerN := jobs
 		if workerN > rowCount {
 			workerN = rowCount
@@ -1033,22 +1101,24 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 		if workerN > maxCPUs {
 			workerN = maxCPUs
 		}
+		var nextRow atomic.Int32
+		var wg sync.WaitGroup
 		for range workerN {
+			wg.Add(1)
 			go func() {
-				for row := range jobsCh {
+				defer wg.Done()
+				for {
+					row := int(nextRow.Add(1) - 1)
+					if row >= rowCount {
+						return
+					}
 					renderRow(row)
 					if opts.OnProgress != nil {
 						progress.Done()
 					}
-					wg.Done()
 				}
 			}()
 		}
-		for row := 0; row < rowCount; row++ {
-			wg.Add(1)
-			jobsCh <- row
-		}
-		close(jobsCh)
 		wg.Wait()
 	}
 
@@ -1125,8 +1195,7 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 	if rowCount <= 0 {
 		return dst
 	}
-	jobsCh := make(chan int)
-	var wg sync.WaitGroup
+
 	workerN := jobs
 	if workerN > rowCount {
 		workerN = rowCount
@@ -1135,40 +1204,92 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 	if workerN > maxCPUs {
 		workerN = maxCPUs
 	}
-	for range workerN {
-		go func() {
-			for row := range jobsCh {
-				y0 := b.Min.Y + row*blockRows
-				y1 := min(y0+blockRows, b.Max.Y)
-				for col := 0; b.Min.X+col*blockCols < b.Max.X; col++ {
-					x0 := b.Min.X + col*blockCols
-					x1 := min(x0+blockCols, b.Max.X)
-					pixels := sampleBlock(img, x0, x1, y0, y1)
-					cell := chooseCell(pixels, mode)
-					for idx := range pixels {
-						if !emittedCoverage(cell, idx) {
-							continue
+	if workerN <= 0 {
+		workerN = 1
+	}
+
+	renderRowRange := func(row int) {
+		y0 := b.Min.Y + row*blockRows
+		y1 := min(y0+blockRows, b.Max.Y)
+		for col := 0; b.Min.X+col*blockCols < b.Max.X; col++ {
+			x0 := b.Min.X + col*blockCols
+			x1 := min(x0+blockCols, b.Max.X)
+			pixels := sampleBlock(img, x0, x1, y0, y1)
+			cell := chooseCell(pixels, mode)
+
+			if core.Fastpath {
+				row0Off := (y0 - b.Min.Y) * dst.Stride
+				row1Off := (y0 + 1 - b.Min.Y) * dst.Stride
+				row2Off := (y0 + 2 - b.Min.Y) * dst.Stride
+				colOff := (x0 - b.Min.X) * 4
+
+				for idx := 0; idx < 6; idx++ {
+					if !emittedCoverage(cell, idx) {
+						continue
+					}
+					target := cell.bg
+					if maskContains(cell.mask, idx) {
+						target = cell.fg
+					}
+					yy := y0 + idx/blockCols
+					xx := x0 + idx%blockCols
+					if xx < b.Max.X && yy < b.Max.Y {
+						var off int
+						switch idx / blockCols {
+						case 0:
+							off = row0Off + (colOff + (idx%blockCols)*4)
+						case 1:
+							off = row1Off + (colOff + (idx%blockCols)*4)
+						case 2:
+							off = row2Off + (colOff + (idx%blockCols)*4)
 						}
-						target := cell.bg
-						if maskContains(cell.mask, idx) {
-							target = cell.fg
-						}
-						yy := y0 + idx/blockCols
-						xx := x0 + idx%blockCols
-						if xx < b.Max.X && yy < b.Max.Y {
-							dst.SetRGBA(xx, yy, target)
-						}
+						dst.Pix[off] = target.R
+						dst.Pix[off+1] = target.G
+						dst.Pix[off+2] = target.B
+						dst.Pix[off+3] = target.A
 					}
 				}
-				wg.Done()
+			} else {
+				for idx := range pixels {
+					if !emittedCoverage(cell, idx) {
+						continue
+					}
+					target := cell.bg
+					if maskContains(cell.mask, idx) {
+						target = cell.fg
+					}
+					yy := y0 + idx/blockCols
+					xx := x0 + idx%blockCols
+					if xx < b.Max.X && yy < b.Max.Y {
+						dst.SetRGBA(xx, yy, target)
+					}
+				}
 			}
-		}()
+		}
 	}
-	for row := 0; row < rowCount; row++ {
-		wg.Add(1)
-		jobsCh <- row
+
+	if workerN <= 1 {
+		for row := 0; row < rowCount; row++ {
+			renderRowRange(row)
+		}
+	} else {
+		var nextRow atomic.Int32
+		var wg sync.WaitGroup
+		for range workerN {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for {
+					row := int(nextRow.Add(1) - 1)
+					if row >= rowCount {
+						return
+					}
+					renderRowRange(row)
+				}
+			}()
+		}
+		wg.Wait()
 	}
-	close(jobsCh)
-	wg.Wait()
+
 	return dst
 }

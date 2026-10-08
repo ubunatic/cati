@@ -29,3 +29,7 @@
 ## 2026-10-05 - Lock-Free Wavefront Scheduling and Direct Slice Fastpath in Parallel Quadblock
 **Learning:** Enforcing quadblock cell dependency constraints via per-diagonal channels and WaitGroup barriers (`wg.Wait()` per diagonal) causes severe thread contention (220+ barriers/frame) and destroys CPU cache prefetching.
 **Action:** Replace per-diagonal channel barriers with a lock-free wavefront scheduler using atomic row progress counters (`atomic.Int32`) and direct `*image.RGBA` / `*image.NRGBA` 2x2 subpixel sampling in `computeQuadCell`, increasing parallel rendering throughput by 35-47%.
+
+## 2026-10-08 - Uniform Opaque Pixel Fastpath and Deferred Cell Struct Construction in Sextant Block Solvers
+**Learning:** In 2×3 sextant block solvers, evaluating all 64 candidate masks on uniform blocks where all non-transparent pixels match accounts for redundant candidate search overhead. Additionally, constructing intermediate `cellResult` structs for every candidate mask before checking `better` score conditions causes unnecessary register spill and branch overhead in hot evaluation loops.
+**Action:** Short-circuit uniform non-transparent blocks upfront in `chooseBestCell`, compute integer luma (`2126R + 7152G + 722B`) for preferred masks, unroll index sum aggregation via `switch entry.count`, defer `cellResult` struct assembly until after mask selection, and prune candidates with `if score > bestScore { continue }`.
