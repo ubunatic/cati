@@ -79,6 +79,24 @@ func safePixel(img image.Image, x, y int) color.RGBA {
 				return color.RGBA{R: rgba.Pix[off], G: rgba.Pix[off+1], B: rgba.Pix[off+2], A: a}
 			}
 		}
+		if nrgba, ok := img.(*image.NRGBA); ok {
+			off := (y-nrgba.Rect.Min.Y)*nrgba.Stride + (x-nrgba.Rect.Min.X)*4
+			if off >= 0 && off+3 < len(nrgba.Pix) {
+				a := nrgba.Pix[off+3]
+				if a == 0 {
+					return color.RGBA{}
+				}
+				if a == 255 {
+					return color.RGBA{R: nrgba.Pix[off], G: nrgba.Pix[off+1], B: nrgba.Pix[off+2], A: 255}
+				}
+				return color.RGBA{
+					R: uint8((uint32(nrgba.Pix[off]) * uint32(a) * 257 / 255) >> 8),
+					G: uint8((uint32(nrgba.Pix[off+1]) * uint32(a) * 257 / 255) >> 8),
+					B: uint8((uint32(nrgba.Pix[off+2]) * uint32(a) * 257 / 255) >> 8),
+					A: a,
+				}
+			}
+		}
 	}
 	return toRGBA(img.At(x, y))
 }
@@ -305,14 +323,107 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 		return &core.Grid{Cells: [][]core.Cell{}}, nil
 	}
 
+	cellBuf := make([]core.Cell, rowCount*width)
 	cells := make([][]core.Cell, rowCount)
 	for i := range cells {
-		cells[i] = make([]core.Cell, width)
+		cells[i] = cellBuf[i*width : (i+1)*width]
 	}
 
 	renderRowFunc := func(row int) {
 		topY := b.Min.Y + row*2
 		botY := topY + 1
+		rowCells := cells[row]
+
+		if core.Fastpath {
+			if rgba, ok := scaled.(*image.RGBA); ok &&
+				b.Min.X >= rgba.Rect.Min.X && b.Max.X <= rgba.Rect.Max.X &&
+				b.Min.Y >= rgba.Rect.Min.Y && b.Max.Y <= rgba.Rect.Max.Y {
+				topRowOff := (topY - rgba.Rect.Min.Y) * rgba.Stride + (b.Min.X - rgba.Rect.Min.X) * 4
+				hasBot := botY < b.Max.Y
+				botRowOff := (botY - rgba.Rect.Min.Y) * rgba.Stride + (b.Min.X - rgba.Rect.Min.X) * 4
+
+				for x := 0; x < width; x++ {
+					tOff := topRowOff + x*4
+					var top color.RGBA
+					if a := rgba.Pix[tOff+3]; a != 0 {
+						top = color.RGBA{R: rgba.Pix[tOff], G: rgba.Pix[tOff+1], B: rgba.Pix[tOff+2], A: a}
+					}
+
+					var bot color.RGBA
+					if hasBot {
+						bOff := botRowOff + x*4
+						if a := rgba.Pix[bOff+3]; a != 0 {
+							bot = color.RGBA{R: rgba.Pix[bOff], G: rgba.Pix[bOff+1], B: rgba.Pix[bOff+2], A: a}
+						}
+					}
+
+					c := pairToCell(top, bot)
+					rowCells[x] = core.Cell{
+						Ch:          c.ch,
+						Fg:          c.fg,
+						Bg:          c.bg,
+						HasFg:       c.hasFG,
+						HasBg:       c.hasBG,
+						Transparent: c.transparent,
+					}
+				}
+				return
+			}
+
+			if nrgba, ok := scaled.(*image.NRGBA); ok &&
+				b.Min.X >= nrgba.Rect.Min.X && b.Max.X <= nrgba.Rect.Max.X &&
+				b.Min.Y >= nrgba.Rect.Min.Y && b.Max.Y <= nrgba.Rect.Max.Y {
+				topRowOff := (topY - nrgba.Rect.Min.Y) * nrgba.Stride + (b.Min.X - nrgba.Rect.Min.X) * 4
+				hasBot := botY < b.Max.Y
+				botRowOff := (botY - nrgba.Rect.Min.Y) * nrgba.Stride + (b.Min.X - nrgba.Rect.Min.X) * 4
+
+				for x := 0; x < width; x++ {
+					tOff := topRowOff + x*4
+					var top color.RGBA
+					if a := nrgba.Pix[tOff+3]; a != 0 {
+						if a == 255 {
+							top = color.RGBA{R: nrgba.Pix[tOff], G: nrgba.Pix[tOff+1], B: nrgba.Pix[tOff+2], A: 255}
+						} else {
+							top = color.RGBA{
+								R: uint8((uint32(nrgba.Pix[tOff]) * uint32(a) * 257 / 255) >> 8),
+								G: uint8((uint32(nrgba.Pix[tOff+1]) * uint32(a) * 257 / 255) >> 8),
+								B: uint8((uint32(nrgba.Pix[tOff+2]) * uint32(a) * 257 / 255) >> 8),
+								A: a,
+							}
+						}
+					}
+
+					var bot color.RGBA
+					if hasBot {
+						bOff := botRowOff + x*4
+						if a := nrgba.Pix[bOff+3]; a != 0 {
+							if a == 255 {
+								bot = color.RGBA{R: nrgba.Pix[bOff], G: nrgba.Pix[bOff+1], B: nrgba.Pix[bOff+2], A: 255}
+							} else {
+								bot = color.RGBA{
+									R: uint8((uint32(nrgba.Pix[bOff]) * uint32(a) * 257 / 255) >> 8),
+									G: uint8((uint32(nrgba.Pix[bOff+1]) * uint32(a) * 257 / 255) >> 8),
+									B: uint8((uint32(nrgba.Pix[bOff+2]) * uint32(a) * 257 / 255) >> 8),
+									A: a,
+								}
+							}
+						}
+					}
+
+					c := pairToCell(top, bot)
+					rowCells[x] = core.Cell{
+						Ch:          c.ch,
+						Fg:          c.fg,
+						Bg:          c.bg,
+						HasFg:       c.hasFG,
+						HasBg:       c.hasBG,
+						Transparent: c.transparent,
+					}
+				}
+				return
+			}
+		}
+
 		for x := 0; x < width; x++ {
 			srcX := b.Min.X + x
 			top := safePixel(scaled, srcX, topY)
@@ -321,7 +432,7 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 				bot = safePixel(scaled, srcX, botY)
 			}
 			c := pairToCell(top, bot)
-			cells[row][x] = core.Cell{
+			rowCells[x] = core.Cell{
 				Ch:          c.ch,
 				Fg:          c.fg,
 				Bg:          c.bg,
@@ -409,7 +520,7 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 		return nil
 	}
 
-	var buf []byte
+	buf := make([]byte, 0, grid.Width*32)
 	var runeBuf [utf8.UTFMax]byte
 	for y := 0; y < grid.Height; y++ {
 		buf = buf[:0]
