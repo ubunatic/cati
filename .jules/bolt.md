@@ -29,3 +29,7 @@
 ## 2026-10-05 - Lock-Free Wavefront Scheduling and Direct Slice Fastpath in Parallel Quadblock
 **Learning:** Enforcing quadblock cell dependency constraints via per-diagonal channels and WaitGroup barriers (`wg.Wait()` per diagonal) causes severe thread contention (220+ barriers/frame) and destroys CPU cache prefetching.
 **Action:** Replace per-diagonal channel barriers with a lock-free wavefront scheduler using atomic row progress counters (`atomic.Int32`) and direct `*image.RGBA` / `*image.NRGBA` 2x2 subpixel sampling in `computeQuadCell`, increasing parallel rendering throughput by 35-47%.
+
+## 2026-10-05 - Contiguous Cell Grid Pre-allocation and Direct Fastpath Row Sampling in Halfblock
+**Learning:** Allocating separate row slice headers (`make([]core.Cell, width)`) in cell grid initialization creates $O(\text{rowCount})$ heap allocation overhead per frame. Repeatedly calling pixel extraction functions with bounds checks and interface type assertions (`img.(*image.RGBA)`) per pixel adds substantial CPU latency.
+**Action:** Allocate a single contiguous backing slice (`cellBuf := make([]core.Cell, rowCount*width)`) in `RenderToGrid`, fastpath direct row sampling for `*image.RGBA` and `*image.NRGBA` with precomputed row byte offsets, and pre-allocate line output byte buffers (`make([]byte, 0, width*32)`), reducing allocations by >91% and latency by >28%.
