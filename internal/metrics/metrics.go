@@ -153,15 +153,18 @@ func extractLumaFlat(img image.Image, buf []float64) ([]float64, int, int) {
 			rowOff := startOff + y*m.Stride
 			pix := m.Pix[rowOff : rowOff+w*4]
 			outRow := buf[y*w : (y+1)*w]
-			x, i := 0, 0
-			for ; x+3 < w; x, i = x+4, i+16 {
-				outRow[x] = rLumaLUT[pix[i]] + gLumaLUT[pix[i+1]] + bLumaLUT[pix[i+2]]
-				outRow[x+1] = rLumaLUT[pix[i+4]] + gLumaLUT[pix[i+5]] + bLumaLUT[pix[i+6]]
-				outRow[x+2] = rLumaLUT[pix[i+8]] + gLumaLUT[pix[i+9]] + bLumaLUT[pix[i+10]]
-				outRow[x+3] = rLumaLUT[pix[i+12]] + gLumaLUT[pix[i+13]] + bLumaLUT[pix[i+14]]
-			}
-			for ; x < w; x, i = x+1, i+4 {
-				outRow[x] = rLumaLUT[pix[i]] + gLumaLUT[pix[i+1]] + bLumaLUT[pix[i+2]]
+			for x, i := 0, 0; x < w; x, i = x+1, i+4 {
+				a := pix[i+3]
+				if a == 255 {
+					outRow[x] = rLumaLUT[pix[i]] + gLumaLUT[pix[i+1]] + bLumaLUT[pix[i+2]]
+				} else if a == 0 {
+					outRow[x] = 0
+				} else {
+					r16 := (uint32(pix[i]) * 257 * uint32(a)) / 255
+					g16 := (uint32(pix[i+1]) * 257 * uint32(a)) / 255
+					b16 := (uint32(pix[i+2]) * 257 * uint32(a)) / 255
+					outRow[x] = (0.2126*float64(r16) + 0.7152*float64(g16) + 0.0722*float64(b16)) * inv65535
+				}
 			}
 		}
 	case *image.Gray:
@@ -171,7 +174,7 @@ func extractLumaFlat(img image.Image, buf []float64) ([]float64, int, int) {
 			pix := m.Pix[rowOff : rowOff+w]
 			outRow := buf[y*w : (y+1)*w]
 			for x := 0; x < w; x++ {
-				outRow[x] = cgray * float64(pix[x])
+				outRow[x] = grayLUT[pix[x]]
 			}
 		}
 	case *image.YCbCr:
@@ -183,8 +186,9 @@ func extractLumaFlat(img image.Image, buf []float64) ([]float64, int, int) {
 			outRow := buf[y*w : (y+1)*w]
 			for x := 0; x < w; x++ {
 				ci := x >> 1
-				r, g, b := color.YCbCrToRGB(m.Y[yOff+x], m.Cb[cOff+ci], m.Cr[cOff+ci])
-				outRow[x] = cr709*float64(r) + cg709*float64(g) + cb709*float64(b)
+				yc := color.YCbCr{Y: m.Y[yOff+x], Cb: m.Cb[cOff+ci], Cr: m.Cr[cOff+ci]}
+				r, g, b, _ := yc.RGBA()
+				outRow[x] = (0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)) * inv65535
 			}
 		}
 	default:
@@ -193,11 +197,10 @@ func extractLumaFlat(img image.Image, buf []float64) ([]float64, int, int) {
 	return buf, w, h
 }
 
+const inv65535 = 1.0 / 65535.0
+
 // extractLumaSimple is the reference luma extraction via img.At.
-// NOTE: the typed fast paths above differ slightly: NRGBA ignores alpha
-// (no premultiply) and Gray/YCbCr round differently (see issue 055).
 func extractLumaSimple(img image.Image, buf []float64, b image.Rectangle) []float64 {
-	const inv65535 = 1.0 / 65535.0
 	w := b.Dx()
 	for y := 0; y < b.Dy(); y++ {
 		outRow := buf[y*w : (y+1)*w]
