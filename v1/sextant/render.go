@@ -786,7 +786,6 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 	var pr, pg, pb [6]int
 	var opaqueMask uint8
 	var transMask uint8
-	var totalSumR, totalSumG, totalSumB int
 	var totalSqSum int
 
 	for i := 0; i < 6; i++ {
@@ -798,9 +797,6 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 		opaqueMask |= bitForIdxTable[i]
 		r, g, b := int(p.R), int(p.G), int(p.B)
 		pr[i], pg[i], pb[i] = r, g, b
-		totalSumR += r
-		totalSumG += g
-		totalSumB += b
 		totalSqSum += r*r + g*g + b*b
 	}
 
@@ -808,10 +804,35 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 		return cellResult{ch: ' ', mask: 0, transparent: true}
 	}
 
+	var sumR, sumG, sumB [64]int
+	var subScore [64]int
+
+	for sub := uint8(1); sub < 64; sub++ {
+		prev := sub & (sub - 1)
+		lsb := 5 - bits.TrailingZeros8(sub)
+		sR := sumR[prev] + pr[lsb]
+		sG := sumG[prev] + pg[lsb]
+		sB := sumB[prev] + pb[lsb]
+		sumR[sub] = sR
+		sumG[sub] = sG
+		sumB[sub] = sB
+
+		if sub&(^opaqueMask) != 0 {
+			continue
+		}
+
+		cnt := bits.OnesCount8(sub)
+		r := sR / cnt
+		g := sG / cnt
+		b := sB / cnt
+		subScore[sub] = -2*(r*sR+g*sG+b*sB) + cnt*(r*r+g*g+b*b)
+	}
+
+	transPenalty := bits.OnesCount8(transMask) * transparentOverpaintPenalty
 	preferred := directMask(pixels)
 
 	bestScore := math.MaxInt
-	var bestCell cellResult
+	var bestMask uint8
 	bestPreferredOverlap := -1
 	bestPopcount := -1
 
@@ -819,81 +840,12 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 		m := mask & 0b111111
 		fgOpaque := m & opaqueMask
 		bgOpaque := (^m) & opaqueMask
-		fgN := bits.OnesCount8(fgOpaque)
-		bgN := bits.OnesCount8(bgOpaque)
 
-		var fgSumR, fgSumG, fgSumB int
-		entry := &maskBitIndices[fgOpaque]
-		for idx := 0; idx < entry.count; idx++ {
-			i := entry.indices[idx]
-			fgSumR += pr[i]
-			fgSumG += pg[i]
-			fgSumB += pb[i]
-		}
-
-		var bgSumR, bgSumG, bgSumB int
-		if bgN > 0 {
-			bgSumR = totalSumR - fgSumR
-			bgSumG = totalSumG - fgSumG
-			bgSumB = totalSumB - fgSumB
-		}
-
-		var fgR, fgG, fgB int
-		if fgN > 0 {
-			fgR = fgSumR / fgN
-			fgG = fgSumG / fgN
-			fgB = fgSumB / fgN
-		}
-
-		var bgR, bgG, bgB int
-		if bgN > 0 {
-			bgR = bgSumR / bgN
-			bgG = bgSumG / bgN
-			bgB = bgSumB / bgN
-		}
-
-		score := totalSqSum
-		if fgN > 0 {
-			score -= 2 * (fgR*fgSumR + fgG*fgSumG + fgB*fgSumB)
-			score += fgN * (fgR*fgR + fgG*fgG + fgB*fgB)
-		}
-		if bgN > 0 {
-			score -= 2 * (bgR*bgSumR + bgG*bgSumG + bgB*bgSumB)
-			score += bgN * (bgR*bgR + bgG*bgG + bgB*bgB)
-		}
-
-		if bgN > 0 {
-			transCount := bits.OnesCount8(transMask)
-			score += transCount * transparentOverpaintPenalty
+		score := totalSqSum + subScore[fgOpaque] + subScore[bgOpaque]
+		if bgOpaque != 0 {
+			score += transPenalty
 		} else {
-			transFGCount := bits.OnesCount8(m & transMask)
-			score += transFGCount * transparentOverpaintPenalty
-		}
-
-		cell := cellResult{
-			ch:   sextantRunes[m],
-			mask: m,
-		}
-		if fgN > 0 {
-			cell.fg = color.RGBA{R: uint8(fgR), G: uint8(fgG), B: uint8(fgB), A: 255}
-			cell.hasFG = true
-		}
-		if bgN > 0 {
-			cell.bg = color.RGBA{R: uint8(bgR), G: uint8(bgG), B: uint8(bgB), A: 255}
-			cell.hasBG = true
-		}
-
-		if m == 0 || m == 0b111111 {
-			cell.ch = ' '
-			cell.mask = 0
-			if m == 0 && !cell.hasBG && bgN > 0 {
-				cell.bg = color.RGBA{R: uint8(bgR), G: uint8(bgG), B: uint8(bgB), A: 255}
-				cell.hasBG = true
-			}
-			if m == 0b111111 && !cell.hasBG && fgN > 0 {
-				cell.bg = color.RGBA{R: uint8(fgR), G: uint8(fgG), B: uint8(fgB), A: 255}
-				cell.hasBG = true
-			}
+			score += bits.OnesCount8(m&transMask) * transparentOverpaintPenalty
 		}
 
 		overlap := bits.OnesCount8(m & preferred)
@@ -905,9 +857,61 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 
 		if better {
 			bestScore = score
-			bestCell = cell
+			bestMask = m
 			bestPreferredOverlap = overlap
 			bestPopcount = pop
+		}
+	}
+
+	m := bestMask & 0b111111
+	fgOpaque := m & opaqueMask
+	bgOpaque := (^m) & opaqueMask
+	fgN := bits.OnesCount8(fgOpaque)
+	bgN := bits.OnesCount8(bgOpaque)
+
+	bestCell := cellResult{
+		ch:   sextantRunes[m],
+		mask: m,
+	}
+	if fgN > 0 {
+		bestCell.fg = color.RGBA{
+			R: uint8(sumR[fgOpaque] / fgN),
+			G: uint8(sumG[fgOpaque] / fgN),
+			B: uint8(sumB[fgOpaque] / fgN),
+			A: 255,
+		}
+		bestCell.hasFG = true
+	}
+	if bgN > 0 {
+		bestCell.bg = color.RGBA{
+			R: uint8(sumR[bgOpaque] / bgN),
+			G: uint8(sumG[bgOpaque] / bgN),
+			B: uint8(sumB[bgOpaque] / bgN),
+			A: 255,
+		}
+		bestCell.hasBG = true
+	}
+
+	if m == 0 || m == 0b111111 {
+		bestCell.ch = ' '
+		bestCell.mask = 0
+		if m == 0 && !bestCell.hasBG && bgN > 0 {
+			bestCell.bg = color.RGBA{
+				R: uint8(sumR[bgOpaque] / bgN),
+				G: uint8(sumG[bgOpaque] / bgN),
+				B: uint8(sumB[bgOpaque] / bgN),
+				A: 255,
+			}
+			bestCell.hasBG = true
+		}
+		if m == 0b111111 && !bestCell.hasBG && fgN > 0 {
+			bestCell.bg = color.RGBA{
+				R: uint8(sumR[fgOpaque] / fgN),
+				G: uint8(sumG[fgOpaque] / fgN),
+				B: uint8(sumB[fgOpaque] / fgN),
+				A: 255,
+			}
+			bestCell.hasBG = true
 		}
 	}
 
@@ -991,8 +995,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 
 	colCount := (b.Dx() + blockCols - 1) / blockCols
 	cells := make([][]core.Cell, rowCount)
+	buf := make([]core.Cell, rowCount*colCount)
 	for r := range cells {
-		cells[r] = make([]core.Cell, colCount)
+		cells[r] = buf[r*colCount : (r+1)*colCount]
 	}
 
 	renderRow := func(row int) {
@@ -1156,7 +1161,12 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 						yy := y0 + idx/blockCols
 						xx := x0 + idx%blockCols
 						if xx < b.Max.X && yy < b.Max.Y {
-							dst.SetRGBA(xx, yy, target)
+							off := dst.PixOffset(xx, yy)
+							p := dst.Pix[off : off+4 : off+4]
+							p[0] = target.R
+							p[1] = target.G
+							p[2] = target.B
+							p[3] = target.A
 						}
 					}
 				}

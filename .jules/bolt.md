@@ -29,3 +29,7 @@
 ## 2026-10-05 - Lock-Free Wavefront Scheduling and Direct Slice Fastpath in Parallel Quadblock
 **Learning:** Enforcing quadblock cell dependency constraints via per-diagonal channels and WaitGroup barriers (`wg.Wait()` per diagonal) causes severe thread contention (220+ barriers/frame) and destroys CPU cache prefetching.
 **Action:** Replace per-diagonal channel barriers with a lock-free wavefront scheduler using atomic row progress counters (`atomic.Int32`) and direct `*image.RGBA` / `*image.NRGBA` 2x2 subpixel sampling in `computeQuadCell`, increasing parallel rendering throughput by 35-47%.
+
+## 2026-10-06 - Inductive Subset Sums and Precomputed Error Evaluation in Sextant Solvers
+**Learning:** Evaluating 64 candidate masks in `chooseBestCell` via per-mask pixel iteration loops and integer divisions (`/ fgN`, `/ bgN`) caused over 380 division instructions per cell and accounted for >50% of total sextant rendering CPU time.
+**Action:** Compute subset RGB sums inductively (`sR = sumR[sub & (sub-1)] + pr[5-trailingZeros(sub)]`) and precalculate subset squared error values (`subScore[sub]`) prior to the mask loop, reducing candidate scoring to 2 array lookups and additions per mask with zero divisions or struct allocations in the candidate loop.
