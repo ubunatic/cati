@@ -1,0 +1,27 @@
+# cross/inner-cell circles (horizontal)
+cross 🯡𜸀𜸀𜸀🯣|🯡𜸀𜸀🯣|🯡𜸀🯣|🯡🯣 
+inner 🞅🞅🞅🞅 |🞅🞅🞅 |🞅🞅 |🞅
+cross 🯡𜸀𜸀𜸀🯣|🯡𜸀𜸀🯣|🯡𜸀🯣|🯡🯣 
+inner 🞅🞅🞅🞅 |🞅🞅🞅 |🞅🞅 |🞅
+
+# cross-cell circles (vertical)
+1 🯢|🞅|🯢|🞅|🯢|🞅
+2 𜸁|🞅|𜸁|🞅|𜸁|🞅
+3 𜸁|🞅|𜸁|🞅|𜸁|🞅
+4 🯠|🞅|🯠|🞅|🯠|🞅
+
+# variable-sized circles
+big    ◯◯◯
+medium ○○○
+small  ∘∘∘
+asc    ∘○◯
+desc   ◯○∘
+mixed  ○◯∘ ○∘◯
+
+
+# variable-sized circles (vertical)
+∘|○|◯|  ○|∘|◯
+∘|○|◯|  ∘|◯|○
+∘|○|◯|  ◯|∘|○
+∘|○|◯|  ○|◯|∘
+
