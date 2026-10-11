@@ -783,7 +783,10 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 		return bestCell
 	}
 
-	var pr, pg, pb [6]int
+	type rgbPixel struct {
+		r, g, b int
+	}
+	var pix [6]rgbPixel
 	var opaqueMask uint8
 	var transMask uint8
 	var totalSumR, totalSumG, totalSumB int
@@ -797,7 +800,7 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 		}
 		opaqueMask |= bitForIdxTable[i]
 		r, g, b := int(p.R), int(p.G), int(p.B)
-		pr[i], pg[i], pb[i] = r, g, b
+		pix[i] = rgbPixel{r: r, g: g, b: b}
 		totalSumR += r
 		totalSumG += g
 		totalSumB += b
@@ -808,6 +811,8 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 		return cellResult{ch: ' ', mask: 0, transparent: true}
 	}
 
+	totalOpaqueN := bits.OnesCount8(opaqueMask)
+	totalTransN := bits.OnesCount8(transMask)
 	preferred := directMask(pixels)
 
 	bestScore := math.MaxInt
@@ -818,17 +823,16 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 	for _, mask := range masks {
 		m := mask & 0b111111
 		fgOpaque := m & opaqueMask
-		bgOpaque := (^m) & opaqueMask
 		fgN := bits.OnesCount8(fgOpaque)
-		bgN := bits.OnesCount8(bgOpaque)
+		bgN := totalOpaqueN - fgN
 
 		var fgSumR, fgSumG, fgSumB int
 		entry := &maskBitIndices[fgOpaque]
 		for idx := 0; idx < entry.count; idx++ {
-			i := entry.indices[idx]
-			fgSumR += pr[i]
-			fgSumG += pg[i]
-			fgSumB += pb[i]
+			p := pix[entry.indices[idx]]
+			fgSumR += p.r
+			fgSumG += p.g
+			fgSumB += p.b
 		}
 
 		var bgSumR, bgSumG, bgSumB int
@@ -863,8 +867,7 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 		}
 
 		if bgN > 0 {
-			transCount := bits.OnesCount8(transMask)
-			score += transCount * transparentOverpaintPenalty
+			score += totalTransN * transparentOverpaintPenalty
 		} else {
 			transFGCount := bits.OnesCount8(m & transMask)
 			score += transFGCount * transparentOverpaintPenalty

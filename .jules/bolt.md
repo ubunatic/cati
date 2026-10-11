@@ -29,3 +29,7 @@
 ## 2026-10-05 - Lock-Free Wavefront Scheduling and Direct Slice Fastpath in Parallel Quadblock
 **Learning:** Enforcing quadblock cell dependency constraints via per-diagonal channels and WaitGroup barriers (`wg.Wait()` per diagonal) causes severe thread contention (220+ barriers/frame) and destroys CPU cache prefetching.
 **Action:** Replace per-diagonal channel barriers with a lock-free wavefront scheduler using atomic row progress counters (`atomic.Int32`) and direct `*image.RGBA` / `*image.NRGBA` 2x2 subpixel sampling in `computeQuadCell`, increasing parallel rendering throughput by 35-47%.
+
+## 2026-10-11 - Derived Complementary Bitmask Popcounts and Interleaved Pixel Arrays
+**Learning:** Calling `bits.OnesCount64` / `bits.OnesCount8` repeatedly for complementary bitmasks (`bgOpaque`, `bgTrans`) inside inner candidate evaluation loops adds redundant SIMD popcount instructions. Furthermore, accessing parallel `pr`, `pg`, `pb` arrays causes non-contiguous L1 cache loads during bit-trailing zero iterations.
+**Action:** Precompute total block popcounts (`totalOpaqueN`, `totalTransN`), derive `bgN = totalOpaqueN - fgN` and `bgTrans = totalTransN - fgTrans` from single foreground popcounts, and replace parallel channel arrays with interleaved `rgbPixel` struct arrays.

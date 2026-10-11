@@ -112,7 +112,10 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 		return cellResult{Ch: ' ', Err: math.MaxFloat64}
 	}
 
-	var pr, pg, pb [128]uint8
+	type rgbPixel struct {
+		r, g, b uint8
+	}
+	var pix [128]rgbPixel
 	var opaque0, opaque1 uint64
 	var totalSumR, totalSumG, totalSumB uint32
 	var totalSqSum int64
@@ -123,7 +126,8 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 		for y := y0; y <= y1; y++ {
 			p := rgba.Pix[rgba.PixOffset(x0, y):]
 			for x := 0; x < blockW; x++ {
-				pr[idx], pg[idx], pb[idx], pa[idx] = p[x*4], p[x*4+1], p[x*4+2], p[x*4+3]
+				pix[idx] = rgbPixel{r: p[x*4], g: p[x*4+1], b: p[x*4+2]}
+				pa[idx] = p[x*4+3]
 				idx++
 			}
 		}
@@ -132,7 +136,8 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 		for y := y0; y <= y1; y++ {
 			p := nrgba.Pix[nrgba.PixOffset(x0, y):]
 			for x := 0; x < blockW; x++ {
-				pr[idx], pg[idx], pb[idx], pa[idx] = p[x*4], p[x*4+1], p[x*4+2], p[x*4+3]
+				pix[idx] = rgbPixel{r: p[x*4], g: p[x*4+1], b: p[x*4+2]}
+				pa[idx] = p[x*4+3]
 				idx++
 			}
 		}
@@ -141,7 +146,8 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 		for y := y0; y <= y1; y++ {
 			for x := x0; x <= x1; x++ {
 				c := rgbaAt(img, x, y)
-				pr[idx], pg[idx], pb[idx], pa[idx] = c.R, c.G, c.B, c.A
+				pix[idx] = rgbPixel{r: c.R, g: c.G, b: c.B}
+				pa[idx] = c.A
 				idx++
 			}
 		}
@@ -155,7 +161,8 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 		} else {
 			opaque1 |= uint64(1) << (idx - 64)
 		}
-		ur, ug, ub := uint32(pr[idx]), uint32(pg[idx]), uint32(pb[idx])
+		p := pix[idx]
+		ur, ug, ub := uint32(p.r), uint32(p.g), uint32(p.b)
 		totalSumR += ur
 		totalSumG += ug
 		totalSumB += ub
@@ -194,17 +201,22 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 	const transparentPixelCost = 195075 // 3 * 255 * 255
 
 	if n <= 64 {
+		totalOpaqueN := bits.OnesCount64(opaque0)
+		totalTransN := bits.OnesCount64(trans0)
+
 		// Optimized kernel for blocks with up to 64 pixels (4x8, 2x2, 2x3, 2x6, etc.)
 		for _, cand := range bitCands {
 			candM0 := cand.mask.lo
 			fgOpaque0 := candM0 & opaque0
-			bgOpaque0 := (^candM0) & opaque0
 
 			fgN := bits.OnesCount64(fgOpaque0)
-			bgN := bits.OnesCount64(bgOpaque0)
+			bgN := totalOpaqueN - fgN
 
-			fgTrans := bits.OnesCount64(candM0 & trans0)
-			bgTrans := bits.OnesCount64((^candM0) & trans0)
+			var fgTrans, bgTrans int
+			if trans0 != 0 {
+				fgTrans = bits.OnesCount64(candM0 & trans0)
+				bgTrans = totalTransN - fgTrans
+			}
 
 			if fgN == 0 && bgN > 0 && cand.ch != ' ' {
 				continue
@@ -213,9 +225,10 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 			var fgSumR, fgSumG, fgSumB uint32
 			for b := fgOpaque0; b != 0; {
 				tz := bits.TrailingZeros64(b)
-				fgSumR += uint32(pr[tz])
-				fgSumG += uint32(pg[tz])
-				fgSumB += uint32(pb[tz])
+				p := pix[tz]
+				fgSumR += uint32(p.r)
+				fgSumG += uint32(p.g)
+				fgSumB += uint32(p.b)
 				b &= b - 1
 			}
 
@@ -289,20 +302,24 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 			}
 		}
 	} else {
+		totalOpaqueN := bits.OnesCount64(opaque0) + bits.OnesCount64(opaque1)
+		totalTransN := bits.OnesCount64(trans0) + bits.OnesCount64(trans1)
+
 		// 128-bit kernel for blocks up to 128 pixels (e.g. 4x24)
 		for _, cand := range bitCands {
 			candM0 := cand.mask.lo
 			candM1 := cand.mask.hi
 			fgOpaque0 := candM0 & opaque0
 			fgOpaque1 := candM1 & opaque1
-			bgOpaque0 := (^candM0) & opaque0
-			bgOpaque1 := (^candM1) & opaque1
 
 			fgN := bits.OnesCount64(fgOpaque0) + bits.OnesCount64(fgOpaque1)
-			bgN := bits.OnesCount64(bgOpaque0) + bits.OnesCount64(bgOpaque1)
+			bgN := totalOpaqueN - fgN
 
-			fgTrans := bits.OnesCount64(candM0&trans0) + bits.OnesCount64(candM1&trans1)
-			bgTrans := bits.OnesCount64((^candM0)&trans0) + bits.OnesCount64((^candM1)&trans1)
+			var fgTrans, bgTrans int
+			if trans0 != 0 || trans1 != 0 {
+				fgTrans = bits.OnesCount64(candM0&trans0) + bits.OnesCount64(candM1&trans1)
+				bgTrans = totalTransN - fgTrans
+			}
 
 			if fgN == 0 && bgN > 0 && cand.ch != ' ' {
 				continue
@@ -311,16 +328,18 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 			var fgSumR, fgSumG, fgSumB uint32
 			for b := fgOpaque0; b != 0; {
 				tz := bits.TrailingZeros64(b)
-				fgSumR += uint32(pr[tz])
-				fgSumG += uint32(pg[tz])
-				fgSumB += uint32(pb[tz])
+				p := pix[tz]
+				fgSumR += uint32(p.r)
+				fgSumG += uint32(p.g)
+				fgSumB += uint32(p.b)
 				b &= b - 1
 			}
 			for b := fgOpaque1; b != 0; {
 				tz := bits.TrailingZeros64(b) + 64
-				fgSumR += uint32(pr[tz])
-				fgSumG += uint32(pg[tz])
-				fgSumB += uint32(pb[tz])
+				p := pix[tz]
+				fgSumR += uint32(p.r)
+				fgSumG += uint32(p.g)
+				fgSumB += uint32(p.b)
 				b &= b - 1
 			}
 
