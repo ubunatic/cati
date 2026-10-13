@@ -886,11 +886,14 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	}
 
 	cells := make([][]core.Cell, trRows)
+	cellStorage := make([]core.Cell, trRows*tcCols)
 	for tr := 0; tr < trRows; tr++ {
-		cells[tr] = make([]core.Cell, tcCols)
+		cells[tr] = cellStorage[tr*tcCols : (tr+1)*tcCols]
+		rowCells := cells[tr]
+		rowOffset := tr * tcCols
 		for tc := 0; tc < tcCols; tc++ {
-			qc := qCells[tr*tcCols+tc]
-			cells[tr][tc] = core.Cell{
+			qc := qCells[rowOffset+tc]
+			rowCells[tc] = core.Cell{
 				Ch:          qc.ch,
 				Fg:          qc.fg,
 				Bg:          qc.bg,

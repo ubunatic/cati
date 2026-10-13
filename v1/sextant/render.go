@@ -1003,8 +1003,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 
 	colCount := (b.Dx() + blockCols - 1) / blockCols
 	cells := make([][]core.Cell, rowCount)
+	cellStorage := make([]core.Cell, rowCount*colCount)
 	for r := range cells {
-		cells[r] = make([]core.Cell, colCount)
+		cells[r] = cellStorage[r*colCount : (r+1)*colCount]
 	}
 
 	renderRow := func(row int) {
