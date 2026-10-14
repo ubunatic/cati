@@ -37,7 +37,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 031 | [031-remove-ansi-golden-goldens.md](031-remove-ansi-golden-goldens.md) | Remove `.ansi` golden tests (unverifiable byte diffs let a fix go stale) | ✅ Closed |
 | 032 | [032-jpeg-golden-toolchain-drift.md](032-jpeg-golden-toolchain-drift.md) | JPEG-sourced golden drift across Go toolchain patch versions | ✅ Closed |
 | 033 | [033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md](033-render-unconditionally-emits-erase-line-cr-prefix-breaks-composed-layouts.md) | Render() unconditionally emits erase-line+CR prefix, breaks composed layouts | Closed — opt-out implemented and verified: NoLinePrefix on halfblock/quadblock/sextant Options; go vet/go test/make install green |
-| 034 | [034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md](034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md) | quadblock and sextant have no image loader, must import halfblock.LoadImage | ✅ Closed |
+| 034 | [034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md](034-quadblock-and-sextant-have-no-image-loader-must-import-halfblock-loadimage.md) | quadblock and sextant have no image loader, must import halfblock.LoadImage | Closed |
 | 035 | [035-make-png-golden-comparisons-ignore-non-rendering-metadata.md](035-make-png-golden-comparisons-ignore-non-rendering-metadata.md) | Make PNG golden comparisons ignore non-rendering metadata | Closed (Verified with metadata isolation and negative difference tests in `cmd/golden_render_test.go`) |
 | 036 | [036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md](036-add-smart-render-mode-that-selects-the-best-width-by-psnr.md) | Add smart render mode that selects the best width by PSNR | Open |
 | 037 | [037-extend-smart-rendering-to-algorithm-native-sub-cell-steps.md](037-extend-smart-rendering-to-algorithm-native-sub-cell-steps.md) | Extend smart rendering to algorithm-native sub-cell steps | Closed — resolved in 322cca7 |
@@ -98,6 +98,8 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 092 | [092-custom-glyph-reconstruction-ignores-supplied-masks-skewing-ssim-for-glyph-union-modes.md](092-custom-glyph-reconstruction-ignores-supplied-masks-skewing-ssim-for-glyph-union-modes.md) | Custom glyph reconstruction ignores supplied masks, skewing SSIM for glyph_union modes | Open |
 | 093 | [093-fix-octant-glyph-to-subpixel-mapping.md](093-fix-octant-glyph-to-subpixel-mapping.md) | Fix octant glyph-to-subpixel mapping | Closed — corrected all octant mappings; user confirmed visual result and full suite passed |
 | 094 | [094-restore-quadblock-fastpath-parity-for-partial-alpha-and-nonzero-bounds.md](094-restore-quadblock-fastpath-parity-for-partial-alpha-and-nonzero-bounds.md) | Restore quadblock fastpath parity for partial alpha and nonzero bounds | Open |
+| 095 | [095-deduplicate-halfblock-and-sextant-fastpath-branches.md](095-deduplicate-halfblock-and-sextant-fastpath-branches.md) | Deduplicate halfblock and sextant fastpath branches | Open |
+| 096 | [096-skip-media-tests-when-git-lfs-assets-are-pointer-files.md](096-skip-media-tests-when-git-lfs-assets-are-pointer-files.md) | Skip media tests when Git LFS assets are pointer files | Open |
 ## Archived
 
 | # | Title | Reason |
