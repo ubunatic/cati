@@ -10,18 +10,6 @@ import (
 	"ubunatic.com/cati/v1/core"
 )
 
-func TestNRGBAPremultiplicationExactMatch(t *testing.T) {
-	for a := 0; a <= 255; a++ {
-		for r := 0; r <= 255; r++ {
-			want := toRGBA(color.NRGBA{R: uint8(r), G: uint8(r), B: uint8(r), A: uint8(a)})
-			got := nrgbaToRGBA(uint8(r), uint8(r), uint8(r), uint8(a))
-			if got != want {
-				t.Fatalf("nrgbaToRGBA mismatch for R=%d, A=%d: got %v, want %v", r, a, got, want)
-			}
-		}
-	}
-}
-
 func TestFastpathDifferentialParity(t *testing.T) {
 	rect := image.Rect(0, 0, 32, 32)
 

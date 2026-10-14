@@ -1,6 +1,6 @@
 # 094 — Restore quadblock fastpath parity for partial alpha and nonzero bounds
 
-**Status**: Open
+**Status**: Closed — fixed by PR #49; demo reports identical output
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug

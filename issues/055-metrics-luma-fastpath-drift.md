@@ -1,6 +1,6 @@
 # 055 — Metrics Luma Fast Paths Diverge From Simple Path
 
-**Status**: Open
+**Status**: Closed — fixed by PR #51; TestExtractLumaFastpathParity
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Bug
