@@ -100,6 +100,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 094 | [094-restore-quadblock-fastpath-parity-for-partial-alpha-and-nonzero-bounds.md](094-restore-quadblock-fastpath-parity-for-partial-alpha-and-nonzero-bounds.md) | Restore quadblock fastpath parity for partial alpha and nonzero bounds | Closed — fixed by PR #49; demo reports identical output |
 | 095 | [095-deduplicate-halfblock-and-sextant-fastpath-branches.md](095-deduplicate-halfblock-and-sextant-fastpath-branches.md) | Deduplicate halfblock and sextant fastpath branches | Open |
 | 096 | [096-skip-media-tests-when-git-lfs-assets-are-pointer-files.md](096-skip-media-tests-when-git-lfs-assets-are-pointer-files.md) | Skip media tests when Git LFS assets are pointer files | Open |
+| 097 | [097-add-github-actions-ci-for-build-vet-and-tests.md](097-add-github-actions-ci-for-build-vet-and-tests.md) | Add GitHub Actions CI for build, vet and tests | Open |
 ## Archived
 
 | # | Title | Reason |
