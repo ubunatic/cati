@@ -58,7 +58,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 052 | [052-unified-composite-quality-metric-and-efficiency-index.md](052-unified-composite-quality-metric-and-efficiency-index.md) | Unified Composite Quality Metric and Efficiency Index | Open |
 | 053 | [053-gate-loom-list-panel-search-behind-slash-option.md](053-gate-loom-list-panel-search-behind-slash-option.md) | Gate Loom List Panel Search Behind Option ("Type to Search" vs "[/] Search") | Closed (Implemented GatedSearch in loom Choice and integrated into cati imgbrowser) |
 | 054 | [054-review-jules-bolt-perf-patches.md](054-review-jules-bolt-perf-patches.md) | Review of Jules "Bolt" Perf Patches (PR #8, #9) | Closed (post-factum: worker cap moved to Makefile env, all fast paths behind shared CATI_FASTPATH) |
-| 055 | [055-metrics-luma-fastpath-drift.md](055-metrics-luma-fastpath-drift.md) | Metrics Luma Fast Paths Diverge From Simple Path | Open |
+| 055 | [055-metrics-luma-fastpath-drift.md](055-metrics-luma-fastpath-drift.md) | Metrics Luma Fast Paths Diverge From Simple Path | Closed — fixed by PR #51; TestExtractLumaFastpathParity |
 | 056 | [056-cati-bench-mediafile-per-asset-render-speed-benchmark.md](056-cati-bench-mediafile-per-asset-render-speed-benchmark.md) | `cati --bench <mediafile>`: Per-Asset Render Speed Benchmark | Closed |
 | 057 | [057-honour-spec-experimental-render-modes-across-mode-consumers.md](057-honour-spec-experimental-render-modes-across-mode-consumers.md) | Honour spec experimental render modes across mode consumers | Open |
 | 058 | [058-cati-bench-reports-fast-simple-output-mismatches.md](058-cati-bench-reports-fast-simple-output-mismatches.md) | cati --bench reports fast/simple output mismatches | Closed |
