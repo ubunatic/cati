@@ -15,7 +15,6 @@ import (
 	"image"
 	"image/color"
 	"io"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -84,25 +83,6 @@ func safePixel(img image.Image, x, y int) color.RGBA {
 }
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
-
-func nrgbaToRGBA(r, g, b, a uint8) color.RGBA {
-	if a == 0 {
-		return color.RGBA{}
-	}
-	if a == 255 {
-		return color.RGBA{R: r, G: g, B: b, A: 255}
-	}
-	a16 := uint32(a) * 257
-	r16 := (uint32(r) * 257 * a16) / 65535
-	g16 := (uint32(g) * 257 * a16) / 65535
-	b16 := (uint32(b) * 257 * a16) / 65535
-	return color.RGBA{
-		R: uint8(r16 >> 8),
-		G: uint8(g16 >> 8),
-		B: uint8(b16 >> 8),
-		A: a,
-	}
-}
 
 // toRGBA converts any color.Color to color.RGBA, pre-multiplying alpha.
 func toRGBA(c color.Color) color.RGBA {
@@ -389,12 +369,12 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 					topOff := topRowOff + (minX+x)*4
 					var top, bot color.RGBA
 					if topOff >= 0 && topOff+3 < len(pix) {
-						top = nrgbaToRGBA(pix[topOff], pix[topOff+1], pix[topOff+2], pix[topOff+3])
+						top = core.NRGBAToRGBA(pix[topOff], pix[topOff+1], pix[topOff+2], pix[topOff+3])
 					}
 					if hasBot {
 						botOff := botRowOff + (minX+x)*4
 						if botOff >= 0 && botOff+3 < len(pix) {
-							bot = nrgbaToRGBA(pix[botOff], pix[botOff+1], pix[botOff+2], pix[botOff+3])
+							bot = core.NRGBAToRGBA(pix[botOff], pix[botOff+1], pix[botOff+2], pix[botOff+3])
 						}
 					}
 					c := pairToCell(top, bot)
@@ -445,8 +425,8 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 		if workerN > rowCount {
 			workerN = rowCount
 		}
-		if workerN > runtime.NumCPU() {
-			workerN = runtime.NumCPU()
+		if workerN > core.MaxWorkers() {
+			workerN = core.MaxWorkers()
 		}
 		for range workerN {
 			go func() {
@@ -679,7 +659,7 @@ func RenderToImageJ(img image.Image, jobs int) *image.RGBA {
 				var topColor, botColor color.RGBA
 				if topOff >= 0 && topOff+3 < len(pix) {
 					if a := pix[topOff+3]; a != 0 {
-						top := nrgbaToRGBA(pix[topOff], pix[topOff+1], pix[topOff+2], a)
+						top := core.NRGBAToRGBA(pix[topOff], pix[topOff+1], pix[topOff+2], a)
 						topColor = color.RGBA{R: top.R, G: top.G, B: top.B, A: 255}
 					}
 				}
@@ -687,7 +667,7 @@ func RenderToImageJ(img image.Image, jobs int) *image.RGBA {
 					botOff := srcBotRowOff + srcX*4
 					if botOff >= 0 && botOff+3 < len(pix) {
 						if a := pix[botOff+3]; a != 0 {
-							bot := nrgbaToRGBA(pix[botOff], pix[botOff+1], pix[botOff+2], a)
+							bot := core.NRGBAToRGBA(pix[botOff], pix[botOff+1], pix[botOff+2], a)
 							botColor = color.RGBA{R: bot.R, G: bot.G, B: bot.B, A: 255}
 						}
 					}
@@ -750,8 +730,8 @@ func RenderToImageJ(img image.Image, jobs int) *image.RGBA {
 		if workerN > rowCount {
 			workerN = rowCount
 		}
-		if workerN > runtime.NumCPU() {
-			workerN = runtime.NumCPU()
+		if workerN > core.MaxWorkers() {
+			workerN = core.MaxWorkers()
 		}
 		for range workerN {
 			go func() {

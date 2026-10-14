@@ -76,25 +76,6 @@ func toRGBA(c color.Color) color.RGBA {
 	return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: uint8(a >> 8)}
 }
 
-func nrgbaToRGBA(r, g, b, a uint8) color.RGBA {
-	if a == 0 {
-		return color.RGBA{}
-	}
-	if a == 255 {
-		return color.RGBA{R: r, G: g, B: b, A: 255}
-	}
-	a16 := uint32(a) * 257
-	r16 := (uint32(r) * 257 * a16) / 65535
-	g16 := (uint32(g) * 257 * a16) / 65535
-	b16 := (uint32(b) * 257 * a16) / 65535
-	return color.RGBA{
-		R: uint8(r16 >> 8),
-		G: uint8(g16 >> 8),
-		B: uint8(b16 >> 8),
-		A: a,
-	}
-}
-
 func isTransparent(c color.RGBA) bool { return c.A == 0 }
 
 func eqRGB(a, b color.RGBA) bool { return a.R == b.R && a.G == b.G && a.B == b.B }
@@ -806,7 +787,7 @@ func safePixel(img image.Image, x, y int, b image.Rectangle) color.RGBA {
 		}
 		if nrgba, ok := img.(*image.NRGBA); ok {
 			p := nrgba.Pix[nrgba.PixOffset(x, y):]
-			return nrgbaToRGBA(p[0], p[1], p[2], p[3])
+			return core.NRGBAToRGBA(p[0], p[1], p[2], p[3])
 		}
 	}
 	return toRGBA(img.At(x, y))
@@ -1354,10 +1335,10 @@ func computeQuadCell(img image.Image, b image.Rectangle, opts Options, cells []q
 				pix := nrgba.Pix
 				off0 := (py0-minY)*stride + (px0-minX)*4
 				off1 := (py1-minY)*stride + (px0-minX)*4
-				pixels[0] = nrgbaToRGBA(pix[off0], pix[off0+1], pix[off0+2], pix[off0+3])
-				pixels[1] = nrgbaToRGBA(pix[off0+4], pix[off0+5], pix[off0+6], pix[off0+7])
-				pixels[2] = nrgbaToRGBA(pix[off1], pix[off1+1], pix[off1+2], pix[off1+3])
-				pixels[3] = nrgbaToRGBA(pix[off1+4], pix[off1+5], pix[off1+6], pix[off1+7])
+				pixels[0] = core.NRGBAToRGBA(pix[off0], pix[off0+1], pix[off0+2], pix[off0+3])
+				pixels[1] = core.NRGBAToRGBA(pix[off0+4], pix[off0+5], pix[off0+6], pix[off0+7])
+				pixels[2] = core.NRGBAToRGBA(pix[off1], pix[off1+1], pix[off1+2], pix[off1+3])
+				pixels[3] = core.NRGBAToRGBA(pix[off1+4], pix[off1+5], pix[off1+6], pix[off1+7])
 			} else {
 				pixels[0] = safePixel(nrgba, px0, py0, b)
 				pixels[1] = safePixel(nrgba, px1, py0, b)
