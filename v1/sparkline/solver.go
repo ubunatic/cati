@@ -19,6 +19,14 @@ type bitCandidate struct {
 	mask mask128
 }
 
+var divInvTable [129]uint64
+
+func init() {
+	for d := 1; d <= 128; d++ {
+		divInvTable[d] = ((uint64(1) << 32) + uint64(d) - 1) / uint64(d)
+	}
+}
+
 // bitCandidatesTable stores precomputed bitCandidate slices for fixed mode and block geometry.
 var (
 	verticalBitCandidates4x8  = makeBitCandidates(verticalCandidates, 4, 8)
@@ -117,13 +125,26 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 	var totalSumR, totalSumG, totalSumB uint32
 	var totalSqSum int64
 
-	var pa [128]uint8
 	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
 		idx := 0
 		for y := y0; y <= y1; y++ {
 			p := rgba.Pix[rgba.PixOffset(x0, y):]
+			_ = p[blockW*4-1]
 			for x := 0; x < blockW; x++ {
-				pr[idx], pg[idx], pb[idx], pa[idx] = p[x*4], p[x*4+1], p[x*4+2], p[x*4+3]
+				r, g, b, a := p[x*4], p[x*4+1], p[x*4+2], p[x*4+3]
+				if a != 0 {
+					pr[idx], pg[idx], pb[idx] = r, g, b
+					if idx < 64 {
+						opaque0 |= uint64(1) << idx
+					} else {
+						opaque1 |= uint64(1) << (idx - 64)
+					}
+					ur, ug, ub := uint32(r), uint32(g), uint32(b)
+					totalSumR += ur
+					totalSumG += ug
+					totalSumB += ub
+					totalSqSum += int64(ur*ur + ug*ug + ub*ub)
+				}
 				idx++
 			}
 		}
@@ -131,8 +152,22 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 		idx := 0
 		for y := y0; y <= y1; y++ {
 			p := nrgba.Pix[nrgba.PixOffset(x0, y):]
+			_ = p[blockW*4-1]
 			for x := 0; x < blockW; x++ {
-				pr[idx], pg[idx], pb[idx], pa[idx] = p[x*4], p[x*4+1], p[x*4+2], p[x*4+3]
+				r, g, b, a := p[x*4], p[x*4+1], p[x*4+2], p[x*4+3]
+				if a != 0 {
+					pr[idx], pg[idx], pb[idx] = r, g, b
+					if idx < 64 {
+						opaque0 |= uint64(1) << idx
+					} else {
+						opaque1 |= uint64(1) << (idx - 64)
+					}
+					ur, ug, ub := uint32(r), uint32(g), uint32(b)
+					totalSumR += ur
+					totalSumG += ug
+					totalSumB += ub
+					totalSqSum += int64(ur*ur + ug*ug + ub*ub)
+				}
 				idx++
 			}
 		}
@@ -141,25 +176,22 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 		for y := y0; y <= y1; y++ {
 			for x := x0; x <= x1; x++ {
 				c := rgbaAt(img, x, y)
-				pr[idx], pg[idx], pb[idx], pa[idx] = c.R, c.G, c.B, c.A
+				if c.A != 0 {
+					pr[idx], pg[idx], pb[idx] = c.R, c.G, c.B
+					if idx < 64 {
+						opaque0 |= uint64(1) << idx
+					} else {
+						opaque1 |= uint64(1) << (idx - 64)
+					}
+					ur, ug, ub := uint32(c.R), uint32(c.G), uint32(c.B)
+					totalSumR += ur
+					totalSumG += ug
+					totalSumB += ub
+					totalSqSum += int64(ur*ur + ug*ug + ub*ub)
+				}
 				idx++
 			}
 		}
-	}
-	for idx := range n {
-		if pa[idx] == 0 {
-			continue
-		}
-		if idx < 64 {
-			opaque0 |= uint64(1) << idx
-		} else {
-			opaque1 |= uint64(1) << (idx - 64)
-		}
-		ur, ug, ub := uint32(pr[idx]), uint32(pg[idx]), uint32(pb[idx])
-		totalSumR += ur
-		totalSumG += ug
-		totalSumB += ub
-		totalSqSum += int64(ur*ur + ug*ug + ub*ub)
 	}
 
 	if opaque0 == 0 && opaque1 == 0 {
@@ -222,18 +254,20 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 			var fgAvgR, fgAvgG, fgAvgB uint8
 			var bgAvgR, bgAvgG, bgAvgB uint8
 			if fgN > 0 {
-				fgAvgR = uint8(fgSumR / uint32(fgN))
-				fgAvgG = uint8(fgSumG / uint32(fgN))
-				fgAvgB = uint8(fgSumB / uint32(fgN))
+				invFG := divInvTable[fgN]
+				fgAvgR = uint8((uint64(fgSumR) * invFG) >> 32)
+				fgAvgG = uint8((uint64(fgSumG) * invFG) >> 32)
+				fgAvgB = uint8((uint64(fgSumB) * invFG) >> 32)
 			}
 			var bgSumR, bgSumG, bgSumB uint32
 			if bgN > 0 {
 				bgSumR = totalSumR - fgSumR
 				bgSumG = totalSumG - fgSumG
 				bgSumB = totalSumB - fgSumB
-				bgAvgR = uint8(bgSumR / uint32(bgN))
-				bgAvgG = uint8(bgSumG / uint32(bgN))
-				bgAvgB = uint8(bgSumB / uint32(bgN))
+				invBG := divInvTable[bgN]
+				bgAvgR = uint8((uint64(bgSumR) * invBG) >> 32)
+				bgAvgG = uint8((uint64(bgSumG) * invBG) >> 32)
+				bgAvgB = uint8((uint64(bgSumB) * invBG) >> 32)
 			}
 
 			errInt := totalSqSum
@@ -327,18 +361,20 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 			var fgAvgR, fgAvgG, fgAvgB uint8
 			var bgAvgR, bgAvgG, bgAvgB uint8
 			if fgN > 0 {
-				fgAvgR = uint8(fgSumR / uint32(fgN))
-				fgAvgG = uint8(fgSumG / uint32(fgN))
-				fgAvgB = uint8(fgSumB / uint32(fgN))
+				invFG := divInvTable[fgN]
+				fgAvgR = uint8((uint64(fgSumR) * invFG) >> 32)
+				fgAvgG = uint8((uint64(fgSumG) * invFG) >> 32)
+				fgAvgB = uint8((uint64(fgSumB) * invFG) >> 32)
 			}
 			var bgSumR, bgSumG, bgSumB uint32
 			if bgN > 0 {
 				bgSumR = totalSumR - fgSumR
 				bgSumG = totalSumG - fgSumG
 				bgSumB = totalSumB - fgSumB
-				bgAvgR = uint8(bgSumR / uint32(bgN))
-				bgAvgG = uint8(bgSumG / uint32(bgN))
-				bgAvgB = uint8(bgSumB / uint32(bgN))
+				invBG := divInvTable[bgN]
+				bgAvgR = uint8((uint64(bgSumR) * invBG) >> 32)
+				bgAvgG = uint8((uint64(bgSumG) * invBG) >> 32)
+				bgAvgB = uint8((uint64(bgSumB) * invBG) >> 32)
 			}
 
 			errInt := totalSqSum
