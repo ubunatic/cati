@@ -1,6 +1,6 @@
 # 086 — Add vec and oct golden render tests
 
-**Status**: Open
+**Status**: Closed — Added vec and oct golden render tests with directional, asymmetric, solid, inverted, and sample fixtures (commit 9b26141)
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug
