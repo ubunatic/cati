@@ -16,7 +16,6 @@ import (
 	"ubunatic.com/cati/v1/quadblock"
 	"ubunatic.com/cati/v1/sextant"
 	"ubunatic.com/cati/v1/sparkline"
-	"ubunatic.com/cati/v1/sparkline/testhelper"
 )
 
 // ── isImageFile ───────────────────────────────────────────────────────────────
@@ -574,16 +573,6 @@ func TestSampleDarthDaughterNoDuplicateRenderedPixelRows(t *testing.T) {
 }
 
 func TestAllRenderModesWidthOneThroughTwentyKeepAspectAndNoGaps(t *testing.T) {
-	if err := testhelper.GenerateGradients("testdata"); err != nil {
-		t.Fatalf("GenerateGradients: %v", err)
-	}
-	if err := testhelper.GenerateFixtures("testdata"); err != nil {
-		t.Fatalf("GenerateFixtures: %v", err)
-	}
-	if err := testhelper.GenerateGeometrics("testdata"); err != nil {
-		t.Fatalf("GenerateGeometrics: %v", err)
-	}
-
 	sources := []struct {
 		name string
 		img  image.Image

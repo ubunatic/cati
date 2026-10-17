@@ -35,16 +35,6 @@ var updateGolden = flag.Bool("update", false, "overwrite golden render images in
 func TestGoldenRenders(t *testing.T) {
 	testdataDir := "testdata"
 
-	if err := testhelper.GenerateGradients(testdataDir); err != nil {
-		t.Fatalf("GenerateGradients: %v", err)
-	}
-	if err := testhelper.GenerateFixtures(testdataDir); err != nil {
-		t.Fatalf("GenerateFixtures: %v", err)
-	}
-	if err := testhelper.GenerateGeometrics(testdataDir); err != nil {
-		t.Fatalf("GenerateGeometrics: %v", err)
-	}
-
 	type tc struct {
 		folder     string
 		sourcePath string
@@ -153,8 +143,10 @@ func TestGoldenRenders(t *testing.T) {
 		baseScaled := prepareRenderedImage(orig, nil, c.n, c.n, baseRC, "")
 		baseRender := goldenRenderToImage(baseScaled, baseRC, 0, 0)
 		baseBounds := baseRender.Bounds()
-		if err := os.MkdirAll(folderPath, 0o755); err != nil {
-			t.Fatalf("create %s: %v", folderPath, err)
+		if *updateGolden {
+			if err := os.MkdirAll(folderPath, 0o755); err != nil {
+				t.Fatalf("create %s: %v", folderPath, err)
+			}
 		}
 		for _, a := range algos {
 			renderName := fmt.Sprintf("render_%s_%dch.png", a.name, c.n)
@@ -178,14 +170,7 @@ func TestGoldenRenders(t *testing.T) {
 			}
 
 			if _, err := os.Stat(renderPath); os.IsNotExist(err) {
-				if isJPEGPath(sourcePath) {
-					t.Errorf("missing JPEG golden %s for %s; generate it with GOTOOLCHAIN=%s GOWORK=off go test ./cmd -run TestGoldenRenders -update", renderPath, runtime.Version(), runtime.Version())
-					continue
-				}
-				t.Logf("creating golden %s", renderName)
-				if err := testhelper.SavePNG(renderPath, rendered, meta); err != nil {
-					t.Errorf("save golden %s: %v", renderPath, err)
-				}
+				t.Errorf("missing golden %s; generate it explicitly with GOTOOLCHAIN=%s GOWORK=off go test ./cmd -run TestGoldenRenders -update", renderPath, runtime.Version())
 				continue
 			}
 
@@ -224,8 +209,10 @@ func TestCustomDoom1Goldens(t *testing.T) {
 		if orig == nil {
 			continue
 		}
-		if err := os.MkdirAll(goldenDir, 0o755); err != nil {
-			t.Fatalf("create %s: %v", goldenDir, err)
+		if *updateGolden {
+			if err := os.MkdirAll(goldenDir, 0o755); err != nil {
+				t.Fatalf("create %s: %v", goldenDir, err)
+			}
 		}
 		renderName := fmt.Sprintf("render_%s_%dx%d.png", target.name, target.cols, target.rows)
 		renderPath := filepath.Join(goldenDir, renderName)
@@ -269,10 +256,7 @@ func TestCustomDoom1Goldens(t *testing.T) {
 			continue
 		}
 		if _, err := os.Stat(renderPath); os.IsNotExist(err) {
-			t.Logf("creating golden %s", renderName)
-			if err := testhelper.SavePNG(renderPath, rendered, meta); err != nil {
-				t.Errorf("save golden %s: %v", renderPath, err)
-			}
+			t.Errorf("missing golden %s; generate it explicitly with go test ./cmd -run TestCustomDoom1Goldens -update", renderPath)
 			continue
 		}
 		golden := goldenLoad(t, renderPath)
