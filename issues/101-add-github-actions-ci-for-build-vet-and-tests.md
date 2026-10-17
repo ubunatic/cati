@@ -24,9 +24,10 @@ used a stale Go version and required Docker directly.
 - Provide a podman-first/docker-fallback container test path running the same
   checks. The container is read-only except for `/tmp`; only the designated
   output directory is writable from the host.
-- Container-specific skips use `CATI_CONTAINER_TEST=1`. Audio playback is
-  skipped; tagged PTY integration tests are outside the default suite. No
-  default tests require GPU or network access.
+- Container-specific skip: `internal/audio.TestPlayAudio` checks
+  `CATI_CONTAINER_TEST=1` and skips audio output. The PTY test
+  `TestInteractiveSmallGradientViaPTY` is tagged `integration` and remains
+  outside the default suite. No default tests require GPU or network access.
 
 ## Verification
 
