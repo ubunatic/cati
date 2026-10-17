@@ -1,6 +1,6 @@
 # 103 — Integration-tag root tests use package main instead of cati
 
-**Status**: Open
+**Status**: Closed — Changed package declaration to cati_test and removed duplicate var in tui_integration_test.go (commit c720887)
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Bug
