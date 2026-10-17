@@ -792,16 +792,18 @@ func safePixel(img image.Image, x, y int, b image.Rectangle) color.RGBA {
 	if x < b.Min.X || x >= b.Max.X || y < b.Min.Y || y >= b.Max.Y {
 		return color.RGBA{}
 	}
-	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
-		p := rgba.Pix[rgba.PixOffset(x, y):]
-		if p[3] == 0 {
-			return color.RGBA{}
+	if core.Fastpath {
+		if rgba, ok := img.(*image.RGBA); ok {
+			p := rgba.Pix[rgba.PixOffset(x, y):]
+			if p[3] == 0 {
+				return color.RGBA{}
+			}
+			return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
 		}
-		return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
-	}
-	if nrgba, ok := img.(*image.NRGBA); ok && core.Fastpath {
-		p := nrgba.Pix[nrgba.PixOffset(x, y):]
-		return nrgbaToRGBA(p[0], p[1], p[2], p[3])
+		if nrgba, ok := img.(*image.NRGBA); ok {
+			p := nrgba.Pix[nrgba.PixOffset(x, y):]
+			return core.NRGBAToRGBA(p[0], p[1], p[2], p[3])
+		}
 	}
 	return toRGBA(img.At(x, y))
 }
@@ -880,11 +882,14 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 	}
 
 	cells := make([][]core.Cell, trRows)
+	cellStorage := make([]core.Cell, trRows*tcCols)
 	for tr := 0; tr < trRows; tr++ {
-		cells[tr] = make([]core.Cell, tcCols)
+		cells[tr] = cellStorage[tr*tcCols : (tr+1)*tcCols]
+		rowCells := cells[tr]
+		rowOffset := tr * tcCols
 		for tc := 0; tc < tcCols; tc++ {
-			qc := qCells[tr*tcCols+tc]
-			cells[tr][tc] = core.Cell{
+			qc := qCells[rowOffset+tc]
+			rowCells[tc] = core.Cell{
 				Ch:          qc.ch,
 				Fg:          qc.fg,
 				Bg:          qc.bg,
@@ -1345,10 +1350,10 @@ func computeQuadCell(img image.Image, b image.Rectangle, opts Options, cells []q
 				pix := nrgba.Pix
 				off0 := (py0-minY)*stride + (px0-minX)*4
 				off1 := (py1-minY)*stride + (px0-minX)*4
-				pixels[0] = nrgbaToRGBA(pix[off0], pix[off0+1], pix[off0+2], pix[off0+3])
-				pixels[1] = nrgbaToRGBA(pix[off0+4], pix[off0+5], pix[off0+6], pix[off0+7])
-				pixels[2] = nrgbaToRGBA(pix[off1], pix[off1+1], pix[off1+2], pix[off1+3])
-				pixels[3] = nrgbaToRGBA(pix[off1+4], pix[off1+5], pix[off1+6], pix[off1+7])
+				pixels[0] = core.NRGBAToRGBA(pix[off0], pix[off0+1], pix[off0+2], pix[off0+3])
+				pixels[1] = core.NRGBAToRGBA(pix[off0+4], pix[off0+5], pix[off0+6], pix[off0+7])
+				pixels[2] = core.NRGBAToRGBA(pix[off1], pix[off1+1], pix[off1+2], pix[off1+3])
+				pixels[3] = core.NRGBAToRGBA(pix[off1+4], pix[off1+5], pix[off1+6], pix[off1+7])
 			} else {
 				pixels[0] = safePixel(nrgba, px0, py0, b)
 				pixels[1] = safePixel(nrgba, px1, py0, b)

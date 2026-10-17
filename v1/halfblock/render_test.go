@@ -35,11 +35,17 @@ func TestFastpathParity(t *testing.T) {
 	for y := rect.Min.Y; y < rect.Max.Y; y++ {
 		for x := rect.Min.X; x < rect.Max.X; x++ {
 			c := color.RGBA{R: uint8((x + 2) * 7), G: uint8((y - 3) * 11), B: uint8((x + y + 16) * 5), A: 255}
-			if (x+y)%7 == 0 {
+			switch (x + y) % 7 {
+			case 0:
 				c.A = 0
+			case 3:
+				c.A = 128
+			case 5:
+				c.A = 1
 			}
-			rgbaImg.SetRGBA(x, y, c)
-			nrgbaImg.SetNRGBA(x, y, color.NRGBA{R: c.R, G: c.G, B: c.B, A: c.A})
+			nc := color.NRGBA{R: c.R, G: c.G, B: c.B, A: c.A}
+			rgbaImg.SetRGBA(x, y, toRGBA(nc))
+			nrgbaImg.SetNRGBA(x, y, nc)
 			grayImg.SetGray(x, y, color.Gray{Y: uint8(x + y)})
 		}
 	}
@@ -59,6 +65,7 @@ func TestFastpathParity(t *testing.T) {
 				t.Fatalf("fast Render: %v", err)
 			}
 			fastImage := RenderToImage(tc.img)
+			fastImageJ := RenderToImageJ(tc.img, 4)
 			fastScaled := ScaleNN(tc.img, 17, 11)
 
 			core.Fastpath = false
@@ -67,6 +74,7 @@ func TestFastpathParity(t *testing.T) {
 				t.Fatalf("simple Render: %v", err)
 			}
 			simpleImage := RenderToImage(tc.img)
+			simpleImageJ := RenderToImageJ(tc.img, 4)
 			simpleScaled := ScaleNN(tc.img, 17, 11)
 
 			if !bytes.Equal(fast.Bytes(), simple.Bytes()) {
@@ -74,6 +82,9 @@ func TestFastpathParity(t *testing.T) {
 			}
 			if fastImage.Bounds() != simpleImage.Bounds() || !bytes.Equal(fastImage.Pix, simpleImage.Pix) {
 				t.Fatal("RenderToImage output differs between fast and simple paths")
+			}
+			if !bytes.Equal(fastImageJ.Pix, simpleImageJ.Pix) || !bytes.Equal(fastImageJ.Pix, fastImage.Pix) {
+				t.Fatal("RenderToImageJ(jobs=4) output differs from fast/simple or jobs=1 paths")
 			}
 			fastRGBA, fastOK := fastScaled.(*image.RGBA)
 			simpleRGBA, simpleOK := simpleScaled.(*image.RGBA)

@@ -1,6 +1,6 @@
 # 094 — Restore quadblock fastpath parity for partial alpha and nonzero bounds
 
-**Status**: Closed — restored NRGBA premultiplication and destination-relative coordinate bounds parity; full suite and preflight green
+**Status**: Closed — restored NRGBA premultiplication and destination-relative bounds parity (also fixed by PR #49 on GitHub); full suite and preflight green
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug

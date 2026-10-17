@@ -108,9 +108,15 @@ var (
 		count   int
 		indices [6]int
 	}
+	divTable [7][1536]uint8
 )
 
 func init() {
+	for n := 1; n <= 6; n++ {
+		for s := 0; s < 1536; s++ {
+			divTable[n][s] = uint8(s / n)
+		}
+	}
 	for m := 0; m < 64; m++ {
 		var cnt int
 		for i := 0; i < 6; i++ {
@@ -792,9 +798,12 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 	}
 
 	preferred := directMask(pixels)
-
+	transCount := bits.OnesCount8(transMask)
 	bestScore := math.MaxInt
-	var bestCell cellResult
+	var bestMask uint8
+	var bestFgR, bestFgG, bestFgB int
+	var bestBgR, bestBgG, bestBgB int
+	var bestFgN, bestBgN int
 	bestPreferredOverlap := -1
 	bestPopcount := -1
 
@@ -814,25 +823,22 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 			fgSumB += pb[i]
 		}
 
+		var fgR, fgG, fgB int
+		if fgN > 0 {
+			fgR = int(divTable[fgN][fgSumR])
+			fgG = int(divTable[fgN][fgSumG])
+			fgB = int(divTable[fgN][fgSumB])
+		}
+
 		var bgSumR, bgSumG, bgSumB int
+		var bgR, bgG, bgB int
 		if bgN > 0 {
 			bgSumR = totalSumR - fgSumR
 			bgSumG = totalSumG - fgSumG
 			bgSumB = totalSumB - fgSumB
-		}
-
-		var fgR, fgG, fgB int
-		if fgN > 0 {
-			fgR = fgSumR / fgN
-			fgG = fgSumG / fgN
-			fgB = fgSumB / fgN
-		}
-
-		var bgR, bgG, bgB int
-		if bgN > 0 {
-			bgR = bgSumR / bgN
-			bgG = bgSumG / bgN
-			bgB = bgSumB / bgN
+			bgR = int(divTable[bgN][bgSumR])
+			bgG = int(divTable[bgN][bgSumG])
+			bgB = int(divTable[bgN][bgSumB])
 		}
 
 		score := totalSqSum
@@ -846,26 +852,15 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 		}
 
 		if bgN > 0 {
-			transCount := bits.OnesCount8(transMask)
 			score += transCount * transparentOverpaintPenalty
 		} else {
 			transFGCount := bits.OnesCount8(m & transMask)
 			score += transFGCount * transparentOverpaintPenalty
 		}
 
-		cell := cellResult{
-			ch:   sextantRunes[m],
-			mask: m,
+		if score > bestScore {
+			continue
 		}
-		if fgN > 0 {
-			cell.fg = color.RGBA{R: uint8(fgR), G: uint8(fgG), B: uint8(fgB), A: 255}
-			cell.hasFG = true
-		}
-		if bgN > 0 {
-			cell.bg = color.RGBA{R: uint8(bgR), G: uint8(bgG), B: uint8(bgB), A: 255}
-			cell.hasBG = true
-		}
-
 
 		overlap := bits.OnesCount8(m & preferred)
 		pop := bits.OnesCount8(m)
@@ -876,10 +871,26 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 
 		if better {
 			bestScore = score
-			bestCell = cell
+			bestMask = m
+			bestFgR, bestFgG, bestFgB = fgR, fgG, fgB
+			bestBgR, bestBgG, bestBgB = bgR, bgG, bgB
+			bestFgN, bestBgN = fgN, bgN
 			bestPreferredOverlap = overlap
 			bestPopcount = pop
 		}
+	}
+
+	bestCell := cellResult{
+		ch:   sextantRunes[bestMask],
+		mask: bestMask,
+	}
+	if bestFgN > 0 {
+		bestCell.fg = color.RGBA{R: uint8(bestFgR), G: uint8(bestFgG), B: uint8(bestFgB), A: 255}
+		bestCell.hasFG = true
+	}
+	if bestBgN > 0 {
+		bestCell.bg = color.RGBA{R: uint8(bestBgR), G: uint8(bestBgG), B: uint8(bestBgB), A: 255}
+		bestCell.hasBG = true
 	}
 
 	return bestCell
@@ -962,8 +973,9 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 
 	colCount := (b.Dx() + blockCols - 1) / blockCols
 	cells := make([][]core.Cell, rowCount)
+	cellStorage := make([]core.Cell, rowCount*colCount)
 	for r := range cells {
-		cells[r] = make([]core.Cell, colCount)
+		cells[r] = cellStorage[r*colCount : (r+1)*colCount]
 	}
 
 	renderRow := func(row int) {
@@ -1116,18 +1128,40 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 					x1 := min(x0+blockCols, b.Max.X)
 					pixels := sampleBlock(img, x0, x1, y0, y1)
 					cell := chooseCell(pixels, mode)
-					for idx := range pixels {
-						if !emittedCoverage(cell, idx) {
-							continue
+					if core.Fastpath {
+						for idx := range pixels {
+							if !emittedCoverage(cell, idx) {
+								continue
+							}
+							target := cell.bg
+							if maskContains(cell.mask, idx) {
+								target = cell.fg
+							}
+							yy := y0 + idx/blockCols
+							xx := x0 + idx%blockCols
+							if xx < b.Max.X && yy < b.Max.Y {
+								off := dst.PixOffset(xx, yy)
+								p := dst.Pix[off : off+4 : off+4]
+								p[0] = target.R
+								p[1] = target.G
+								p[2] = target.B
+								p[3] = target.A
+							}
 						}
-						target := cell.bg
-						if maskContains(cell.mask, idx) {
-							target = cell.fg
-						}
-						yy := y0 + idx/blockCols
-						xx := x0 + idx%blockCols
-						if xx < b.Max.X && yy < b.Max.Y {
-							dst.SetRGBA(xx, yy, target)
+					} else {
+						for idx := range pixels {
+							if !emittedCoverage(cell, idx) {
+								continue
+							}
+							target := cell.bg
+							if maskContains(cell.mask, idx) {
+								target = cell.fg
+							}
+							yy := y0 + idx/blockCols
+							xx := x0 + idx%blockCols
+							if xx < b.Max.X && yy < b.Max.Y {
+								dst.SetRGBA(xx, yy, target)
+							}
 						}
 					}
 				}

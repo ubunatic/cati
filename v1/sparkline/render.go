@@ -6,7 +6,6 @@ import (
 	"image/color"
 	"io"
 	"math"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -202,8 +201,8 @@ func RenderToGrid(img image.Image, cols int, opts Options) (*core.Grid, error) {
 		if workerN > outRows {
 			workerN = outRows
 		}
-		if workerN > runtime.NumCPU() {
-			workerN = runtime.NumCPU()
+		if workerN > core.MaxWorkers() {
+			workerN = core.MaxWorkers()
 		}
 		for range workerN {
 			go func() {
@@ -398,7 +397,7 @@ func RenderToImageWithOptionsJ(img image.Image, outCols, outRows int, opts Optio
 func parallelRows(rows, jobs int, renderRow func(int)) {
 	jobsCh := make(chan int)
 	var wg sync.WaitGroup
-	workerN := min(jobs, min(rows, runtime.NumCPU()))
+	workerN := min(jobs, min(rows, core.MaxWorkers()))
 	for range workerN {
 		go func() {
 			for row := range jobsCh {
