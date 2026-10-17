@@ -26,12 +26,16 @@ used a stale Go version and required Docker directly.
   output directory is writable from the host.
 - Container-specific skip: `internal/audio.TestPlayAudio` checks
   `CATI_CONTAINER_TEST=1` and skips audio output. The PTY test
-  `TestInteractiveSmallGradientViaPTY` is tagged `integration` and remains
-  outside the default suite. No default tests require GPU or network access.
+  `TestInteractiveSmallGradientViaPTY` also skips with that flag and is tagged
+  `integration`, outside the default suite. No default tests require GPU or
+  network access.
 
 ## Verification
 
-- `make container-test` passes locally with podman or docker.
+- `make container-test` could not start in the current tool environment:
+  rootless podman is denied namespace cloning, and the quota wrapper cannot see
+  the host podman socket. The target must still be run on a host where podman or
+  docker is permitted before closing this ticket.
 - Validate `.github/workflows/ci.yaml` with actionlint or PyYAML.
 - Make the CI test and REUSE jobs required status checks in repository settings
   after the workflow is merged.
