@@ -705,4 +705,3 @@ func TestCustomGlyphReconstructionVectorAndUnevenDimensions(t *testing.T) {
 		}
 	}
 }
-

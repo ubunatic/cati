@@ -711,4 +711,3 @@ func TestQuadblockFastpathParity_NRGBAAndNonzeroBounds(t *testing.T) {
 		})
 	}
 }
-

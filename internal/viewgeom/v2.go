@@ -135,4 +135,3 @@ func (s V2Spec) FitWidthPrimary(srcW, srcH, cols, rows int, frame bool) V2Plan {
 
 	return plan
 }
-

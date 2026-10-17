@@ -39,12 +39,25 @@ Additional suites are opt-in:
 
 Other checks:
 
+- `make ci-test` — gofmt check, vet, build, both fastpath test modes, and the
+  race-enabled suite. CI uses Go 1.26.0 and checks out Git LFS media fixtures.
+- `make container-test` — runs the same checks in the pinned Dockerfile image
+  using podman when available, otherwise docker. The container filesystem is
+  read-only apart from `/tmp` and the host output directory
+  (`CONTAINER_OUTPUT`, default `.container-test-output/`).
 - `go test -bench=.` — runs performance benchmarks; benchmarks are not part of
   the normal test run.
 - `make preflight` — builds the binaries, runs `go vet`, and checks that the
   demo renderer reports no errors.
 - `make docker-test` — runs the tests with the pinned Go toolchain, useful when
   validating PNG golden-image changes.
+
+Container tests set `CATI_CONTAINER_TEST=1`. Audio playback skips because the
+container has no host audio device. The default suite does not include the
+tagged PTY integration suite; no default tests require a GPU or network access.
+Media probing and video decoding still run when FFmpeg and real LFS assets are
+available. `internal/testutil.RequireMedia` skips missing fixtures, LFS pointer
+files, or missing FFmpeg tools, while decoder errors on present media fail.
 
 For a real asset speed comparison, run `cati --bench <mediafile>`. Each mode
 is measured with fast paths on and off (`core.Fastpath`) and the row shows the

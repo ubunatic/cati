@@ -195,7 +195,7 @@ func BenchmarkRenderTpl(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = renderTpl(tpl, vars, baseAnsi)
-  }
+	}
 }
 
 func TestStyleAndAboutFixturesDriveOutput(t *testing.T) {

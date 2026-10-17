@@ -207,7 +207,7 @@ func extractH1(content string) string {
 func writeTOCEntry(sb *strings.Builder, p DocPage, childrenMap map[string][]DocPage, depth int) {
 	indent := strings.Repeat("    ", depth)
 	sb.WriteString(fmt.Sprintf("%s- [%s](%s)\n", indent, p.Title, p.Filename))
-	
+
 	// Print children
 	if children, exists := childrenMap[p.Filename]; exists {
 		for _, child := range children {
@@ -224,7 +224,7 @@ func syncExample() {
 		os.Exit(1)
 	}
 	exampleStr := string(exampleBytes)
-	
+
 	// Strip build tag if present
 	buildTag := "//go:build ignore"
 	if strings.HasPrefix(exampleStr, buildTag) {

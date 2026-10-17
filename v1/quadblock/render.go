@@ -84,9 +84,9 @@ func nrgbaToRGBA(r, g, b, a uint8) color.RGBA {
 		return color.RGBA{R: r, G: g, B: b, A: 255}
 	}
 	return color.RGBA{
-		R: uint8((uint32(r)*0x101*uint32(a)/0xff) >> 8),
-		G: uint8((uint32(g)*0x101*uint32(a)/0xff) >> 8),
-		B: uint8((uint32(b)*0x101*uint32(a)/0xff) >> 8),
+		R: uint8((uint32(r) * 0x101 * uint32(a) / 0xff) >> 8),
+		G: uint8((uint32(g) * 0x101 * uint32(a) / 0xff) >> 8),
+		B: uint8((uint32(b) * 0x101 * uint32(a) / 0xff) >> 8),
 		A: a,
 	}
 }

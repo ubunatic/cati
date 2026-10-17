@@ -1,6 +1,8 @@
 .git
 website/book
+.container-test-output
 cati
 catiplay
 catibrowse
 demo_widths
+dist

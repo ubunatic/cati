@@ -13,3 +13,4 @@ catibrowse
 /go.work.sum
 /imgbrowser
 /dist/
+/.container-test-output/

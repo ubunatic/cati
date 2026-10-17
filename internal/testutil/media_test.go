@@ -42,3 +42,15 @@ func TestRequireMedia(t *testing.T) {
 		})
 	}
 }
+
+func TestSkipInContainer(t *testing.T) {
+	t.Setenv("CATI_CONTAINER_TEST", "1")
+	var check *testing.T
+	t.Run("device-dependent test", func(t *testing.T) {
+		check = t
+		SkipInContainer(t, "host audio playback")
+	})
+	if !check.Skipped() {
+		t.Fatal("SkipInContainer did not skip a container-only test")
+	}
+}

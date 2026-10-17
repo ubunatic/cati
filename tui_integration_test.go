@@ -67,6 +67,7 @@ func TestInteractiveSmallGradientViaPipedStdin(t *testing.T) {
 }
 
 func TestInteractiveSmallGradientViaPTY(t *testing.T) {
+	testutil.SkipInContainer(t, "PTY terminal interaction")
 	if testing.Short() {
 		t.Skip("skipping PTY integration test in short mode")
 	}

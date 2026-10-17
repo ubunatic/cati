@@ -21,6 +21,9 @@ export CATI_FASTPATH ?= 1
 
 # Keep stdlib-decoder goldens reproducible and ignore any enclosing workspace.
 GO_TEST_ENV := GOWORK=off GOTOOLCHAIN=go1.26.0
+ENGINE ?= $(shell command -v podman || command -v docker)
+CONTAINER_ENGINE_ARGS ?=
+CONTAINER_OUTPUT ?= $(CURDIR)/.container-test-output
 
 help: 🤖  # show this help
 	@grep -E '^[a-zA-Z_-]+:.*[⚙🤖].*#+' $(MAKEFILE_LIST) | \
@@ -70,6 +73,16 @@ test: ⚙️  ## run linter and tests
 	$(GO_TEST_ENV) go test ./...
 	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0 ./...
 
+fmt-check: ⚙️  ## verify Go files are gofmt-clean
+	@test -z "$$(gofmt -l $$(find . -type f -name '*.go' -not -path './.git/*'))"
+
+ci-test: ⚙️ fmt-check  ## run CI build, vet, tests and race checks
+	$(GO_TEST_ENV) go vet ./...
+	$(GO_TEST_ENV) go build ./...
+	$(GO_TEST_ENV) go test ./...
+	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0 ./...
+	$(GO_TEST_ENV) go test -race ./...
+
 test-player: ⚙️  ## run catiplay-specific tests
 	$(GO_TEST_ENV) go test -tags=catiplay ./cmd
 	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0,catiplay ./cmd
@@ -85,8 +98,13 @@ test-integration: ⚙️ build  ## run terminal integration tests
 test-all: ⚙️ test test-player test-browser test-integration  ## run default and optional tests
 
 docker-test: ⚙️  ## run tests in the pinned Go toolchain (avoids golden drift across machines)
-	docker build -t cati-test .
-	docker run --rm cati-test
+	$(MAKE) container-test
+
+container-test: ⚙️  ## run CI checks in a read-only podman/docker container
+	@test -n "$(ENGINE)" || { printf '%s\n' 'podman or docker is required'; exit 1; }
+	mkdir -p "$(CONTAINER_OUTPUT)"
+	$(ENGINE) $(CONTAINER_ENGINE_ARGS) build -f Dockerfile -t cati-test .
+	$(ENGINE) $(CONTAINER_ENGINE_ARGS) run --rm --read-only --tmpfs /tmp --mount type=bind,source="$(CONTAINER_OUTPUT)",target=/out,rw --env CATI_CONTAINER_TEST=1 cati-test
 
 docker-update-goldens: ⚙️  ## regenerate goldens using the pinned Go toolchain (review the diff before committing)
 	docker build -t cati-test .

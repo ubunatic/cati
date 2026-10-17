@@ -47,8 +47,8 @@ func loadPixelAspectPolicy(files fs.FS) (PixelAspectPolicy, error) {
 		return PixelAspectPolicy{}, fmt.Errorf("aspect policy: %w", err)
 	}
 	var document struct {
-		Schema  string `yaml:"$schema"`
-		Pixel   struct {
+		Schema string `yaml:"$schema"`
+		Pixel  struct {
 			MaxDistortion *float64 `yaml:"max_distortion"`
 			MaxPadding    *float64 `yaml:"max_padding"`
 		} `yaml:"pixel"`

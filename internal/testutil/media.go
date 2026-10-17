@@ -9,6 +9,14 @@ import (
 	"testing"
 )
 
+// SkipInContainer skips tests that require host devices unavailable to containers.
+func SkipInContainer(t testing.TB, requirement string) {
+	t.Helper()
+	if os.Getenv("CATI_CONTAINER_TEST") == "1" {
+		t.Skipf("container test skips %s", requirement)
+	}
+}
+
 // RequireMedia skips tests whose media or external tools are unavailable.
 // Other read errors fail the test; malformed media still reaches the decoder.
 func RequireMedia(t testing.TB, path string, commands ...string) {
