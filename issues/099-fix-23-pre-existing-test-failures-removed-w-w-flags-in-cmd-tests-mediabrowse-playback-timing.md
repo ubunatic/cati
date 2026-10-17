@@ -1,6 +1,6 @@
 # Fix pre-existing test failures on main
 
-**Status**: Open
+**Status**: Closed — Fixed in 5ce50a0; make test-q1 passes fast/reference suites and make preflight passes
 **Priority**: P1
 **Category**: Bug
 
