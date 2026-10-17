@@ -4,7 +4,7 @@
 **Priority**: P1 (High)
 **Severity**: Moderate
 **Category**: Infrastructure
-**Related**: [096](096-skip-media-tests-when-git-lfs-assets-are-pointer-files.md), [Testing](../docs/Testing.md), `Makefile`, `Dockerfile`, PR #56 (merged with zero checks)
+**Related**: [100](100-skip-media-tests-when-git-lfs-assets-are-pointer-files.md), [Testing](../docs/Testing.md), `Makefile`, `Dockerfile`, PR #56 (merged with zero checks)
 
 ---
 
@@ -33,8 +33,8 @@ unnoticed.
   `v1/halfblock/video.go` shell out to `ffmpeg`/`ffprobe`. The `Dockerfile` installs `ffmpeg`.
 - **LFS:** `*.mp4`, `*.webm`, and `docs/feedback/*.png` are Git LFS (`.gitattributes`).
   Without `lfs: true` on checkout, `TestProbeAudio` and
-  `TestRealVideoPlaybackIntegration` fail (see 096). LFS bandwidth on GitHub
-  is metered, so prefer skipping (096) over pulling LFS on every run.
+  `TestRealVideoPlaybackIntegration` fail (see 100). LFS bandwidth on GitHub
+  is metered, so prefer skipping (100) over pulling LFS on every run.
 - **License:** `REUSE.toml` exists; `make reuse` runs `reuse lint`.
 
 ## 3. Implementation & Verification Plan
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4          # no lfs: media tests skip via 096
+      - uses: actions/checkout@v4          # no lfs: media tests skip via 100
       - uses: actions/setup-go@v5
         with: { go-version-file: go.mod, cache: true }
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
@@ -71,7 +71,7 @@ jobs:
 ```
 
 Steps:
-1. Land 096 first (or in the same PR). Otherwise CI starts red on the LFS
+1. Land 100 first (or in the same PR). Otherwise CI starts red on the LFS
    pointer failures. Do not add `lfs: true` as a workaround.
 2. Pin actions to the major tags above. Dependabot for `github-actions` is
    optional (`.github/dependabot.yml`, weekly).

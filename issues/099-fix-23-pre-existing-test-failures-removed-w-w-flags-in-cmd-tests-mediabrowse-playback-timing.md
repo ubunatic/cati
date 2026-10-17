@@ -41,4 +41,4 @@ Failing tests:
 ## Acceptance
 - Tests use the current width flags (or the CLI restores the documented shorthand, per spec).
 - mediabrowse playback test is deterministic.
-- `go test ./...` green; CI ticket 097 can then gate on it.
+- `go test ./...` green; CI ticket 101 can then gate on it.
