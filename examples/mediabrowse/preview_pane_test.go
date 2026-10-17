@@ -15,10 +15,11 @@ import (
 	"ubunatic.com/cati/v1/core"
 )
 
-func withWidgetFactories(t *testing.T) {
+func testPreviewPane(t *testing.T, mode media.Mode, fps float64, factories previewWidgetFactories) *mediaPreviewPane {
 	t.Helper()
-	oldImage, oldVideo := loadImageWidget, newVideoWidget
-	t.Cleanup(func() { loadImageWidget, newVideoWidget = oldImage, oldVideo })
+	p := newMediaPreviewPaneWithFactories(mode, fps, factories)
+	t.Cleanup(p.Close)
+	return p
 }
 
 func waitForCondition(t *testing.T, timeout time.Duration, cond func() bool) {
@@ -34,7 +35,7 @@ func waitForCondition(t *testing.T, timeout time.Duration, cond func() bool) {
 }
 
 func TestPreviewPaneConstructionStateAndMessages(t *testing.T) {
-	p := newMediaPreviewPane(media.ModeHalfblock, 0)
+	p := testPreviewPane(t, media.ModeHalfblock, 0, defaultPreviewWidgetFactories())
 	if p.fps != 24 || p.Title() != "Preview" {
 		t.Fatalf("initial preview state: fps=%v title=%q", p.fps, p.Title())
 	}
@@ -53,17 +54,17 @@ func TestPreviewPaneConstructionStateAndMessages(t *testing.T) {
 }
 
 func TestPreviewPaneModeCycleAndImageDispatch(t *testing.T) {
-	withWidgetFactories(t)
+	factories := defaultPreviewWidgetFactories()
 	var modes []media.Mode
-	loadImageWidget = func(_ context.Context, _ string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
+	factories.loadImage = func(_ context.Context, _ string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
 		modes = append(modes, mode)
 		return nil, nil
 	}
-	newVideoWidget = func(string, media.Mode, float64) (*media.Widget, error) {
+	factories.newVideo = func(string, media.Mode, float64) (*media.Widget, error) {
 		t.Fatal("still image was dispatched to video loader")
 		return nil, nil
 	}
-	p := newMediaPreviewPane(media.ModeHalfblock, 30)
+	p := testPreviewPane(t, media.ModeHalfblock, 30, factories)
 	p.SetPath("still.png")
 	waitForCondition(t, 200*time.Millisecond, func() bool {
 		p.mu.Lock()
@@ -93,23 +94,23 @@ func TestPreviewPaneModeCycleAndImageDispatch(t *testing.T) {
 }
 
 func TestPreviewPaneVideoDispatchAndErrors(t *testing.T) {
-	withWidgetFactories(t)
+	factories := defaultPreviewWidgetFactories()
 	imageCalls, videoCalls := 0, 0
-	loadImageWidget = func(_ context.Context, path string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
+	factories.loadImage = func(_ context.Context, path string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
 		imageCalls++
 		if filepath.Ext(path) != ".mp4" || mode != media.ModeHalfblock {
 			t.Errorf("image loader args = %q, %q", path, mode)
 		}
 		return nil, nil
 	}
-	newVideoWidget = func(path string, mode media.Mode, fps float64) (*media.Widget, error) {
+	factories.newVideo = func(path string, mode media.Mode, fps float64) (*media.Widget, error) {
 		videoCalls++
 		if filepath.Ext(path) != ".mp4" || mode != media.ModeHalfblock || fps != 18 {
 			t.Errorf("video loader args = %q, %q, %v", path, mode, fps)
 		}
 		return nil, nil
 	}
-	p := newMediaPreviewPane(media.ModeHalfblock, 18)
+	p := testPreviewPane(t, media.ModeHalfblock, 18, factories)
 	p.SetPath("clip.mp4")
 	waitForCondition(t, 200*time.Millisecond, func() bool {
 		p.mu.Lock()
@@ -133,7 +134,7 @@ func TestPreviewPaneVideoDispatchAndErrors(t *testing.T) {
 		t.Errorf("SetMessage state: path=%q message=%q playing=%v", p.currentPath, p.message, p.playing)
 	}
 
-	loadImageWidget = func(_ context.Context, _ string, _ media.Mode, _ func(core.Progress)) (*media.Widget, error) {
+	p.loadImage = func(_ context.Context, _ string, _ media.Mode, _ func(core.Progress)) (*media.Widget, error) {
 		return nil, errors.New("bad image")
 	}
 	p.SetPath("broken.jpg")
@@ -145,11 +146,11 @@ func TestPreviewPaneVideoDispatchAndErrors(t *testing.T) {
 }
 
 func TestPreviewPaneProgressAndCancellation(t *testing.T) {
-	withWidgetFactories(t)
+	factories := defaultPreviewWidgetFactories()
 	unblock := make(chan struct{})
 	firstStarted := make(chan struct{})
 
-	loadImageWidget = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
+	factories.loadImage = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
 		if path == "slow.png" {
 			close(firstStarted)
 			onProgress(core.Progress{Stage: "decoding", Ratio: 0.42})
@@ -163,7 +164,7 @@ func TestPreviewPaneProgressAndCancellation(t *testing.T) {
 		return nil, nil
 	}
 
-	p := newMediaPreviewPane(media.ModeHalfblock, 24)
+	p := testPreviewPane(t, media.ModeHalfblock, 24, factories)
 	p.SetPath("slow.png")
 	<-firstStarted
 
@@ -192,16 +193,46 @@ func TestPreviewPaneProgressAndCancellation(t *testing.T) {
 	close(unblock)
 }
 
+func TestPreviewPaneCloseWaitsForPendingLoad(t *testing.T) {
+	factories := defaultPreviewWidgetFactories()
+	started := make(chan struct{})
+	exited := make(chan struct{})
+	factories.loadImage = func(ctx context.Context, _ string, _ media.Mode, _ func(core.Progress)) (*media.Widget, error) {
+		close(started)
+		<-ctx.Done()
+		close(exited)
+		return nil, ctx.Err()
+	}
+	p := testPreviewPane(t, media.ModeHalfblock, 24, factories)
+	p.SetPath("slow.png")
+	<-started
+	p.Close()
+	select {
+	case <-exited:
+	default:
+		t.Fatal("Close returned before the pending image load exited")
+	}
+	modeBeforeClose := p.mode
+	messageBeforeClose := p.message
+	p.CycleMode()
+	p.TogglePlay()
+	p.SetMessage("after close")
+	p.SetPath("after-close.png")
+	if p.loading || p.currentPath != "slow.png" || p.mode != modeBeforeClose || p.message != messageBeforeClose {
+		t.Fatalf("closed preview pane changed state: loading=%v path=%q mode=%q message=%q", p.loading, p.currentPath, p.mode, p.message)
+	}
+}
+
 func TestPreviewPaneKeyHandlingAndStillPlayNoop(t *testing.T) {
-	withWidgetFactories(t)
-	loadImageWidget = func(_ context.Context, _ string, _ media.Mode, _ func(core.Progress)) (*media.Widget, error) {
+	factories := defaultPreviewWidgetFactories()
+	factories.loadImage = func(_ context.Context, _ string, _ media.Mode, _ func(core.Progress)) (*media.Widget, error) {
 		return nil, nil
 	}
-	newVideoWidget = func(string, media.Mode, float64) (*media.Widget, error) {
+	factories.newVideo = func(string, media.Mode, float64) (*media.Widget, error) {
 		t.Fatal("still image play toggle attempted video load")
 		return nil, nil
 	}
-	p := newMediaPreviewPane(media.ModeHalfblock, 24)
+	p := testPreviewPane(t, media.ModeHalfblock, 24, factories)
 	p.SetPath("still.png")
 	waitForCondition(t, 200*time.Millisecond, func() bool {
 		p.mu.Lock()
@@ -227,11 +258,13 @@ func TestPreviewPaneKeyHandlingAndStillPlayNoop(t *testing.T) {
 }
 
 func TestPreviewPaneVideoPlayDuringAsyncStillLoad(t *testing.T) {
-	withWidgetFactories(t)
+	factories := defaultPreviewWidgetFactories()
 	stillStarted := make(chan struct{})
 	unblockStill := make(chan struct{})
+	stillExited := make(chan struct{})
 
-	loadImageWidget = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
+	factories.loadImage = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
+		defer close(stillExited)
 		close(stillStarted)
 		<-unblockStill
 		return nil, errors.New("simulated background failure after cancel")
@@ -241,11 +274,18 @@ func TestPreviewPaneVideoPlayDuringAsyncStillLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	newVideoWidget = func(path string, mode media.Mode, fps float64) (*media.Widget, error) {
+	factories.newVideo = func(path string, mode media.Mode, fps float64) (*media.Widget, error) {
 		return fakeVideoWidget, nil
 	}
 
-	p := newMediaPreviewPane(media.ModeHalfblock, 24)
+	p := testPreviewPane(t, media.ModeHalfblock, 24, factories)
+	t.Cleanup(func() {
+		select {
+		case <-unblockStill:
+		default:
+			close(unblockStill)
+		}
+	})
 	p.SetPath("clip.mp4")
 	<-stillStarted
 
@@ -260,7 +300,7 @@ func TestPreviewPaneVideoPlayDuringAsyncStillLoad(t *testing.T) {
 
 	// Unblock the still frame goroutine and ensure it does not discard the video widget
 	close(unblockStill)
-	time.Sleep(20 * time.Millisecond)
+	<-stillExited
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -276,7 +316,7 @@ func TestPreviewPaneVideoPlayDuringAsyncStillLoad(t *testing.T) {
 }
 
 func TestPreviewPaneRepeatedPlayPauseDoesNotReloadPreview(t *testing.T) {
-	withWidgetFactories(t)
+	factories := defaultPreviewWidgetFactories()
 	stillLoads := 0
 	videoLoads := 0
 
@@ -289,16 +329,16 @@ func TestPreviewPaneRepeatedPlayPauseDoesNotReloadPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loadImageWidget = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
+	factories.loadImage = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
 		stillLoads++
 		return previewWidget, nil
 	}
-	newVideoWidget = func(path string, mode media.Mode, fps float64) (*media.Widget, error) {
+	factories.newVideo = func(path string, mode media.Mode, fps float64) (*media.Widget, error) {
 		videoLoads++
 		return fakeVideoWidget, nil
 	}
 
-	p := newMediaPreviewPane(media.ModeHalfblock, 24)
+	p := testPreviewPane(t, media.ModeHalfblock, 24, factories)
 	p.SetPath("video.mp4")
 
 	waitForCondition(t, 200*time.Millisecond, func() bool {
@@ -354,22 +394,22 @@ func TestPreviewPaneRepeatedPlayPauseDoesNotReloadPreview(t *testing.T) {
 }
 
 func TestPreviewPaneAutoPauseOnVideoEOFAndRestart(t *testing.T) {
-	withWidgetFactories(t)
+	factories := defaultPreviewWidgetFactories()
 	videoLoads := 0
 	fakeVideoWidget, err := media.NewImage(image.NewRGBA(image.Rect(0, 0, 2, 2)), media.ModeHalfblock)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	loadImageWidget = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
+	factories.loadImage = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
 		return nil, nil
 	}
-	newVideoWidget = func(path string, mode media.Mode, fps float64) (*media.Widget, error) {
+	factories.newVideo = func(path string, mode media.Mode, fps float64) (*media.Widget, error) {
 		videoLoads++
 		return fakeVideoWidget, nil
 	}
 
-	p := newMediaPreviewPane(media.ModeHalfblock, 24)
+	p := testPreviewPane(t, media.ModeHalfblock, 24, factories)
 	p.SetPath("video.mp4")
 	waitForCondition(t, 200*time.Millisecond, func() bool {
 		p.mu.Lock()

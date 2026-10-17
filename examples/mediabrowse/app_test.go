@@ -183,17 +183,18 @@ func TestThemeResolutionCyclingAndFullscreenKeys(t *testing.T) {
 }
 
 func TestAppKeyRoutingAcrossPanesAndSearch(t *testing.T) {
-	withWidgetFactories(t)
-	loadImageWidget = func(_ context.Context, _ string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
-		return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
-	}
-	newVideoWidget = func(_ string, mode media.Mode, _ float64) (*media.Widget, error) {
-		return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
+	factories := previewWidgetFactories{
+		loadImage: func(_ context.Context, _ string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
+			return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
+		},
+		newVideo: func(_ string, mode media.Mode, _ float64) (*media.Widget, error) {
+			return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
+		},
 	}
 
 	root := t.TempDir()
 	writeFixture(t, filepath.Join(root, "clip.mp4"))
-	a, err := newApp(root, "mc", media.ModeHalfblock, 24, false, 20)
+	a, err := newAppWithPreviewFactories(root, "mc", media.ModeHalfblock, 24, false, 20, factories)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,17 +290,18 @@ func TestCycleThemeVisitsEverySpeccedThemeAndWraps(t *testing.T) {
 }
 
 func TestAppTickerInterface(t *testing.T) {
-	withWidgetFactories(t)
-	loadImageWidget = func(_ context.Context, _ string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
-		return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
-	}
-	newVideoWidget = func(_ string, mode media.Mode, _ float64) (*media.Widget, error) {
-		return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
+	factories := previewWidgetFactories{
+		loadImage: func(_ context.Context, _ string, mode media.Mode, _ func(core.Progress)) (*media.Widget, error) {
+			return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
+		},
+		newVideo: func(_ string, mode media.Mode, _ float64) (*media.Widget, error) {
+			return media.NewImage(image.NewRGBA(image.Rect(0, 0, 1, 1)), mode)
+		},
 	}
 
 	root := t.TempDir()
 	writeFixture(t, filepath.Join(root, "clip.mp4"))
-	a, err := newApp(root, "mc", media.ModeHalfblock, 24, false, 20)
+	a, err := newAppWithPreviewFactories(root, "mc", media.ModeHalfblock, 24, false, 20, factories)
 	if err != nil {
 		t.Fatal(err)
 	}

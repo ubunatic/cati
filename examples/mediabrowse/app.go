@@ -53,6 +53,10 @@ type app struct {
 }
 
 func newApp(dir, themeName string, initialMode media.Mode, fps float64, imagesOnly bool, initialHeight int, initialSelection ...string) (*app, error) {
+	return newAppWithPreviewFactories(dir, themeName, initialMode, fps, imagesOnly, initialHeight, defaultPreviewWidgetFactories(), initialSelection...)
+}
+
+func newAppWithPreviewFactories(dir, themeName string, initialMode media.Mode, fps float64, imagesOnly bool, initialHeight int, factories previewWidgetFactories, initialSelection ...string) (*app, error) {
 	if initialHeight < 10 {
 		initialHeight = 30
 	}
@@ -64,7 +68,7 @@ func newApp(dir, themeName string, initialMode media.Mode, fps float64, imagesOn
 		imagesOnly: imagesOnly,
 		boxHeight:  initialHeight,
 		fps:        fps,
-		preview:    newMediaPreviewPane(initialMode, fps),
+		preview:    newMediaPreviewPaneWithFactories(initialMode, fps, factories),
 	}
 
 	border := loom.BoxBorder{

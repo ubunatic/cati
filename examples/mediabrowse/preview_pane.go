@@ -17,6 +17,10 @@ import (
 
 type mediaPreviewPane struct {
 	mu          sync.Mutex
+	loads       sync.WaitGroup
+	closed      bool
+	loadImage   func(context.Context, string, media.Mode, func(core.Progress)) (*media.Widget, error)
+	newVideo    func(string, media.Mode, float64) (*media.Widget, error)
 	mode        media.Mode
 	currentPath string
 	message     string
@@ -34,32 +38,53 @@ type mediaPreviewPane struct {
 	generation  uint64
 }
 
-var (
-	loadImageWidget = func(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
-		img, err := halfblock.LoadImageContext(ctx, path, onProgress)
-		if err != nil {
-			return nil, err
-		}
-		return media.NewImage(img, mode)
+func defaultLoadImageWidget(ctx context.Context, path string, mode media.Mode, onProgress func(core.Progress)) (*media.Widget, error) {
+	img, err := halfblock.LoadImageContext(ctx, path, onProgress)
+	if err != nil {
+		return nil, err
 	}
-	newVideoWidget = media.NewVideo
-)
+	return media.NewImage(img, mode)
+}
+
+type previewWidgetFactories struct {
+	loadImage func(context.Context, string, media.Mode, func(core.Progress)) (*media.Widget, error)
+	newVideo  func(string, media.Mode, float64) (*media.Widget, error)
+}
+
+func defaultPreviewWidgetFactories() previewWidgetFactories {
+	return previewWidgetFactories{loadImage: defaultLoadImageWidget, newVideo: media.NewVideo}
+}
 
 func newMediaPreviewPane(mode media.Mode, fps float64) *mediaPreviewPane {
+	return newMediaPreviewPaneWithFactories(mode, fps, defaultPreviewWidgetFactories())
+}
+
+func newMediaPreviewPaneWithFactories(mode media.Mode, fps float64, factories previewWidgetFactories) *mediaPreviewPane {
 	if fps <= 0 {
 		fps = 24.0
 	}
+	defaults := defaultPreviewWidgetFactories()
+	if factories.loadImage == nil {
+		factories.loadImage = defaults.loadImage
+	}
+	if factories.newVideo == nil {
+		factories.newVideo = defaults.newVideo
+	}
 	return &mediaPreviewPane{
-		mode: mode,
-		fps:  fps,
+		mode:      mode,
+		fps:       fps,
+		loadImage: factories.loadImage,
+		newVideo:  factories.newVideo,
 	}
 }
 
 func (p *mediaPreviewPane) Close() {
 	p.mu.Lock()
-	defer p.mu.Unlock()
+	p.closed = true
 	p.cancelLoadingLocked()
 	p.closeMediaLocked()
+	p.mu.Unlock()
+	p.loads.Wait()
 }
 
 func (p *mediaPreviewPane) cancelLoadingLocked() {
@@ -110,6 +135,9 @@ func (p *mediaPreviewPane) Title() string {
 func (p *mediaPreviewPane) SetMessage(msg string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.closed {
+		return
+	}
 	p.cancelLoadingLocked()
 	p.closeMediaLocked()
 	p.currentPath = ""
@@ -120,6 +148,9 @@ func (p *mediaPreviewPane) SetMessage(msg string) {
 func (p *mediaPreviewPane) SetPath(path string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.closed {
+		return
+	}
 	if path == p.currentPath && (p.preview != nil || p.video != nil || p.loading) {
 		return
 	}
@@ -144,9 +175,12 @@ func (p *mediaPreviewPane) loadPreviewLocked() {
 	p.cancel = cancel
 	path := p.currentPath
 	mode := p.mode
+	loadImage := p.loadImage
+	p.loads.Add(1)
 
 	go func(gen uint64, path string, mode media.Mode) {
-		w, err := loadImageWidget(ctx, path, mode, func(prog core.Progress) {
+		defer p.loads.Done()
+		w, err := loadImage(ctx, path, mode, func(prog core.Progress) {
 			p.mu.Lock()
 			defer p.mu.Unlock()
 			if p.generation != gen || !p.loading {
@@ -195,6 +229,9 @@ func (p *mediaPreviewPane) loadPreviewLocked() {
 func (p *mediaPreviewPane) CycleMode() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.closed {
+		return
+	}
 	switch p.mode {
 	case media.ModeHalfblock:
 		p.mode = media.ModeQuadblock
@@ -214,7 +251,7 @@ func (p *mediaPreviewPane) CycleMode() {
 			}
 			p.videoEnded = false
 			p.videoReady = false
-			w, err := newVideoWidget(p.currentPath, p.mode, p.fps)
+			w, err := p.newVideo(p.currentPath, p.mode, p.fps)
 			if err != nil {
 				p.message = "Video error: " + err.Error()
 				p.playing = false
@@ -238,6 +275,9 @@ func (p *mediaPreviewPane) CycleMode() {
 func (p *mediaPreviewPane) TogglePlay() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.closed {
+		return
+	}
 	if p.currentPath == "" || !halfblock.IsVideo(p.currentPath) {
 		return
 	}
@@ -251,7 +291,7 @@ func (p *mediaPreviewPane) TogglePlay() {
 			}
 			p.videoEnded = false
 			p.videoReady = false
-			w, err := newVideoWidget(p.currentPath, p.mode, p.fps)
+			w, err := p.newVideo(p.currentPath, p.mode, p.fps)
 			if err != nil {
 				p.message = "Video error: " + err.Error()
 				p.playing = false
