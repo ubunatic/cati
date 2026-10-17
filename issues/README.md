@@ -106,6 +106,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 100 | [100-skip-media-tests-when-git-lfs-assets-are-pointer-files.md](100-skip-media-tests-when-git-lfs-assets-are-pointer-files.md) | Skip media tests when Git LFS assets are pointer files | Open |
 | 101 | [101-add-github-actions-ci-for-build-vet-and-tests.md](101-add-github-actions-ci-for-build-vet-and-tests.md) | Add GitHub Actions CI for build, vet and tests | Open |
 | 102 | [102-deduplicate-halfblock-and-sextant-fastpath-branches.md](102-deduplicate-halfblock-and-sextant-fastpath-branches.md) | Deduplicate halfblock and sextant fastpath branches | Open |
+| 103 | [103-integration-tag-root-tests-use-package-main-instead-of-cati.md](103-integration-tag-root-tests-use-package-main-instead-of-cati.md) | Integration-tag root tests use package main instead of cati | Open |
 ## Archived
 
 | # | Title | Reason |
