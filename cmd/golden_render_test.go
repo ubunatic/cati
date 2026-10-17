@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"image"
@@ -14,6 +15,7 @@ import (
 	"testing"
 
 	"ubunatic.com/cati/internal/imgutil"
+	"ubunatic.com/cati/internal/viewgeom"
 	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
 	"ubunatic.com/cati/v1/sextant"
@@ -266,6 +268,214 @@ func TestCustomDoom1Goldens(t *testing.T) {
 	}
 }
 
+func ensureVecOctSources(t *testing.T, dir string) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create dir %s: %v", dir, err)
+	}
+	asymPath := filepath.Join(dir, "asymmetric_source.png")
+	if _, err := os.Stat(asymPath); os.IsNotExist(err) {
+		img := image.NewRGBA(image.Rect(0, 0, 12, 8))
+		blue := color.RGBA{B: 255, A: 255}
+		red := color.RGBA{R: 255, A: 255}
+		yellow := color.RGBA{R: 255, G: 255, A: 255}
+		for y := range 8 {
+			for x := range 12 {
+				img.SetRGBA(x, y, blue)
+			}
+		}
+		// Cell 0 (x:0..1, y:0..3): octant 3 (0, 1) active
+		img.SetRGBA(0, 1, red)
+		// Cell 1 (x:2..3, y:0..3): octants 1 (2,0) and 8 (3,3) active
+		img.SetRGBA(2, 0, yellow)
+		img.SetRGBA(3, 3, yellow)
+		// Cell 2 (x:4..5, y:0..3): right half (octants 2,4,6,8)
+		img.SetRGBA(5, 0, red)
+		img.SetRGBA(5, 1, red)
+		img.SetRGBA(5, 2, red)
+		img.SetRGBA(5, 3, red)
+		if err := testhelper.SavePNG(asymPath, img, map[string]string{
+			"Description": "Deterministic asymmetric octant and vector source",
+		}); err != nil {
+			t.Fatalf("save %s: %v", asymPath, err)
+		}
+	}
+
+	invPath := filepath.Join(dir, "inverted_source.png")
+	if _, err := os.Stat(invPath); os.IsNotExist(err) {
+		const sz = 20
+		img := image.NewRGBA(image.Rect(0, 0, sz, sz))
+		red := color.RGBA{R: 255, A: 255}
+		blue := color.RGBA{B: 255, A: 255}
+		for y := range sz {
+			for x := range sz {
+				if x+y < sz {
+					img.SetRGBA(x, y, blue) // Inverted from demo_diag_20x20
+				} else {
+					img.SetRGBA(x, y, red)
+				}
+			}
+		}
+		if err := testhelper.SavePNG(invPath, img, map[string]string{
+			"Description": "Deterministic color-inverted diagonal source",
+		}); err != nil {
+			t.Fatalf("save %s: %v", invPath, err)
+		}
+	}
+}
+
+// TestVecAndOctGoldens exercises custom glyph modes (octant and vector) against
+// deterministic directional, asymmetric, solid, inverted, and sample fixtures.
+func TestVecAndOctGoldens(t *testing.T) {
+	goldenDir := filepath.Join("testdata", "vec_oct")
+	ensureVecOctSources(t, goldenDir)
+
+	type fixtureSpec struct {
+		name       string
+		sourcePath string
+		cols, rows int
+	}
+
+	fixtures := []fixtureSpec{
+		{
+			name:       "diag",
+			sourcePath: "testdata/demo_diag_20x20/source.png",
+			cols:       10,
+			rows:       10,
+		},
+		{
+			name:       "asymmetric",
+			sourcePath: filepath.Join(goldenDir, "asymmetric_source.png"),
+			cols:       6,
+			rows:       2,
+		},
+		{
+			name:       "solid",
+			sourcePath: "testdata/solid_red_4x4/source.png",
+			cols:       2,
+			rows:       1,
+		},
+		{
+			name:       "inverted",
+			sourcePath: filepath.Join(goldenDir, "inverted_source.png"),
+			cols:       10,
+			rows:       10,
+		},
+		{
+			name:       "sample",
+			sourcePath: "assets/samples/sample-003-darth-daughter.jpg",
+			cols:       10,
+			rows:       10,
+		},
+	}
+
+	for _, modeName := range []string{"oct", "vec"} {
+		rc, err := findRenderModeByName(modeName)
+		if err != nil {
+			t.Fatalf("findRenderModeByName(%q): %v", modeName, err)
+		}
+		for _, fix := range fixtures {
+			t.Run(fmt.Sprintf("%s_%s", modeName, fix.name), func(t *testing.T) {
+				orig := goldenSourceLoad(t, fix.sourcePath)
+				if orig == nil {
+					return
+				}
+				scaled := prepareRenderedImage(orig, nil, fix.cols, fix.rows, rc, "")
+				rendered := goldenRenderToImage(scaled, rc, 0, 0)
+				b := rendered.Bounds()
+				if b.Dx() <= 0 || b.Dy() <= 0 {
+					t.Fatalf("%s/%s produced empty image", modeName, fix.name)
+				}
+
+				// Independent coverage verifications:
+				switch fix.name {
+				case "solid":
+					for y := b.Min.Y; y < b.Max.Y; y++ {
+						for x := b.Min.X; x < b.Max.X; x++ {
+							r, g, bb, a := rendered.At(x, y).RGBA()
+							if r == 0 || g != 0 || bb != 0 || a == 0 {
+								t.Fatalf("solid: pixel (%d,%d) is not pure red: %v", x, y, rendered.At(x, y))
+							}
+						}
+					}
+				case "diag":
+					tlR, _, tlB, _ := rendered.At(b.Min.X, b.Min.Y).RGBA()
+					brR, _, brB, _ := rendered.At(b.Max.X-1, b.Max.Y-1).RGBA()
+					if tlR == 0 || tlB != 0 {
+						t.Errorf("diag: top-left pixel is not red: %v", rendered.At(b.Min.X, b.Min.Y))
+					}
+					if brB == 0 || brR != 0 {
+						t.Errorf("diag: bottom-right pixel is not blue: %v", rendered.At(b.Max.X-1, b.Max.Y-1))
+					}
+				case "inverted":
+					tlR, _, tlB, _ := rendered.At(b.Min.X, b.Min.Y).RGBA()
+					brR, _, brB, _ := rendered.At(b.Max.X-1, b.Max.Y-1).RGBA()
+					if tlB == 0 || tlR != 0 {
+						t.Errorf("inverted: top-left pixel is not blue: %v", rendered.At(b.Min.X, b.Min.Y))
+					}
+					if brR == 0 || brB != 0 {
+						t.Errorf("inverted: bottom-right pixel is not red: %v", rendered.At(b.Max.X-1, b.Max.Y-1))
+					}
+				case "asymmetric":
+					if modeName == "oct" {
+						p00 := rendered.At(b.Min.X+2, b.Min.Y+2)
+						p01 := rendered.At(b.Min.X+2, b.Min.Y+8)
+						r00, _, b00, _ := p00.RGBA()
+						r01, _, b01, _ := p01.RGBA()
+						if b00 == 0 || r00 != 0 {
+							t.Errorf("oct asymmetric: subpixel (0,0) is not blue: %v", p00)
+						}
+						if r01 == 0 || b01 != 0 {
+							t.Errorf("oct asymmetric: subpixel (0,1) is not red: %v (scaled %v)", p01, scaled.Bounds())
+						}
+					}
+				}
+
+				renderName := fmt.Sprintf("render_%s_%s.png", modeName, fix.name)
+				renderPath, err := goldenRenderPath(goldenDir, renderName, fix.sourcePath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				geom := rc.viewSpec()
+				meta := map[string]string{
+					"Algorithm": modeName,
+					"Mode":      modeName,
+					"Fixture":   fix.name,
+					"Cols":      fmt.Sprintf("%d", fix.cols),
+					"Rows":      fmt.Sprintf("%d", fix.rows),
+					"Geometry":  fmt.Sprintf("%dx%d", geom.CellW, geom.CellH),
+				}
+
+				if *updateGolden {
+					if err := testhelper.SavePNG(renderPath, rendered, meta); err != nil {
+						t.Errorf("save golden %s: %v", renderPath, err)
+					}
+					return
+				}
+
+				if _, err := os.Stat(renderPath); os.IsNotExist(err) {
+					t.Errorf("missing golden %s; generate it with go test ./cmd -run TestVecAndOctGoldens -update", renderPath)
+					return
+				}
+
+				data, err := os.ReadFile(renderPath)
+				if err != nil {
+					t.Fatalf("read golden %s: %v", renderPath, err)
+				}
+				for _, token := range []string{"Algorithm\x00" + modeName, "Geometry\x00" + fmt.Sprintf("%dx%d", geom.CellW, geom.CellH)} {
+					if !bytes.Contains(data, []byte(token)) {
+						t.Errorf("%s: missing PNG metadata %q", renderPath, token)
+					}
+				}
+
+				golden := goldenLoad(t, renderPath)
+				if golden != nil && !goldenEqual(rendered, golden) {
+					t.Errorf("%s: rendered image differs from golden", renderName)
+				}
+			})
+		}
+	}
+}
+
 // countDifferentPixels counts unequal pixel locations in a, comparing the same
 // coordinates in b. b may have extra transparent padding below a.
 func countDifferentPixels(a, b image.Image) int {
@@ -508,6 +718,16 @@ func goldenRenderToImage(scaled image.Image, rc renderCfg, refW, refH int) image
 
 func goldenNativeRenderToImage(scaled image.Image, rc renderCfg) image.Image {
 	b := scaled.Bounds()
+	if rc.useGlyphs() {
+		spec := rc.viewSpec()
+		outCols := max(1, b.Dx()/spec.CellW)
+		outRows := max(1, b.Dy()/spec.CellH)
+		rendered, err := sparkline.RenderToImageWithOptions(scaled, outCols, outRows, rc.glyphOptions())
+		if err != nil {
+			panic(err)
+		}
+		return rendered
+	}
 	switch rc.mode {
 	case modeSextant:
 		return sextant.RenderToImage(scaled, rc.sextantMode)
@@ -536,7 +756,7 @@ func goldenNativeRenderToImage(scaled image.Image, rc renderCfg) image.Image {
 //	sextant:   2×3px/char → kX= 6, kY= 8 → 12×24
 func upscaleToCharRes(rendered image.Image, rc renderCfg) image.Image {
 	blockW, blockH := goldenCharBlock()
-	spec := rc.mode.viewSpec()
+	spec := rc.viewSpec()
 	kX := blockW / spec.CellW
 	kY := blockH / spec.CellH
 	if kX <= 1 && kY <= 1 {
@@ -601,15 +821,17 @@ func TestGoldenBlockIntegerFactors(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name string
-		mode renderMode
+		spec viewgeom.Spec
 	}{
-		{"halfblock", modeHalfblock},
-		{"quad", modeQuad},
-		{"spark", modeSpark},
-		{"spark_best", modeSparkBest},
-		{"sextant", modeSextant},
+		{"halfblock", modeHalfblock.viewSpec()},
+		{"quad", modeQuad.viewSpec()},
+		{"spark", modeSpark.viewSpec()},
+		{"spark_best", modeSparkBest.viewSpec()},
+		{"sextant", modeSextant.viewSpec()},
+		{"octant", viewgeom.NewCellRatio(2, 4, 4, 4)},
+		{"vec6", viewgeom.NewCellRatio(4, 6, 8, 6)},
 	} {
-		spec := tc.mode.viewSpec()
+		spec := tc.spec
 		if blockW%spec.CellW != 0 {
 			t.Errorf("%s: blockW=%d is not divisible by CellW=%d", tc.name, blockW, spec.CellW)
 		}

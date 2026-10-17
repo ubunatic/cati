@@ -56,6 +56,12 @@ pattern, and geometry metadata. Regenerate only these fixtures with
 `go run scripts/reconstruction_probe_fixtures.go`; existing render goldens are
 unaffected. Small-image SSIM is reported as unavailable rather than perfect.
 
+### Vector and octant golden coverage
+
+Full pipeline golden coverage for `vec` (4x6 `vec6`) and `oct` (2x4 `octant`) is established in `TestVecAndOctGoldens` under `testdata/vec_oct/`.
+Each fixture tests directional half-planes (`diag`), asymmetric subpixel placement (`asymmetric`), full solid color (`solid`), foreground/background inversion (`inverted`), and real-world sample imagery (`sample-003-darth-daughter.jpg` at 10 columns).
+The shared 12×24 comparison block divides both octant (kX=6, kY=6) and vector (kX=3, kY=4) geometries exactly, guaranteeing pure integer replication without fractional smear. Embedded PNG `tEXt` chunks record algorithm, geometry, and fixture metadata.
+
 
 This document captures the architecture, design decisions, optimal-split algorithm, scanning traversal, and testing harness for the **Cati** sparkline rendering mode.
 
