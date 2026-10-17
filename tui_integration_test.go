@@ -18,6 +18,7 @@ import (
 	"unsafe"
 
 	"ubunatic.com/cati/internal/testutil"
+	"ubunatic.com/cati/spec"
 )
 
 var (
@@ -130,7 +131,7 @@ func TestInteractiveGradientHintShowsSourcePixelsPerCell(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"default fit", []string{"-i", "testdata/gradient_32x32.png"}, "src px/cell=1"},
+		{"default fit", []string{"-i", "testdata/gradient_32x32.png"}, "src px/cell=0.5"},
 		{"explicit one", []string{"-i", "testdata/gradient_32x32.png", "-z=1"}, "src px/cell=1"},
 		{"explicit half", []string{"-i", "testdata/gradient_32x32.png", "-z=0.5"}, "src px/cell=0.5"},
 		{"explicit four", []string{"-i", "testdata/gradient_32x32.png", "-z=4"}, "src px/cell=4"},
@@ -162,9 +163,9 @@ func TestInteractiveModeHalfStartsHalfblockAndCyclesToQuad(t *testing.T) {
 		keys string
 		want string
 	}{
-		{"starts halfblock", "q", "halfblock"},
-		{"r cycles to quad", "rq", "quad/splithalf"},
-		{"third r reaches spark", "rrrq", "spark/quad"},
+		{"starts half", "q", "half"},
+		{"r cycles to next mode", "rq", cycleModeForTest(t, "half", 1)},
+		{"third r reaches third successor", "rrrq", cycleModeForTest(t, "half", 3)},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -188,7 +189,7 @@ func TestInteractiveAndStaticHalfblockRenderMatch(t *testing.T) {
 	}
 
 	bin := buildCatiForTest(t)
-	args := []string{"assets/samples/sample-003-darth-daughter.jpg", "-m=h", "-w", "50"}
+	args := []string{"assets/samples/sample-003-darth-daughter.jpg", "-m=h", "-W", "50"}
 
 	staticCmd := exec.Command(bin, args...)
 	staticCmd.Env = append(os.Environ(), "TERM=xterm-256color")
@@ -352,12 +353,11 @@ func TestInteractiveGradientConvergentModesShowPerfectSSIM(t *testing.T) {
 		name string
 		mode string
 	}{
-		{"default quad", "quad/splithalf"},
-		{"edge snap", "quad/edge-snap"},
-		{"spark quad", "spark/quad"},
-		{"spark best", "spark/best"},
-		{"sextant 2x3", "sextant/2x3"},
-		{"halfblock", "halfblock"},
+		{"quad", "quad"},
+		// Only 1x2/2x2 cells can represent this gradient exactly. Larger
+		// geometries remain covered by solid-colour and PNG golden tests.
+		{"half split", "half/split"},
+		{"half", "half"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -386,12 +386,12 @@ func TestInteractiveSolidRedAllModesShowPerfectSSIM(t *testing.T) {
 		name string
 		mode string
 	}{
-		{"quad splithalf", "quad/splithalf"},
-		{"quad edge snap", "quad/edge-snap"},
-		{"spark quad", "spark/quad"},
-		{"spark best", "spark/best"},
-		{"sextant 2x3", "sextant/2x3"},
-		{"halfblock", "halfblock"},
+		{"quad", "quad"},
+		{"quad plus", "quad+"},
+		{"bars", "bars"},
+		{"bars plus", "bars+"},
+		{"sextant", "2x3"},
+		{"half", "half"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -415,12 +415,13 @@ func TestInteractiveVideoFramesDoNotWrapAcrossRenderModes(t *testing.T) {
 
 	const rows, cols = 37, 95
 	bin := buildCatiForTest(t)
-	out, err := runCatiPTYSize(t, bin, []string{"-i", "testdata/baby-60p-nn.webm"}, "rrrq", rows, cols)
+	out, err := runCatiPTYSize(t, bin, []string{"-i", "--mode=half", "testdata/baby-60p-nn.webm"}, "rrrq", rows, cols)
 	if err != nil {
 		t.Fatalf("cati exited with error: %v\noutput:\n%s", err, stripANSIForTest(out))
 	}
 	plain := stripANSIForTest(out)
-	for _, mode := range []string{"quad/splithalf", "quad/edge-snap", "halfblock", "spark/quad"} {
+	for i := range 4 {
+		mode := cycleModeForTest(t, "half", i)
 		if !strings.Contains(plain, mode) {
 			t.Fatalf("video output missing mode %q\noutput:\n%s", mode, plain)
 		}
@@ -443,23 +444,44 @@ func TestInteractiveVideoFramesDoNotWrapAcrossRenderModes(t *testing.T) {
 	}
 }
 
-func buildCatiForTest(t *testing.T) string {
+func cycleModeForTest(t *testing.T, start string, steps int) string {
 	t.Helper()
-
-	dir := t.TempDir()
-	bins := map[string]string{
-		"cati":       "./cmd/cati",
-		"catiplay":   "./cmd/catiplay",
-		"catibrowse": "./cmd/catibrowse",
+	modes, err := spec.LoadRenderModes()
+	if err != nil {
+		t.Fatal(err)
 	}
-	for name, pkg := range bins {
-		build := exec.Command("go", "build", "-o", filepath.Join(dir, name), pkg)
-		build.Env = os.Environ()
-		if out, err := build.CombinedOutput(); err != nil {
-			t.Fatalf("go build %s: %v\n%s", name, err, out)
+	for i, mode := range modes.Cycle {
+		if mode == start {
+			return modes.Cycle[(i+steps)%len(modes.Cycle)]
 		}
 	}
-	return filepath.Join(dir, "cati")
+	t.Fatalf("mode %q missing from spec cycle", start)
+	return ""
+}
+
+var integrationBinDir string
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "cati-integration-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	integrationBinDir = dir
+	build := exec.Command("go", "build", "-o", dir+string(os.PathSeparator), "./cmd/cati", "./cmd/catiplay", "./cmd/catibrowse")
+	if out, err := build.CombinedOutput(); err != nil {
+		fmt.Fprintf(os.Stderr, "build integration binaries: %v\n%s", err, out)
+		_ = os.RemoveAll(dir)
+		os.Exit(1)
+	}
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+func buildCatiForTest(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(integrationBinDir, "cati")
 }
 
 func assertNoSparkSizeMismatchOutput(t *testing.T, out string) {
@@ -669,45 +691,46 @@ func runCatiPTYSize(t *testing.T, binary string, args []string, keys string, row
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		for i := 0; i < len(keys); i++ {
-			if _, err := master.Write([]byte{keys[i]}); err != nil {
-				return
-			}
-			time.Sleep(250 * time.Millisecond)
-		}
-	}()
-
+	// Advance only after a complete hint row. Child startup and rendering can
+	// take arbitrarily longer than a fixed delay on a loaded or race-enabled host.
 	var out strings.Builder
-	deadline := time.NewTimer(3 * time.Second)
+	var pending string
+	nextKey := 0
+	deadline := time.NewTimer(15 * testutil.RaceFactor * time.Second)
 	defer deadline.Stop()
-
-	for {
+	var waitErr error
+	processDone := false
+	for output != nil || !processDone {
 		select {
 		case chunk, ok := <-output:
-			if ok {
-				out.WriteString(chunk)
+			if !ok {
+				output = nil
+				continue
 			}
-		case err := <-done:
-			time.Sleep(50 * time.Millisecond)
-			for {
-				select {
-				case chunk, ok := <-output:
-					if !ok {
-						return out.String(), err
+			out.WriteString(chunk)
+			pending += chunk
+			if i := strings.LastIndex(pending, "\x1b[K"); i >= 0 {
+				if strings.Contains(pending[i:], " \x1b[m") && nextKey < len(keys) {
+					if _, err := master.Write([]byte{keys[nextKey]}); err != nil {
+						_ = cmd.Process.Kill()
+						t.Fatalf("write scripted key: %v", err)
 					}
-					out.WriteString(chunk)
-				default:
-					return out.String(), err
+					nextKey++
+					pending = ""
 				}
 			}
+		case waitErr = <-done:
+			processDone = true
+			done = nil
 		case <-deadline.C:
 			_ = cmd.Process.Kill()
-			err := <-done
-			t.Fatalf("cati did not exit after scripted keys; wait error: %v\noutput:\n%s", err, stripANSIForTest(out.String()))
+			if !processDone {
+				waitErr = <-done
+			}
+			t.Fatalf("cati did not exit after %d/%d scripted keys; wait error: %v\noutput:\n%s", nextKey, len(keys), waitErr, stripANSIForTest(out.String()))
 		}
 	}
+	return out.String(), waitErr
 }
 
 func spawnPTYForTest(t *testing.T) (*os.File, string) {
