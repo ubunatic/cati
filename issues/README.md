@@ -107,6 +107,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 101 | [101-add-github-actions-ci-for-build-vet-and-tests.md](101-add-github-actions-ci-for-build-vet-and-tests.md) | Add GitHub Actions CI for build, vet and tests | Closed — CI workflow + make container-test; host podman container-test green incl. race (4b91911, ddf181a) |
 | 102 | [102-deduplicate-halfblock-and-sextant-fastpath-branches.md](102-deduplicate-halfblock-and-sextant-fastpath-branches.md) | Deduplicate halfblock and sextant fastpath branches | Closed — Fixed in cd68067; fast/reference suites, renderer race checks, preflight and benchmark comparison pass without golden changes |
 | 103 | [103-integration-tag-root-tests-use-package-main-instead-of-cati.md](103-integration-tag-root-tests-use-package-main-instead-of-cati.md) | Integration-tag root tests use package main instead of cati | Open |
+| 104 | [104-update-tui-integration-test-go-for-post-split-cli-flags-and-spec-driven-mode-names.md](104-update-tui-integration-test-go-for-post-split-cli-flags-and-spec-driven-mode-names.md) | Update tui_integration_test.go for post-split CLI flags and spec-driven mode names | Open |
 ## Archived
 
 | # | Title | Reason |
