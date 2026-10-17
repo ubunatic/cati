@@ -28,6 +28,9 @@ func executeProbe(args ...string) (string, error) {
 }
 
 func TestModesProbeDefaultsAndSelectors(t *testing.T) {
+	if testing.Short() {
+		t.Skip("command parameter sweep")
+	}
 	out, err := executeProbe()
 	if err != nil {
 		t.Fatal(err)

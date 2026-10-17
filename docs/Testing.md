@@ -17,6 +17,26 @@ library packages, renderers, CLI logic, spec integrity, and ordinary package
 tests. The Makefile runs these test targets with the pinned Go 1.26.0 toolchain
 and ignores enclosing `go.work` files so JPEG-based golden renders are stable.
 
+Use `make test-short` for the fast unit tier, or
+`make test-pkg PKG=./internal/input/...` for an isolated, uncached race check.
+Short mode skips media prerequisites and expensive all-mode/sample quality
+sweeps; it still checks spec integrity, geometry and PNG goldens. Full tests
+retain those sweeps. SSIM variants run as parallel subtests against immutable
+source images; golden cases share decoded source fixtures within the test.
+Benchmark deadline logic uses a fake clock rather than sleeping.
+
+Measure uncached timings reproducibly:
+
+```bash
+GOWORK=off GOTOOLCHAIN=go1.26.0 go test -json -count=1 ./... > /tmp/cati-tests.json
+go run scripts/test_timings.go /tmp/cati-tests.json
+```
+
+The 2026-10-17 baseline took 43.59s in `cmd`: the all-mode smart metadata
+sweep took 8.02s, the SSIM sample sweep 7.14s, and the sleeping benchmark test
+3.96s. The latter now advances a fake clock and verifies one render per mode
+and path. Compare timings with warm build caches and similar host load.
+
 CLI geometry tests invoke this checkout's player command directly for preview
 cases, so an older `catiplay` on PATH cannot affect their results. Width uses
 `--width`/`-W` and height uses `--height`/`-H`. The real mediabrowse video test
@@ -34,17 +54,26 @@ Additional suites are opt-in:
 - `make test-player` — tests guarded by the `catiplay` build tag.
 - `make test-browser` — tests guarded by the `catibrowse` build tag.
 - `make test-integration` — terminal/TUI tests guarded by the `integration`
-  build tag; this builds the binaries first.
+  build tag; this builds the binaries first. The suite shares one temporary
+  binary directory and sends each PTY key after a completed hint row. It drains
+  the output channel after process exit, with no wall-clock sleeps; external
+  process deadlines scale with `testutil.RaceFactor`. Mode-cycle assertions
+  read the embedded spec. Exact gradient convergence covers 1x2/2x2 cells;
+  larger geometries have solid-colour and PNG golden coverage.
 - `make test-all` — runs the default, player, browser, and integration suites.
 
 Other checks:
 
-- `make ci-test` — gofmt check, vet, build, both fastpath test modes, and the
+- `make lint` — gofmt check, vet, and `harnez lint --check` on tracked Go,
+  shell, Markdown and Makefile files. CI and Docker pin the Harnez version.
+- `make ci-test` — lint, build, both fastpath test modes, and the
   race-enabled suite. CI uses Go 1.26.0 and checks out Git LFS media fixtures.
 - `make container-test` — runs the same checks in the pinned Dockerfile image
   using podman when available, otherwise docker. The container filesystem is
   read-only apart from `/tmp` and the host output directory
   (`CONTAINER_OUTPUT`, default `.container-test-output/`).
+  The host supplies the tracked lint-file manifest in that directory because
+  the image omits `.git`; direct image runs can supply `CATI_LINT_FILES` too.
 - `go test -bench=.` — runs performance benchmarks; benchmarks are not part of
   the normal test run.
 - `make preflight` — builds the binaries, runs `go vet`, and checks that the

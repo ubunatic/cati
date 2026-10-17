@@ -128,13 +128,18 @@ func TestGoldenRenders(t *testing.T) {
 		algos = append(algos, algoSpec{pair.name, rc})
 	}
 
+	sources := make(map[string]image.Image)
 	for _, c := range cases {
 		folderPath := filepath.Join(testdataDir, c.folder)
 		sourcePath := c.sourcePath
 		if sourcePath == "" {
 			sourcePath = filepath.Join(folderPath, "source.png")
 		}
-		orig := goldenSourceLoad(t, sourcePath)
+		orig, loaded := sources[sourcePath]
+		if !loaded {
+			orig = goldenSourceLoad(t, sourcePath)
+			sources[sourcePath] = orig
+		}
 		if orig == nil {
 			continue
 		}

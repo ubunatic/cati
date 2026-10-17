@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"ubunatic.com/cati/internal/testutil"
 	"ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/core"
 )
@@ -145,7 +146,7 @@ func TestRunMediaBenchmarkTimeBudget(t *testing.T) {
 	elapsed := time.Since(start)
 	// Allow generous headroom: n modes × (budget + 50ms setup).
 	entries, _ := listableRenderModes()
-	maxExpected := time.Duration(len(entries)+1) * (budget + 200*time.Millisecond)
+	maxExpected := time.Duration(testutil.RaceFactor) * time.Duration(len(entries)+1) * (budget + 200*time.Millisecond)
 	if elapsed > maxExpected {
 		t.Fatalf("benchmark took %s, expected ≤ %s for %d modes", elapsed, maxExpected, len(entries))
 	}
@@ -156,14 +157,35 @@ func TestRunMediaBenchmarkTimeBudget(t *testing.T) {
 func TestRunMediaBenchmarkSlowMode(t *testing.T) {
 	path := makeTestPNG(t, t.TempDir())
 	var out bytes.Buffer
-	// Inject a fake renderer that always sleeps longer than the budget.
+	// Advance a fake clock past the budget on every render.
 	budget := 30 * time.Millisecond
+	tick := time.Unix(0, 0)
+	now := func() time.Time { return tick }
+	calls := 0
 	slowRender := func(img image.Image, cfg renderCfg) ([]string, error) {
-		time.Sleep(budget * 5)
-		return renderDemoLines(img, cfg)
+		calls++
+		tick = tick.Add(budget * 5)
+		return []string{"deterministic render"}, nil
 	}
-	if err := runMediaBenchmarkWithRunner(&out, path, 20, 8, 1, "", budget, time.Now, slowRender); err != nil {
+	if err := runMediaBenchmarkWithRunner(&out, path, 20, 8, 1, "", budget, now, slowRender); err != nil {
 		t.Fatalf("runMediaBenchmarkWithRunner: %v", err)
+	}
+	entries, err := listableRenderModes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	modes, err := spec.LoadRenderModes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 0
+	for _, entry := range entries {
+		if !slices.Contains(modes.Experimental, entry.name) {
+			want += 2
+		}
+	}
+	if calls != want {
+		t.Fatalf("slow renders = %d, want one per mode and fastpath (%d)", calls, want)
 	}
 	got := out.String()
 	if !strings.Contains(got, "(slow)") {
@@ -235,6 +257,9 @@ func TestRunMediaBenchmarkStreamingOutput(t *testing.T) {
 
 // TestRunMediaBenchmarkVideo verifies output for a short synthetic video.
 func TestRunMediaBenchmarkVideo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("FFmpeg integration")
+	}
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg unavailable")
 	}
@@ -259,6 +284,9 @@ func TestRunMediaBenchmarkVideo(t *testing.T) {
 }
 
 func TestRunMediaBenchmarkVideoOutputParityMismatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("FFmpeg integration")
+	}
 	if _, err := exec.LookPath("ffmpeg"); err != nil {
 		t.Skip("ffmpeg unavailable")
 	}

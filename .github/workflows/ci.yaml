@@ -27,7 +27,9 @@ jobs:
           cache: true
       - name: Install media tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: Build, vet, test and check race safety
+      - name: Install pinned Harnez linter
+        run: go install ubunatic.com/harnez/cmd/harnez@v0.1.31-0.20261017082349-aeff3cee56cf
+      - name: Lint, build, test and check race safety
         run: make ci-test
 
   reuse:

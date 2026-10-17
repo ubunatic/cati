@@ -10,6 +10,10 @@ import (
 )
 
 func TestModesCommandDemo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("all-mode command sweep; run make test for full coverage")
+	}
+	t.Parallel()
 	var out bytes.Buffer
 	if err := runModesDemo(&out, 12, false); err != nil {
 		t.Fatal(err)
@@ -65,6 +69,10 @@ func TestModesCommandInfoFiltersAliasesAndListsShapes(t *testing.T) {
 }
 
 func TestModesCommandInfoAllModesAndSmartMetadataOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("all-mode command sweep; run make test for full coverage")
+	}
+	t.Parallel()
 	var out bytes.Buffer
 	if err := runModesDemoSelected(&out, 8, true, true, nil); err != nil {
 		t.Fatal(err)
@@ -145,6 +153,10 @@ func TestPadANSILine(t *testing.T) {
 }
 
 func TestModesFilterFlags(t *testing.T) {
+	if testing.Short() {
+		t.Skip("all-mode command sweep; run make test for full coverage")
+	}
+	t.Parallel()
 	tests := []struct {
 		name       string
 		args       []string
@@ -259,6 +271,9 @@ func TestModesListGlyphSets(t *testing.T) {
 }
 
 func TestModesStatsInTitle(t *testing.T) {
+	if testing.Short() {
+		t.Skip("command parameter sweep")
+	}
 	var out bytes.Buffer
 	cmd := modesCommand()
 	cmd.SetOut(&out)
@@ -275,6 +290,9 @@ func TestModesStatsInTitle(t *testing.T) {
 }
 
 func TestModesSorting(t *testing.T) {
+	if testing.Short() {
+		t.Skip("command parameter sweep")
+	}
 	t.Run("list sort by name", func(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
@@ -483,6 +501,10 @@ func TestModesBenchmarkScorecard(t *testing.T) {
 }
 
 func TestModesCommandOptimizedFilters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("all-mode command sweep; run make test for full coverage")
+	}
+	t.Parallel()
 	t.Run("filter optimized modes only", func(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
@@ -684,6 +706,10 @@ func TestFormatCardsGrid(t *testing.T) {
 }
 
 func TestModesCommandColsFlag(t *testing.T) {
+	if testing.Short() {
+		t.Skip("all-mode command sweep; run make test for full coverage")
+	}
+	t.Parallel()
 	t.Run("cols 1 single column output", func(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()

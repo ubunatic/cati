@@ -16,6 +16,9 @@ import (
 // variant, prints the top-3 per image and a cross-image summary.
 // Run with: go test ./cmd/ -run TestRenderQuality -v
 func TestRenderQuality(t *testing.T) {
+	if testing.Short() {
+		t.Skip("sample-image quality sweep")
+	}
 	const (
 		cols = 80 // terminal columns for the test render
 		rows = 40 // terminal rows

@@ -73,11 +73,20 @@ test: ⚙️  ## run linter and tests
 	$(GO_TEST_ENV) go test ./...
 	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0 ./...
 
+test-short: ⚙️  ## run fast unit tests without media or expensive command sweeps
+	$(GO_TEST_ENV) go test -short -count=1 ./...
+
+test-pkg: ⚙️  ## run one package with race detection (PKG=./internal/input/...)
+	@test -n "$(PKG)" || { printf '%s\n' 'PKG is required, e.g. make test-pkg PKG=./internal/input/...'; exit 1; }
+	$(GO_TEST_ENV) go test -race -count=1 $(PKG)
+
 fmt-check: ⚙️  ## verify Go files are gofmt-clean
 	@test -z "$$(gofmt -l $$(find . -type f -name '*.go' -not -path './.git/*'))"
 
-ci-test: ⚙️ fmt-check  ## run CI build, vet, tests and race checks
-	$(GO_TEST_ENV) go vet ./...
+lint: ⚙️  ## check tracked files with gofmt, go vet and harnez lint
+	$(GO_TEST_ENV) sh scripts/lint.sh
+
+ci-test: ⚙️ lint  ## run CI lint, build, tests and race checks
 	$(GO_TEST_ENV) go build ./...
 	$(GO_TEST_ENV) go test ./...
 	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0 ./...
@@ -103,8 +112,9 @@ docker-test: ⚙️  ## run tests in the pinned Go toolchain (avoids golden drif
 container-test: ⚙️  ## run CI checks in a read-only podman/docker container
 	@test -n "$(ENGINE)" || { printf '%s\n' 'podman or docker is required'; exit 1; }
 	mkdir -p "$(CONTAINER_OUTPUT)"
+	git ls-files -z '*.go' '*.sh' '*.md' '*Makefile' > "$(CONTAINER_OUTPUT)/lint-files"
 	$(ENGINE) $(CONTAINER_ENGINE_ARGS) build -f Dockerfile -t cati-test .
-	$(ENGINE) $(CONTAINER_ENGINE_ARGS) run --rm --read-only --tmpfs /tmp --mount type=bind,source="$(CONTAINER_OUTPUT)",target=/out,rw --env CATI_CONTAINER_TEST=1 cati-test
+	$(ENGINE) $(CONTAINER_ENGINE_ARGS) run --rm --read-only --tmpfs /tmp --mount type=bind,source="$(CONTAINER_OUTPUT)",target=/out,rw --env CATI_CONTAINER_TEST=1 --env CATI_LINT_FILES=/out/lint-files cati-test
 
 docker-update-goldens: ⚙️  ## regenerate goldens using the pinned Go toolchain (review the diff before committing)
 	docker build -t cati-test .

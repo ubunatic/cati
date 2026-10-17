@@ -33,7 +33,7 @@ func TestRequireMedia(t *testing.T) {
 			continued := false
 			t.Run("prerequisites", func(t *testing.T) {
 				check = t
-				RequireMedia(t, path, tc.commands...)
+				requireMedia(t, path, tc.commands...)
 				continued = true
 			})
 			if check.Skipped() != tc.wantSkip || continued == tc.wantSkip {

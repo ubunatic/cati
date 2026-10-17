@@ -21,6 +21,14 @@ func SkipInContainer(t testing.TB, requirement string) {
 // Other read errors fail the test; malformed media still reaches the decoder.
 func RequireMedia(t testing.TB, path string, commands ...string) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("media integration is excluded from short tests")
+	}
+	requireMedia(t, path, commands...)
+}
+
+func requireMedia(t testing.TB, path string, commands ...string) {
+	t.Helper()
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
 		t.Skipf("media fixture %s is missing", path)

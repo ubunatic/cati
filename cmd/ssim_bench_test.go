@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -104,6 +105,9 @@ var allVariants = []struct {
 // variants, and prints the top-3 per image plus a cross-image summary.
 // Run with -v to see full rankings per image.
 func TestSSIMBenchmark(t *testing.T) {
+	if testing.Short() {
+		t.Skip("sample-image quality sweep")
+	}
 	const (
 		cols = 80
 		rows = 40
@@ -150,17 +154,28 @@ func TestSSIMBenchmark(t *testing.T) {
 			continue
 		}
 
-		var results []result
-		for _, v := range allVariants {
-			vp := v.rc.scaleToFit(orig, cols, rows)
-			b := vp.Bounds()
-			ref := metrics.PyramidDownscale(orig, b.Dx(), b.Dy())
-			q := computeQuality(ref, vp, v.rc)
-			results = append(results, result{v.name, q})
-			c := cum[v.name]
-			c.ssim += q.SSIM
-			c.blk += q.Blockiness
-			c.edge += q.EdgeCont
+		// The source is immutable; each worker owns its viewport and result slot.
+		results := make([]result, len(allVariants))
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			for i, v := range allVariants {
+				t.Run(v.name, func(t *testing.T) {
+					t.Parallel()
+					vp := v.rc.scaleToFit(orig, cols, rows)
+					b := vp.Bounds()
+					ref := metrics.PyramidDownscale(orig, b.Dx(), b.Dy())
+					q := computeQuality(ref, vp, v.rc)
+					if math.IsNaN(q.SSIM) || math.IsInf(q.SSIM, 0) || q.SSIM < -1 || q.SSIM > 1 {
+						t.Fatalf("invalid SSIM: %v", q.SSIM)
+					}
+					results[i] = result{v.name, q}
+				})
+			}
+		})
+		for _, r := range results {
+			c := cum[r.name]
+			c.ssim += r.q.SSIM
+			c.blk += r.q.Blockiness
+			c.edge += r.q.EdgeCont
 		}
 
 		sort.Slice(results, func(i, j int) bool { return results[i].q.SSIM > results[j].q.SSIM })
