@@ -27,6 +27,48 @@ type bitCandidate struct {
 	mask mask128
 }
 
+// divMult stores precomputed uint64 reciprocal multiplication factors for fast uint32 division.
+var divMult [129]uint64
+
+func init() {
+	for d := 1; d <= 128; d++ {
+		m := ((uint64(1) << 32) + uint64(d) - 1) / uint64(d)
+		ok := false
+		for delta := int64(0); delta <= 2; delta++ {
+			m2 := uint64(int64(m) + delta)
+			valid := true
+			for s := uint64(0); s <= uint64(d*255); s++ {
+				if (s*m2)>>32 != s/uint64(d) {
+					valid = false
+					break
+				}
+			}
+			if valid {
+				divMult[d] = m2
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			for delta := int64(-1); delta >= -2; delta-- {
+				m2 := uint64(int64(m) + delta)
+				valid := true
+				for s := uint64(0); s <= uint64(d*255); s++ {
+					if (s*m2)>>32 != s/uint64(d) {
+						valid = false
+						break
+					}
+				}
+				if valid {
+					divMult[d] = m2
+					ok = true
+					break
+				}
+			}
+		}
+	}
+}
+
 // bitCandidatesTable stores precomputed bitCandidate slices for fixed mode and block geometry.
 var (
 	verticalBitCandidates4x8  = makeBitCandidates(verticalCandidates, 4, 8)
@@ -220,29 +262,47 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 			}
 
 			var fgSumR, fgSumG, fgSumB uint32
-			for b := fgOpaque0; b != 0; {
-				tz := bits.TrailingZeros64(b)
-				fgSumR += uint32(pr[tz])
-				fgSumG += uint32(pg[tz])
-				fgSumB += uint32(pb[tz])
-				b &= b - 1
+			var bgSumR, bgSumG, bgSumB uint32
+
+			if fgN <= bgN {
+				for b := fgOpaque0; b != 0; {
+					tz := bits.TrailingZeros64(b)
+					fgSumR += uint32(pr[tz])
+					fgSumG += uint32(pg[tz])
+					fgSumB += uint32(pb[tz])
+					b &= b - 1
+				}
+				if bgN > 0 {
+					bgSumR = totalSumR - fgSumR
+					bgSumG = totalSumG - fgSumG
+					bgSumB = totalSumB - fgSumB
+				}
+			} else {
+				for b := bgOpaque0; b != 0; {
+					tz := bits.TrailingZeros64(b)
+					bgSumR += uint32(pr[tz])
+					bgSumG += uint32(pg[tz])
+					bgSumB += uint32(pb[tz])
+					b &= b - 1
+				}
+				fgSumR = totalSumR - bgSumR
+				fgSumG = totalSumG - bgSumG
+				fgSumB = totalSumB - bgSumB
 			}
 
 			var fgAvgR, fgAvgG, fgAvgB uint8
 			var bgAvgR, bgAvgG, bgAvgB uint8
 			if fgN > 0 {
-				fgAvgR = uint8(fgSumR / uint32(fgN))
-				fgAvgG = uint8(fgSumG / uint32(fgN))
-				fgAvgB = uint8(fgSumB / uint32(fgN))
+				inv := divMult[fgN]
+				fgAvgR = uint8((uint64(fgSumR) * inv) >> 32)
+				fgAvgG = uint8((uint64(fgSumG) * inv) >> 32)
+				fgAvgB = uint8((uint64(fgSumB) * inv) >> 32)
 			}
-			var bgSumR, bgSumG, bgSumB uint32
 			if bgN > 0 {
-				bgSumR = totalSumR - fgSumR
-				bgSumG = totalSumG - fgSumG
-				bgSumB = totalSumB - fgSumB
-				bgAvgR = uint8(bgSumR / uint32(bgN))
-				bgAvgG = uint8(bgSumG / uint32(bgN))
-				bgAvgB = uint8(bgSumB / uint32(bgN))
+				inv := divMult[bgN]
+				bgAvgR = uint8((uint64(bgSumR) * inv) >> 32)
+				bgAvgG = uint8((uint64(bgSumG) * inv) >> 32)
+				bgAvgB = uint8((uint64(bgSumB) * inv) >> 32)
 			}
 
 			errInt := totalSqSum
@@ -319,36 +379,61 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 			}
 
 			var fgSumR, fgSumG, fgSumB uint32
-			for b := fgOpaque0; b != 0; {
-				tz := bits.TrailingZeros64(b)
-				fgSumR += uint32(pr[tz])
-				fgSumG += uint32(pg[tz])
-				fgSumB += uint32(pb[tz])
-				b &= b - 1
-			}
-			for b := fgOpaque1; b != 0; {
-				tz := bits.TrailingZeros64(b) + 64
-				fgSumR += uint32(pr[tz])
-				fgSumG += uint32(pg[tz])
-				fgSumB += uint32(pb[tz])
-				b &= b - 1
+			var bgSumR, bgSumG, bgSumB uint32
+
+			if fgN <= bgN {
+				for b := fgOpaque0; b != 0; {
+					tz := bits.TrailingZeros64(b)
+					fgSumR += uint32(pr[tz])
+					fgSumG += uint32(pg[tz])
+					fgSumB += uint32(pb[tz])
+					b &= b - 1
+				}
+				for b := fgOpaque1; b != 0; {
+					tz := bits.TrailingZeros64(b) + 64
+					fgSumR += uint32(pr[tz])
+					fgSumG += uint32(pg[tz])
+					fgSumB += uint32(pb[tz])
+					b &= b - 1
+				}
+				if bgN > 0 {
+					bgSumR = totalSumR - fgSumR
+					bgSumG = totalSumG - fgSumG
+					bgSumB = totalSumB - fgSumB
+				}
+			} else {
+				for b := bgOpaque0; b != 0; {
+					tz := bits.TrailingZeros64(b)
+					bgSumR += uint32(pr[tz])
+					bgSumG += uint32(pg[tz])
+					bgSumB += uint32(pb[tz])
+					b &= b - 1
+				}
+				for b := bgOpaque1; b != 0; {
+					tz := bits.TrailingZeros64(b) + 64
+					bgSumR += uint32(pr[tz])
+					bgSumG += uint32(pg[tz])
+					bgSumB += uint32(pb[tz])
+					b &= b - 1
+				}
+				fgSumR = totalSumR - bgSumR
+				fgSumG = totalSumG - bgSumG
+				fgSumB = totalSumB - bgSumB
 			}
 
 			var fgAvgR, fgAvgG, fgAvgB uint8
 			var bgAvgR, bgAvgG, bgAvgB uint8
 			if fgN > 0 {
-				fgAvgR = uint8(fgSumR / uint32(fgN))
-				fgAvgG = uint8(fgSumG / uint32(fgN))
-				fgAvgB = uint8(fgSumB / uint32(fgN))
+				inv := divMult[fgN]
+				fgAvgR = uint8((uint64(fgSumR) * inv) >> 32)
+				fgAvgG = uint8((uint64(fgSumG) * inv) >> 32)
+				fgAvgB = uint8((uint64(fgSumB) * inv) >> 32)
 			}
-			var bgSumR, bgSumG, bgSumB uint32
 			if bgN > 0 {
-				bgSumR = totalSumR - fgSumR
-				bgSumG = totalSumG - fgSumG
-				bgSumB = totalSumB - fgSumB
-				bgAvgR = uint8(bgSumR / uint32(bgN))
-				bgAvgG = uint8(bgSumG / uint32(bgN))
-				bgAvgB = uint8(bgSumB / uint32(bgN))
+				inv := divMult[bgN]
+				bgAvgR = uint8((uint64(bgSumR) * inv) >> 32)
+				bgAvgG = uint8((uint64(bgSumG) * inv) >> 32)
+				bgAvgB = uint8((uint64(bgSumB) * inv) >> 32)
 			}
 
 			errInt := totalSqSum
