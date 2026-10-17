@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"ubunatic.com/cati/internal/testutil"
 )
 
 // videoExts lists extensions treated as potential audio sources.
@@ -45,17 +47,19 @@ func TestProbeAudio(t *testing.T) {
 				continue
 			}
 			found = true
-			info, err := Probe(path)
-			if err != nil {
-				t.Errorf("%s: probe error: %v", path, err)
-				continue
-			}
-			if info == nil {
-				t.Logf("%-50s  no audio", path)
-			} else {
-				t.Logf("%-50s  %s  %d Hz  %dch",
-					path, info.Codec, info.SampleRate, info.Channels)
-			}
+			t.Run(path, func(t *testing.T) {
+				testutil.RequireMedia(t, path, "ffprobe")
+				info, err := Probe(path)
+				if err != nil {
+					t.Fatalf("%s: probe error: %v", path, err)
+				}
+				if info == nil {
+					t.Logf("%-50s  no audio", path)
+				} else {
+					t.Logf("%-50s  %s  %d Hz  %dch",
+						path, info.Codec, info.SampleRate, info.Channels)
+				}
+			})
 		}
 	}
 	if !found {

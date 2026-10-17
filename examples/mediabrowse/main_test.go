@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"ubunatic.com/cati/internal/testutil"
 	"ubunatic.com/loom"
 	"ubunatic.com/loom/media"
 )
@@ -140,9 +141,7 @@ func TestRootCommandReportsInvalidDirectory(t *testing.T) {
 
 func TestRealVideoPlaybackIntegration(t *testing.T) {
 	videoPath := filepath.Join("..", "..", "testdata", "baby-60p-nn.webm")
-	if _, err := os.Stat(videoPath); err != nil {
-		t.Skip("testdata/baby-60p-nn.webm not found, skipping real video test")
-	}
+	testutil.RequireMedia(t, videoPath, "ffmpeg", "ffprobe")
 
 	a, err := newApp(filepath.Dir(videoPath), "mc", media.ModeHalfblock, 24, false, 20, filepath.Base(videoPath))
 	if err != nil {

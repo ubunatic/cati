@@ -16,6 +16,8 @@ import (
 	"time"
 	"unicode/utf8"
 	"unsafe"
+
+	"ubunatic.com/cati/internal/testutil"
 )
 
 var (
@@ -408,9 +410,7 @@ func TestInteractiveVideoFramesDoNotWrapAcrossRenderModes(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping PTY video integration test in short mode")
 	}
-	if _, err := os.Stat("testdata/baby-60p-nn.webm"); err != nil {
-		t.Fatalf("test fixture missing: %v", err)
-	}
+	testutil.RequireMedia(t, "testdata/baby-60p-nn.webm", "ffmpeg", "ffprobe")
 
 	const rows, cols = 37, 95
 	bin := buildCatiForTest(t)

@@ -23,6 +23,12 @@ cases, so an older `catiplay` on PATH cannot affect their results. Width uses
 checks play/pause/resume before ticking, then waits up to ten seconds for EOF:
 the decoder can drain the entire short clip in a single tick.
 
+Real audio-probe and video tests use `internal/testutil.RequireMedia` to skip
+missing fixtures, Git LFS pointer files, or unavailable `ffprobe`/`ffmpeg`
+commands. Run `git lfs pull` and install FFmpeg to exercise those tests. Each
+audio asset has its own subtest, so a pointer does not hide other available
+media. Read errors and decoder failures on present media still fail the test.
+
 Additional suites are opt-in:
 
 - `make test-player` — tests guarded by the `catiplay` build tag.
