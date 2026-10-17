@@ -1,6 +1,6 @@
 # 101 — Add GitHub Actions CI for build, vet and tests
 
-**Status**: Open
+**Status**: In Progress — Implement CI and container test parity
 **Priority**: P1 (High)
 **Severity**: Moderate
 **Category**: Infrastructure
