@@ -31,13 +31,28 @@ Static analysis of the 24 non-test Go source files (8,423 lines total) reveals s
 - **Golden suite expanded**: added `solid_red_4x4` regression fixture; small gradient cases (4×4, 2×2, 1×1); `demo_vert_split_8x8` at widths 1/3/4/5; 4 geometric 20×20 images (diag, circle, checker, cross); total ~110 new PNG + ANSI goldens
 - **Demo render tables**: `make demo-widths` compares the default demo set; `make demo-darth`, `make demo-solder`, and `make demo-vacation` compare the sample photos. `scripts/demo_widths.go` accepts repeatable `-image`/`-i`, `-w` max width, and `-n` downscale-step count; single-image runs show render modes side by side.
 
+### October 2026 — bounded package extraction (issue 106)
+
+- `internal/browser`, `internal/modes` and `internal/ansi` now own presentation,
+  card layout and renderer-width helpers with independent package tests.
+- Browser configuration/menu, viewer renderer/mode/zoom and mode-card/filter/
+  metrics helpers have separate command files. `browser.go` fell from 2,496 to
+  1,346 lines, `modes.go` from 1,583 to 747, and `interactive.go` from 1,480 to 679.
+- Declaration hashes matched across the mechanical split; default and reference
+  suites passed without golden changes (commits 9d3ab8d and 540f6c3).
+- `harnez assess --hotspots` still reports `browser()` at 1,221 lines. The
+  installed October 17 linter reports 81 size/parameter warnings across 41
+  files, with no errors. These are remaining decomposition work, including
+  test functions and renderer files; the original sixteen shell errors are fixed.
+
 ### What remains open
 - **A** (12 YAML parsers): `internal/input/input.go:parse()` and several parsers in `browser.go` are still manual
 - **B1** (ANSI helpers duplicated between halfblock/quadblock): still unextracted
 - **B4–B7** (image blitting, thumbnail list, ffprobe, compileCell): still duplicated
 - **C1** (`browser()` god function, ~1,200 lines): untouched
 - **E2–E4** (hardcoded Go fallback labels/controls/config): still present
-- **F1** (`cmd/` god package): still one flat package
+- **F1** (`cmd/` god package): orchestration and state remain coupled; presentation
+  and layout now have internal package boundaries
 - **F4** (`renderCfg` semantic overlaps): still present
 
 ---

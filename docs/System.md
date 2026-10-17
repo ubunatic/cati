@@ -102,8 +102,10 @@ state and renderer selection remain in `cmd` (issue 008). Command internals
 are split by responsibility: `browser_config.go`/`browser_menu.go`,
 `interactive_render.go`/`interactive_modes.go`/`interactive_zoom.go`, and
 `modes_filter.go`/`modes_cards.go`/`modes_metrics.go`. The entry-point files now
-contain orchestration rather than those unrelated helpers. The browser event
-loop itself remains a larger follow-up under issue 008.
+contain orchestration rather than those unrelated helpers. [Testing](Testing.md)
+documents the package, short, full, ANSI and container verification tiers.
+Remaining event-loop and structural warnings are tracked in
+[issue 008](../issues/008-spaghetti-code-analysis.md).
 
 The quality metrics, image-geometry helpers, and pixel-art pre-scalers were extracted from `cmd/` into dedicated `internal/` packages. The key learnings:
 

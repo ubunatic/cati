@@ -1,6 +1,6 @@
 # 104 — Update tui_integration_test.go for post-split CLI flags and spec-driven mode names
 
-**Status**: Closed — Fixed in 8078566; fastpath integration suite and preflight pass, reference verification follows in the same sprint
+**Status**: Closed — Fixed in 8078566; full fast/reference PTY suites and container CI pass
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Bug
