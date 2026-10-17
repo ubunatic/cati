@@ -37,6 +37,38 @@ Prior to this optimization:
   [Contiguous Cell Storage] ---> [bufio / Terminal Writer]
 ```
 
+## Deduplication verification (2026-10-17, issue 102)
+
+Grid construction shares the `cell.gridCell` conversion. RGBA and NRGBA byte
+readers are reused by grid construction and direct reconstruction, which now
+shares `storeOpaquePixel`. The row loops retain concrete image-type selection;
+small inline helpers avoid indirect calls per pixel. Reconstruction preserves
+premultiplied RGB, forces painted alpha to 255, and clears transparent pixels.
+Odd-height, nonzero-origin subimages and a source-color oracle cover this
+invariant in serial and parallel execution. No golden changes are expected.
+
+Baseline: `35e862f`; changed: issue 102 implementation. Go 1.26.0, AMD Ryzen 7
+8700G, `CATI_FASTPATH=1`, CPU affinity 0, five samples of 500 ms each. Medians:
+
+| Benchmark | Before | After | Bytes / allocations |
+|---|---:|---:|---:|
+| RenderSerial | 1,068,366 ns | 832,321 ns | 310,664 / 20 |
+| RenderToImageSerial | 125,528 ns | 78,446 ns | 131,216 / 3 |
+
+Both binaries were compiled with `go test -c ./v1/halfblock`; the baseline used
+`-overlay` to map `render.go` to its contents from `git show 35e862f:v1/halfblock/render.go`,
+keeping tests and dependencies identical. Run each compiled binary with:
+
+```bash
+CATI_FASTPATH=1 taskset -c 0 /tmp/halfblock.test -test.run '^$' \
+  -test.bench 'BenchmarkRender(Serial|ToImageSerial)$' \
+  -test.benchmem -test.benchtime=500ms -test.count=5 -test.cpu=1
+```
+
+These shared-host measurements support the absence of a regression; they are
+not a portable speed-up guarantee. Fast/reference suites, renderer race tests,
+and `make preflight` passed without regenerating goldens.
+
 ## Benchmark Evidence
 
 Benchmarks performed on x86_64 host across 1 to 10 CPU cores:

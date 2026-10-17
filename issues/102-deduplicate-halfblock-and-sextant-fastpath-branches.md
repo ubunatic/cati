@@ -39,3 +39,17 @@ writer; behaviour is unchanged.
   `make preflight` must pass.
 - Benchmarks (`render_bench_test.go`) must not regress by more than noise;
   record before/after in the perf doc.
+
+## Resolution
+
+Extracted shared byte readers, grid-cell conversion, and opaque reconstruction
+stores in halfblock while retaining concrete type selection per row. These
+small helpers avoid introducing indirect reader calls in the hot loops.
+Sextant now shares coverage/color traversal and branches only for the store;
+its exact division-table arithmetic is documented and exhaustively tested.
+
+Added odd-height subimage parity and independent source-color reconstruction
+checks. The full fast/reference suites, `go test -race ./v1/...` (Go 1.26.0),
+and `make preflight` pass; no goldens were regenerated. Pinned, interleaved
+reconstruction benchmarks show no regression; measurements and reproduction
+instructions are in the linked performance notes.

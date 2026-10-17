@@ -108,6 +108,9 @@ var (
 		count   int
 		indices [6]int
 	}
+	// Exact integer quotients for all six-pixel component sums (<= 1530).
+	// Shared by both paths: this is common solver arithmetic, not a distinct
+	// approximate fast path. TestDivisionTableExact checks every reachable sum.
 	divTable [7][1536]uint8
 )
 
@@ -1128,38 +1131,25 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 					x1 := min(x0+blockCols, b.Max.X)
 					pixels := sampleBlock(img, x0, x1, y0, y1)
 					cell := chooseCell(pixels, mode)
-					if core.Fastpath {
-						for idx := range pixels {
-							if !emittedCoverage(cell, idx) {
-								continue
-							}
-							target := cell.bg
-							if maskContains(cell.mask, idx) {
-								target = cell.fg
-							}
-							yy := y0 + idx/blockCols
-							xx := x0 + idx%blockCols
-							if xx < b.Max.X && yy < b.Max.Y {
+					for idx := range pixels {
+						if !emittedCoverage(cell, idx) {
+							continue
+						}
+						target := cell.bg
+						if maskContains(cell.mask, idx) {
+							target = cell.fg
+						}
+						yy := y0 + idx/blockCols
+						xx := x0 + idx%blockCols
+						if xx < b.Max.X && yy < b.Max.Y {
+							if core.Fastpath {
 								off := dst.PixOffset(xx, yy)
 								p := dst.Pix[off : off+4 : off+4]
 								p[0] = target.R
 								p[1] = target.G
 								p[2] = target.B
 								p[3] = target.A
-							}
-						}
-					} else {
-						for idx := range pixels {
-							if !emittedCoverage(cell, idx) {
-								continue
-							}
-							target := cell.bg
-							if maskContains(cell.mask, idx) {
-								target = cell.fg
-							}
-							yy := y0 + idx/blockCols
-							xx := x0 + idx%blockCols
-							if xx < b.Max.X && yy < b.Max.Y {
+							} else {
 								dst.SetRGBA(xx, yy, target)
 							}
 						}

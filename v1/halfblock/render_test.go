@@ -57,6 +57,8 @@ func TestFastpathParity(t *testing.T) {
 		{name: "RGBA", img: rgbaImg},
 		{name: "NRGBA", img: nrgbaImg},
 		{name: "Gray", img: grayImg},
+		{name: "RGBA subimage odd height", img: rgbaImg.SubImage(image.Rect(-1, 5, 18, 18))},
+		{name: "NRGBA subimage odd height", img: nrgbaImg.SubImage(image.Rect(-1, 5, 18, 18))},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			core.Fastpath = true
@@ -96,6 +98,42 @@ func TestFastpathParity(t *testing.T) {
 }
 
 // ── pairToCell ────────────────────────────────────────────────────────────────
+
+func TestReconstructionMatchesSourceANSIColors(t *testing.T) {
+	previous := core.Fastpath
+	t.Cleanup(func() { core.Fastpath = previous })
+	parent := image.NewNRGBA(image.Rect(-3, 2, 6, 9))
+	for y := 2; y < 9; y++ {
+		for x := -3; x < 6; x++ {
+			parent.SetNRGBA(x, y, color.NRGBA{
+				R: 210, G: uint8((x + 3) * 23), B: uint8(y * 21),
+				A: []uint8{0, 1, 128, 255}[(x+y+3)%4],
+			})
+		}
+	}
+	src := parent.SubImage(image.Rect(-1, 3, 4, 8))
+	for _, fast := range []bool{false, true} {
+		core.Fastpath = fast
+		for _, jobs := range []int{1, 4} {
+			got := RenderToImageJ(src, jobs)
+			if got.Bounds() != src.Bounds() {
+				t.Fatalf("bounds = %v, want %v", got.Bounds(), src.Bounds())
+			}
+			for y := src.Bounds().Min.Y; y < src.Bounds().Max.Y; y++ {
+				for x := src.Bounds().Min.X; x < src.Bounds().Max.X; x++ {
+					r, g, b, a := src.At(x, y).RGBA()
+					want := color.RGBA{}
+					if a != 0 {
+						want = color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 255}
+					}
+					if pixel := got.RGBAAt(x, y); pixel != want {
+						t.Fatalf("fast=%v jobs=%d pixel (%d,%d) = %v, want %v", fast, jobs, x, y, pixel, want)
+					}
+				}
+			}
+		}
+	}
+}
 
 func TestPairToCell(t *testing.T) {
 	t.Helper()

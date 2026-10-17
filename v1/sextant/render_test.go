@@ -10,6 +10,16 @@ import (
 	"ubunatic.com/cati/v1/halfblock"
 )
 
+func TestDivisionTableExact(t *testing.T) {
+	for count := 1; count <= 6; count++ {
+		for sum := 0; sum <= 255*count; sum++ {
+			if got, want := int(divTable[count][sum]), sum/count; got != want {
+				t.Fatalf("average of %d components summing to %d = %d, want %d", count, sum, got, want)
+			}
+		}
+	}
+}
+
 func patternImage(mask uint8, on, off color.RGBA) image.Image {
 	img := image.NewRGBA(image.Rect(0, 0, 2, 3))
 	for i := 0; i < 6; i++ {

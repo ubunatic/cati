@@ -78,3 +78,37 @@ BenchmarkRenderToImageSextant-4      33.07 ms/op            11.87 ms/op     2.79
 - **Full Sextant Terminal Render (`Render`)**: Render latency reduced from **32.68 ms/op down to 11.52 ms/op (2.84x faster / -64.7% throughput latency)**.
 - **Full Sextant Image Reconstruction (`RenderToImageJ`)**: Latency reduced from **33.07 ms/op down to 11.87 ms/op (2.79x faster)**.
 - **Zero Allocations**: Allocation count remains at 0 allocs/op for `ChooseCell`.
+
+## Deduplication verification (2026-10-17, issue 102)
+
+`RenderToImageJ` now has one coverage/color loop. Only the direct byte store
+versus `SetRGBA` remains behind `core.Fastpath`. The division table remains
+common solver arithmetic: every reachable quotient is exactly `sum/count`,
+verified exhaustively for counts 1..6 and sums 0..255*count. It does not
+introduce a second approximate fitting algorithm. No golden pixels changed.
+
+Baseline `35e862f` versus the issue 102 implementation, Go 1.26.0, AMD Ryzen 7
+8700G, `CATI_FASTPATH=1`: five CPU-0 samples gave terminal-render medians of
+5,677,541 ns before and 4,774,994 ns after (116,264 B / 18 allocations).
+Reconstruction samples were noisy under other host workloads, so the deciding
+comparison alternated baseline and changed binaries on CPU 4 for three rounds
+of two one-second samples each:
+
+| RenderToImageSextant | Before | After |
+|---|---:|---:|
+| Median | 4,566,378 ns | 4,543,660 ns |
+| Range | 4,522,462–4,842,861 ns | 4,534,556–4,591,948 ns |
+| Allocations | 5 | 5 |
+
+Reconstruction remains about 131,360 B/op; the measured runtime difference is
+within noise. Both binaries used the current tests and dependencies; a Go
+`-overlay` mapped the baseline's `render.go` to its contents at `35e862f`.
+Compile with `go test -c ./v1/sextant`, then alternate the two binaries with:
+
+```bash
+CATI_FASTPATH=1 taskset -c 4 /tmp/sextant.test -test.run '^$' \
+  -test.bench '^BenchmarkRenderToImageSextant$' \
+  -test.benchmem -test.benchtime=1s -test.count=2 -test.cpu=1
+```
+
+Fast/reference suites, renderer race tests and `make preflight` passed.

@@ -20,6 +20,19 @@ columns. `--grid <cols>` (default: 8) arranges cards into aligned horizontal
 rows. The independent asymmetric 2x3 PNG fixture verifies orientation and both
 preview formats; regenerate it with `go run scripts/glyph_mask_fixture.go`.
 
+## Halfblock and sextant reconstruction
+
+Halfblock grid and image paths share RGBA/NRGBA byte readers, grid-cell
+conversion, and the opaque pixel writer. Type selection stays outside the
+pixel loop so these small helpers can inline. Bypassing the grid is exact:
+reconstruction preserves premultiplied source RGB and sets alpha to 255 for
+painted pixels, leaving fully transparent pixels zero. Subimages, odd final
+rows, and serial/parallel paths are covered by parity and source-color tests.
+Sextant reconstruction shares one coverage/color loop; fast/reference paths
+only select the pixel store. Its common division table contains exact integer
+quotients for every reachable six-pixel color sum, checked exhaustively.
+This refactoring changes no fitting, geometry, or golden pixels.
+
 ## Reconstruction probes
 
 `cati modes test` runs the three demonstrations from `scripts/reconstruct_demo.go`:
