@@ -23,6 +23,9 @@ func executeGlyphs(args ...string) (string, error) {
 }
 
 func TestModesGlyphsSelectors(t *testing.T) {
+	if testing.Short() {
+		t.Skip("glyph inventory selector sweep")
+	}
 	for _, tc := range []struct{ selector, geometry string }{
 		{"half", "1x2"}, {"h", "1x2"}, {"oct", "2x4"}, {"vec6", "4x6"},
 		{"octants", "2x4"}, {"d10", "2x4"}, {"d10,56", "4x12"},

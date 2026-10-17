@@ -165,6 +165,9 @@ func TestFitSVGTarget(t *testing.T) {
 }
 
 func TestLoadImageSVG(t *testing.T) {
+	if testing.Short() {
+		t.Skip("external SVG rasterization")
+	}
 	if _, err := exec.LookPath("rsvg-convert"); err != nil {
 		t.Skip("rsvg-convert not found on $PATH — skipping SVG rasterization test")
 	}
@@ -186,6 +189,9 @@ func TestLoadImageSVG(t *testing.T) {
 }
 
 func TestLoadImageWithTargetSVG(t *testing.T) {
+	if testing.Short() {
+		t.Skip("external SVG rasterization")
+	}
 	if _, err := exec.LookPath("rsvg-convert"); err != nil {
 		t.Skip("rsvg-convert not found on $PATH — skipping SVG rasterization test")
 	}

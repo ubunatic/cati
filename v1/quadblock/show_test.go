@@ -103,6 +103,9 @@ const (
 // Variants are grouped into rows of maxVariantsPerRow columns.
 // Run with: go test ./internal/quadblock/ -v -run TestShowImages
 func TestShowImages(t *testing.T) {
+	if testing.Short() {
+		t.Skip("interactive sample-image showcase")
+	}
 	if !testing.Verbose() {
 		t.Skip("only runs with -v")
 	}

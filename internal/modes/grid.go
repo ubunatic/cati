@@ -3,6 +3,7 @@ package modes
 
 import (
 	"strings"
+
 	"ubunatic.com/cati/internal/ansi"
 )
 

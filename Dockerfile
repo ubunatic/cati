@@ -6,10 +6,12 @@ FROM golang:1.26.0-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    librsvg2-bin \
     && rm -rf /var/lib/apt/lists/*
 
 ARG HARNEZ_VERSION=v0.1.31-0.20261017082349-aeff3cee56cf
-RUN go install ubunatic.com/harnez/cmd/harnez@${HARNEZ_VERSION}
+# Harnez needs a newer compiler; renderer tests still use the base Go 1.26.0.
+RUN GOTOOLCHAIN=go1.26.5 go install ubunatic.com/harnez/cmd/harnez@${HARNEZ_VERSION}
 
 WORKDIR /src
 COPY go.mod go.sum ./

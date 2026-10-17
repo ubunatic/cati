@@ -72,6 +72,9 @@ func TestProbeAudio(t *testing.T) {
 //
 // Usage: go test ./internal/audio/ -v -run TestPlayAudio
 func TestPlayAudio(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real audio playback")
+	}
 	testutil.SkipInContainer(t, "audio playback")
 	if !testing.Verbose() {
 		t.Skip("only runs with -v")

@@ -254,6 +254,9 @@ func TestParseRenderMode(t *testing.T) {
 }
 
 func TestRemovedRenderModesAreRejected(t *testing.T) {
+	if testing.Short() {
+		t.Skip("removed-mode rejection sweep")
+	}
 	for _, mode := range []string{"halfblock", "quad/splithalf", "splithalf", "qe", "quad/edge-snap", "edge-snap", "spark/quad", "sb", "spark/best", "sextant", "sextant/2x3", "sh", "sg", "spark/geom", "xg", "xb", "geom", "best", "sextant/geom", "sextant/best", "shg", "shb", "geomshape", "geomshape/2x2", "geomshape/geom", "geomshape/best"} {
 		t.Run(mode, func(t *testing.T) {
 			if _, err := parseRenderMode(mode); err == nil {
@@ -573,6 +576,9 @@ func TestSampleDarthDaughterNoDuplicateRenderedPixelRows(t *testing.T) {
 }
 
 func TestAllRenderModesWidthOneThroughTwentyKeepAspectAndNoGaps(t *testing.T) {
+	if testing.Short() {
+		t.Skip("all-source, all-mode width sweep")
+	}
 	sources := []struct {
 		name string
 		img  image.Image

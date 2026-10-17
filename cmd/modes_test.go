@@ -49,6 +49,10 @@ func TestModesCommandSmartZeroWidthListsWithoutRendering(t *testing.T) {
 }
 
 func TestModesCommandInfoFiltersAliasesAndListsShapes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("rendered mode-info inventory sweep")
+	}
+	t.Parallel()
 	var out bytes.Buffer
 	if err := runModesDemoSelected(&out, 8, false, true, []string{"h"}); err != nil {
 		t.Fatal(err)
@@ -128,6 +132,10 @@ func TestModesCommandRejectsUnknownSelection(t *testing.T) {
 }
 
 func TestModesInfoListsRegistryCompositionsAndPreservesCase(t *testing.T) {
+	if testing.Short() {
+		t.Skip("smart registry composition demo")
+	}
+	t.Parallel()
 	var out bytes.Buffer
 	cmd := modesCommand()
 	cmd.SetOut(&out)
@@ -476,6 +484,9 @@ func TestModesSamplePresets(t *testing.T) {
 }
 
 func TestModesBenchmarkScorecard(t *testing.T) {
+	if testing.Short() {
+		t.Skip("sample-dataset benchmark")
+	}
 	var out bytes.Buffer
 	cmd := modesCommand()
 	cmd.SetOut(&out)

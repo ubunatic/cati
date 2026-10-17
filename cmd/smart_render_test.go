@@ -74,6 +74,9 @@ func TestFitNativeWidthAllowsSubCellRenderWidth(t *testing.T) {
 }
 
 func TestSmartPrepareNativeModesPreserveTargetColumns(t *testing.T) {
+	if testing.Short() {
+		t.Skip("all-mode smart viewport sweep")
+	}
 	src := image.NewRGBA(image.Rect(0, 0, 32, 16))
 	for _, name := range []string{"half/split", "quad", "spark", "spark+quad", "six", "six+half", "spark+six"} {
 		rc, err := findRenderModeByName(name)

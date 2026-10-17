@@ -156,7 +156,7 @@ func TestSSIMBenchmark(t *testing.T) {
 
 		// The source is immutable; each worker owns its viewport and result slot.
 		results := make([]result, len(allVariants))
-		t.Run(filepath.Base(path), func(t *testing.T) {
+		if !t.Run(filepath.Base(path), func(t *testing.T) {
 			for i, v := range allVariants {
 				t.Run(v.name, func(t *testing.T) {
 					t.Parallel()
@@ -170,7 +170,11 @@ func TestSSIMBenchmark(t *testing.T) {
 					results[i] = result{v.name, q}
 				})
 			}
-		})
+		}) {
+			// Failed workers leave their result slots empty; preserve their
+			// diagnostics instead of dereferencing an absent aggregate entry.
+			continue
+		}
 		for _, r := range results {
 			c := cum[r.name]
 			c.ssim += r.q.SSIM

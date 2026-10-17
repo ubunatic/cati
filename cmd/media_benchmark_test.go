@@ -46,7 +46,8 @@ func makeTestPNG(t *testing.T, dir string) string {
 func TestRunMediaBenchmarkImage(t *testing.T) {
 	path := makeTestPNG(t, t.TempDir())
 	var out bytes.Buffer
-	if err := runMediaBenchmark(&out, path, 20, 8, 1, "", 500*time.Millisecond); err != nil {
+	// Output coverage needs one render per mode, not repeated timed samples.
+	if err := runMediaBenchmark(&out, path, 20, 8, 1, "", time.Millisecond); err != nil {
 		t.Fatalf("runMediaBenchmark: %v", err)
 	}
 	got := out.String()
@@ -120,7 +121,7 @@ func TestRunMediaBenchmarkNonTTYDefaultSize(t *testing.T) {
 	var out bytes.Buffer
 	// We pass a *bytes.Buffer (not *os.File), so TermWidth/TermHeight return 0
 	// → the code must fall back to 80×24 rather than max(1, 0)=1.
-	if err := runMediaBenchmark(&out, path, 0, 0, 1, "", 200*time.Millisecond); err != nil {
+	if err := runMediaBenchmark(&out, path, 0, 0, 1, "", time.Millisecond); err != nil {
 		t.Fatalf("runMediaBenchmark with auto size: %v", err)
 	}
 	got := out.String()
@@ -129,7 +130,7 @@ func TestRunMediaBenchmarkNonTTYDefaultSize(t *testing.T) {
 		t.Fatalf("width fell back to <2, non-TTY default size broken:\n%s", got)
 	}
 	if !strings.Contains(got, "(80x24)") {
-		t.Logf("output header (not asserting exact size): %s", strings.SplitN(got, "\n", 2)[0])
+		t.Fatalf("missing non-TTY default size: %s", strings.SplitN(got, "\n", 2)[0])
 	}
 }
 
@@ -199,7 +200,7 @@ func TestRunMediaBenchmarkModeFilter(t *testing.T) {
 	path := makeTestPNG(t, t.TempDir())
 	var out bytes.Buffer
 	// "h" is the halfblock alias — only one mode should appear in the output.
-	if err := runMediaBenchmark(&out, path, 20, 8, 1, "h", 200*time.Millisecond); err != nil {
+	if err := runMediaBenchmark(&out, path, 20, 8, 1, "h", time.Millisecond); err != nil {
 		t.Fatalf("runMediaBenchmark with mode filter: %v", err)
 	}
 	got := out.String()
@@ -332,7 +333,7 @@ func TestRunMediaBenchmarkSkipsExperimental(t *testing.T) {
 	}
 	path := makeTestPNG(t, t.TempDir())
 	var out bytes.Buffer
-	if err := runMediaBenchmark(&out, path, 20, 8, 1, "", 50*time.Millisecond); err != nil {
+	if err := runMediaBenchmark(&out, path, 20, 8, 1, "", time.Millisecond); err != nil {
 		t.Fatal(err)
 	}
 	for _, line := range strings.Split(out.String(), "\n")[2:] {

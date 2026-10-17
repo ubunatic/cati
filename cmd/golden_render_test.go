@@ -35,6 +35,9 @@ var updateGolden = flag.Bool("update", false, "overwrite golden render images in
 //
 // Run with -update to regenerate all goldens.
 func TestGoldenRenders(t *testing.T) {
+	if !*updateGolden {
+		t.Parallel()
+	}
 	testdataDir := "testdata"
 
 	type tc struct {
@@ -965,6 +968,9 @@ func goldenLoad(t *testing.T, path string) image.Image {
 // (CellH/2)×kY = blockH/2 golden pixel rows — exactly half a character block,
 // uniform across all algorithms.
 func TestGoldenTransparentBound(t *testing.T) {
+	if !*updateGolden {
+		t.Parallel()
+	}
 	_, blockH := goldenCharBlock()
 	// halfCharGoldenPx is the maximum transparent rows allowed in any golden:
 	// CellH/2 rendered pixels × kY = blockH/2, constant across all modes.

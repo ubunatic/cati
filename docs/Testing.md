@@ -19,11 +19,16 @@ and ignores enclosing `go.work` files so JPEG-based golden renders are stable.
 
 Use `make test-short` for the fast unit tier, or
 `make test-pkg PKG=./internal/input/...` for an isolated, uncached race check.
+The short tier disables Go's implicit vet pass; `make lint`, `make test` and
+`make preflight` retain vet as the separate static-analysis gate.
 Short mode skips media prerequisites and expensive all-mode/sample quality
 sweeps; it still checks spec integrity, geometry and PNG goldens. Full tests
 retain those sweeps. SSIM variants run as parallel subtests against immutable
 source images; golden cases share decoded source fixtures within the test.
 Benchmark deadline logic uses a fake clock rather than sleeping.
+Short mode also excludes SVG subprocesses and verbose audio/image showcases.
+Read-only golden suites run concurrently after tests that change global render
+settings; explicit golden updates stay serial.
 
 `internal/ansitest` parses single-cell renderer rows into glyphs, foreground
 and background colours, and SGR attributes. Structural assertions compare row
@@ -47,6 +52,10 @@ The 2026-10-17 baseline took 43.59s in `cmd`: the all-mode smart metadata
 sweep took 8.02s, the SSIM sample sweep 7.14s, and the sleeping benchmark test
 3.96s. The latter now advances a fake clock and verifies one render per mode
 and path. Compare timings with warm build caches and similar host load.
+After extraction and test-tier changes, the full fast/reference `cmd` runs
+measured 28.61s/29.93s. The final short run measured 4.64s in `cmd` and 9.25s
+for the whole `make test-short` invocation with warm build caches. Earlier
+invocations with recompilation exceeded ten seconds; host load also matters.
 
 CLI geometry tests invoke this checkout's player command directly for preview
 cases, so an older `catiplay` on PATH cannot affect their results. Width uses
@@ -76,15 +85,22 @@ Additional suites are opt-in:
 Other checks:
 
 - `make lint` — gofmt check, vet, and `harnez lint --check` on tracked Go,
-  shell, Markdown and Makefile files. CI and Docker pin the Harnez version.
+  shell, Markdown and Makefile files. CI and Docker pin the Harnez version
+  and build that tool with Go 1.26.5; renderer checks remain on Go 1.26.0.
 - `make ci-test` — lint, build, both fastpath test modes, and the
-  race-enabled suite. CI uses Go 1.26.0 and checks out Git LFS media fixtures.
+  race-enabled suite, including `catiplay`, `catibrowse` and `integration`
+  tests. CI uses Go 1.26.0, FFmpeg and librsvg, and checks out LFS fixtures.
 - `make container-test` — runs the same checks in the pinned Dockerfile image
   using podman when available, otherwise docker. The container filesystem is
   read-only apart from `/tmp` and the host output directory
   (`CONTAINER_OUTPUT`, default `.container-test-output/`).
   The host supplies the tracked lint-file manifest in that directory because
   the image omits `.git`; direct image runs can supply `CATI_LINT_FILES` too.
+  A runner that restricts rootless namespace setup can use a local Podman API
+  service via `CONTAINER_ENGINE_ARGS="--remote --url unix:///path/to/socket"`.
+  Keep its socket in a runner-visible directory (for example the ignored
+  output directory) and stop the temporary service afterwards. Quota enforcement
+  stays enabled around the test command.
 - `go test -bench=.` — runs performance benchmarks; benchmarks are not part of
   the normal test run.
 - `make preflight` — builds the binaries, runs `go vet`, and checks that the
@@ -93,8 +109,10 @@ Other checks:
   validating PNG golden-image changes.
 
 Container tests set `CATI_CONTAINER_TEST=1`. Audio playback skips because the
-container has no host audio device. The default suite does not include the
-tagged PTY integration suite; no default tests require a GPU or network access.
+container has no host audio device. CI includes tagged PTY integration tests;
+podman/docker provide `/dev/ptmx` and a private `/dev/pts` mount. The ordinary
+`make test` suite remains untagged. No tests require a GPU or network access
+(toolchain/module downloads happen during setup).
 Media probing and video decoding still run when FFmpeg and real LFS assets are
 available. `internal/testutil.RequireMedia` skips missing fixtures, LFS pointer
 files, or missing FFmpeg tools, while decoder errors on present media fail.
