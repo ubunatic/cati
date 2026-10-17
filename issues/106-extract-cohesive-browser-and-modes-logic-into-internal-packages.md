@@ -1,6 +1,6 @@
 # 106 — Extract cohesive browser and modes logic into internal packages
 
-**Status**: Open
+**Status**: Closed — Extracted independently tested internal/browser, internal/modes, internal/ansi in 9d3ab8d; split command files in 540f6c3; declaration hashes unchanged, full fast/reference suites and preflight pass; event-loop follow-up remains in 008
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Refactor
