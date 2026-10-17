@@ -39,10 +39,10 @@ followed by its rendering strategy and the complete Unicode shape inventory
 used by that mode. For a smaller comparison, pass mode names or aliases such
 as `cati modes half six --info`.
 
-With `--smart -w 0`, the command lists the selected modes without rendering
+With `--smart -W 0`, the command lists the selected modes without rendering
 demo images.
 
-Composable registry modes are inspectable with `cati modes --smart -w 0 --info`.
+Composable registry modes are inspectable with `cati modes --smart -W 0 --info`.
 Names are case-sensitive (`q` and `Q` differ); debug expressions use `d` plus
 comma-separated set IDs, for example `d1,6,9,44`. Registry-only experimental
 unions are reported with normalized IDs and LCM geometry but are not passed to
@@ -116,8 +116,8 @@ compatibility aliases when the companion binaries are installed.
 |------|-------|---------|-------------|
 | `--ansi` | | `true` | 24-bit ANSI true-color output |
 | `--mode` | `-m` | `half` | render mode: `h\|half`, `hs\|half/split`, `q\|quad`, `s\|spark`, `sq\|spark+quad`, `x\|six`, `xh\|six+half`, `sx\|spark+six` |
-| `--width` | `-w` | auto | target image width in terminal columns |
-| `--height` | | auto | target image height in terminal rows |
+| `--width` | `-W` | auto | target image width in terminal columns |
+| `--height` | `-H` | auto | target image height in terminal rows |
 | `--crop` | `-c` | off | crop output in terminal cells: `W:H`, `W:H:X:Y`, `auto`, or alignment like `c,m` |
 | `--zoom` | `-z` | fit | initial zoom: `0` = fit, `1`/`100%`/`1:1`, `w`/`h` = scale to width/height |
 | `--prescaler` | `-S` | | resize prescaler: `nn` (nearest-neighbor), `pyramid` |

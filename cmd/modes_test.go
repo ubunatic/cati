@@ -30,10 +30,10 @@ func TestModesCommandSmartZeroWidthListsWithoutRendering(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
-	cmd.SetArgs([]string{"--smart", "-w", "0", "half"})
+	cmd.SetArgs([]string{"--smart", "-W", "0", "half"})
 
 	if err := cmd.Execute(); err != nil {
-		t.Fatalf("modes --smart -w 0: %v", err)
+		t.Fatalf("modes --smart -W 0: %v", err)
 	}
 	text := out.String()
 	if !strings.Contains(text, "Available render modes:\nhalf\n") {
@@ -123,7 +123,7 @@ func TestModesInfoListsRegistryCompositionsAndPreservesCase(t *testing.T) {
 	var out bytes.Buffer
 	cmd := modesCommand()
 	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"--smart", "-w", "0", "Q", "q", "d1,6,9,44", "--info"})
+	cmd.SetArgs([]string{"--smart", "-W", "0", "Q", "q", "d1,6,9,44", "--info"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("modes registry info: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestModesStatsInTitle(t *testing.T) {
 	var out bytes.Buffer
 	cmd := modesCommand()
 	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"--smart", "-w", "12", "half", "spark+six"})
+	cmd.SetArgs([]string{"--smart", "-W", "12", "half", "spark+six"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("modes --smart: %v", err)
 	}
@@ -332,14 +332,14 @@ func TestModesSorting(t *testing.T) {
 		var out1, out2 bytes.Buffer
 		cmd1 := modesCommand()
 		cmd1.SetOut(&out1)
-		cmd1.SetArgs([]string{"-w", "12", "--sort", "ssim", "half", "quad", "six"})
+		cmd1.SetArgs([]string{"-W", "12", "--sort", "ssim", "half", "quad", "six"})
 		if err := cmd1.Execute(); err != nil {
 			t.Fatalf("modes --sort ssim: %v", err)
 		}
 
 		cmd2 := modesCommand()
 		cmd2.SetOut(&out2)
-		cmd2.SetArgs([]string{"-w", "12", "--by-ssim", "half", "quad", "six"})
+		cmd2.SetArgs([]string{"-W", "12", "--by-ssim", "half", "quad", "six"})
 		if err := cmd2.Execute(); err != nil {
 			t.Fatalf("modes --by-ssim: %v", err)
 		}
@@ -366,7 +366,7 @@ func TestModesSorting(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"-w", "12", "--sort", "eff", "half", "quad", "six"})
+		cmd.SetArgs([]string{"-W", "12", "--sort", "eff", "half", "quad", "six"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("modes --sort eff: %v", err)
 		}
@@ -394,7 +394,7 @@ func TestModesCustomImageInput(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"-w", "12", "-i", "testdata/demo_circle_20x20/source.png", "half", "quad"})
+		cmd.SetArgs([]string{"-W", "12", "-i", "testdata/demo_circle_20x20/source.png", "half", "quad"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("modes -i circle: %v", err)
 		}
@@ -411,7 +411,7 @@ func TestModesCustomImageInput(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"-w", "12", "-i", "testdata/demo_circle_20x20/source.png", "-i", "testdata/demo_checker_20x20/source.png", "half"})
+		cmd.SetArgs([]string{"-W", "12", "-i", "testdata/demo_circle_20x20/source.png", "-i", "testdata/demo_checker_20x20/source.png", "half"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("modes -i circle -i checker: %v", err)
 		}
@@ -446,7 +446,7 @@ func TestModesSamplePresets(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"-w", "12", "-p", "soldering", "half"})
+		cmd.SetArgs([]string{"-W", "12", "-p", "soldering", "half"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("modes -p soldering: %v", err)
 		}
@@ -461,7 +461,7 @@ func TestModesBenchmarkScorecard(t *testing.T) {
 	var out bytes.Buffer
 	cmd := modesCommand()
 	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"--benchmark", "-w", "10", "half", "quad"})
+	cmd.SetArgs([]string{"--benchmark", "-W", "10", "half", "quad"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("modes --benchmark: %v", err)
 	}
@@ -688,7 +688,7 @@ func TestModesCommandColsFlag(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"-w", "8", "--cols", "1", "half", "quad"})
+		cmd.SetArgs([]string{"-W", "8", "--cols", "1", "half", "quad"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("modes --cols 1: %v", err)
 		}
@@ -710,7 +710,7 @@ func TestModesCommandColsFlag(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"-w", "8", "--cols", "2", "half", "quad"})
+		cmd.SetArgs([]string{"-W", "8", "--cols", "2", "half", "quad"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("modes --cols 2: %v", err)
 		}
@@ -732,7 +732,7 @@ func TestModesCommandColsFlag(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"-w", "8", "--cols", "3", "half", "quad", "full"})
+		cmd.SetArgs([]string{"-W", "8", "--cols", "3", "half", "quad", "full"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("modes --cols 3: %v", err)
 		}
@@ -754,7 +754,7 @@ func TestModesCommandColsFlag(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"-w", "8", "--cols", "auto", "half"})
+		cmd.SetArgs([]string{"-W", "8", "--cols", "auto", "half"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("modes --cols auto: %v", err)
 		}
@@ -764,7 +764,7 @@ func TestModesCommandColsFlag(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"-w", "8", "--cols", "0", "half"})
+		cmd.SetArgs([]string{"-W", "8", "--cols", "0", "half"})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("modes --cols 0: %v", err)
 		}
@@ -774,14 +774,14 @@ func TestModesCommandColsFlag(t *testing.T) {
 		var out bytes.Buffer
 		cmd := modesCommand()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"-w", "8", "--cols", "invalid", "half"})
+		cmd.SetArgs([]string{"-W", "8", "--cols", "invalid", "half"})
 		if err := cmd.Execute(); err == nil {
 			t.Fatalf("expected error for --cols invalid, got nil")
 		}
 
 		cmd = modesCommand()
 		cmd.SetOut(&out)
-		cmd.SetArgs([]string{"-w", "8", "--cols", "-5", "half"})
+		cmd.SetArgs([]string{"-W", "8", "--cols", "-5", "half"})
 		if err := cmd.Execute(); err == nil {
 			t.Fatalf("expected error for --cols -5, got nil")
 		}

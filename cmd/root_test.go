@@ -1113,12 +1113,21 @@ func TestCLIDoom1S2Render(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// Exercise this checkout's player directly; an installed catiplay
+			// may implement a different CLI version.
 			cmd := New()
+			for _, arg := range tc.args {
+				if arg == "--play" {
+					cmd = NewPlay()
+					break
+				}
+			}
 			cmd.SetArgs(tc.args)
 			outR, outW, err := os.Pipe()
 			if err != nil {
 				t.Fatalf("os.Pipe: %v", err)
 			}
+			defer outR.Close()
 			oldStdout := os.Stdout
 			oldArgs := os.Args
 			os.Stdout = outW
@@ -1136,11 +1145,11 @@ func TestCLIDoom1S2Render(t *testing.T) {
 			os.Stdout = oldStdout
 			os.Args = oldArgs
 
+			outBytes := <-outChan
 			if execErr != nil {
 				t.Fatalf("cmd.Execute error: %v", execErr)
 			}
 
-			outBytes := <-outChan
 			lines := strings.Split(strings.TrimSuffix(string(outBytes), "\n"), "\n")
 			if len(lines) != tc.wantLines {
 				t.Errorf("got %d lines, want %d lines", len(lines), tc.wantLines)

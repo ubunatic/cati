@@ -17,6 +17,12 @@ library packages, renderers, CLI logic, spec integrity, and ordinary package
 tests. The Makefile runs these test targets with the pinned Go 1.26.0 toolchain
 and ignores enclosing `go.work` files so JPEG-based golden renders are stable.
 
+CLI geometry tests invoke this checkout's player command directly for preview
+cases, so an older `catiplay` on PATH cannot affect their results. Width uses
+`--width`/`-W` and height uses `--height`/`-H`. The real mediabrowse video test
+checks play/pause/resume before ticking, then waits up to ten seconds for EOF:
+the decoder can drain the entire short clip in a single tick.
+
 Additional suites are opt-in:
 
 - `make test-player` — tests guarded by the `catiplay` build tag.

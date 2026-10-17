@@ -161,12 +161,6 @@ func TestRealVideoPlaybackIntegration(t *testing.T) {
 		t.Fatal("expected video to enter playing state")
 	}
 
-	// Tick multiple times and draw
-	for i := 0; i < 5; i++ {
-		time.Sleep(10 * time.Millisecond)
-		a.Tick(time.Now())
-	}
-
 	c := loom.NewCanvas(60, 20)
 	a.Draw(c, loom.Rect{W: 60, H: 20})
 	if title := a.preview.Title(); !strings.Contains(title, "playing") {
@@ -202,9 +196,16 @@ func TestRealVideoPlaybackIntegration(t *testing.T) {
 	if title := a.preview.Title(); !strings.Contains(title, "playing") {
 		t.Fatalf("resumed preview title = %q, want playing", title)
 	}
-	for i := 0; i < 3; i++ {
-		time.Sleep(10 * time.Millisecond)
+	// The decoder can finish the entire clip in one tick. Check play/pause
+	// before ticking, then wait for EOF rather than assuming a playback duration.
+	waitForCondition(t, 10*time.Second, func() bool {
 		a.Tick(time.Now())
+		a.preview.mu.Lock()
+		defer a.preview.mu.Unlock()
+		return a.preview.videoEnded
+	})
+	if a.preview.playing || a.TickInterval() != 0 {
+		t.Fatal("video did not stop at EOF")
 	}
 	a.Draw(c, loom.Rect{W: 60, H: 20})
 }
