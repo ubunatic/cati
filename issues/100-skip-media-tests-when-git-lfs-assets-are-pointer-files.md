@@ -1,6 +1,6 @@
 # 100 — Skip media tests when Git LFS assets are pointer files
 
-**Status**: Closed — Fixed in HEAD media-prerequisite helper; fast/reference make test-q1 passes with real media and pointer/absent-tool unit fixtures
+**Status**: Closed — Fixed in 68b11ff; fast/reference make test-q1 passes with real media and pointer/absent-tool unit fixtures; make preflight passes
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Infrastructure
