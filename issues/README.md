@@ -112,6 +112,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 106 | [106-extract-cohesive-browser-and-modes-logic-into-internal-packages.md](106-extract-cohesive-browser-and-modes-logic-into-internal-packages.md) | Extract cohesive browser and modes logic into internal packages | Open |
 | 107 | [107-assert-ansi-render-rows-and-colours-structurally.md](107-assert-ansi-render-rows-and-colours-structurally.md) | Assert ANSI render rows and colours structurally | Open |
 | 108 | [108-fix-harnez-lint-findings-and-enforce-shared-lint-target-in-ci.md](108-fix-harnez-lint-findings-and-enforce-shared-lint-target-in-ci.md) | Fix harnez lint findings and enforce shared lint target in CI | Open |
+| 109 | [109-github-ci-parallel-jobs-timing-summary-flake-hunt-cloud-agent.md](109-github-ci-parallel-jobs-timing-summary-flake-hunt-cloud-agent.md) | GitHub CI: parallel jobs, timing summary, flake hunt | Open — owned by the Claude cloud agent (ccr branch); placeholder reserved by host |
 ## Archived
 
 | # | Title | Reason |
