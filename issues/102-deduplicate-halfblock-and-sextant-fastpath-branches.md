@@ -1,6 +1,6 @@
 # 102 — Deduplicate halfblock and sextant fastpath branches
 
-**Status**: Open
+**Status**: Closed — Fixed in cd68067; fast/reference suites, renderer race checks, preflight and benchmark comparison pass without golden changes
 **Priority**: P3 (Low)
 **Severity**: Minor
 **Category**: Refactor

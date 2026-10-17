@@ -105,7 +105,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 099 | [099-fix-23-pre-existing-test-failures-removed-w-w-flags-in-cmd-tests-mediabrowse-playback-timing.md](099-fix-23-pre-existing-test-failures-removed-w-w-flags-in-cmd-tests-mediabrowse-playback-timing.md) | Fix pre-existing test failures on main | Closed — Fixed in 5ce50a0; make test-q1 passes fast/reference suites and make preflight passes |
 | 100 | [100-skip-media-tests-when-git-lfs-assets-are-pointer-files.md](100-skip-media-tests-when-git-lfs-assets-are-pointer-files.md) | Skip media tests when Git LFS assets are pointer files | Closed — Fixed in 68b11ff; fast/reference make test-q1 passes with real media and pointer/absent-tool unit fixtures; make preflight passes |
 | 101 | [101-add-github-actions-ci-for-build-vet-and-tests.md](101-add-github-actions-ci-for-build-vet-and-tests.md) | Add GitHub Actions CI for build, vet and tests | Open |
-| 102 | [102-deduplicate-halfblock-and-sextant-fastpath-branches.md](102-deduplicate-halfblock-and-sextant-fastpath-branches.md) | Deduplicate halfblock and sextant fastpath branches | Open |
+| 102 | [102-deduplicate-halfblock-and-sextant-fastpath-branches.md](102-deduplicate-halfblock-and-sextant-fastpath-branches.md) | Deduplicate halfblock and sextant fastpath branches | Closed — Fixed in cd68067; fast/reference suites, renderer race checks, preflight and benchmark comparison pass without golden changes |
 | 103 | [103-integration-tag-root-tests-use-package-main-instead-of-cati.md](103-integration-tag-root-tests-use-package-main-instead-of-cati.md) | Integration-tag root tests use package main instead of cati | Open |
 ## Archived
 
