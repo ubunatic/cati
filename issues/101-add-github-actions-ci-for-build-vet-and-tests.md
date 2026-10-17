@@ -1,6 +1,6 @@
 # 101 — Add GitHub Actions CI for build, vet and tests
 
-**Status**: In Progress — Implement CI and container test parity
+**Status**: Closed — CI workflow + make container-test; host podman container-test green incl. race (4b91911, ddf181a)
 **Priority**: P1 (High)
 **Severity**: Moderate
 **Category**: Infrastructure
