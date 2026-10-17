@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/term"
 	"ubunatic.com/cati/internal/audio"
+	browserui "ubunatic.com/cati/internal/browser"
 	"ubunatic.com/cati/internal/input"
 	"ubunatic.com/cati/internal/metrics"
 	"ubunatic.com/cati/internal/viewgeom"
@@ -224,20 +225,6 @@ func (rc renderCfg) preScaleName() string {
 	default:
 		return "+pre"
 	}
-}
-
-func ellipsizeRunes(s string, max int) string {
-	if max <= 0 || s == "" {
-		return ""
-	}
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	if max <= 3 {
-		return string(r[:max])
-	}
-	return string(r[:max-3]) + "..."
 }
 
 func viewerHintVars(meta MediaMeta, termCols int, hintTpl string, extra map[string]string) map[string]string {
@@ -1478,3 +1465,5 @@ func interactiveVideo(path string, initWidth, initHeight int, rc renderCfg, tr T
 		}
 	}
 }
+
+func ellipsizeRunes(s string, max int) string { return browserui.EllipsizeRunes(s, max) }

@@ -339,27 +339,6 @@ func TestMaxZoom(t *testing.T) {
 	}
 }
 
-func TestEllipsizeRunes(t *testing.T) {
-	tests := []struct {
-		name string
-		in   string
-		max  int
-		want string
-	}{
-		{"fits", "cat.png", 8, "cat.png"},
-		{"truncate with ellipsis", "very_long_name.png", 10, "very_lo..."},
-		{"tight budget", "abcdef", 3, "abc"},
-		{"empty budget", "abcdef", 0, ""},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := ellipsizeRunes(tc.in, tc.max); got != tc.want {
-				t.Fatalf("ellipsizeRunes(%q, %d) = %q, want %q", tc.in, tc.max, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestViewerHintVarsFitsWidth(t *testing.T) {
 	meta := MediaMeta{
 		Name:     "very_long_filename_for_the_viewer_hint_bar.png",

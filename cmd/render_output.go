@@ -6,7 +6,7 @@ import (
 	"image"
 	"io"
 	"time"
-	"unicode/utf8"
+	"ubunatic.com/cati/internal/ansi"
 )
 
 // renderCheckGate throttles the per-frame ANSI invariant check.
@@ -86,50 +86,4 @@ func validateRenderedANSI(out string, want renderCells, modeName string) error {
 	return nil
 }
 
-func visibleLineWidths(out string) []int {
-	var widths []int
-	col := 0
-	for i := 0; i < len(out); {
-		if out[i] == '\x1b' {
-			i = skipANSI(out, i)
-			continue
-		}
-		switch out[i] {
-		case '\r':
-			col = 0
-			i++
-			continue
-		case '\n':
-			widths = append(widths, col)
-			col = 0
-			i++
-			continue
-		}
-		_, size := utf8.DecodeRuneInString(out[i:])
-		if size == 0 {
-			break
-		}
-		col++
-		i += size
-	}
-	if col > 0 {
-		widths = append(widths, col)
-	}
-	return widths
-}
-
-func skipANSI(out string, i int) int {
-	i++
-	if i >= len(out) || out[i] != '[' {
-		return i
-	}
-	i++
-	for i < len(out) {
-		c := out[i]
-		i++
-		if c >= 0x40 && c <= 0x7e {
-			break
-		}
-	}
-	return i
-}
+func visibleLineWidths(out string) []int { return ansi.LineWidths(out) }

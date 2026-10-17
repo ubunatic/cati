@@ -107,13 +107,6 @@ func TestControlWithoutGoHandlerFailsIntegrity(t *testing.T) {
 	}
 }
 
-func TestTruncateANSIPreservesEscapesAndWidth(t *testing.T) {
-	got := truncateANSI("\x1b[31mabcdef\x1b[m", 3)
-	if got != "\x1b[31mabc" {
-		t.Fatalf("truncateANSI = %q, want red abc prefix", got)
-	}
-}
-
 func TestFitMenuItemsCollapsesLowPriorityBeforeRemoving(t *testing.T) {
 	items := []menuLayoutItem{
 		{literal: "", label: "[High]", fullLabel: "[High]", compactLabel: "[H]", prio: 100, visible: true},

@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"ubunatic.com/cati/internal/ansi"
 	"ubunatic.com/cati/internal/metrics"
+	modelayout "ubunatic.com/cati/internal/modes"
 	"ubunatic.com/cati/spec"
 	"ubunatic.com/cati/v1/halfblock"
 	"ubunatic.com/cati/v1/quadblock"
@@ -978,94 +980,6 @@ func modeInfoLines(entry renderModeEntry, modeSpec spec.RenderModesSpec) []strin
 	return strings.Split(text, "\n")
 }
 
-func autoFitGridCols(cards [][]string, termWidth int) int {
-	if termWidth <= 0 || len(cards) == 0 {
-		return 1
-	}
-	maxCardW := 0
-	for _, card := range cards {
-		for _, line := range card {
-			if w := ansiLineWidth(line); w > maxCardW {
-				maxCardW = w
-			}
-		}
-	}
-	if maxCardW <= 0 {
-		return 1
-	}
-	const gutter = 4
-	for k := 3; k >= 1; k-- {
-		needed := k*maxCardW + (k-1)*gutter
-		if needed <= termWidth {
-			return k
-		}
-	}
-	return 1
-}
-
-func formatGridRowLines(rowCards [][]string) []string {
-	if len(rowCards) == 0 {
-		return nil
-	}
-	colWidths := make([]int, len(rowCards))
-	maxH := 0
-	for j, card := range rowCards {
-		w := 0
-		for _, line := range card {
-			if lw := ansiLineWidth(line); lw > w {
-				w = lw
-			}
-		}
-		colWidths[j] = w
-		if len(card) > maxH {
-			maxH = len(card)
-		}
-	}
-
-	lines := make([]string, 0, maxH+1)
-	lines = append(lines, "") // blank line before row
-	for r := 0; r < maxH; r++ {
-		var sb strings.Builder
-		for j, card := range rowCards {
-			var line string
-			if r < len(card) {
-				line = card[r]
-			}
-			if j < len(rowCards)-1 {
-				sb.WriteString(padANSILine(line, colWidths[j]))
-				sb.WriteString("    ")
-			} else {
-				sb.WriteString(line)
-			}
-		}
-		lines = append(lines, strings.TrimRight(sb.String(), " "))
-	}
-	return lines
-}
-
-func formatCardsGrid(cards [][]string, cols int, termWidth int) []string {
-	if len(cards) == 0 {
-		return nil
-	}
-	effectiveCols := cols
-	if effectiveCols <= 0 {
-		effectiveCols = autoFitGridCols(cards, termWidth)
-	}
-	if effectiveCols <= 0 {
-		effectiveCols = 1
-	}
-
-	var result []string
-	for i := 0; i < len(cards); i += effectiveCols {
-		end := i + effectiveCols
-		if end > len(cards) {
-			end = len(cards)
-		}
-		result = append(result, formatGridRowLines(cards[i:end])...)
-	}
-	return result
-}
-
 func printCardsGrid(out io.Writer, cards [][]string, cols int) {
 	lines := formatCardsGrid(cards, cols, catiterm.TermWidth())
 	for _, l := range lines {
@@ -1292,36 +1206,6 @@ func modeGlyphs(entry renderModeEntry, modeSpec spec.RenderModesSpec) []rune {
 	return result
 }
 
-func wrapGlyphs(shapes []rune, width, prefixWidth int) string {
-	if len(shapes) == 0 {
-		return "(none)"
-	}
-	var b strings.Builder
-	lineWidth := prefixWidth
-	for i, r := range shapes {
-		glyphWidth := 1
-		if i > 0 {
-			glyphWidth++
-		}
-		if lineWidth+glyphWidth > width && b.Len() > 0 {
-			b.WriteString("\n")
-			b.WriteString(strings.Repeat(" ", prefixWidth))
-			lineWidth = prefixWidth
-			glyphWidth = 1
-		}
-		if i > 0 && lineWidth > prefixWidth {
-			b.WriteByte(' ')
-		}
-		if r == ' ' {
-			b.WriteRune('␠')
-		} else {
-			b.WriteRune(r)
-		}
-		lineWidth += glyphWidth
-	}
-	return b.String()
-}
-
 type modeDemoStats struct {
 	dur  time.Duration
 	w    int
@@ -1526,17 +1410,8 @@ func ansiLinesWidth(lines []string) int {
 	return width
 }
 
-func ansiLineWidth(line string) int {
-	widths := visibleLineWidths(line)
-	if len(widths) == 0 {
-		return 0
-	}
-	return widths[0]
-}
-
-func padANSILine(line string, width int) string {
-	return line + strings.Repeat(" ", max(0, width-ansiLineWidth(line)))
-}
+func ansiLineWidth(line string) int             { return ansi.FirstLineWidth(line) }
+func padANSILine(line string, width int) string { return ansi.PadLine(line, width) }
 
 func decodeEmbeddedLogo() (image.Image, error) {
 	b, err := base64.StdEncoding.DecodeString(embeddedCatiLogo)
@@ -1580,4 +1455,14 @@ func renderDemoLines(img image.Image, rc renderCfg) ([]string, error) {
 		return nil, nil
 	}
 	return strings.Split(text, "\n"), nil
+}
+
+func autoFitGridCols(cards [][]string, termWidth int) int {
+	return modelayout.AutoFitGridCols(cards, termWidth)
+}
+func formatCardsGrid(cards [][]string, cols, termWidth int) []string {
+	return modelayout.FormatCardsGrid(cards, cols, termWidth)
+}
+func wrapGlyphs(shapes []rune, width, prefixWidth int) string {
+	return modelayout.WrapGlyphs(shapes, width, prefixWidth)
 }

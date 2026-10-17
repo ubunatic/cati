@@ -90,6 +90,16 @@ For detail on specific components, refer to:
 
 ### Internal Package Decoupling (June 2026)
 
+The October 2026 presentation extraction adds three internal boundaries:
+`internal/browser` owns colour tokens, template rendering/measurement, ANSI
+truncation and filename ellipsizing; `internal/modes` owns demo-card grids and
+glyph-inventory wrapping; `internal/ansi` owns the shared renderer width scan.
+Their tests run without CLI factories, media tools or optional browser/player
+build tags. Small `cmd` adapters preserve existing call sites. Width handling
+still uses the existing single-cell renderer-glyph contract; this extraction
+does not change rendering algorithms or public `v1` APIs. Browser event-loop
+state and renderer selection remain in `cmd` (issue 008).
+
 The quality metrics, image-geometry helpers, and pixel-art pre-scalers were extracted from `cmd/` into dedicated `internal/` packages. The key learnings:
 
 *   **Pure math lives in `internal/`** — anything that depends only on `image`, `image/color`, and `math` should not sit in `cmd/`. It creates import coupling, bloats the UI package, and makes unit testing harder.
