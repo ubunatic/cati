@@ -2,7 +2,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
   workflow_dispatch:
 
@@ -10,28 +10,128 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# As GO_TEST_ENV in the Makefile: the pinned toolchain keeps goldens stable.
+env:
+  GOWORK: "off"
+  GOTOOLCHAIN: go1.26.0
+
+# lint, unit and race run in parallel; report adds the wall time. Raw logs
+# need admin rights to download, so each job writes failures, test time and
+# the slowest packages to its summary and annotations (gh run view shows them).
+# Each job keeps its own module and build cache (race builds differ), saved
+# per commit and restored from the newest for the same go.sum.
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache: true
-      - name: Install media tools
+          cache: false
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-lint-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: go-lint-${{ hashFiles('go.sum') }}-
+      - run: make fmt-check
+      - run: go vet ./...
+      - run: go build ./...
+
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-unit-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: go-unit-${{ hashFiles('go.sum') }}-
+      - name: install media tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: Build, vet, test and check race safety
-        run: make ci-test
+      - name: go test -short
+        id: test
+        run: |
+          go test -short -json ./... > unit.json 2>&1
+          CATI_FASTPATH=0 go test -short -tags=fastpath0 -json ./... >> unit.json 2>&1
+      - name: summary
+        if: always() && steps.test.outcome != 'skipped'
+        run: go run .github/gotest-report.go -title "unit (go test -short)" unit.json
+
+  race:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-race-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: go-race-${{ hashFiles('go.sum') }}-
+      - name: install media tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: go test -race
+        id: test
+        run: go test -race -json ./... > race.json 2>&1
+      - name: summary
+        if: always() && steps.test.outcome != 'skipped'
+        run: go run .github/gotest-report.go -title "race (go test -race)" race.json
 
   reuse:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: fsfe/reuse-action@v5
+
+  report:
+    needs: [ lint, unit, race, reuse ]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: wall time
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LINT: ${{ needs.lint.result }}
+          UNIT: ${{ needs.unit.result }}
+          RACE: ${{ needs.race.result }}
+          REUSE: ${{ needs.reuse.result }}
+        run: |
+          started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          wall=$(( $(date +%s) - $(date -d "$started" +%s) ))
+          {
+            printf '### CI wall time: %dm%02ds\n\n' $((wall / 60)) $((wall % 60))
+            printf '| job | result |\n|---|---|\n| lint | %s |\n| unit | %s |\n| race | %s |\n| reuse | %s |\n' "$LINT" "$UNIT" "$RACE" "$REUSE"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if test "$LINT$UNIT$RACE$REUSE" != successsuccesssuccesssuccess
+          then
+            exit 1
+          fi
