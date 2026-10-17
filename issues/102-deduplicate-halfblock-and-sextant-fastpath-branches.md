@@ -1,4 +1,4 @@
-# 095 — Deduplicate halfblock and sextant fastpath branches
+# 102 — Deduplicate halfblock and sextant fastpath branches
 
 **Status**: Open
 **Priority**: P3 (Low)
