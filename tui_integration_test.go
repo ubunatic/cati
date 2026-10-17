@@ -1,6 +1,6 @@
 //go:build integration
 
-package main
+package cati_test
 
 import (
 	"bytes"
@@ -509,8 +509,6 @@ func lastInfoLineForTest(out string) string {
 	}
 	return ""
 }
-
-var infoOrZoomHintRe = regexp.MustCompile(`info raw=[^\r\n]*|src px/cell=[0-9.]+`)
 
 func lastInfoOrZoomHintForTest(out string) string {
 	matches := infoOrZoomHintRe.FindAllString(stripANSIForTest(out), -1)
