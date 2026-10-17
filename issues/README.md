@@ -108,6 +108,10 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 102 | [102-deduplicate-halfblock-and-sextant-fastpath-branches.md](102-deduplicate-halfblock-and-sextant-fastpath-branches.md) | Deduplicate halfblock and sextant fastpath branches | Closed — Fixed in cd68067; fast/reference suites, renderer race checks, preflight and benchmark comparison pass without golden changes |
 | 103 | [103-integration-tag-root-tests-use-package-main-instead-of-cati.md](103-integration-tag-root-tests-use-package-main-instead-of-cati.md) | Integration-tag root tests use package main instead of cati | Closed — Changed package declaration to cati_test and removed duplicate var in tui_integration_test.go (commit c720887) |
 | 104 | [104-update-tui-integration-test-go-for-post-split-cli-flags-and-spec-driven-mode-names.md](104-update-tui-integration-test-go-for-post-split-cli-flags-and-spec-driven-mode-names.md) | Update tui_integration_test.go for post-split CLI flags and spec-driven mode names | Open |
+| 105 | [105-add-efficient-short-and-package-test-tiers-using-measured-test-timings.md](105-add-efficient-short-and-package-test-tiers-using-measured-test-timings.md) | Add efficient short and package test tiers using measured test timings | Open |
+| 106 | [106-extract-cohesive-browser-and-modes-logic-into-internal-packages.md](106-extract-cohesive-browser-and-modes-logic-into-internal-packages.md) | Extract cohesive browser and modes logic into internal packages | Open |
+| 107 | [107-assert-ansi-render-rows-and-colours-structurally.md](107-assert-ansi-render-rows-and-colours-structurally.md) | Assert ANSI render rows and colours structurally | Open |
+| 108 | [108-fix-harnez-lint-findings-and-enforce-shared-lint-target-in-ci.md](108-fix-harnez-lint-findings-and-enforce-shared-lint-target-in-ci.md) | Fix harnez lint findings and enforce shared lint target in CI | Open |
 ## Archived
 
 | # | Title | Reason |
