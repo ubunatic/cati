@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"ubunatic.com/cati/internal/ansitest"
 	"ubunatic.com/cati/v1/core"
 )
 
@@ -266,15 +267,13 @@ func TestRender_SolidColor(t *testing.T) {
 	}
 	out := sb.String()
 
-	// Expect 2 terminal rows (4 pixel rows / 2) each followed by a newline.
-	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	if len(lines) != 2 {
-		t.Errorf("expected 2 lines, got %d: %q", len(lines), out)
-	}
-	// Every line must contain the █ character (solid color = same fg top & bot).
-	for i, l := range lines {
-		if !strings.ContainsRune(l, '█') {
-			t.Errorf("line %d: expected █, got %q", i, l)
+	rows := parseRenderCells(t, out, 2, 4)
+	for y, row := range rows {
+		for x, cell := range row {
+			want := ansitest.Cell{Rune: '█', FG: ansitest.RGB(255, 0, 0)}
+			if cell != want {
+				t.Errorf("cell (%d,%d) = %+v, want %+v", x, y, cell, want)
+			}
 		}
 	}
 }
@@ -339,16 +338,12 @@ func TestRender_TwoColors(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 	out := sb.String()
-	// Each cell has red top / blue bottom → ▀ with fg=red bg=blue.
-	if !strings.ContainsRune(out, '▀') {
-		t.Errorf("expected ▀ characters in output: %q", out)
-	}
-	// Both fg (red) and bg (blue) ANSI sequences must appear.
-	if !strings.Contains(out, "38;2;255;0;0") {
-		t.Errorf("expected red fg escape in output: %q", out)
-	}
-	if !strings.Contains(out, "48;2;0;0;255") {
-		t.Errorf("expected blue bg escape in output: %q", out)
+	rows := parseRenderCells(t, out, 1, 4)
+	for x, cell := range rows[0] {
+		want := ansitest.Cell{Rune: '▀', FG: ansitest.RGB(255, 0, 0), BG: ansitest.RGB(0, 0, 255)}
+		if cell != want {
+			t.Errorf("cell (%d,0) = %+v, want %+v", x, cell, want)
+		}
 	}
 }
 
@@ -361,8 +356,9 @@ func TestRenderToImage_ANSIColorsAreOpaque(t *testing.T) {
 	if err := Render(&ansi, img, 1, Options{NoLinePrefix: true}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if want := "\x1b[38;2;100;20;5m▀\x1b[0m"; !strings.Contains(ansi.String(), want) {
-		t.Fatalf("ANSI output = %q, want %q", ansi.String(), want)
+	topCell := parseRenderCells(t, ansi.String(), 1, 1)[0][0]
+	if want := (ansitest.Cell{Rune: '▀', FG: ansitest.RGB(100, 20, 5)}); topCell != want {
+		t.Fatalf("top cell = %+v, want %+v", topCell, want)
 	}
 
 	serial := RenderToImage(img)
@@ -385,8 +381,9 @@ func TestRenderToImage_ANSIColorsAreOpaque(t *testing.T) {
 	if err := Render(&bottomANSI, bottom, 1, Options{NoLinePrefix: true}); err != nil {
 		t.Fatalf("Render bottom-only: %v", err)
 	}
-	if want := "\x1b[38;2;5;20;100m▄\x1b[0m"; !strings.Contains(bottomANSI.String(), want) {
-		t.Fatalf("bottom ANSI output = %q, want %q", bottomANSI.String(), want)
+	bottomCell := parseRenderCells(t, bottomANSI.String(), 1, 1)[0][0]
+	if want := (ansitest.Cell{Rune: '▄', FG: ansitest.RGB(5, 20, 100)}); bottomCell != want {
+		t.Fatalf("bottom cell = %+v, want %+v", bottomCell, want)
 	}
 	if got := RenderToImage(bottom).RGBAAt(0, 1); got != (color.RGBA{R: 5, G: 20, B: 100, A: 255}) {
 		t.Fatalf("bottom painted pixel = %#v, want opaque premultiplied ANSI color", got)
@@ -402,8 +399,9 @@ func TestRenderToImage_ANSIBackgroundIsOpaque(t *testing.T) {
 	if err := Render(&ansi, img, 1, Options{NoLinePrefix: true}); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if !strings.Contains(ansi.String(), "\x1b[48;2;0;0;255m") {
-		t.Fatalf("ANSI output lacks blue background: %q", ansi.String())
+	cell := parseRenderCells(t, ansi.String(), 1, 1)[0][0]
+	if want := (ansitest.Cell{Rune: '▀', FG: ansitest.RGB(255, 0, 0), BG: ansitest.RGB(0, 0, 255)}); cell != want {
+		t.Fatalf("two-colour cell = %+v, want %+v", cell, want)
 	}
 	got := RenderToImage(img)
 	if got.RGBAAt(0, 0) != (color.RGBA{R: 255, A: 255}) || got.RGBAAt(0, 1) != (color.RGBA{B: 255, A: 255}) {
@@ -439,5 +437,42 @@ func TestRender_PNGFixtures(t *testing.T) {
 				t.Errorf("expected >= %d lines, got %d", fix.minRows, len(lines))
 			}
 		})
+	}
+}
+
+func parseRenderCells(t *testing.T, out string, wantRows, wantCols int) [][]ansitest.Cell {
+	t.Helper()
+	rows, err := ansitest.Parse(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != wantRows {
+		t.Fatalf("render rows = %d, want %d", len(rows), wantRows)
+	}
+	for y, row := range rows {
+		if len(row) != wantCols {
+			t.Fatalf("row %d has %d cells, want %d", y, len(row), wantCols)
+		}
+	}
+	return rows
+}
+
+func TestRenderColourStateDoesNotLeakAcrossRows(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 2, 3))
+	for x := range 2 {
+		img.SetRGBA(x, 0, rgba(255, 0, 0, 255))
+		img.SetRGBA(x, 1, rgba(0, 0, 255, 255))
+		img.SetRGBA(x, 2, rgba(0, 255, 0, 255))
+	}
+	var out strings.Builder
+	if err := Render(&out, img, 2, Options{}); err != nil {
+		t.Fatal(err)
+	}
+	rows := parseRenderCells(t, out.String(), 2, 2)
+	for x, cell := range rows[1] {
+		want := ansitest.Cell{Rune: '▀', FG: ansitest.RGB(0, 255, 0)}
+		if cell != want {
+			t.Errorf("partial bottom cell (%d,1) = %+v, want %+v", x, cell, want)
+		}
 	}
 }

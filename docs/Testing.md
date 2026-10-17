@@ -25,6 +25,17 @@ retain those sweeps. SSIM variants run as parallel subtests against immutable
 source images; golden cases share decoded source fixtures within the test.
 Benchmark deadline logic uses a fake clock rather than sleeping.
 
+`internal/ansitest` parses single-cell renderer rows into glyphs, foreground
+and background colours, and SGR attributes. Structural assertions compare row
+and cell counts as well as style; equivalent combined/separate SGR encodings
+compare equal. Parser tests cover resets, indexed/true colours, carriage return,
+line erasure and malformed sequences. The known cursor-visibility and mouse
+reporting toggles in the viewer prologue preserve painted cell state; screen
+switching and unknown controls remain errors. Half-block colour/row tests and the
+interactive-versus-static comparison use this helper. Unsupported terminal
+operations fail explicitly; it is not a general terminal emulator. Exact byte
+comparisons remain appropriate for fast/reference output parity.
+
 Measure uncached timings reproducibly:
 
 ```bash

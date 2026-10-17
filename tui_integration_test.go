@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
+	"ubunatic.com/cati/internal/ansitest"
 	"ubunatic.com/cati/internal/testutil"
 	"ubunatic.com/cati/spec"
 )
@@ -68,7 +69,6 @@ func TestInteractiveSmallGradientViaPipedStdin(t *testing.T) {
 }
 
 func TestInteractiveSmallGradientViaPTY(t *testing.T) {
-	testutil.SkipInContainer(t, "PTY terminal interaction")
 	if testing.Short() {
 		t.Skip("skipping PTY integration test in short mode")
 	}
@@ -203,29 +203,7 @@ func TestInteractiveAndStaticHalfblockRenderMatch(t *testing.T) {
 		t.Fatalf("interactive cati exited with error: %v\noutput:\n%s", err, stripANSIForTest(interactiveOut))
 	}
 
-	gotStatic := normalizedRenderOutputForTest(string(staticOut))
-	gotInteractive := normalizedRenderOutputForTest(firstRenderedFrameForTest(interactiveOut))
-	if gotInteractive != gotStatic {
-		intLines := strings.Split(gotInteractive, "\n")
-		statLines := strings.Split(gotStatic, "\n")
-		max := len(intLines)
-		if len(statLines) > max {
-			max = len(statLines)
-		}
-		for i := 0; i < max; i++ {
-			var in, st string
-			if i < len(intLines) {
-				in = intLines[i]
-			}
-			if i < len(statLines) {
-				st = statLines[i]
-			}
-			if in != st {
-				t.Fatalf("interactive and static render output differ at line %d\ninteractive: %q\nstatic: %q", i+1, in, st)
-			}
-		}
-		t.Fatalf("interactive and static render output differ")
-	}
+	ansitest.AssertEqual(t, firstRenderedFrameForTest(interactiveOut), string(staticOut))
 }
 
 func TestStaticExplicitZoomCellSizeAcrossRenderModes(t *testing.T) {
@@ -576,13 +554,6 @@ func firstRenderedFrameForTest(out string) string {
 		return out[start:]
 	}
 	return out[start : start+end]
-}
-
-func normalizedRenderOutputForTest(out string) string {
-	plain := stripANSIForTest(out)
-	plain = strings.ReplaceAll(plain, "\r", "")
-	plain = strings.TrimSuffix(plain, "\n")
-	return plain
 }
 
 type frameBlockSize struct {
