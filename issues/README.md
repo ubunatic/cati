@@ -105,6 +105,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 097 | [097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md](097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md) | 2x4 braille mode must be dot-only: no full block, no background color | Open |
 | 097 | [097-add-github-actions-ci-for-build-vet-and-tests.md](097-add-github-actions-ci-for-build-vet-and-tests.md) | Add GitHub Actions CI for build, vet and tests | Open |
 | 098 | [098-split-spec-render-modes-yaml-so-a-new-glyph-set-or-composition-is-one-small-edit.md](098-split-spec-render-modes-yaml-so-a-new-glyph-set-or-composition-is-one-small-edit.md) | Split spec/render_modes.yaml so a new glyph set or composition is one small edit | Closed — render_modes.yaml split into compositions.yaml, glyph_sets/ and glyph_shapes/; CLI glyph outputs byte-identical, no golden changed; M2 docs and preflight passed |
+| 099 | [099-fix-23-pre-existing-test-failures-removed-w-w-flags-in-cmd-tests-mediabrowse-playback-timing.md](099-fix-23-pre-existing-test-failures-removed-w-w-flags-in-cmd-tests-mediabrowse-playback-timing.md) | Fix pre-existing test failures on main | Open |
 ## Archived
 
 | # | Title | Reason |
