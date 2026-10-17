@@ -1,4 +1,4 @@
-# 096 — Skip media tests when Git LFS assets are pointer files
+# 100 — Skip media tests when Git LFS assets are pointer files
 
 **Status**: Open
 **Priority**: P2 (Medium)
