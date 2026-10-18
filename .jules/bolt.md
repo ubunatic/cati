@@ -37,3 +37,7 @@
 ## 2026-10-12 - Single Contiguous Grid Slice Allocation and Direct Image Reconstruction Fastpath
 **Learning:** Iteratively allocating row slices (`make([]core.Cell, width)`) in `RenderToGrid` generates 60+ heap allocations per frame, and building intermediate `*core.Grid` structures inside `RenderToImageJ` causes 4x higher rendering latency and 66% RAM allocation bloat. In addition, 4-byte `copy(...)` in 2D scaling loops invokes `runtime.memmove` overhead.
 **Action:** Pre-allocate a single contiguous slice `cellStorage := make([]core.Cell, rowCount*width)` in `RenderToGrid`, write pixel bytes directly into `dst.Pix` in `RenderToImageJ` under `core.Fastpath` without creating `*core.Grid`, and replace 4-byte `copy(...)` in scaling loops with direct element assignments.
+
+## 2026-10-18 - Integer Luma Thresholding, Popcount Table, and Perfect Match Early Exit in Sextant Solver
+**Learning:** Evaluating float64 luma thresholds (`luma(p)`) and `bits.OnesCount8` in 64-candidate loops per cell in `chooseBestCell` introduces floating point instruction overhead and sub-byte bit counter overhead. Moreover, searching remaining candidate masks after finding a zero-error match (`score == 0 && m == preferred`) wastes CPU cycles in uniform and simple edge regions.
+**Action:** Compute integer luma using `2126*R + 7152*G + 722*B`, precompute popcount lookup table `popTable [64]uint8`, add uniform color fastpath in `chooseCell`, and break candidate evaluation loops immediately on perfect score zero matching preferred direct mask.
