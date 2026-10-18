@@ -112,7 +112,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 106 | [106-extract-cohesive-browser-and-modes-logic-into-internal-packages.md](106-extract-cohesive-browser-and-modes-logic-into-internal-packages.md) | Extract cohesive browser and modes logic into internal packages | Closed — Extracted independently tested internal/browser, internal/modes, internal/ansi in 9d3ab8d; split command files in 540f6c3; declaration hashes unchanged, full fast/reference suites and preflight pass; event-loop follow-up remains in 008 |
 | 107 | [107-assert-ansi-render-rows-and-colours-structurally.md](107-assert-ansi-render-rows-and-colours-structurally.md) | Assert ANSI render rows and colours structurally | Closed — Implemented in 8aa4cb8; structural colour/row checks, PTY parity and container race suites pass |
 | 108 | [108-fix-harnez-lint-findings-and-enforce-shared-lint-target-in-ci.md](108-fix-harnez-lint-findings-and-enforce-shared-lint-target-in-ci.md) | Fix harnez lint findings and enforce shared lint target in CI | Closed — Implemented in 3645673 and 0edb756; pinned lint and full tagged container CI pass |
-| 109 | [109-github-ci-parallel-jobs-timing-summary-flake-hunt-cloud-agent.md](109-github-ci-parallel-jobs-timing-summary-flake-hunt-cloud-agent.md) | GitHub CI: parallel jobs, timing summary, flake hunt | Open — owned by the Claude cloud agent (ccr branch); placeholder reserved by host |
+| 109 | [109-github-ci-parallel-jobs-timing-summary-flake-hunt-cloud-agent.md](109-github-ci-parallel-jobs-timing-summary-flake-hunt-cloud-agent.md) | GitHub CI: parallel jobs, timing summary, flake hunt | Closed |
 ## Archived
 
 | # | Title | Reason |

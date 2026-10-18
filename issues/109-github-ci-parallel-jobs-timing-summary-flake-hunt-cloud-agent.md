@@ -1,6 +1,6 @@
 # GitHub CI: parallel jobs, timing summary, flake hunt
 
-Status: In Progress — owned by the Claude cloud agent (ccr branch)
+Status: Closed — lint/unit/full/race/reuse jobs on q-cati's commands, ~6m vs 8m30 (run 39150205143); fast-forwarded to main
 
 Scope: .github/ only — same design as harnez issue 809 (no flake workflow:
 the sprint scopes the flake hunt to harnez and loom).
