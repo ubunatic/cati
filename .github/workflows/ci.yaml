@@ -13,27 +13,157 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# As GO_TEST_ENV in the Makefile: the pinned toolchain keeps goldens stable.
+env:
+  GOWORK: "off"
+  GOTOOLCHAIN: go1.26.0
+  TAGS: catiplay,catibrowse,integration
+
+# make ci-test split into parallel jobs running the same commands; report adds
+# the wall time. Raw logs need admin rights to download, so each test job
+# writes failures (also as annotations, shown by gh run view), test time and
+# the slowest packages to its summary. Each job keeps its own module and build
+# cache (race builds differ), saved per commit.
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-          cache: true
-      - name: Install media tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg librsvg2-bin
+          cache: false
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-lint-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: go-lint-${{ hashFiles('go.sum') }}-
       - name: Install pinned Harnez linter
         run: GOTOOLCHAIN=go1.26.5 go install ubunatic.com/harnez/cmd/harnez@v0.1.31-0.20261017082349-aeff3cee56cf
-      - name: Lint, build, test and check race safety
-        run: make ci-test
+      # gofmt, go vet and harnez lint on tracked files
+      - run: make lint
+      - run: go build ./...
+
+  unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-unit-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: go-unit-${{ hashFiles('go.sum') }}-
+      - name: Install media tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg librsvg2-bin
+      # As make test-short.
+      - name: go test -short
+        id: test
+        run: go test -vet=off -short -count=1 -json ./... > unit.json 2>&1
+      - name: summary
+        if: always() && steps.test.outcome != 'skipped'
+        run: go run .github/gotest-report.go -title "unit (go test -short)" unit.json
+
+  full:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-full-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: go-full-${{ hashFiles('go.sum') }}-
+      - name: Install media tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg librsvg2-bin
+      # As the two non-race go test lines of make ci-test.
+      - name: go test (default and fastpath0)
+        id: test
+        run: |
+          go test -tags="$TAGS" -json ./... > full.json 2>&1
+          CATI_FASTPATH=0 go test -tags="fastpath0,$TAGS" -json ./... >> full.json 2>&1
+      - name: summary
+        if: always() && steps.test.outcome != 'skipped'
+        run: go run .github/gotest-report.go -title "full (default and fastpath0)" full.json
+
+  race:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: go-race-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: go-race-${{ hashFiles('go.sum') }}-
+      - name: Install media tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg librsvg2-bin
+      - name: go test -race
+        id: test
+        run: go test -race -tags="$TAGS" -json ./... > race.json 2>&1
+      - name: summary
+        if: always() && steps.test.outcome != 'skipped'
+        run: go run .github/gotest-report.go -title "race (go test -race)" race.json
 
   reuse:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: fsfe/reuse-action@v5
+
+  report:
+    needs: [ lint, unit, full, race, reuse ]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: wall time
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LINT: ${{ needs.lint.result }}
+          UNIT: ${{ needs.unit.result }}
+          FULL: ${{ needs.full.result }}
+          RACE: ${{ needs.race.result }}
+          REUSE: ${{ needs.reuse.result }}
+        run: |
+          started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          wall=$(( $(date +%s) - $(date -d "$started" +%s) ))
+          {
+            printf '### CI wall time: %dm%02ds\n\n' $((wall / 60)) $((wall % 60))
+            printf '| job | result |\n|---|---|\n| lint | %s |\n| unit | %s |\n| full | %s |\n| race | %s |\n| reuse | %s |\n' "$LINT" "$UNIT" "$FULL" "$RACE" "$REUSE"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Summaries do not show in gh run view; this notice annotation does.
+          # No exit status: a failed job is already red on its own.
+          printf '::notice title=CI wall time %dm%02ds::lint=%s unit=%s full=%s race=%s reuse=%s\n' $((wall / 60)) $((wall % 60)) "$LINT" "$UNIT" "$FULL" "$RACE" "$REUSE"
