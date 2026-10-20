@@ -57,7 +57,7 @@ The original pipeline used `-f image2pipe -vcodec png pipe:1` and `png.Decode` i
 
 Rawvideo (`-f rawvideo -pix_fmt rgba`) eliminates all compression/decompression: ffmpeg copies pixels directly to the pipe, Go reads a fixed `w*h*4` byte block per frame with `io.ReadFull`. Per-frame memory is the same (both approaches yield an uncompressed `image.Image`); the difference is CPU.
 
-**Current caveat:** frames are piped at source resolution (e.g. 1920×1080 = 8.3 MB/frame). At 30 fps that is ~250 MB/s through the pipe, which Linux handles comfortably (loopback pipe bandwidth ≫ 1 GB/s), but is wasteful. The planned fix is ffmpeg-side scaling (`-vf scale=W:H`) so frames arrive pre-scaled to terminal dimensions. See [issue 005](../issues/005-video-ffmpeg-scaling.md).
+**Current caveat:** frames are piped at source resolution (e.g. 1920×1080 = 8.3 MB/frame). At 30 fps that is ~250 MB/s through the pipe, which Linux handles comfortably (loopback pipe bandwidth ≫ 1 GB/s), but is wasteful. The planned fix is ffmpeg-side scaling (`-vf scale=W:H`) so frames arrive pre-scaled to terminal dimensions. See [issue 005](https://codeberg.org/ubunatic/cati/src/branch/main/issues/005-video-ffmpeg-scaling.md).
 
 ### FPS rate limiting
 

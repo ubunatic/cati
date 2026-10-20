@@ -18,8 +18,8 @@
 - [Glossary & Metric Taxonomy](Glossary.md)
 - [Render Experiment Lessons](RenderExperimentLessons.md)
 - [Rendering Bug & Golden Playbook](RenderingBugPlaybook.md)
-- [Codespaces Workbench Color Study](studies/codespaces-color-rendering.md)
-- [Vector Glyph Continuity Study](studies/2026-10-07-vector-glyph-continuity.md)
+- [Codespaces Workbench Color Study](https://codeberg.org/ubunatic/cati/src/branch/main/docs/studies/codespaces-color-rendering.md)
+- [Vector Glyph Continuity Study](https://codeberg.org/ubunatic/cati/src/branch/main/docs/studies/2026-10-07-vector-glyph-continuity.md)
 - [Go Conventions](Go.md)
 - [Make Conventions](Make.md)
 <!-- TOC_END -->

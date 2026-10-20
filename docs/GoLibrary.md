@@ -109,7 +109,7 @@ by the CLI. `spec.ResolveGlyphSetExpression("d1,6,9,44")` returns normalized,
 sorted IDs, the union glyph inventory and row-major coverage masks,
 approximation status, and exact common geometry (per-axis LCM). Names and
 aliases are case-sensitive. The expression grammar and migration table for legacy mode names are documented in issue
-[#043](../issues/043-compose-named-and-debug-render-modes-from-glyph-set-ids.md).
+[#043](https://codeberg.org/ubunatic/cati/src/branch/main/issues/043-compose-named-and-debug-render-modes-from-glyph-set-ids.md).
 
 Library renderers can convert those shapes directly to `sparkline.Shape` and
 pass them in `sparkline.Options.Shapes`; `Render`, `RenderToGrid`,

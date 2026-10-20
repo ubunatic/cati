@@ -15,7 +15,7 @@ Golden PNGs are the project's ground truth for what every render mode produces.
 A careless `-update` silently rewrites that truth and hides regressions forever.
 This playbook is the discipline that prevents it. It is written from a real fix
 (spark/quad garbled bottom row → cross-mode half-cell unification, issue
-[#015](../issues/015-spark-bottom-row-halfcell-fit.md)); the steps below are the
+[#015](https://codeberg.org/ubunatic/cati/src/branch/main/issues/015-spark-bottom-row-halfcell-fit.md)); the steps below are the
 exact sequence that worked.
 
 ---
