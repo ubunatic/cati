@@ -44,10 +44,13 @@ instead of `ls issues/`, `find`, or raw grep:
   Existing PNG documentation links may still be inspected as documentation.
 - `harnez find -d <repo> issues next` — report the next free ticket number (read-only)
 - `harnez issues new -d <repo> "<title>"` — run this right away; it reserves the number and creates the ticket skeleton.
+- Cloud agents use `harnez issues new --remote -d <repo> "<title>"` (automatic when `CLAUDE_CODE_REMOTE` is set): authenticated gh on the github remote allocates permanent GH IDs. No host reservation or local fallback; local numbering ignores GH IDs.
 - Open the printed file and fill it in, keeping its schema; do not search for a template first.
 - Run `harnez index -d <repo>` and commit the ticket and index.
 - `harnez issues <verb> -d <repo> <n> [reason]` — change a ticket's status, resync
   `issues/README.md`, and commit, in one call
+- Closing an already-Closed ticket is a no-op regardless of reason; use
+  `harnez issues close --amend-reason` to explicitly correct its reason.
 - Commit documentation and `issues/*.md` changes immediately; don't batch them behind
   pending code work.
 
@@ -80,6 +83,8 @@ unless the user names it (e.g. `/scroll-craft`, "use scroll-craft") or picks it 
   to prevent `harnez exec`'s ambient 60-second default execution timeout from killing the task.
 - When launching asynchronous background tasks, stop calling tools immediately and rely entirely
   on reactive completion notifications. Do NOT poll status or run `sleep` commands.
+- Never `pkill -f`/`pgrep -f` with a pattern that can match your own shell command line (it
+  kills the tool call itself). Match exact argv fields via `ps -eo pid,args` or kill recorded PIDs.
 
 ## Agentic Loop Invariants
 Where `@docs/AgenticLoop.md` is present in this project, follow it rather than
