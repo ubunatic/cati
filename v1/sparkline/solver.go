@@ -27,6 +27,15 @@ type bitCandidate struct {
 	mask mask128
 }
 
+// divInv precomputes reciprocal multipliers for fast division: (sum * inv) >> 32 == sum / n.
+var divInv [129]uint64
+
+func init() {
+	for i := 1; i <= 128; i++ {
+		divInv[i] = ((1 << 32) + uint64(i) - 1) / uint64(i)
+	}
+}
+
 // bitCandidatesTable stores precomputed bitCandidate slices for fixed mode and block geometry.
 var (
 	verticalBitCandidates4x8  = makeBitCandidates(verticalCandidates, 4, 8)
@@ -120,12 +129,16 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 		return cellResult{Ch: ' ', Err: math.MaxFloat64}
 	}
 
-	var pr, pg, pb [128]uint8
+	var pr, pg, pb, pa [128]uint8
+	_ = pr[127]
+	_ = pg[127]
+	_ = pb[127]
+	_ = pa[127]
+
 	var opaque0, opaque1 uint64
 	var totalSumR, totalSumG, totalSumB uint32
 	var totalSqSum int64
 
-	var pa [128]uint8
 	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
 		idx := 0
 		for y := y0; y <= y1; y++ {
@@ -203,17 +216,19 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 	const transparentPixelCost = 195075 // 3 * 255 * 255
 
 	if n <= 64 {
+		opaqueCount0 := bits.OnesCount64(opaque0)
+		transCount0 := bits.OnesCount64(trans0)
+
 		// Optimized kernel for blocks with up to 64 pixels (4x8, 2x2, 2x3, 2x6, etc.)
 		for _, cand := range bitCands {
 			candM0 := cand.mask.lo
 			fgOpaque0 := candM0 & opaque0
-			bgOpaque0 := (^candM0) & opaque0
 
 			fgN := bits.OnesCount64(fgOpaque0)
-			bgN := bits.OnesCount64(bgOpaque0)
+			bgN := opaqueCount0 - fgN
 
 			fgTrans := bits.OnesCount64(candM0 & trans0)
-			bgTrans := bits.OnesCount64((^candM0) & trans0)
+			bgTrans := transCount0 - fgTrans
 
 			if fgN == 0 && bgN > 0 && cand.ch != ' ' {
 				continue
@@ -230,19 +245,21 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 
 			var fgAvgR, fgAvgG, fgAvgB uint8
 			var bgAvgR, bgAvgG, bgAvgB uint8
-			if fgN > 0 {
-				fgAvgR = uint8(fgSumR / uint32(fgN))
-				fgAvgG = uint8(fgSumG / uint32(fgN))
-				fgAvgB = uint8(fgSumB / uint32(fgN))
-			}
 			var bgSumR, bgSumG, bgSumB uint32
+			if fgN > 0 {
+				inv := divInv[fgN]
+				fgAvgR = uint8((uint64(fgSumR) * inv) >> 32)
+				fgAvgG = uint8((uint64(fgSumG) * inv) >> 32)
+				fgAvgB = uint8((uint64(fgSumB) * inv) >> 32)
+			}
 			if bgN > 0 {
+				inv := divInv[bgN]
 				bgSumR = totalSumR - fgSumR
 				bgSumG = totalSumG - fgSumG
 				bgSumB = totalSumB - fgSumB
-				bgAvgR = uint8(bgSumR / uint32(bgN))
-				bgAvgG = uint8(bgSumG / uint32(bgN))
-				bgAvgB = uint8(bgSumB / uint32(bgN))
+				bgAvgR = uint8((uint64(bgSumR) * inv) >> 32)
+				bgAvgG = uint8((uint64(bgSumG) * inv) >> 32)
+				bgAvgB = uint8((uint64(bgSumB) * inv) >> 32)
 			}
 
 			errInt := totalSqSum
@@ -299,20 +316,21 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 			}
 		}
 	} else {
+		totalOpaque := bits.OnesCount64(opaque0) + bits.OnesCount64(opaque1)
+		totalTrans := bits.OnesCount64(trans0) + bits.OnesCount64(trans1)
+
 		// 128-bit kernel for blocks up to 128 pixels (e.g. 4x24)
 		for _, cand := range bitCands {
 			candM0 := cand.mask.lo
 			candM1 := cand.mask.hi
 			fgOpaque0 := candM0 & opaque0
 			fgOpaque1 := candM1 & opaque1
-			bgOpaque0 := (^candM0) & opaque0
-			bgOpaque1 := (^candM1) & opaque1
 
 			fgN := bits.OnesCount64(fgOpaque0) + bits.OnesCount64(fgOpaque1)
-			bgN := bits.OnesCount64(bgOpaque0) + bits.OnesCount64(bgOpaque1)
+			bgN := totalOpaque - fgN
 
 			fgTrans := bits.OnesCount64(candM0&trans0) + bits.OnesCount64(candM1&trans1)
-			bgTrans := bits.OnesCount64((^candM0)&trans0) + bits.OnesCount64((^candM1)&trans1)
+			bgTrans := totalTrans - fgTrans
 
 			if fgN == 0 && bgN > 0 && cand.ch != ' ' {
 				continue
@@ -336,19 +354,21 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 
 			var fgAvgR, fgAvgG, fgAvgB uint8
 			var bgAvgR, bgAvgG, bgAvgB uint8
-			if fgN > 0 {
-				fgAvgR = uint8(fgSumR / uint32(fgN))
-				fgAvgG = uint8(fgSumG / uint32(fgN))
-				fgAvgB = uint8(fgSumB / uint32(fgN))
-			}
 			var bgSumR, bgSumG, bgSumB uint32
+			if fgN > 0 {
+				inv := divInv[fgN]
+				fgAvgR = uint8((uint64(fgSumR) * inv) >> 32)
+				fgAvgG = uint8((uint64(fgSumG) * inv) >> 32)
+				fgAvgB = uint8((uint64(fgSumB) * inv) >> 32)
+			}
 			if bgN > 0 {
+				inv := divInv[bgN]
 				bgSumR = totalSumR - fgSumR
 				bgSumG = totalSumG - fgSumG
 				bgSumB = totalSumB - fgSumB
-				bgAvgR = uint8(bgSumR / uint32(bgN))
-				bgAvgG = uint8(bgSumG / uint32(bgN))
-				bgAvgB = uint8(bgSumB / uint32(bgN))
+				bgAvgR = uint8((uint64(bgSumR) * inv) >> 32)
+				bgAvgG = uint8((uint64(bgSumG) * inv) >> 32)
+				bgAvgB = uint8((uint64(bgSumB) * inv) >> 32)
 			}
 
 			errInt := totalSqSum
