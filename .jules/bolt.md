@@ -37,3 +37,7 @@
 ## 2026-10-12 - Single Contiguous Grid Slice Allocation and Direct Image Reconstruction Fastpath
 **Learning:** Iteratively allocating row slices (`make([]core.Cell, width)`) in `RenderToGrid` generates 60+ heap allocations per frame, and building intermediate `*core.Grid` structures inside `RenderToImageJ` causes 4x higher rendering latency and 66% RAM allocation bloat. In addition, 4-byte `copy(...)` in 2D scaling loops invokes `runtime.memmove` overhead.
 **Action:** Pre-allocate a single contiguous slice `cellStorage := make([]core.Cell, rowCount*width)` in `RenderToGrid`, write pixel bytes directly into `dst.Pix` in `RenderToImageJ` under `core.Fastpath` without creating `*core.Grid`, and replace 4-byte `copy(...)` in scaling loops with direct element assignments.
+
+## 2026-10-17 - Fast Reciprocal Division and Symmetric Bit Iteration in Sparkline Candidate Solver
+**Learning:** Performing variable integer division (`sum / count`) across 60–100+ candidates per cell in `findBestCandidateFast` causes severe x86_64 `idiv` instruction pipeline stalls. In addition, always iterating over set bits in `fgOpaque` regardless of bit density wastes CPU cycles when `fgN` > `bgN`.
+**Action:** Precompute fixed-point uint64 reciprocal multipliers (`divMult [129]uint64`) for 1..128 denominators to execute division as 1-cycle `(sum * divMult[count]) >> 32` arithmetic, and select `min(fgN, bgN)` for bit iteration loops to compute complementary color sums as `totalSum - partSum`.
