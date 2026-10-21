@@ -104,6 +104,7 @@ var (
 	sextantRuneByMask = map[uint8]rune{}
 	sextantMasks      []uint8
 	sextantRunes      [64]rune
+	popTable          [64]uint8
 	maskBitIndices    [64]struct {
 		count   int
 		indices [6]int
@@ -129,6 +130,7 @@ func init() {
 			}
 		}
 		maskBitIndices[m].count = cnt
+		popTable[m] = uint8(cnt)
 	}
 	next := rune(0x1FB00)
 	for _, name := range sextantNames() {
@@ -463,26 +465,26 @@ func avgRegion(img image.Image, x0, x1, y0, y1 int) color.RGBA {
 }
 
 func directMask(pixels [6]color.RGBA) uint8 {
-	var sum float64
-	var n int
-	for _, p := range pixels {
-		if isTransparent(p) {
+	var totalLuma, n int
+	var lumas [6]int
+	var opaqueMask uint8
+	for i, p := range pixels {
+		if p.A == 0 {
 			continue
 		}
-		sum += luma(p)
+		l := 2126*int(p.R) + 7152*int(p.G) + 722*int(p.B)
+		lumas[i] = l
+		totalLuma += l
+		opaqueMask |= bitForIdxTable[i]
 		n++
 	}
 	if n == 0 {
 		return 0
 	}
-	mean := sum / float64(n)
 	var mask uint8
-	for i, p := range pixels {
-		if isTransparent(p) {
-			continue
-		}
-		if luma(p) >= mean {
-			mask |= bitForIndex(i)
+	for i := 0; i < 6; i++ {
+		if opaqueMask&bitForIdxTable[i] != 0 && lumas[i]*n >= totalLuma {
+			mask |= bitForIdxTable[i]
 		}
 	}
 	return mask
@@ -646,6 +648,9 @@ func heuristicMasks(pixels [6]color.RGBA) []uint8 {
 }
 
 func popcount(mask uint8) int {
+	if uint(mask) < 64 {
+		return int(popTable[mask])
+	}
 	return bits.OnesCount8(mask)
 }
 
@@ -738,15 +743,12 @@ func emittedCoverage(cell cellResult, idx int) bool {
 
 func chooseCell(pixels [6]color.RGBA, mode Mode) cellResult {
 	if core.Fastpath {
-		allTransparent := true
-		for i := 0; i < 6; i++ {
-			if pixels[i].A != 0 {
-				allTransparent = false
-				break
+		p0 := pixels[0]
+		if p0 == pixels[1] && p0 == pixels[2] && p0 == pixels[3] && p0 == pixels[4] && p0 == pixels[5] {
+			if p0.A == 0 {
+				return cellResult{ch: ' ', transparent: true}
 			}
-		}
-		if allTransparent {
-			return cellResult{ch: ' ', transparent: true}
+			return cellResult{ch: '█', mask: 0b111111, fg: p0, hasFG: true}
 		}
 	}
 	// Evaluate every representable mask. The direct luma threshold is a useful
@@ -776,10 +778,12 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 	}
 
 	var pr, pg, pb [6]int
+	var lumas [6]int
 	var opaqueMask uint8
 	var transMask uint8
-	var totalSumR, totalSumG, totalSumB int
+	var totalSumR, totalSumG, totalSumB, totalLuma int
 	var totalSqSum int
+	var opaqueCount int
 
 	for i := 0; i < 6; i++ {
 		p := pixels[i]
@@ -788,11 +792,15 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 			continue
 		}
 		opaqueMask |= bitForIdxTable[i]
+		opaqueCount++
 		r, g, b := int(p.R), int(p.G), int(p.B)
+		l := 2126*r + 7152*g + 722*b
 		pr[i], pg[i], pb[i] = r, g, b
+		lumas[i] = l
 		totalSumR += r
 		totalSumG += g
 		totalSumB += b
+		totalLuma += l
 		totalSqSum += r*r + g*g + b*b
 	}
 
@@ -800,8 +808,14 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 		return cellResult{ch: ' ', mask: 0, transparent: true}
 	}
 
-	preferred := directMask(pixels)
-	transCount := bits.OnesCount8(transMask)
+	var preferred uint8
+	for i := 0; i < 6; i++ {
+		if opaqueMask&bitForIdxTable[i] != 0 && lumas[i]*opaqueCount >= totalLuma {
+			preferred |= bitForIdxTable[i]
+		}
+	}
+
+	transCount := int(popTable[transMask])
 	bestScore := math.MaxInt
 	var bestMask uint8
 	var bestFgR, bestFgG, bestFgB int
@@ -813,13 +827,12 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 	for _, mask := range masks {
 		m := mask & 0b111111
 		fgOpaque := m & opaqueMask
-		bgOpaque := (^m) & opaqueMask
-		fgN := bits.OnesCount8(fgOpaque)
-		bgN := bits.OnesCount8(bgOpaque)
+		entry := &maskBitIndices[fgOpaque]
+		fgN := entry.count
+		bgN := opaqueCount - fgN
 
 		var fgSumR, fgSumG, fgSumB int
-		entry := &maskBitIndices[fgOpaque]
-		for idx := 0; idx < entry.count; idx++ {
+		for idx := 0; idx < fgN; idx++ {
 			i := entry.indices[idx]
 			fgSumR += pr[i]
 			fgSumG += pg[i]
@@ -828,36 +841,35 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 
 		var fgR, fgG, fgB int
 		if fgN > 0 {
-			fgR = int(divTable[fgN][fgSumR])
-			fgG = int(divTable[fgN][fgSumG])
-			fgB = int(divTable[fgN][fgSumB])
+			divRow := &divTable[fgN]
+			fgR = int(divRow[fgSumR])
+			fgG = int(divRow[fgSumG])
+			fgB = int(divRow[fgSumB])
 		}
 
 		var bgSumR, bgSumG, bgSumB int
 		var bgR, bgG, bgB int
 		if bgN > 0 {
+			divRow := &divTable[bgN]
 			bgSumR = totalSumR - fgSumR
 			bgSumG = totalSumG - fgSumG
 			bgSumB = totalSumB - fgSumB
-			bgR = int(divTable[bgN][bgSumR])
-			bgG = int(divTable[bgN][bgSumG])
-			bgB = int(divTable[bgN][bgSumB])
+			bgR = int(divRow[bgSumR])
+			bgG = int(divRow[bgSumG])
+			bgB = int(divRow[bgSumB])
 		}
 
 		score := totalSqSum
 		if fgN > 0 {
-			score -= 2 * (fgR*fgSumR + fgG*fgSumG + fgB*fgSumB)
-			score += fgN * (fgR*fgR + fgG*fgG + fgB*fgB)
+			fgSq := fgR*fgR + fgG*fgG + fgB*fgB
+			score += fgN*fgSq - 2*(fgR*fgSumR+fgG*fgSumG+fgB*fgSumB)
 		}
 		if bgN > 0 {
-			score -= 2 * (bgR*bgSumR + bgG*bgSumG + bgB*bgSumB)
-			score += bgN * (bgR*bgR + bgG*bgG + bgB*bgB)
-		}
-
-		if bgN > 0 {
+			bgSq := bgR*bgR + bgG*bgG + bgB*bgB
+			score += bgN*bgSq - 2*(bgR*bgSumR+bgG*bgSumG+bgB*bgSumB)
 			score += transCount * transparentOverpaintPenalty
 		} else {
-			transFGCount := bits.OnesCount8(m & transMask)
+			transFGCount := int(popTable[m&transMask])
 			score += transFGCount * transparentOverpaintPenalty
 		}
 
@@ -865,8 +877,8 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 			continue
 		}
 
-		overlap := bits.OnesCount8(m & preferred)
-		pop := bits.OnesCount8(m)
+		overlap := int(popTable[m&preferred])
+		pop := int(popTable[m])
 
 		better := score < bestScore ||
 			(score == bestScore && overlap > bestPreferredOverlap) ||
@@ -880,6 +892,10 @@ func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 			bestFgN, bestBgN = fgN, bgN
 			bestPreferredOverlap = overlap
 			bestPopcount = pop
+
+			if score == 0 && m == preferred {
+				break
+			}
 		}
 	}
 
