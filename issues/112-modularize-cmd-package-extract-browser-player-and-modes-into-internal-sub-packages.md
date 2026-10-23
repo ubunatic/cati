@@ -39,18 +39,26 @@ Following the pattern identified in loom (issues 377, 378) and harnez (issues 87
 - Verified incrementally: one feature extraction per milestone/commit with cache-invalidation checks.
 
 ## 3. Implementation & Verification Plan
-1. **Milestone 1 — Extract Modes Command (`internal/climodes`)**:
-   - Move modes CLI logic and modes tests out of `cmd/`.
+
+### Pre-Work / Shared Boundary Discovery:
+Investigation during lean sprint (2026-10-24) showed that extracting `cmd/modes*.go` directly is blocked because `modes.go` and `cmd/modes_benchmark.go` depend on `renderModeEntry` and `renderCfg` (defined in `cmd/interactive_modes.go` and `cmd/interactive_render.go`), which are also used across `cmd/browser.go`, `cmd/interactive.go`, and `cmd/ssim.go`.
+Therefore, extracting modes requires first (or concurrently) placing the shared render mode configuration/registry types (`renderCfg`, `renderModeEntry`, and mode cycle loaders) into an internal foundation package such as `internal/clirender` or `internal/rendermodes`.
+
+1. **Milestone 0 — Shared Render Modes Foundation (`internal/clirender` or `internal/rendermodes`)**:
+   - Extract `renderCfg`, `renderModeEntry`, and related mode registry helpers into an internal package.
+   - Update `cmd/` callers to use this shared type.
+2. **Milestone 1 — Extract Modes Command (`internal/climodes`)**:
+   - Move modes CLI logic, cards, probe, and modes tests out of `cmd/` into `internal/climodes`.
    - Leave thin `modesCmd` in `cmd/modes.go`.
    - Verify: `go test ./internal/climodes ./cmd`, build and vet pass.
-2. **Milestone 2 — Extract Browser (`internal/clibrowse`)**:
+3. **Milestone 2 — Extract Browser (`internal/clibrowse`)**:
    - Move file browser navigation, thumbnail queue, and browser tests out of `cmd/`.
    - Leave thin `browseCmd` in `cmd/browser.go`.
    - Verify: `go test ./internal/clibrowse ./cmd`, build and vet pass.
-3. **Milestone 3 — Extract Interactive Player (`internal/cliplay`)**:
+4. **Milestone 3 — Extract Interactive Player (`internal/cliplay`)**:
    - Move player loop, zoom, and interactive viewer tests out of `cmd/`.
    - Leave thin `playCmd` in `cmd/play.go`.
    - Verify: `go test ./internal/cliplay ./cmd`, build and vet pass.
-4. **Cache & Performance Verification**:
+5. **Cache & Performance Verification**:
    - Run `gotester report` to measure new per-package timing and RSS profile.
    - Run cache hit probe: touch one file in `internal/climodes` and confirm that `go test ./...` only re-runs `internal/climodes` and `cmd`, leaving the rest cached.

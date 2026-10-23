@@ -43,7 +43,9 @@ Baseline run (2026-10-23 via `HTO=0 gotester report ./...`):
 ## 3. Roadmap (one step per milestone, measure before/after)
 
 1. **Baseline Report (Done):** Run `gotester report` to measure wall, CPU, peak RSS per package, and top 20 slowest tests. Baseline saved in `testreport/report.md`.
-2. **Audio tests bounding:** Bound `internal/audio/TestPlayAudio` (25.5s) using a tiny audio sample or `-short` tier guard so standard `make test` / `test-short` does not spend 25s waiting on audio clocks.
+2. **Audio tests bounding (Delivered in commit `424e634`):**
+   - Bound `internal/audio/TestPlayAudio` to a 250ms representative audio clip and parallelized probe subtests.
+   - Result: `internal/audio` wall time dropped from **27.1s down to 0.9s** (`TestPlayAudio` dropped from **25.46s to 0.39s**).
 3. **`cmd` modes & benchmark test optimization:**
    - De-duplicate or streamline exhaustive flag/filter matrices in `cmd/modes_test.go` (`TestModesCommandInfoAllModesAndSmartMetadataOnce` 14s, `TestModesFilterFlags` 6.2s, `TestModesCommandDemo` 5.6s).
    - Move or guard heavy media benchmarks (`TestRunMediaBenchmarkVideo` 6.4s, `TestSSIMBenchmark` 2.6s) so unit test passes stay under target budgets.
