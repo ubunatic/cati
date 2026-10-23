@@ -40,6 +40,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 096 | [096-tune-vec3-and-vec4-vector-glyph-tips-with-hand-drawn-masks.md](096-tune-vec3-and-vec4-vector-glyph-tips-with-hand-drawn-masks.md) | Tune vec3 and vec4 vector glyph tips with hand-drawn masks | Open |
 | 097 | [097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md](097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md) | 2x4 braille mode must be dot-only: no full block, no background color | Open |
 | 111 | [111-test-suite-catalog-and-roadmap-lighter-quieter-timed-tests.md](111-test-suite-catalog-and-roadmap-lighter-quieter-timed-tests.md) | test suite catalog and roadmap: lighter, quieter, timed tests | Open |
+| 112 | [112-modularize-cmd-package-extract-browser-player-and-modes-into-internal-sub-packages.md](112-modularize-cmd-package-extract-browser-player-and-modes-into-internal-sub-packages.md) | modularize cmd package: extract browser, player, and modes into internal sub-packages | Open |
 <!-- harnez:end issues-active-index -->
 ## Archived
 
