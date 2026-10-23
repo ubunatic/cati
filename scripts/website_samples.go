@@ -56,10 +56,8 @@ func generateGroup(paths []string) error {
 		return fmt.Errorf("decode %s: %w", paths[1], err)
 	}
 
-	photoBounds := photo.Bounds()
 	renderBounds := firstRender.Bounds()
-	factor := max(1, int(math.Round(float64(photoBounds.Dy())/float64(renderBounds.Dy()))))
-	target := image.Rect(0, 0, renderBounds.Dx()*factor, renderBounds.Dy()*factor)
+	target := image.Rectangle{Max: renderBounds.Size()}
 
 	for _, rel := range paths[1:] {
 		render, err := decode(filepath.Join("website", rel))
@@ -80,7 +78,7 @@ func generateGroup(paths []string) error {
 	if err := encodeJPEG(photoOut, fitAndPad(photo, target), 95); err != nil {
 		return err
 	}
-	fmt.Printf("%s factor=%d target=%dx%d photo=%dx%d\n", paths[0], factor, target.Dx(), target.Dy(), photoBounds.Dx(), photoBounds.Dy())
+	fmt.Printf("%s factor=1 target=%dx%d\n", paths[0], target.Dx(), target.Dy())
 	return nil
 }
 
