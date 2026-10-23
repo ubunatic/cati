@@ -41,6 +41,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 097 | [097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md](097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md) | 2x4 braille mode must be dot-only: no full block, no background color | Open |
 | 111 | [111-test-suite-catalog-and-roadmap-lighter-quieter-timed-tests.md](111-test-suite-catalog-and-roadmap-lighter-quieter-timed-tests.md) | test suite catalog and roadmap: lighter, quieter, timed tests | Open |
 | 112 | [112-modularize-cmd-package-extract-browser-player-and-modes-into-internal-sub-packages.md](112-modularize-cmd-package-extract-browser-player-and-modes-into-internal-sub-packages.md) | modularize cmd package: extract browser, player, and modes into internal sub-packages | Open |
+| 113 | [113-discovery-invert-fastpath-to-standard-and-evaluate-dedicated-reference-package.md](113-discovery-invert-fastpath-to-standard-and-evaluate-dedicated-reference-package.md) | discovery: invert fastpath to standard and evaluate dedicated reference package | Open |
 <!-- harnez:end issues-active-index -->
 ## Archived
 
