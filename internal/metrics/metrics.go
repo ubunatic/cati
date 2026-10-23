@@ -6,8 +6,6 @@
 package metrics
 
 import (
-	"ubunatic.com/cati/v1/core"
-
 	"image"
 	"image/color"
 	"math"
@@ -136,9 +134,6 @@ func extractLumaFlat(img image.Image, buf []float64) ([]float64, int, int) {
 		buf = make([]float64, needed)
 	}
 
-	if !core.Fastpath {
-		return extractLumaSimple(img, buf, b), w, h
-	}
 	switch m := img.(type) {
 	case *image.RGBA:
 		startOff := m.PixOffset(b.Min.X, b.Min.Y)

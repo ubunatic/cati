@@ -7,7 +7,6 @@ import (
 	"io"
 	"math"
 	"strconv"
-	"strings"
 	"sync"
 	"unicode/utf8"
 
@@ -235,34 +234,6 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 	grid, err := RenderToGrid(img, cols, opts)
 	if err != nil {
 		return err
-	}
-
-	if !core.Fastpath {
-		for y := 0; y < grid.Height; y++ {
-			var sb strings.Builder
-			if !opts.NoLinePrefix {
-				sb.WriteString(ansiLinePrefix)
-			}
-			for x := 0; x < grid.Width; x++ {
-				cell := grid.Cells[y][x]
-				if cell.Transparent {
-					sb.WriteRune(' ')
-					continue
-				}
-				if cell.HasBg {
-					sb.WriteString(bgRGB(cell.Bg))
-				}
-				if cell.HasFg {
-					sb.WriteString(fgRGB(cell.Fg))
-				}
-				sb.WriteRune(cell.Ch)
-				sb.WriteString(ansiReset)
-			}
-			if _, err := fmt.Fprintln(w, sb.String()); err != nil {
-				return fmt.Errorf("sparkline render: %w", err)
-			}
-		}
-		return nil
 	}
 
 	var buf []byte
@@ -1121,7 +1092,7 @@ func toRGBA(c color.Color) color.RGBA {
 }
 
 func rgbaAt(img image.Image, x, y int) color.RGBA {
-	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
+	if rgba, ok := img.(*image.RGBA); ok {
 		i := rgba.PixOffset(x, y)
 		p := rgba.Pix[i : i+4]
 		return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}

@@ -79,11 +79,12 @@ src (2x4 pixels)
     *   `█` (U+2588): Both pixels colored identically.
     *   ` ` (Space): Both pixels transparent.
 
-### Fast Path & Performance (`CATI_FASTPATH`)
-Half-block rendering implements dual-path execution gated by `core.Fastpath` (default enabled, disabled via `CATI_FASTPATH=0`):
-- **Direct RGBA Access**: Fast path directly indexes `*image.RGBA.Pix` slices during scaling and sampling, avoiding interface boxing from `img.At(x, y)`.
-- **Zero-Allocation ANSI Formatting**: Assembles ANSI 24-bit color escapes directly into a reusable line byte buffer via `strconv.AppendUint` instead of `fmt.Sprintf` / `strings.Builder`.
-- See [docs/perf/2026-09-24-halfblock-direct-rgba-fastpath.md](https://codeberg.org/ubunatic/cati/src/branch/main/docs/perf/2026-09-24-halfblock-direct-rgba-fastpath.md) for benchmark data and technical details.
+### Pixel access and output
+RGBA and NRGBA images use direct pixel-slice access as the standard path;
+other `image.Image` implementations use `At`. NRGBA bytes are premultiplied
+before scoring so partial-alpha colors match `At` semantics. ANSI escapes are
+assembled into reusable byte buffers. Package-local reference tests compare the
+optimized readers and render output against simple `At`-based fixture loops.
 
 ---
 

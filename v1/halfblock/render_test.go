@@ -1,14 +1,12 @@
 package halfblock
 
 import (
-	"bytes"
 	"image"
 	"image/color"
 	"strings"
 	"testing"
 
 	"ubunatic.com/cati/internal/ansitest"
-	"ubunatic.com/cati/v1/core"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -25,84 +23,9 @@ func solidImage(w, h int, c color.RGBA) image.Image {
 	return img
 }
 
-func TestFastpathParity(t *testing.T) {
-	previous := core.Fastpath
-	defer func() { core.Fastpath = previous }()
-
-	rect := image.Rect(-2, 3, 30, 22)
-	rgbaImg := image.NewRGBA(rect)
-	nrgbaImg := image.NewNRGBA(rect)
-	grayImg := image.NewGray(rect)
-	for y := rect.Min.Y; y < rect.Max.Y; y++ {
-		for x := rect.Min.X; x < rect.Max.X; x++ {
-			c := color.RGBA{R: uint8((x + 2) * 7), G: uint8((y - 3) * 11), B: uint8((x + y + 16) * 5), A: 255}
-			switch (x + y) % 7 {
-			case 0:
-				c.A = 0
-			case 3:
-				c.A = 128
-			case 5:
-				c.A = 1
-			}
-			nc := color.NRGBA{R: c.R, G: c.G, B: c.B, A: c.A}
-			rgbaImg.SetRGBA(x, y, toRGBA(nc))
-			nrgbaImg.SetNRGBA(x, y, nc)
-			grayImg.SetGray(x, y, color.Gray{Y: uint8(x + y)})
-		}
-	}
-
-	for _, tc := range []struct {
-		name string
-		img  image.Image
-	}{
-		{name: "RGBA", img: rgbaImg},
-		{name: "NRGBA", img: nrgbaImg},
-		{name: "Gray", img: grayImg},
-		{name: "RGBA subimage odd height", img: rgbaImg.SubImage(image.Rect(-1, 5, 18, 18))},
-		{name: "NRGBA subimage odd height", img: nrgbaImg.SubImage(image.Rect(-1, 5, 18, 18))},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			core.Fastpath = true
-			var fast bytes.Buffer
-			if err := Render(&fast, tc.img, 12, Options{Rows: 8, NoLinePrefix: true}); err != nil {
-				t.Fatalf("fast Render: %v", err)
-			}
-			fastImage := RenderToImage(tc.img)
-			fastImageJ := RenderToImageJ(tc.img, 4)
-			fastScaled := ScaleNN(tc.img, 17, 11)
-
-			core.Fastpath = false
-			var simple bytes.Buffer
-			if err := Render(&simple, tc.img, 12, Options{Rows: 8, NoLinePrefix: true}); err != nil {
-				t.Fatalf("simple Render: %v", err)
-			}
-			simpleImage := RenderToImage(tc.img)
-			simpleImageJ := RenderToImageJ(tc.img, 4)
-			simpleScaled := ScaleNN(tc.img, 17, 11)
-
-			if !bytes.Equal(fast.Bytes(), simple.Bytes()) {
-				t.Fatal("ANSI output differs between fast and simple paths")
-			}
-			if fastImage.Bounds() != simpleImage.Bounds() || !bytes.Equal(fastImage.Pix, simpleImage.Pix) {
-				t.Fatal("RenderToImage output differs between fast and simple paths")
-			}
-			if !bytes.Equal(fastImageJ.Pix, simpleImageJ.Pix) || !bytes.Equal(fastImageJ.Pix, fastImage.Pix) {
-				t.Fatal("RenderToImageJ(jobs=4) output differs from fast/simple or jobs=1 paths")
-			}
-			fastRGBA, fastOK := fastScaled.(*image.RGBA)
-			simpleRGBA, simpleOK := simpleScaled.(*image.RGBA)
-			if !fastOK || !simpleOK || fastRGBA.Bounds() != simpleRGBA.Bounds() || !bytes.Equal(fastRGBA.Pix, simpleRGBA.Pix) {
-				t.Fatal("ScaleNN output differs between fast and simple paths")
-			}
-		})
-	}
-}
-
 // ── pairToCell ────────────────────────────────────────────────────────────────
 
 func TestReconstructionMatchesSourceANSIColors(t *testing.T) {
-	previous := core.Fastpath
-	t.Cleanup(func() { core.Fastpath = previous })
 	parent := image.NewNRGBA(image.Rect(-3, 2, 6, 9))
 	for y := 2; y < 9; y++ {
 		for x := -3; x < 6; x++ {
@@ -113,23 +36,20 @@ func TestReconstructionMatchesSourceANSIColors(t *testing.T) {
 		}
 	}
 	src := parent.SubImage(image.Rect(-1, 3, 4, 8))
-	for _, fast := range []bool{false, true} {
-		core.Fastpath = fast
-		for _, jobs := range []int{1, 4} {
-			got := RenderToImageJ(src, jobs)
-			if got.Bounds() != src.Bounds() {
-				t.Fatalf("bounds = %v, want %v", got.Bounds(), src.Bounds())
-			}
-			for y := src.Bounds().Min.Y; y < src.Bounds().Max.Y; y++ {
-				for x := src.Bounds().Min.X; x < src.Bounds().Max.X; x++ {
-					r, g, b, a := src.At(x, y).RGBA()
-					want := color.RGBA{}
-					if a != 0 {
-						want = color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 255}
-					}
-					if pixel := got.RGBAAt(x, y); pixel != want {
-						t.Fatalf("fast=%v jobs=%d pixel (%d,%d) = %v, want %v", fast, jobs, x, y, pixel, want)
-					}
+	for _, jobs := range []int{1, 4} {
+		got := RenderToImageJ(src, jobs)
+		if got.Bounds() != src.Bounds() {
+			t.Fatalf("bounds = %v, want %v", got.Bounds(), src.Bounds())
+		}
+		for y := src.Bounds().Min.Y; y < src.Bounds().Max.Y; y++ {
+			for x := src.Bounds().Min.X; x < src.Bounds().Max.X; x++ {
+				r, g, b, a := src.At(x, y).RGBA()
+				want := color.RGBA{}
+				if a != 0 {
+					want = color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 255}
+				}
+				if pixel := got.RGBAAt(x, y); pixel != want {
+					t.Fatalf("jobs=%d pixel (%d,%d) = %v, want %v", jobs, x, y, pixel, want)
 				}
 			}
 		}

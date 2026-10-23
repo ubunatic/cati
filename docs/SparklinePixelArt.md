@@ -28,8 +28,9 @@ pixel loop so these small helpers can inline. Bypassing the grid is exact:
 reconstruction preserves premultiplied source RGB and sets alpha to 255 for
 painted pixels, leaving fully transparent pixels zero. Subimages, odd final
 rows, and serial/parallel paths are covered by parity and source-color tests.
-Sextant reconstruction shares one coverage/color loop; fast/reference paths
-only select the pixel store. Its common division table contains exact integer
+Sextant reconstruction shares one coverage/color loop, with direct typed pixel
+reads in production and `At`-based reference loops in package tests. NRGBA
+pixels are premultiplied before scoring. Its common division table contains exact integer
 quotients for every reachable six-pixel color sum, checked exhaustively.
 This refactoring changes no fitting, geometry, or golden pixels.
 

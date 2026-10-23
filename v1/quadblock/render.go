@@ -792,18 +792,16 @@ func safePixel(img image.Image, x, y int, b image.Rectangle) color.RGBA {
 	if x < b.Min.X || x >= b.Max.X || y < b.Min.Y || y >= b.Max.Y {
 		return color.RGBA{}
 	}
-	if core.Fastpath {
-		if rgba, ok := img.(*image.RGBA); ok {
-			p := rgba.Pix[rgba.PixOffset(x, y):]
-			if p[3] == 0 {
-				return color.RGBA{}
-			}
-			return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
+	if rgba, ok := img.(*image.RGBA); ok {
+		p := rgba.Pix[rgba.PixOffset(x, y):]
+		if p[3] == 0 {
+			return color.RGBA{}
 		}
-		if nrgba, ok := img.(*image.NRGBA); ok {
-			p := nrgba.Pix[nrgba.PixOffset(x, y):]
-			return core.NRGBAToRGBA(p[0], p[1], p[2], p[3])
-		}
+		return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
+	}
+	if nrgba, ok := img.(*image.NRGBA); ok {
+		p := nrgba.Pix[nrgba.PixOffset(x, y):]
+		return core.NRGBAToRGBA(p[0], p[1], p[2], p[3])
 	}
 	return toRGBA(img.At(x, y))
 }
@@ -929,17 +927,10 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 				buf = append(buf, ' ')
 				continue
 			}
-			if core.Fastpath {
-				if c.HasBg {
-					buf = appendBgRGB(buf, c.Bg)
-				}
-				buf = appendFgRGB(buf, c.Fg)
-			} else {
-				if c.HasBg {
-					buf = append(buf, bgRGB(c.Bg)...)
-				}
-				buf = append(buf, fgRGB(c.Fg)...)
+			if c.HasBg {
+				buf = appendBgRGB(buf, c.Bg)
 			}
+			buf = appendFgRGB(buf, c.Fg)
 			buf = utf8.AppendRune(buf, c.Ch)
 			buf = append(buf, ansiReset...)
 		}
@@ -1030,159 +1021,16 @@ func RenderToImageJ(img image.Image, opts Options, jobs int) *image.RGBA {
 		return dst
 	}
 
-	if core.Fastpath {
-		for tr := 0; tr < trRows; tr++ {
-			py0 := tr * 2
-			py1 := py0 + 1
-			row0Off := py0 * dst.Stride
-			row1Off := py1 * dst.Stride
-			for tc := 0; tc < tcCols; tc++ {
-				c := cells[tr*tcCols+tc]
-				px0 := tc * 2
-				px1 := px0 + 1
-
-				if px0 >= pixW || py0 >= pixH {
-					continue
-				}
-
-				mask := charToMask(c.ch)
-				bg := c.bg
-				if !c.hasBG {
-					bg = color.RGBA{}
-				}
-				fg := c.fg
-				if !c.hasFG {
-					fg = bg
-				}
-
-				switch c.ch {
-				case '▌':
-					off00 := row0Off + px0*4
-					off01 := row0Off + px1*4
-					off10 := row1Off + px0*4
-					off11 := row1Off + px1*4
-
-					if px0 < pixW && py0 < pixH {
-						src := safePixel(img, b.Min.X+px0, b.Min.Y+py0, b)
-						if src.A != 0 {
-							dst.Pix[off00] = fg.R
-							dst.Pix[off00+1] = fg.G
-							dst.Pix[off00+2] = fg.B
-							dst.Pix[off00+3] = fg.A
-						}
-					}
-					if px1 < pixW && py0 < pixH {
-						src := safePixel(img, b.Min.X+px1, b.Min.Y+py0, b)
-						if src.A != 0 {
-							dst.Pix[off01] = bg.R
-							dst.Pix[off01+1] = bg.G
-							dst.Pix[off01+2] = bg.B
-							dst.Pix[off01+3] = bg.A
-						}
-					}
-					if px0 < pixW && py1 < pixH {
-						src := safePixel(img, b.Min.X+px0, b.Min.Y+py1, b)
-						if src.A != 0 {
-							dst.Pix[off10] = fg.R
-							dst.Pix[off10+1] = fg.G
-							dst.Pix[off10+2] = fg.B
-							dst.Pix[off10+3] = fg.A
-						}
-					}
-					if px1 < pixW && py1 < pixH {
-						src := safePixel(img, b.Min.X+px1, b.Min.Y+py1, b)
-						if src.A != 0 {
-							dst.Pix[off11] = bg.R
-							dst.Pix[off11+1] = bg.G
-							dst.Pix[off11+2] = bg.B
-							dst.Pix[off11+3] = bg.A
-						}
-					}
-				case '▐':
-					off00 := row0Off + px0*4
-					off01 := row0Off + px1*4
-					off10 := row1Off + px0*4
-					off11 := row1Off + px1*4
-
-					if px0 < pixW && py0 < pixH {
-						src := safePixel(img, b.Min.X+px0, b.Min.Y+py0, b)
-						if src.A != 0 {
-							dst.Pix[off00] = bg.R
-							dst.Pix[off00+1] = bg.G
-							dst.Pix[off00+2] = bg.B
-							dst.Pix[off00+3] = bg.A
-						}
-					}
-					if px1 < pixW && py0 < pixH {
-						src := safePixel(img, b.Min.X+px1, b.Min.Y+py0, b)
-						if src.A != 0 {
-							dst.Pix[off01] = fg.R
-							dst.Pix[off01+1] = fg.G
-							dst.Pix[off01+2] = fg.B
-							dst.Pix[off01+3] = fg.A
-						}
-					}
-					if px0 < pixW && py1 < pixH {
-						src := safePixel(img, b.Min.X+px0, b.Min.Y+py1, b)
-						if src.A != 0 {
-							dst.Pix[off10] = bg.R
-							dst.Pix[off10+1] = bg.G
-							dst.Pix[off10+2] = bg.B
-							dst.Pix[off10+3] = bg.A
-						}
-					}
-					if px1 < pixW && py1 < pixH {
-						src := safePixel(img, b.Min.X+px1, b.Min.Y+py1, b)
-						if src.A != 0 {
-							dst.Pix[off11] = fg.R
-							dst.Pix[off11+1] = fg.G
-							dst.Pix[off11+2] = fg.B
-							dst.Pix[off11+3] = fg.A
-						}
-					}
-				default:
-					qBit := [4]uint8{bitUL, bitUR, bitLL, bitLR}
-					qPX := [4]int{px0, px1, px0, px1}
-					qPY := [4]int{py0, py0, py1, py1}
-					qOff := [4]int{
-						row0Off + px0*4,
-						row0Off + px1*4,
-						row1Off + px0*4,
-						row1Off + px1*4,
-					}
-
-					for q := 0; q < 4; q++ {
-						px, py := qPX[q], qPY[q]
-						if px < pixW && py < pixH {
-							src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
-							if src.A != 0 {
-								target := bg
-								if mask&qBit[q] != 0 {
-									target = fg
-								}
-								off := qOff[q]
-								dst.Pix[off] = target.R
-								dst.Pix[off+1] = target.G
-								dst.Pix[off+2] = target.B
-								dst.Pix[off+3] = target.A
-							}
-						}
-					}
-				}
-			}
-		}
-		return dst
-	}
-
-	quadBit := [4]uint8{bitUL, bitUR, bitLL, bitLR}
-	qDX := [4]int{0, 1, 0, 1}
-	qDY := [4]int{0, 0, 1, 1}
-
 	for tr := 0; tr < trRows; tr++ {
+		py0 := tr * 2
+		py1 := py0 + 1
+		row0Off := py0 * dst.Stride
+		row1Off := py1 * dst.Stride
 		for tc := 0; tc < tcCols; tc++ {
 			c := cells[tr*tcCols+tc]
 			px0 := tc * 2
-			py0 := tr * 2
+			px1 := px0 + 1
+
 			if px0 >= pixW || py0 >= pixH {
 				continue
 			}
@@ -1196,49 +1044,117 @@ func RenderToImageJ(img image.Image, opts Options, jobs int) *image.RGBA {
 			if !c.hasFG {
 				fg = bg
 			}
+
 			switch c.ch {
 			case '▌':
-				for q, dx := range []int{0, 1, 0, 1} {
-					dy := qDY[q]
-					px, py := tc*2+dx, tr*2+dy
-					if px < pixW && py < pixH {
-						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
-						if src.A == 0 {
-							dst.SetRGBA(px, py, color.RGBA{})
-						} else if dx == 0 {
-							dst.SetRGBA(px, py, fg)
-						} else {
-							dst.SetRGBA(px, py, bg)
-						}
+				off00 := row0Off + px0*4
+				off01 := row0Off + px1*4
+				off10 := row1Off + px0*4
+				off11 := row1Off + px1*4
+
+				if px0 < pixW && py0 < pixH {
+					src := safePixel(img, b.Min.X+px0, b.Min.Y+py0, b)
+					if src.A != 0 {
+						dst.Pix[off00] = fg.R
+						dst.Pix[off00+1] = fg.G
+						dst.Pix[off00+2] = fg.B
+						dst.Pix[off00+3] = fg.A
+					}
+				}
+				if px1 < pixW && py0 < pixH {
+					src := safePixel(img, b.Min.X+px1, b.Min.Y+py0, b)
+					if src.A != 0 {
+						dst.Pix[off01] = bg.R
+						dst.Pix[off01+1] = bg.G
+						dst.Pix[off01+2] = bg.B
+						dst.Pix[off01+3] = bg.A
+					}
+				}
+				if px0 < pixW && py1 < pixH {
+					src := safePixel(img, b.Min.X+px0, b.Min.Y+py1, b)
+					if src.A != 0 {
+						dst.Pix[off10] = fg.R
+						dst.Pix[off10+1] = fg.G
+						dst.Pix[off10+2] = fg.B
+						dst.Pix[off10+3] = fg.A
+					}
+				}
+				if px1 < pixW && py1 < pixH {
+					src := safePixel(img, b.Min.X+px1, b.Min.Y+py1, b)
+					if src.A != 0 {
+						dst.Pix[off11] = bg.R
+						dst.Pix[off11+1] = bg.G
+						dst.Pix[off11+2] = bg.B
+						dst.Pix[off11+3] = bg.A
 					}
 				}
 			case '▐':
-				for q, dx := range []int{0, 1, 0, 1} {
-					dy := qDY[q]
-					px, py := tc*2+dx, tr*2+dy
-					if px < pixW && py < pixH {
-						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
-						if src.A == 0 {
-							dst.SetRGBA(px, py, color.RGBA{})
-						} else if dx == 1 {
-							dst.SetRGBA(px, py, fg)
-						} else {
-							dst.SetRGBA(px, py, bg)
-						}
+				off00 := row0Off + px0*4
+				off01 := row0Off + px1*4
+				off10 := row1Off + px0*4
+				off11 := row1Off + px1*4
+
+				if px0 < pixW && py0 < pixH {
+					src := safePixel(img, b.Min.X+px0, b.Min.Y+py0, b)
+					if src.A != 0 {
+						dst.Pix[off00] = bg.R
+						dst.Pix[off00+1] = bg.G
+						dst.Pix[off00+2] = bg.B
+						dst.Pix[off00+3] = bg.A
+					}
+				}
+				if px1 < pixW && py0 < pixH {
+					src := safePixel(img, b.Min.X+px1, b.Min.Y+py0, b)
+					if src.A != 0 {
+						dst.Pix[off01] = fg.R
+						dst.Pix[off01+1] = fg.G
+						dst.Pix[off01+2] = fg.B
+						dst.Pix[off01+3] = fg.A
+					}
+				}
+				if px0 < pixW && py1 < pixH {
+					src := safePixel(img, b.Min.X+px0, b.Min.Y+py1, b)
+					if src.A != 0 {
+						dst.Pix[off10] = bg.R
+						dst.Pix[off10+1] = bg.G
+						dst.Pix[off10+2] = bg.B
+						dst.Pix[off10+3] = bg.A
+					}
+				}
+				if px1 < pixW && py1 < pixH {
+					src := safePixel(img, b.Min.X+px1, b.Min.Y+py1, b)
+					if src.A != 0 {
+						dst.Pix[off11] = fg.R
+						dst.Pix[off11+1] = fg.G
+						dst.Pix[off11+2] = fg.B
+						dst.Pix[off11+3] = fg.A
 					}
 				}
 			default:
-				for q, bit := range quadBit {
-					dx, dy := qDX[q], qDY[q]
-					px, py := tc*2+dx, tr*2+dy
+				qBit := [4]uint8{bitUL, bitUR, bitLL, bitLR}
+				qPX := [4]int{px0, px1, px0, px1}
+				qPY := [4]int{py0, py0, py1, py1}
+				qOff := [4]int{
+					row0Off + px0*4,
+					row0Off + px1*4,
+					row1Off + px0*4,
+					row1Off + px1*4,
+				}
+
+				for q := 0; q < 4; q++ {
+					px, py := qPX[q], qPY[q]
 					if px < pixW && py < pixH {
 						src := safePixel(img, b.Min.X+px, b.Min.Y+py, b)
-						if src.A == 0 {
-							dst.SetRGBA(px, py, color.RGBA{})
-						} else if mask&bit != 0 {
-							dst.SetRGBA(px, py, fg)
-						} else {
-							dst.SetRGBA(px, py, bg)
+						if src.A != 0 {
+							target := bg
+							if mask&qBit[q] != 0 {
+								target = fg
+							}
+							off := qOff[q]
+							dst.Pix[off] = target.R
+							dst.Pix[off+1] = target.G
+							dst.Pix[off+2] = target.B
+							dst.Pix[off+3] = target.A
 						}
 					}
 				}
@@ -1315,7 +1231,7 @@ func computeQuadCell(img image.Image, b image.Rectangle, opts Options, cells []q
 	px1 := px0 + 1
 
 	var pixels [4]color.RGBA
-	if core.Fastpath && opts.Blend == BlendNone {
+	if opts.Blend == BlendNone {
 		if rgba, ok := img.(*image.RGBA); ok {
 			minX, minY := rgba.Rect.Min.X, rgba.Rect.Min.Y
 			maxX, maxY := rgba.Rect.Max.X, rgba.Rect.Max.Y

@@ -276,29 +276,27 @@ func bgRGB(c color.RGBA) string {
 }
 
 func samplePixelFast(img image.Image, x, y int) color.RGBA {
-	if core.Fastpath {
-		if rgba, ok := img.(*image.RGBA); ok {
-			if !image.Pt(x, y).In(rgba.Rect) {
-				return color.RGBA{}
-			}
-			off := rgba.PixOffset(x, y)
-			p := rgba.Pix[off : off+4 : off+4]
-			if p[3] == 0 {
-				return color.RGBA{}
-			}
-			return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
+	if rgba, ok := img.(*image.RGBA); ok {
+		if !image.Pt(x, y).In(rgba.Rect) {
+			return color.RGBA{}
 		}
-		if nrgba, ok := img.(*image.NRGBA); ok {
-			if !image.Pt(x, y).In(nrgba.Rect) {
-				return color.RGBA{}
-			}
-			off := nrgba.PixOffset(x, y)
-			p := nrgba.Pix[off : off+4 : off+4]
-			if p[3] == 0 {
-				return color.RGBA{}
-			}
-			return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
+		off := rgba.PixOffset(x, y)
+		p := rgba.Pix[off : off+4 : off+4]
+		if p[3] == 0 {
+			return color.RGBA{}
 		}
+		return color.RGBA{R: p[0], G: p[1], B: p[2], A: p[3]}
+	}
+	if nrgba, ok := img.(*image.NRGBA); ok {
+		if !image.Pt(x, y).In(nrgba.Rect) {
+			return color.RGBA{}
+		}
+		off := nrgba.PixOffset(x, y)
+		p := nrgba.Pix[off : off+4 : off+4]
+		if p[3] == 0 {
+			return color.RGBA{}
+		}
+		return core.NRGBAToRGBA(p[0], p[1], p[2], p[3])
 	}
 	return toRGBA(img.At(x, y))
 }
@@ -362,63 +360,48 @@ func splitAxis(min, max, parts, idx int) (int, int) {
 
 func sampleBlock(img image.Image, x0, x1, y0, y1 int) [6]color.RGBA {
 	if x1-x0 == 2 && y1-y0 == 3 {
-		if core.Fastpath {
-			if rgba, ok := img.(*image.RGBA); ok {
-				var pixels [6]color.RGBA
-				off0 := rgba.PixOffset(x0, y0)
-				off1 := rgba.PixOffset(x0, y0+1)
-				off2 := rgba.PixOffset(x0, y0+2)
-				p0 := rgba.Pix[off0 : off0+8]
-				p1 := rgba.Pix[off1 : off1+8]
-				p2 := rgba.Pix[off2 : off2+8]
-				if p0[3] != 0 {
-					pixels[0] = color.RGBA{R: p0[0], G: p0[1], B: p0[2], A: p0[3]}
-				}
-				if p0[7] != 0 {
-					pixels[1] = color.RGBA{R: p0[4], G: p0[5], B: p0[6], A: p0[7]}
-				}
-				if p1[3] != 0 {
-					pixels[2] = color.RGBA{R: p1[0], G: p1[1], B: p1[2], A: p1[3]}
-				}
-				if p1[7] != 0 {
-					pixels[3] = color.RGBA{R: p1[4], G: p1[5], B: p1[6], A: p1[7]}
-				}
-				if p2[3] != 0 {
-					pixels[4] = color.RGBA{R: p2[0], G: p2[1], B: p2[2], A: p2[3]}
-				}
-				if p2[7] != 0 {
-					pixels[5] = color.RGBA{R: p2[4], G: p2[5], B: p2[6], A: p2[7]}
-				}
-				return pixels
+		if rgba, ok := img.(*image.RGBA); ok {
+			var pixels [6]color.RGBA
+			off0 := rgba.PixOffset(x0, y0)
+			off1 := rgba.PixOffset(x0, y0+1)
+			off2 := rgba.PixOffset(x0, y0+2)
+			p0 := rgba.Pix[off0 : off0+8]
+			p1 := rgba.Pix[off1 : off1+8]
+			p2 := rgba.Pix[off2 : off2+8]
+			if p0[3] != 0 {
+				pixels[0] = color.RGBA{R: p0[0], G: p0[1], B: p0[2], A: p0[3]}
 			}
-			if nrgba, ok := img.(*image.NRGBA); ok {
-				var pixels [6]color.RGBA
-				off0 := nrgba.PixOffset(x0, y0)
-				off1 := nrgba.PixOffset(x0, y0+1)
-				off2 := nrgba.PixOffset(x0, y0+2)
-				p0 := nrgba.Pix[off0 : off0+8]
-				p1 := nrgba.Pix[off1 : off1+8]
-				p2 := nrgba.Pix[off2 : off2+8]
-				if p0[3] != 0 {
-					pixels[0] = color.RGBA{R: p0[0], G: p0[1], B: p0[2], A: p0[3]}
-				}
-				if p0[7] != 0 {
-					pixels[1] = color.RGBA{R: p0[4], G: p0[5], B: p0[6], A: p0[7]}
-				}
-				if p1[3] != 0 {
-					pixels[2] = color.RGBA{R: p1[0], G: p1[1], B: p1[2], A: p1[3]}
-				}
-				if p1[7] != 0 {
-					pixels[3] = color.RGBA{R: p1[4], G: p1[5], B: p1[6], A: p1[7]}
-				}
-				if p2[3] != 0 {
-					pixels[4] = color.RGBA{R: p2[0], G: p2[1], B: p2[2], A: p2[3]}
-				}
-				if p2[7] != 0 {
-					pixels[5] = color.RGBA{R: p2[4], G: p2[5], B: p2[6], A: p2[7]}
-				}
-				return pixels
+			if p0[7] != 0 {
+				pixels[1] = color.RGBA{R: p0[4], G: p0[5], B: p0[6], A: p0[7]}
 			}
+			if p1[3] != 0 {
+				pixels[2] = color.RGBA{R: p1[0], G: p1[1], B: p1[2], A: p1[3]}
+			}
+			if p1[7] != 0 {
+				pixels[3] = color.RGBA{R: p1[4], G: p1[5], B: p1[6], A: p1[7]}
+			}
+			if p2[3] != 0 {
+				pixels[4] = color.RGBA{R: p2[0], G: p2[1], B: p2[2], A: p2[3]}
+			}
+			if p2[7] != 0 {
+				pixels[5] = color.RGBA{R: p2[4], G: p2[5], B: p2[6], A: p2[7]}
+			}
+			return pixels
+		}
+		if nrgba, ok := img.(*image.NRGBA); ok {
+			var pixels [6]color.RGBA
+			off0 := nrgba.PixOffset(x0, y0)
+			off1 := nrgba.PixOffset(x0, y0+1)
+			off2 := nrgba.PixOffset(x0, y0+2)
+			p0 := nrgba.Pix[off0 : off0+8]
+			p1 := nrgba.Pix[off1 : off1+8]
+			p2 := nrgba.Pix[off2 : off2+8]
+			pixels[0] = core.NRGBAToRGBA(p0[0], p0[1], p0[2], p0[3])
+			pixels[1] = core.NRGBAToRGBA(p0[4], p0[5], p0[6], p0[7])
+			pixels[2] = core.NRGBAToRGBA(p1[0], p1[1], p1[2], p1[3])
+			pixels[3] = core.NRGBAToRGBA(p1[4], p1[5], p1[6], p1[7])
+			pixels[4] = core.NRGBAToRGBA(p2[0], p2[1], p2[2], p2[3])
+			pixels[5] = core.NRGBAToRGBA(p2[4], p2[5], p2[6], p2[7])
 		}
 		return [6]color.RGBA{
 			samplePixelFast(img, x0, y0), samplePixelFast(img, x0+1, y0),
@@ -737,17 +720,15 @@ func emittedCoverage(cell cellResult, idx int) bool {
 }
 
 func chooseCell(pixels [6]color.RGBA, mode Mode) cellResult {
-	if core.Fastpath {
-		allTransparent := true
-		for i := 0; i < 6; i++ {
-			if pixels[i].A != 0 {
-				allTransparent = false
-				break
-			}
+	allTransparent := true
+	for i := 0; i < 6; i++ {
+		if pixels[i].A != 0 {
+			allTransparent = false
+			break
 		}
-		if allTransparent {
-			return cellResult{ch: ' ', transparent: true}
-		}
+	}
+	if allTransparent {
+		return cellResult{ch: ' ', transparent: true}
 	}
 	// Evaluate every representable mask. The direct luma threshold is a useful
 	// tie-break preference, but it is not generally the lowest-error encoding
@@ -758,21 +739,6 @@ func chooseCell(pixels [6]color.RGBA, mode Mode) cellResult {
 func chooseBestCell(pixels [6]color.RGBA, masks []uint8) cellResult {
 	if len(masks) == 0 {
 		return cellResult{ch: ' ', transparent: true}
-	}
-
-	if !core.Fastpath {
-		preferred := directMask(pixels)
-		bestCell, bestScore := scoreMask(pixels, masks[0])
-		for _, mask := range masks[1:] {
-			cell, score := scoreMask(pixels, mask)
-			if score < bestScore ||
-				(score == bestScore && maskOverlap(mask, preferred) > maskOverlap(bestCell.mask, preferred)) ||
-				(score == bestScore && maskOverlap(mask, preferred) == maskOverlap(bestCell.mask, preferred) && popcount(mask) > popcount(bestCell.mask)) {
-				bestCell = cell
-				bestScore = score
-			}
-		}
-		return bestCell
 	}
 
 	var pr, pg, pb [6]int
@@ -1067,20 +1033,11 @@ func Render(w io.Writer, img image.Image, cols int, opts Options) error {
 				buf = append(buf, ' ')
 				continue
 			}
-			if core.Fastpath {
-				if cell.HasBg {
-					buf = appendBgRGB(buf, cell.Bg)
-				}
-				if cell.HasFg {
-					buf = appendFgRGB(buf, cell.Fg)
-				}
-			} else {
-				if cell.HasBg {
-					buf = append(buf, bgRGB(cell.Bg)...)
-				}
-				if cell.HasFg {
-					buf = append(buf, fgRGB(cell.Fg)...)
-				}
+			if cell.HasBg {
+				buf = appendBgRGB(buf, cell.Bg)
+			}
+			if cell.HasFg {
+				buf = appendFgRGB(buf, cell.Fg)
 			}
 			buf = utf8.AppendRune(buf, cell.Ch)
 			buf = append(buf, ansiReset...)
@@ -1142,16 +1099,12 @@ func RenderToImageJ(img image.Image, mode Mode, jobs int) *image.RGBA {
 						yy := y0 + idx/blockCols
 						xx := x0 + idx%blockCols
 						if xx < b.Max.X && yy < b.Max.Y {
-							if core.Fastpath {
-								off := dst.PixOffset(xx, yy)
-								p := dst.Pix[off : off+4 : off+4]
-								p[0] = target.R
-								p[1] = target.G
-								p[2] = target.B
-								p[3] = target.A
-							} else {
-								dst.SetRGBA(xx, yy, target)
-							}
+							off := dst.PixOffset(xx, yy)
+							p := dst.Pix[off : off+4 : off+4]
+							p[0] = target.R
+							p[1] = target.G
+							p[2] = target.B
+							p[3] = target.A
 						}
 					}
 				}

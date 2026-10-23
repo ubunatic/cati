@@ -126,7 +126,7 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 	var totalSqSum int64
 
 	var pa [128]uint8
-	if rgba, ok := img.(*image.RGBA); ok && core.Fastpath {
+	if rgba, ok := img.(*image.RGBA); ok {
 		idx := 0
 		for y := y0; y <= y1; y++ {
 			p := rgba.Pix[rgba.PixOffset(x0, y):]
@@ -135,12 +135,13 @@ func findBestCandidateFast(img image.Image, x0, x1, y0, y1 int, bitCands []bitCa
 				idx++
 			}
 		}
-	} else if nrgba, ok := img.(*image.NRGBA); ok && core.Fastpath {
+	} else if nrgba, ok := img.(*image.NRGBA); ok {
 		idx := 0
 		for y := y0; y <= y1; y++ {
 			p := nrgba.Pix[nrgba.PixOffset(x0, y):]
 			for x := 0; x < blockW; x++ {
-				pr[idx], pg[idx], pb[idx], pa[idx] = p[x*4], p[x*4+1], p[x*4+2], p[x*4+3]
+				c := core.NRGBAToRGBA(p[x*4], p[x*4+1], p[x*4+2], p[x*4+3])
+				pr[idx], pg[idx], pb[idx], pa[idx] = c.R, c.G, c.B, c.A
 				idx++
 			}
 		}
