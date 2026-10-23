@@ -54,3 +54,10 @@ padding the photo by a few pixels where ratios differ. Resulting targets:
 
 Owner decision (2026-10-23): renders are not scaled up; the photo is resized to the render size.
 So k = 1 for all groups, and summer vacation becomes 600×792 (photo down ≈0.57×), not 1200×1584.
+
+## 5. Delivered
+
+b0f1de6 and 902f6f1: `make website-samples` regenerates the website copies reproducibly (rerun gives
+identical hashes); the three comparison galleries set `viewer: fit` and mark renders `pixelated`.
+Host-verified sizes in the synced site: soldering 960×720, summer 600×792, darth 600×1032 for the
+photo and all three renders. Synced to ubunatic.com (026be1c); staged for owner review.
