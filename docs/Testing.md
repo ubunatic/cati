@@ -44,11 +44,23 @@ comparisons remain appropriate for fast/reference output parity.
 Measure uncached timings reproducibly:
 
 ```bash
+# Full suite per-package wall, CPU, RSS, and 20 slowest tests report:
+HTO=0 gotester report ./...
+# Report written to testreport/report.md
+```
+
+Or json-stream timing analysis via script:
+
+```bash
 GOWORK=off GOTOOLCHAIN=go1.26.0 go test -json -count=1 ./... > /tmp/cati-tests.json
 go run scripts/test_timings.go /tmp/cati-tests.json
 ```
 
-The 2026-10-17 baseline took 43.59s in `cmd`: the all-mode smart metadata
+The 2026-10-23 baseline (`gotester report`) measured 82.7s total wall time across
+28 packages (118.1s CPU, peak RSS 493 MiB). The run is dominated by `cmd` (41.9s,
+493 MiB RSS) and `internal/audio` (27.1s, where `TestPlayAudio` took 25.46s).
+Cataloging and modularization roadmaps are tracked in issue 111 and issue 112.
+Earlier 2026-10-17 baseline took 43.59s in `cmd`: the all-mode smart metadata
 sweep took 8.02s, the SSIM sample sweep 7.14s, and the sleeping benchmark test
 3.96s. The latter now advances a fake clock and verifies one render per mode
 and path. Compare timings with warm build caches and similar host load.
