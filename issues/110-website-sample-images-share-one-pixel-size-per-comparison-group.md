@@ -38,3 +38,16 @@ Aspect ratios match within about 1%.
 - Source files under `testdata/` and the original samples stay untouched; only the website copies
   change. One make target regenerates them reproducibly; no hand-edited images.
 - The gallery blocks in `website/page.yaml` set `viewer: fit` once ubunatic.com 075 M2 supports it.
+
+## 4. Host refinement (2026-10-23, plan review)
+
+Renders scale by an integer factor only, so every terminal cell stays an exact block (a 1.75×
+nearest-neighbor scale makes uneven cells). Rule: `k = max(1, round(original_h / render_h))`,
+renders scaled ×k nearest neighbor, the photo resized smoothly (up or down) to the render size ×k,
+padding the photo by a few pixels where ratios differ. Resulting targets:
+
+| Sample | k | Target | Photo |
+|---|---|---|---|
+| soldering practice | 1 | 960×720 | 640×480 up 1.5× |
+| summer vacation | 2 | 1200×1584 | 1042×1383 up ≈1.15× |
+| darth daughter | 1 | 600×1032 | 687×1168 down ≈0.88× |
