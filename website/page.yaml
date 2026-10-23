@@ -88,6 +88,7 @@ sections:
           to open it at full size.
       - gallery:
           - title: Dense PCB detail (80 columns)
+            viewer: fit
             caption: >-
               **half** preserves the white silkscreen speckles; **quad** sharpens pad edges, but can
               look striped; **spark** groups tiny parts into cleaner board shapes.
@@ -98,13 +99,17 @@ sections:
               - src: testdata/sample_soldering_practice/render_halfblock_80ch.png
                 alt: Half-block render of the soldering practice photo at 80 columns
                 label: half
+                pixelated: true
               - src: testdata/sample_soldering_practice/render_quad_80ch.png
                 alt: Quadrant render of the soldering practice photo at 80 columns
                 label: quad
+                pixelated: true
               - src: testdata/sample_soldering_practice/render_spark_80ch.png
                 alt: Spark render of the soldering practice photo at 80 columns
                 label: spark
+                pixelated: true
           - title: Soft portrait edges (50 columns)
+            viewer: fit
             caption: >-
               **half** keeps face and hand tones more granular; **quad** improves thin trunks and
               the cap outline; **spark** smooths sky and skin into broad readable areas.
@@ -115,13 +120,17 @@ sections:
               - src: testdata/sample_summer_vacation/render_halfblock_50ch.png
                 alt: Half-block render of the summer vacation photo at 50 columns
                 label: half
+                pixelated: true
               - src: testdata/sample_summer_vacation/render_quad_50ch.png
                 alt: Quadrant render of the summer vacation photo at 50 columns
                 label: quad
+                pixelated: true
               - src: testdata/sample_summer_vacation/render_spark_50ch.png
                 alt: Spark render of the summer vacation photo at 50 columns
                 label: spark
+                pixelated: true
           - title: Gloss and silhouettes (50 columns)
+            viewer: fit
             caption: >-
               **half** keeps noisy fabric and mask highlights; **quad** gives sabers and helmet edges
               firmer diagonals; **spark** favors the bold black helmet and pink jacket masses.
@@ -132,12 +141,15 @@ sections:
               - src: testdata/sample_darth_daughter/render_halfblock_50ch.png
                 alt: Half-block render of the costume photo at 50 columns
                 label: half
+                pixelated: true
               - src: testdata/sample_darth_daughter/render_quad_50ch.png
                 alt: Quadrant render of the costume photo at 50 columns
                 label: quad
+                pixelated: true
               - src: testdata/sample_darth_daughter/render_spark_50ch.png
                 alt: Spark render of the costume photo at 50 columns
                 label: spark
+                pixelated: true
   - id: usage
     tag: Usage
     title: Images in your shell

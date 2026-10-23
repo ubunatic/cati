@@ -58,6 +58,9 @@ install-web: ⚙️  ## build the documentation website without modifying source
 	  mkdir -p "$$tmp/assets"; cp -R assets/book "$$tmp/assets/"; \
 	  (cd "$$tmp" && go run scripts/generate_summary.go && mdbook build --dest-dir "$(CURDIR)/website/book")
 
+website-samples: ⚙️  ## regenerate equal-sized website comparison images
+	go run scripts/website_samples.go
+
 check: ⚙️  ## run checks and ensure install-web leaves the checkout clean
 	$(GO_TEST_ENV) go vet ./...
 	$(GO_TEST_ENV) go test ./...
