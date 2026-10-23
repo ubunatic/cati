@@ -41,4 +41,20 @@ Historically, `cati` had a "standard path" using generic `image.Image.At` and an
   - *Summary*: Deleted `v1/core/fastpath.go` and `cmd/fastpath_flags_test.go`. Removed `--fastpath` persistent CLI flag and `CATI_FASTPATH` env lookup from `cmd/root.go`. Updated `spec/cli.yaml` and `cmd/cli_defaults_test.go` removing the `--fastpath` exception rule. Simplified `cmd/media_benchmark.go` to benchmark standard modes in a single pass. Removed `CATI_FASTPATH=0` and `-tags=fastpath0` double-run targets from `Makefile`.
 
 - **Milestone 3**: Final Verification & Study Completion.
-  - *Status*: Executing full test suite and preflight verification.
+  - *Status*: Completed.
+  - *Verification*: Full Quota-1 test suite (`HTO=0 make test-q1`) and `HTO=0 make preflight` passed with zero errors. All installed binaries (`cati`, `catibrowse`, `catiplay`) built and verified against demo widths.
+  - *Outcome*: Issue 113 closed in commit `3220c73`.
+
+---
+
+## 4. Key Takeaways & Efficiency
+
+1. **Elimination of Duplicate Test Burden**:
+   - Removing `CATI_FASTPATH=0` and `-tags=fastpath0` from `Makefile` removed 50% of the redundant test runs across the whole repository.
+   - Parity is now tested via clean, fast unit tests in `reference_test.go` on small synthetic images, eliminating large fixture duplication.
+2. **Encapsulation Preserved (Option B)**:
+   - Kept complex bitmask solvers, quadblock lookup tables, and cell structures private to their respective packages, avoiding public API pollution.
+3. **Latent Bug Fixes**:
+   - Identified and fixed missing NRGBA partial-alpha premultiplication in `v1/sextant` and `v1/sparkline/solver.go`.
+4. **Developer Efficiency**:
+   - `codex:sol:med` delivered M1 and M2 cleanly in two turns, accurately handling edge cases (NRGBA conversion, benchmark single-pass transition, spec integrity).
