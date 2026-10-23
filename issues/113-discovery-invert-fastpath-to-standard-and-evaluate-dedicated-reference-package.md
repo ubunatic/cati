@@ -1,54 +1,65 @@
-# 113 — discovery: invert fastpath to standard and evaluate dedicated reference package
+# 113 — Invert fastpath to standard and adopt in-package reference testing
 
 **Status**: Open
-**Priority**: P3 (Low)
-**Severity**: Minor
+**Priority**: P2 (Medium)
+**Severity**: Moderate
 **Category**: Architecture
-**Related**: 111 (test catalog roadmap), 054 (PR 8/9 review), 055 (luma fastpath drift), 094 (parity), 102 (dedup fastpaths), docs/Testing.md
+**Related**: 111 (test catalog roadmap), 054 (PR 8/9 review), 055 (luma fastpath drift), 094 (quadblock parity), 102 (dedup fastpaths), docs/Testing.md
 
 ---
 
-/goal Reassess and explore disentangling the "fastpath" vs "standard/fallback" rendering paths across the library and CLI: invert the terminology and architecture so that the optimized path is the standard default and the naive path is the "reference" path (evaluating a dedicated `reference` package vs per-package reference implementations), keep reference checks fast and isolated without ballooning test durations on large assets, and de-emphasize internal fastpath knobs/flags so end-users and library consumers interact only with the clean, optimized standard; or stop and report when blocked on a user decision.
+/goal Invert fastpath terminology and architecture across cati: the optimized code paths become the sole production standard, in-package `reference_test.go` suites maintain naive for-loop baseline parity on small synthetic fixtures, remove runtime `core.Fastpath` branching and `--fastpath` flags, and eliminate the `Makefile` -tags=fastpath0 double-run; or stop and report when blocked on a user decision.
 
-## 1. Problem & Motivation
-Currently, `cati` maintains a split between the "standard path" and "fastpath":
-- The fast path (`core.Fastpath`, gated by `CATI_FASTPATH` and `--fastpath` flags) contains optimized rendering (direct `Pix` memory access, append-based ANSI builders, lookup tables).
-- The non-fast path is treated as the "default/standard" fallback in name, even though in practice `core.Fastpath` defaults to `true`.
-- In `Makefile`, `make test` runs the entire test suite *twice* (once default `CATI_FASTPATH=1`, once `CATI_FASTPATH=0` with `-tags=fastpath0`), doubling test execution time and CPU load across 28 packages.
-- CLI flags (`--fastpath`, `--fastpath=false`) and environment variables expose this internal architectural distinction prominently to users and consumers who should simply receive the standard, optimized behavior out of the box.
+## 1. Architectural Decision & Analysis (Refined by argon:low, 2026-10-24)
 
-## 2. Architectural Vision & Discovery Questions
+### The Architectural Call:
+1. **The optimized path is the standard production path**:
+   - `*image.RGBA` / `*image.NRGBA` direct slice access, `strconv.AppendUint` ANSI builders, precomputed lookup tables, and integer bitmask solvers become the standard implementation.
+   - Remove `core.Fastpath` boolean runtime switches across production code. The generic `image.Image` (`img.At(x, y)`) path remains ONLY as the `default:` type switch branch for non-RGBA/NRGBA image types (e.g. `image.Gray`, `image.Paletted`).
+2. **In-Package `reference_test.go` (Option B) over a Monolithic `v1/reference` Package**:
+   - **Zero Public API Pollution**: A public `v1/reference` package would leak naive, slow implementations into the public API.
+   - **Internal Struct Access**: The algorithms in `quadblock`, `sextant`, and `sparkline` rely heavily on unexported structs and lookup tables (`quadCell`, `compileCell`, `sextantRunes`, `candidate`, `bitCandidate`). A separate package would require exporting dozens of internals or duplicating ~1,500 lines of tables.
+   - **True Naive Reference Loops**: In-package `reference_test.go` allows clean, 50–100 line naive nested `for`-loop reference functions (`renderReference`, `renderToImageReference`) directly alongside the production code.
+3. **Eliminate the `make test` Double-Run (`-tags=fastpath0`)**:
+   - Remove `CATI_FASTPATH=0 ... -tags=fastpath0` from `Makefile`. This immediately **halves total test execution time and CPU load**.
+   - Parity is guarded instead by dedicated sub-second `TestReferenceParity` unit tests running on small (8×8 to 32×32) synthetic fixtures (`RGBA`, `NRGBA`, `Gray`, partial alpha, odd dimensions, non-zero `SubImage` bounds).
+4. **De-emphasize & Remove `--fastpath` / `CATI_FASTPATH`**:
+   - Drop the `--fastpath` persistent CLI flag and `CATI_FASTPATH` env lookup. Users and library consumers get optimal performance without managing internal knobs.
 
-### Architectural Vision:
-1. **Terminology Inversion**:
-   - The current "fastpath" is the production **standard path**. Users and library callers should only know and interact with this path.
-   - The old naive/fallback path becomes the **reference implementation** (clean, naive, easy-to-read algorithms using simple for-loops and straightforward if-then logic).
-2. **Dedicated Reference Package vs Per-Package Reference**:
-   - *Option A (Dedicated package)*: A standalone package (e.g. `ubunatic.com/cati/v1/reference` or `internal/reference`) housing naive baseline implementations for each mode (halfblock, quadblock, sextant, sparkline). Tests compare standard implementations against this reference using small, fast fixtures to verify baseline correctness.
-   - *Option B (In-package reference)*: Keeping reference routines within each respective package (`v1/quadblock`, `v1/halfblock`, etc.) as unexported test helpers or isolated files (`reference_test.go`), avoiding runtime dispatch branches (`if core.Fastpath ...`) inside production code.
-3. **Test Decoupling**:
-   - Reference implementations are slow by design; they should **never** be run on large test assets or video files during routine test sweeps.
-   - Eliminate the blunt full-suite double run (`CATI_FASTPATH=0 go test ./...`). Instead, run dedicated differential parity tests on small synthetic inputs (e.g. 8x8 or 16x16 pixel blocks) to prove that the standard optimized algorithm matches the naive reference.
-4. **Surfacing & Clean API**:
-   - Deprecate or hide `--fastpath` from top-level CLI help and public library configuration. Callers should not have to think about reference vs fast paths.
+## 2. Entanglement Findings
 
-### Discovery Scope for Advisor/Investigation:
-1. **Entanglement Audit**:
-   - Audit `v1/halfblock`, `v1/quadblock`, `v1/sextant`, `v1/sparkline`, `internal/metrics`, and `cmd/`.
-   - Where are `core.Fastpath` branches embedded, and how tightly coupled are they with data structures?
-2. **Dedicated Reference Package Feasibility**:
-   - Evaluate trade-offs between a single `reference` package vs package-local reference implementations in test files.
-   - What shared types (geometry, ANSI, color) are needed by a naive reference implementation?
-3. **Test Suite Impact**:
-   - Quantify time saved by removing the full `fastpath0` tag pass from `make test` and replacing it with sub-second differential unit tests.
+1. **`v1/halfblock`**:
+   - `render.go`: Only 1 branch (`if core.Fastpath { ... direct Pix ... } else { img.At }`). Very clean to standardize.
+2. **`v1/quadblock`**:
+   - `render.go`: 5 branches across `safePixel`, `Render`, `RenderToImageJ`, and `computeQuadCell`.
+   - `render_fastpath_test.go` already implements differential parity testing; convert to `reference_test.go`.
+3. **`v1/sextant`**:
+   - `render.go`: 6 branches across `samplePixelFast`, `sampleBlock`, `chooseCell`, `chooseBestCell`, `Render`, and `RenderToImageJ`.
+   - *Latent Bug Uncovered by Audit*: `sextant`'s direct slice reader copies `nrgba.Pix` without calling `core.NRGBAToRGBA`, unlike `quadblock` (issue 094). Must fix to call `core.NRGBAToRGBA` when standardizing.
+4. **`v1/sparkline`**:
+   - `render.go` & `solver.go`: 3 branches. When `core.Fastpath=false`, it currently still runs the 128-bit bitwise math solver and only switches pixel reading to `img.At`. In-package `reference_test.go` will provide the genuine naive 2-pass float/integer search reference.
+5. **`internal/metrics`**:
+   - `metrics.go`: `extractLumaFlat` has 1 branch. `fastpath_test.go` already compares against `extractLumaSimple`.
+6. **`cmd/` & `Makefile`**:
+   - `cmd/root.go`: Registers persistent flag `--fastpath` and forwards `CATI_FASTPATH`.
+   - `cmd/media_benchmark.go`: Currently benchmarks each mode twice (`fast vs simple`).
+   - `Makefile`: Runs all test targets twice (`CATI_FASTPATH=0 ... -tags=fastpath0`).
 
-## 3. Implementation & Verification Plan
-1. **Advisory Discovery**:
-   - Produce a structured assessment of fastpath coupling across `v1/` and `internal/`.
-   - Propose the preferred design (dedicated `reference` package vs test-only reference implementations).
-2. **Prototyping / Migration**:
-   - Decouple production render paths from `core.Fastpath` branching.
-   - Create naive reference algorithms and differential parity tests on small fixtures.
-3. **CLI & Documentation Clean-up**:
-   - Remove or deprecate `--fastpath` CLI flag prominence.
-   - Update `docs/Testing.md` and `docs/GoLibrary.md`.
+## 3. Implementation Roadmap
+
+### Milestone 1: Standardize Core Render Packages & In-Package Reference Tests
+- **`v1/halfblock`**: Remove `core.Fastpath` check; add `reference_test.go` with naive `renderReference` parity check.
+- **`v1/quadblock`**: Remove `core.Fastpath` checks; rename `render_fastpath_test.go` → `reference_test.go`.
+- **`v1/sextant`**: Fix NRGBA partial-alpha premultiplication (`core.NRGBAToRGBA`); remove `core.Fastpath` checks; rename `render_fastpath_test.go` → `reference_test.go`.
+- **`v1/sparkline`**: Remove `core.Fastpath` checks; add clean naive search loop in `reference_test.go`.
+- **`internal/metrics`**: Standardize `extractLumaFlat`; rename `fastpath_test.go` → `reference_test.go`.
+
+### Milestone 2: Strip CLI Knobs, `core.Fastpath`, and `Makefile` Double-Run
+- Remove `v1/core/fastpath.go`.
+- Remove `--fastpath` from `cmd/root.go`, delete `cmd/fastpath_flags_test.go`, update `cmd/cli_defaults_test.go` and `spec/cli.yaml`.
+- Update `cmd/media_benchmark.go` to benchmark standard modes in a single pass.
+- Remove `CATI_FASTPATH=0` and `-tags=fastpath0` targets from `Makefile`.
+
+### Milestone 3: Documentation & Verification
+- Update `docs/Testing.md`, `docs/Design.md`, `docs/RenderPipelines.md`, and `AGENTS.md`.
+- Run `HTO=0 make test-q1` and `make preflight`. Verify tests are 100% green and test suite duration is roughly halved.
