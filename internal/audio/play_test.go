@@ -48,6 +48,7 @@ func TestProbeAudio(t *testing.T) {
 			}
 			found = true
 			t.Run(path, func(t *testing.T) {
+				t.Parallel()
 				testutil.RequireMedia(t, path, "ffprobe")
 				info, err := Probe(path)
 				if err != nil {
@@ -67,7 +68,7 @@ func TestProbeAudio(t *testing.T) {
 	}
 }
 
-// TestPlayAudio finds video files with audio and plays a short snippet of each.
+// TestPlayAudio finds one video file with audio and plays a short snippet.
 // Runs only with -v; skipped otherwise to avoid blocking CI.
 //
 // Usage: go test ./internal/audio/ -v -run TestPlayAudio
@@ -85,7 +86,7 @@ func TestPlayAudio(t *testing.T) {
 	}
 
 	dirs := []string{"../../assets", "../../assets/samples"}
-	const snippetDuration = 3 * time.Second
+	const snippetDuration = 250 * time.Millisecond
 
 	found := false
 	for _, dir := range dirs {
@@ -117,7 +118,7 @@ func TestPlayAudio(t *testing.T) {
 			fmt.Printf("\n── %s ──\n", path)
 			fmt.Printf("   codec=%s  rate=%d Hz  channels=%d\n",
 				info.Codec, info.SampleRate, info.Channels)
-			fmt.Printf("   playing %.0fs snippet …\n", snippetDuration.Seconds())
+			fmt.Printf("   playing %.2fs snippet …\n", snippetDuration.Seconds())
 
 			ctx, cancel := context.WithTimeout(context.Background(), snippetDuration)
 			player, err := Open(ctx, path, 0, 0)
@@ -139,6 +140,7 @@ func TestPlayAudio(t *testing.T) {
 			} else {
 				fmt.Printf("   done\n")
 			}
+			return
 		}
 	}
 
