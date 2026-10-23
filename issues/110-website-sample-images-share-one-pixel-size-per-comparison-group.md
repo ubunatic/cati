@@ -51,3 +51,6 @@ padding the photo by a few pixels where ratios differ. Resulting targets:
 | soldering practice | 1 | 960×720 | 640×480 up 1.5× |
 | summer vacation | 2 | 1200×1584 | 1042×1383 up ≈1.15× |
 | darth daughter | 1 | 600×1032 | 687×1168 down ≈0.88× |
+
+Owner decision (2026-10-23): renders are not scaled up; the photo is resized to the render size.
+So k = 1 for all groups, and summer vacation becomes 600×792 (photo down ≈0.57×), not 1200×1584.
