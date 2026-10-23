@@ -31,4 +31,9 @@ Historically, `cati` had a "standard path" using generic `image.Image.At` and an
 ## 3. Milestones & Progress Log
 
 - **Milestone 1**: Standardize Core Render Packages & In-Package Reference Tests (`v1/halfblock`, `v1/quadblock`, `v1/sextant`, `v1/sparkline`, `internal/metrics`).
+  - *Status*: Delivered in commit `61a85a8`.
+  - *Verification*: `go test ./v1/... ./internal/metrics/...` and `make test-short` passed cleanly.
+  - *Summary*: Removed `core.Fastpath` checks; direct slice access standardized as production standard; generic `img.At` fallback retained for non-RGBA/NRGBA images. Fixed latent NRGBA partial-alpha premultiplication in `v1/sextant` and `v1/sparkline/solver.go`. Replaced fastpath toggle tests with in-package `reference_test.go` parity suites. Updated rendering docs.
+
+- **Milestone 2**: Strip CLI Knobs, `core.Fastpath`, and `Makefile` Double-Run.
   - *Status*: Dispatched to `sol:med`.
