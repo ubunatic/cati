@@ -39,7 +39,6 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 090 | [090-support-parameterized-vector-mode-geometries-vec2-vec8.md](090-support-parameterized-vector-mode-geometries-vec2-vec8.md) | Support parameterized vector mode geometries (vec2..vec8) | Open |
 | 096 | [096-tune-vec3-and-vec4-vector-glyph-tips-with-hand-drawn-masks.md](096-tune-vec3-and-vec4-vector-glyph-tips-with-hand-drawn-masks.md) | Tune vec3 and vec4 vector glyph tips with hand-drawn masks | Open |
 | 097 | [097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md](097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md) | 2x4 braille mode must be dot-only: no full block, no background color | Open |
-| 110 | [110-website-sample-images-share-one-pixel-size-per-comparison-group.md](110-website-sample-images-share-one-pixel-size-per-comparison-group.md) | Website sample images share one pixel size per comparison group | Open |
 <!-- harnez:end issues-active-index -->
 ## Archived
 

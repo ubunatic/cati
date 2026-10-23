@@ -1,6 +1,6 @@
 # 110 — Website sample images share one pixel size per comparison group
 
-**Status**: Open
+**Status**: Closed — Website comparison groups share one pixel size (soldering 960x720, summer 600x792, darth 600x1032), viewer: fit set; live on ubunatic.com/cati since promote of 7f80412
 **Priority**: P1 (High)
 **Severity**: Minor
 **Category**: Feature
