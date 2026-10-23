@@ -16,9 +16,6 @@ export GOCACHE ?= /tmp/cati-gocache
 
 # Ceiling for parallel render workers (read by v1/core.MaxWorkers).
 export CATI_MAX_WORKERS ?= 10
-# 1 = optimised fast paths, 0 = simple reference paths (read by v1/core.Fastpath).
-export CATI_FASTPATH ?= 1
-
 # Keep stdlib-decoder goldens reproducible and ignore any enclosing workspace.
 GO_TEST_ENV := GOWORK=off GOTOOLCHAIN=go1.26.0
 ENGINE ?= $(shell command -v podman || command -v docker)
@@ -68,13 +65,9 @@ check: ⚙️  ## run checks and ensure install-web leaves the checkout clean
 	  after="$$(git status --porcelain)"; \
 	  test "$$before" = "$$after" || { echo "FAIL: install-web changed git status"; git status --short; exit 1; }
 
-# Tests run twice: default CATI_FASTPATH=1, then 0 (simple reference paths).
-# core.Fastpath is read at package init, before go test records env lookups,
-# so the no-op fastpath0 tag keeps a separate test-cache entry for mode 0.
 test: ⚙️  ## run linter and tests
 	$(GO_TEST_ENV) go vet ./...
 	$(GO_TEST_ENV) go test ./...
-	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0 ./...
 
 test-short: ⚙️  ## run fast unit tests without media or expensive command sweeps
 	$(GO_TEST_ENV) go test -vet=off -short -count=1 ./...
@@ -92,20 +85,16 @@ lint: ⚙️  ## check tracked files with gofmt, go vet and harnez lint
 ci-test: ⚙️ lint  ## run CI lint, build, tests and race checks
 	$(GO_TEST_ENV) go build ./...
 	$(GO_TEST_ENV) go test -tags=catiplay,catibrowse,integration ./...
-	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0,catiplay,catibrowse,integration ./...
 	$(GO_TEST_ENV) go test -race -tags=catiplay,catibrowse,integration ./...
 
 test-player: ⚙️  ## run catiplay-specific tests
 	$(GO_TEST_ENV) go test -tags=catiplay ./cmd
-	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0,catiplay ./cmd
 
 test-browser: ⚙️  ## run catibrowse-specific tests
 	$(GO_TEST_ENV) go test -tags=catibrowse ./cmd
-	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0,catibrowse ./cmd
 
 test-integration: ⚙️ build  ## run terminal integration tests
 	$(GO_TEST_ENV) go test -tags=integration .
-	CATI_FASTPATH=0 $(GO_TEST_ENV) go test -tags=fastpath0,integration .
 
 test-all: ⚙️ test test-player test-browser test-integration  ## run default and optional tests
 

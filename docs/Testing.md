@@ -106,8 +106,8 @@ Other checks:
 - `make lint` — gofmt check, vet, and `harnez lint --check` on tracked Go,
   shell, Markdown and Makefile files. CI and Docker pin the Harnez version
   and build that tool with Go 1.26.5; renderer checks remain on Go 1.26.0.
-- `make ci-test` — lint, build, both fastpath test modes, and the
-  race-enabled suite, including `catiplay`, `catibrowse` and `integration`
+- `make ci-test` — lint, build, and the race-enabled suite, including
+  `catiplay`, `catibrowse` and `integration`
   tests. CI uses Go 1.26.0, FFmpeg and librsvg, and checks out LFS fixtures.
 - `make container-test` — runs the same checks in the pinned Dockerfile image
   using podman when available, otherwise docker. The container filesystem is
@@ -137,18 +137,14 @@ available. `internal/testutil.RequireMedia` skips missing fixtures, LFS pointer
 files, or missing FFmpeg tools, while decoder errors on present media fail.
 
 For a real asset speed comparison, run `cati --bench <mediafile>`. Each mode
-is measured with fast paths on and off (`core.Fastpath`) and the row shows the
-speed-up. The row also compares the first image render from each path and marks
-output parity as `ok` or `DIFF`, with the first differing byte and differing
-byte count. Video output is hashed per frame on the fast pass and compared with
-the corresponding simple-pass frame; a differing-frame count appears on the
-row. Any mismatch is summarized and makes the command exit non-zero. Image
-renders repeat within `--bench-budget` (default 3s total,
-split across modes and paths); every mode renders at least once, so slow modes
-at large sizes can extend the run. `--mode` limits the run to one mode;
-otherwise the spec's `experimental` modes (`all+`, `z`, `z+`) are skipped. Videos decode
-the complete first video stream, without playback pacing or audio. Width and
-height default to the terminal size, or 80x24 when stdout is not a terminal.
+is measured through its standard production path and the row reports render
+time (and FPS for video). Image renders repeat within `--bench-budget`
+(default 3s total, split across modes); every mode renders at least once, so
+slow modes at large sizes can extend the run. `--mode` limits the run to one
+mode; otherwise the spec's `experimental` modes (`all+`, `z`, `z+`) are skipped.
+Videos decode the complete first video stream, without playback pacing or
+audio. Width and height default to the terminal size, or 80x24 when stdout is
+not a terminal.
 
 JPEG-derived render goldens are stored per supported Go runtime because JPEG
 decoding can differ by a one-level rounding decision between toolchains. The
@@ -210,29 +206,10 @@ whole-column search. The winner is scored with PSNR and centered in the
 requested canvas. It is intentionally not enabled for interactive/video frame
 loops yet.
 
-## Fast paths
+## Production render paths
 
-Optimised code paths (direct `Pix` access, append-based ANSI formatting) are
-gated by one shared flag, `core.Fastpath`, read once from `CATI_FASTPATH`
-(`0` = simple reference paths; default on). `cati`, `catiplay`, and `catibrowse`
-accept `--fastpath=false` to disable these paths or `--fastpath=true` (also
-`--fastpath`) to enable them, overriding the environment for that invocation.
-An omitted flag preserves the environment default. Forwarded playback/browser
-commands inherit the selection. `cati --bench` still measures both paths.
-The simple path is the reference:
-change and reason about it first, then make the fast path follow. Fast paths
-must be output-identical; each split has a parity test that toggles
-`core.Fastpath`. Check the whole suite on the simple paths with:
-
-```bash
-CATI_FASTPATH=0 GOWORK=off GOTOOLCHAIN=go1.26.0 go test -tags=fastpath0 ./...
-```
-
-Known exception: `metrics.extractLumaFlat` fast paths drift slightly
-(issue 055).
-
-Fast-path payoff, measured with `cati --bench` on one photo at 120x50:
-half 3.92x (2026-09-24); earlier measurements (2026-09-23) were quad 2.07x,
-bars+ 1.43x, bars 1.34x, and other modes about 1x.
-Rerun `--bench` before and after fast-path work to confirm a real gain
-rather than relying on micro-benchmarks alone.
+Direct source-pixel access is the standard for supported image types, with
+generic `image.Image.At` handling for other types. In-package reference tests
+compare render output across synthetic image formats and bounds. Run
+`cati --bench <mediafile>` to measure the standard production path for each
+mode; it does not toggle alternate renderer implementations.

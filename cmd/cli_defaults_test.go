@@ -11,9 +11,6 @@ import (
 	"ubunatic.com/cati/spec"
 )
 
-// envDefaultFlags take their default from the environment, not the spec.
-var envDefaultFlags = map[string]bool{"fastpath": true}
-
 func cliRoots() []*cobra.Command {
 	return []*cobra.Command{New(), NewPlay(), NewBrowse()}
 }
@@ -41,9 +38,6 @@ func TestCLIDefaultsNotHardcoded(t *testing.T) {
 	defer func() { cliSpecFS = spec.FS }()
 	for _, root := range cliRoots() {
 		walkFlags(root, func(c *cobra.Command, f *pflag.Flag) {
-			if envDefaultFlags[f.Name] {
-				return
-			}
 			if !isZeroDefault(f) {
 				t.Errorf("%s --%s has hardcoded default %q; move it to spec/cli.yaml defaults", c.CommandPath(), f.Name, f.DefValue)
 			}

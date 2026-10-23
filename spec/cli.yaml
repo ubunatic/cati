@@ -9,14 +9,13 @@ flags:
     handler: runMediaBenchmark
   bench_budget:
     long: --bench-budget
-    description: Total time budget for an image --bench, split across modes and fast/simple paths; each mode renders at least once
+    description: Total time budget for an image --bench, split across modes; each mode renders at least once
     handler: runMediaBenchmark
 
 # Default values of CLI flags, keyed by command path (as cobra prints it) and
 # long flag name. Go registers every flag with its zero value; applyCLIDefaults
 # (cmd/cli_defaults.go) applies these before parsing. A flag whose default is
 # its zero value (false, 0, "") needs no entry.
-# Exception: --fastpath defaults to the CATI_FASTPATH environment value.
 defaults:
   cati:
     ansi: { default: "true" }

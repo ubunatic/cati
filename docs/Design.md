@@ -268,7 +268,6 @@ defaults:
   with `applyCLIDefaultsUnder(cmd, "cati")`, because their command path lacks the binary name.
 - Missing `cli.yaml`: flags keep zero values. Invalid `cli.yaml` (unknown field, unparsable value,
   e.g. `grid: eight`): every command of that binary fails in `PersistentPreRunE`.
-- Exception: `--fastpath` defaults to the `CATI_FASTPATH` environment value, read at runtime.
 - Guards: `TestCLIDefaultsNotHardcoded` builds the trees without the spec and rejects any
   non-zero Go default; `TestSpecCLIDefaultsIntegrity` requires every spec entry to name an
   existing flag and to be applied as written.

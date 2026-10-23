@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -16,7 +15,6 @@ import (
 
 	"ubunatic.com/cati/internal/testutil"
 	"ubunatic.com/cati/spec"
-	"ubunatic.com/cati/v1/core"
 )
 
 // makeTestPNG creates a small PNG in dir and returns its path.
@@ -51,45 +49,8 @@ func TestRunMediaBenchmarkImage(t *testing.T) {
 		t.Fatalf("runMediaBenchmark: %v", err)
 	}
 	got := out.String()
-	if !strings.Contains(got, "Image benchmark: bench.png") || !strings.Contains(got, "avg/render") || !strings.Contains(got, "Simple") || !strings.Contains(got, "Speedup") {
+	if !strings.Contains(got, "Image benchmark: bench.png") || !strings.Contains(got, "Avg/render") || strings.Contains(got, "Simple") || strings.Contains(got, "Speedup") || strings.Contains(got, "parity") {
 		t.Fatalf("unexpected benchmark output:\n%s", got)
-	}
-}
-
-func TestRunMediaBenchmarkImageOutputParity(t *testing.T) {
-	for _, tc := range []struct {
-		name       string
-		mismatch   bool
-		wantStatus string
-	}{
-		{name: "identical", wantStatus: "ok"},
-		{name: "mismatch", mismatch: true, wantStatus: "DIFF"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			path := makeTestPNG(t, t.TempDir())
-			var out bytes.Buffer
-			calls := 0
-			render := func(img image.Image, cfg renderCfg) ([]string, error) {
-				calls++
-				if tc.mismatch && calls == 1 {
-					return []string{"fast output"}, nil
-				}
-				return []string{"simple output"}, nil
-			}
-			err := runMediaBenchmarkWithRunner(&out, path, 20, 8, 1, "h", 2*time.Millisecond, time.Now, render)
-			if tc.mismatch && err == nil {
-				t.Fatal("expected non-zero mismatch result")
-			}
-			if !tc.mismatch && err != nil {
-				t.Fatalf("identical output returned error: %v", err)
-			}
-			if !strings.Contains(out.String(), tc.wantStatus) {
-				t.Fatalf("output missing parity status %q:\n%s", tc.wantStatus, out.String())
-			}
-			if tc.mismatch && !strings.Contains(out.String(), "first diff") {
-				t.Fatalf("mismatch output missing first difference summary:\n%s", out.String())
-			}
-		})
 	}
 }
 
@@ -182,11 +143,11 @@ func TestRunMediaBenchmarkSlowMode(t *testing.T) {
 	want := 0
 	for _, entry := range entries {
 		if !slices.Contains(modes.Experimental, entry.name) {
-			want += 2
+			want++
 		}
 	}
 	if calls != want {
-		t.Fatalf("slow renders = %d, want one per mode and fastpath (%d)", calls, want)
+		t.Fatalf("slow renders = %d, want one per mode (%d)", calls, want)
 	}
 	got := out.String()
 	if !strings.Contains(got, "(slow)") {
@@ -274,45 +235,13 @@ func TestRunMediaBenchmarkVideo(t *testing.T) {
 	}
 	var out bytes.Buffer
 	stableRender := func(img image.Image, cfg renderCfg) ([]string, error) {
-		return []string{"same frame"}, nil
+		return nil, nil
 	}
 	if err := runMediaBenchmarkWithRunner(&out, path, 12, 6, 1, "", 2*time.Second, time.Now, stableRender); err != nil {
 		t.Fatalf("runMediaBenchmark: %v", err)
 	}
-	if !strings.Contains(out.String(), "Video benchmark: bench.mp4") || !strings.Contains(out.String(), "Frames") || !strings.Contains(out.String(), "Output parity") || !strings.Contains(out.String(), "ok") {
+	if !strings.Contains(out.String(), "Video benchmark: bench.mp4") || !strings.Contains(out.String(), "Frames") || strings.Contains(out.String(), "Output parity") || strings.Contains(out.String(), "Fast fps") {
 		t.Fatalf("unexpected benchmark output:\n%s", out.String())
-	}
-}
-
-func TestRunMediaBenchmarkVideoOutputParityMismatch(t *testing.T) {
-	if testing.Short() {
-		t.Skip("FFmpeg integration")
-	}
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		t.Skip("ffmpeg unavailable")
-	}
-	if _, err := exec.LookPath("ffprobe"); err != nil {
-		t.Skip("ffprobe unavailable")
-	}
-	path := filepath.Join(t.TempDir(), "bench.mp4")
-	cmd := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=32x24:rate=4:duration=1", "-pix_fmt", "yuv420p", "-an", "-y", path)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Skipf("unable to create video fixture: %v (%s)", err, output)
-	}
-	var out bytes.Buffer
-	mismatchRender := func(img image.Image, cfg renderCfg) ([]string, error) {
-		return []string{fmt.Sprintf("fastpath=%t", core.Fastpath)}, nil
-	}
-	err := runMediaBenchmarkWithRunner(&out, path, 12, 6, 1, "h", 2*time.Second, time.Now, mismatchRender)
-	if err == nil {
-		t.Fatal("expected non-zero mismatch result")
-	}
-	got := out.String()
-	if !strings.Contains(got, "DIFF (4/4 frames)") {
-		t.Fatalf("mismatch output missing differing-frame count:\n%s", got)
-	}
-	if !strings.Contains(got, "Output parity: mismatches detected") {
-		t.Fatalf("mismatch output missing parity summary:\n%s", got)
 	}
 }
 
