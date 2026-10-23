@@ -57,6 +57,8 @@ Docs in `./docs/` are managed by harnez. <!-- harnez:bundled -->
 - Bugs, features, and design issues are tracked in `issues/` — read `issues/README.md` for the current status of known problems before starting work.
 - Before starting any feature or fix, skim any Open/In-Progress issues that touch the area you're working in — the index is short and pays for itself immediately.
 - When you change an interface, function signature, or data flow, update the relevant section of the Evergreen doc in the same logical step — not at the end of the session.
+- **Modular Sub-packages**: New CLI commands or major feature sets must be placed in `internal/<feature>` sub-packages from day one, leaving only thin Cobra wiring, flag registration, and exit codes in `cmd/`. Avoid adding substantive business or rendering logic directly to `cmd/` so that package-level test caching is preserved.
+- **Media and Audio Test Bounding**: Long-running media or audio playback tests must be restricted to integration/opt-in test tiers (`-tags=integration`) and not run as part of the standard unit test suite. Typical playback scenarios in standard suites must use a sub-second representative fixture or mock clock.
 - **Golden Image Verification**: Any new visual rendering mode or algorithm must have a corresponding golden image test under `testhelper` or `testdata` with descriptive metadata (like algorithm name and parameters) embedded as custom PNG `tEXt` chunks.
 - **Rendering bugs & golden changes**: follow @docs/RenderingBugPlaybook.md — prove the root cause with numbers before touching code, predict which goldens change, and regenerate a golden only when you can name the wrong pixel and why. Never `-update` to make the suite green.
 

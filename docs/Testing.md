@@ -81,6 +81,13 @@ commands. Run `git lfs pull` and install FFmpeg to exercise those tests. Each
 audio asset has its own subtest, so a pointer does not hide other available
 media. Read errors and decoder failures on present media still fail the test.
 
+**Media test tiers and bounding policy**:
+Long-running media or audio playback tests (e.g. streaming real audio over multiple
+seconds) must be restricted to integration test suites (`-tags=integration`) and
+must not run as part of the default `make test` or `make test-short` tiers.
+Standard unit suites must only test typical playback scenarios against sub-second
+representative fixtures or mock clocks.
+
 Additional suites are opt-in:
 
 - `make test-player` — tests guarded by the `catiplay` build tag.
