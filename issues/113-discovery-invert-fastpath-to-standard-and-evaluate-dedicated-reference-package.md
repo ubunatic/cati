@@ -47,18 +47,24 @@
 
 ## 3. Implementation Roadmap
 
-### Milestone 1: Standardize Core Render Packages & In-Package Reference Tests
-- **`v1/halfblock`**: Remove `core.Fastpath` check; add `reference_test.go` with naive `renderReference` parity check.
-- **`v1/quadblock`**: Remove `core.Fastpath` checks; rename `render_fastpath_test.go` → `reference_test.go`.
-- **`v1/sextant`**: Fix NRGBA partial-alpha premultiplication (`core.NRGBAToRGBA`); remove `core.Fastpath` checks; rename `render_fastpath_test.go` → `reference_test.go`.
-- **`v1/sparkline`**: Remove `core.Fastpath` checks; add clean naive search loop in `reference_test.go`.
-- **`internal/metrics`**: Standardize `extractLumaFlat`; rename `fastpath_test.go` → `reference_test.go`.
+### Milestone 1: Standardize Core Render Packages & In-Package Reference Tests (Delivered: commit 61a85a8)
+- **Delivered Summary**:
+  - Standardized production paths in `v1/halfblock`, `v1/quadblock`, `v1/sextant`, `v1/sparkline`, and `internal/metrics`.
+  - Removed `core.Fastpath` checks; direct slice access is now the standard production path; generic `At` fallback remains for non-RGBA/NRGBA images.
+  - Fixed NRGBA partial-alpha premultiplication in `v1/sextant` and `v1/sparkline/solver.go`.
+  - Added in-package `reference_test.go` suites asserting parity across synthetic fixtures (RGBA, NRGBA alpha variants, Gray, odd sizes, translated SubImages).
+  - Updated algorithm documentation (`docs/QuadPixelArt.md`, `docs/RenderPipelines.md`, `docs/SparklinePixelArt.md`).
 
 ### Milestone 2: Strip CLI Knobs, `core.Fastpath`, and `Makefile` Double-Run
-- Remove `v1/core/fastpath.go`.
-- Remove `--fastpath` from `cmd/root.go`, delete `cmd/fastpath_flags_test.go`, update `cmd/cli_defaults_test.go` and `spec/cli.yaml`.
-- Update `cmd/media_benchmark.go` to benchmark standard modes in a single pass.
-- Remove `CATI_FASTPATH=0` and `-tags=fastpath0` targets from `Makefile`.
+- **Pre-Work / Required Refinements**:
+  - Audit `cmd/` for all usages of `core.Fastpath`, `--fastpath`, and `CATI_FASTPATH`.
+  - Note: `spec/cli.yaml` and `cmd/cli_defaults_test.go` previously had a special exception rule for `--fastpath` defaulting to `CATI_FASTPATH`. Remove that exception and flag registration.
+- **Tasks**:
+  - Remove `v1/core/fastpath.go`.
+  - Remove `--fastpath` from `cmd/root.go`, delete `cmd/fastpath_flags_test.go`, update `cmd/cli_defaults_test.go` and `spec/cli.yaml`.
+  - Update `cmd/media_benchmark.go` to benchmark standard modes in a single pass.
+  - Remove `CATI_FASTPATH=0` and `-tags=fastpath0` targets from `Makefile`.
+  - Verify with `go test ./cmd/...` and `make test-short`.
 
 ### Milestone 3: Documentation & Verification
 - Update `docs/Testing.md`, `docs/Design.md`, `docs/RenderPipelines.md`, and `AGENTS.md`.
