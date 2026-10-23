@@ -55,17 +55,17 @@
   - Added in-package `reference_test.go` suites asserting parity across synthetic fixtures (RGBA, NRGBA alpha variants, Gray, odd sizes, translated SubImages).
   - Updated algorithm documentation (`docs/QuadPixelArt.md`, `docs/RenderPipelines.md`, `docs/SparklinePixelArt.md`).
 
-### Milestone 2: Strip CLI Knobs, `core.Fastpath`, and `Makefile` Double-Run
-- **Pre-Work / Required Refinements**:
-  - Audit `cmd/` for all usages of `core.Fastpath`, `--fastpath`, and `CATI_FASTPATH`.
-  - Note: `spec/cli.yaml` and `cmd/cli_defaults_test.go` previously had a special exception rule for `--fastpath` defaulting to `CATI_FASTPATH`. Remove that exception and flag registration.
-- **Tasks**:
-  - Remove `v1/core/fastpath.go`.
-  - Remove `--fastpath` from `cmd/root.go`, delete `cmd/fastpath_flags_test.go`, update `cmd/cli_defaults_test.go` and `spec/cli.yaml`.
-  - Update `cmd/media_benchmark.go` to benchmark standard modes in a single pass.
-  - Remove `CATI_FASTPATH=0` and `-tags=fastpath0` targets from `Makefile`.
-  - Verify with `go test ./cmd/...` and `make test-short`.
+### Milestone 2: Strip CLI Knobs, `core.Fastpath`, and `Makefile` Double-Run (Delivered: commit 58e0f1c)
+- **Delivered Summary**:
+  - Deleted `v1/core/fastpath.go` and `cmd/fastpath_flags_test.go`.
+  - Removed `--fastpath` CLI persistent flag and `CATI_FASTPATH` env lookup from `cmd/root.go`.
+  - Updated `spec/cli.yaml` and `cmd/cli_defaults_test.go` removing the `--fastpath` exception rule.
+  - Simplified `cmd/media_benchmark.go` and `cmd/media_benchmark_test.go` to benchmark standard modes in a single pass.
+  - Removed `CATI_FASTPATH=0` and `-tags=fastpath0` double-run targets from `Makefile`.
+  - Verified with `go test ./cmd/...`, `make test-short`, and `make preflight`.
 
 ### Milestone 3: Documentation & Verification
-- Update `docs/Testing.md`, `docs/Design.md`, `docs/RenderPipelines.md`, and `AGENTS.md`.
-- Run `HTO=0 make test-q1` and `make preflight`. Verify tests are 100% green and test suite duration is roughly halved.
+- **Tasks**:
+  - Run `HTO=0 make test-q1` to ensure full Quota-1 test suite pass and measure runtime reduction.
+  - Verify `make preflight` succeeds cleanly.
+  - Close Issue 113 with decisive evidence.
