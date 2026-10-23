@@ -36,4 +36,9 @@ Historically, `cati` had a "standard path" using generic `image.Image.At` and an
   - *Summary*: Removed `core.Fastpath` checks; direct slice access standardized as production standard; generic `img.At` fallback retained for non-RGBA/NRGBA images. Fixed latent NRGBA partial-alpha premultiplication in `v1/sextant` and `v1/sparkline/solver.go`. Replaced fastpath toggle tests with in-package `reference_test.go` parity suites. Updated rendering docs.
 
 - **Milestone 2**: Strip CLI Knobs, `core.Fastpath`, and `Makefile` Double-Run.
-  - *Status*: Dispatched to `sol:med`.
+  - *Status*: Delivered in commit `58e0f1c`.
+  - *Verification*: `go test ./cmd/...`, `make test-short`, and `make preflight` passed cleanly.
+  - *Summary*: Deleted `v1/core/fastpath.go` and `cmd/fastpath_flags_test.go`. Removed `--fastpath` persistent CLI flag and `CATI_FASTPATH` env lookup from `cmd/root.go`. Updated `spec/cli.yaml` and `cmd/cli_defaults_test.go` removing the `--fastpath` exception rule. Simplified `cmd/media_benchmark.go` to benchmark standard modes in a single pass. Removed `CATI_FASTPATH=0` and `-tags=fastpath0` double-run targets from `Makefile`.
+
+- **Milestone 3**: Final Verification & Study Completion.
+  - *Status*: Executing full test suite and preflight verification.
