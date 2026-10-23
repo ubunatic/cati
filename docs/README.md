@@ -34,7 +34,7 @@ Welcome to the Cati developer documentation. The following resources cover our p
 | [studies/2026-10-04-terminal-pixels-with-agents-story.md](studies/2026-10-04-terminal-pixels-with-agents-story.md) | Terminal Pixels, Measured and Made |
 | [studies/2026-10-07-vector-glyph-continuity.md](studies/2026-10-07-vector-glyph-continuity.md) | Vector Glyphs Need Continuity, Not Just Alignment |
 | [studies/2026-10-23-profiling-test-slowness-and-cmd-modularization.md](studies/2026-10-23-profiling-test-slowness-and-cmd-modularization.md) | Profiling Test Slowness, Cataloging Bottlenecks, and the Overcrowded Monolith |
-| [studies/2026-10-24-two-agent-lean-sprint-issue-113-fastpath-standardization.md](studies/2026-10-24-two-agent-lean-sprint-issue-113-fastpath-standardization.md) | Two-Agent Lean Sprint Study: Issue 113 Fastpath Standardization & In-Package Reference Testing |
+| [studies/2026-10-24-two-agent-lean-sprint-issue-113-fastpath-standardization.md](studies/2026-10-24-two-agent-lean-sprint-issue-113-fastpath-standardization.md) | Invert fastpath architecture across `cati`, standardize direct-slice renderers, introduce in-package reference parity tests, remove CLI/core runtime switches, and eliminate Makefile double-run. |
 | [studies/codespaces-color-rendering.md](studies/codespaces-color-rendering.md) | GitHub Codespaces Workbench Color Rendering Artifacts |
 | [studies/google-jules-performance-story.md](studies/google-jules-performance-story.md) | Google Jules performance work across Cati and Loom Games |
 <!-- harnez:end docs-studies-index -->
