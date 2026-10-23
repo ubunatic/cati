@@ -1,6 +1,6 @@
 # 113 — Invert fastpath to standard and adopt in-package reference testing
 
-**Status**: Open
+**Status**: Closed — Standardized production paths across core render packages and metrics; added in-package reference_test.go parity suites; fixed NRGBA alpha in sextant and sparkline; deleted core.Fastpath, CLI --fastpath, and Makefile double-runs; make test-q1 green
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Architecture
