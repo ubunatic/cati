@@ -42,4 +42,20 @@ Following Issue 113's standardization of production renderers to direct slice ac
   - *Summary*: Replaced sextant production solver delegation with `chooseCellReference` evaluating all 64 masks using `scoreMask` and tie breaks. Added private `renderToImageReference` and parallel `TestReferenceGoldenParity` in both packages. Sparkline verifies both Quad (`render_spark`) and Best (`render_spark_best`) modes against goldens. Package runtimes remain sub-second (`sextant` ~0.02s, `sparkline` ~0.35s). Reviewed by Host Orchestrator diff review.
 
 - **Milestone 3**: Documentation & Final Quota-1 Verification.
-  - *Status*: In progress.
+  - *Status*: Completed.
+  - *Verification*: Full Quota-1 test suite (`HTO=0 make test-q1`) and `HTO=0 make preflight` passed green with zero errors. All installed binaries built and verified against demo widths.
+  - *Summary*: Updated `docs/Testing.md` describing in-package golden verification of reference paths. Issue 114 closed in commit `888b8f4`.
+
+---
+
+## 4. Key Takeaways & Quality Audit
+
+1. **Direct Verification of Baseline Assumptions**:
+   - The naive reference implementations (`img.At`, 64-mask scoring loop in sextant, float search in sparkline) now directly generate identical pixels to the golden PNGs in `testdata/`.
+   - Transitive confidence is replaced with direct, empirical proof that the reference algorithms produce exact expected visuals.
+2. **True Naive Solver for Sextant**:
+   - Caught and resolved the seam where `sextant`'s reference test previously called production `chooseCell`/`chooseBestCell`. It now evaluates all 64 masks independently using `scoreMask` and tie breaks.
+3. **Encapsulation Maintained**:
+   - All `renderToImageReference`, canvas upscaling, and test fixtures remain completely private to `*_test.go`, keeping the public Go API clean and unpolluted.
+4. **Sub-Second Execution**:
+   - Testing 8 representative cases per package across multiple aspect ratios provides complete coverage while keeping total `v1/*` test suite execution under 1 second.
