@@ -44,17 +44,14 @@ While parity holds transitively ($\text{Reference} == \text{Standard} == \text{G
   - Used exact golden canvas replication (`12×12` for halfblock, `6×12` for quadblock) and asserted pixel-for-pixel equality against golden PNGs.
   - Test runtimes remain sub-second (`halfblock` ~0.5s, `quadblock` ~0.03s). Verified by Host Orchestrator diff review.
 
-### Milestone 2: Naive Solver & Golden Verification in `v1/sextant` and `v1/sparkline`
-- **Pre-Work / Implementation Details**:
-  - `v1/sextant/reference_test.go`:
-    - Replace production `chooseCell` call with a true naive `chooseCellReference(pixels [6]color.RGBA) cellResult` evaluating all 64 masks using `scoreMask` and tie-breaks.
-    - Add private `renderToImageReference(img image.Image, mode Mode) *image.RGBA` reconstructing `2×3` blocks.
-    - Add `TestReferenceGoldenParity(t *testing.T)` with `t.Parallel()` testing against `../../testdata/<folder>/render_sextant_<n>ch.png` (replicated `6×8`).
-  - `v1/sparkline/reference_test.go`:
-    - Add private `renderToImageReference(img image.Image, outCols, outRows int, mode Mode) *image.RGBA` calling `searchReference` on each cell.
-    - Add `TestReferenceGoldenParity(t *testing.T)` asserting against both `render_spark_<n>ch.png` (Quad, cell `4×8`, replicated `3×3`) and `render_spark_best_<n>ch.png` (Best, cell `4×24`, replicated `3×1`), covering both $\le 64$ and $65-128$ pixel kernels.
+### Milestone 2: Naive Solver & Golden Verification in `v1/sextant` and `v1/sparkline` (Delivered: commit d5f9fcb)
+- **Delivered Summary**:
+  - In `v1/sextant/reference_test.go`, replaced production solver delegation with `chooseCellReference` evaluating all 64 masks using `scoreMask` and tie breaks. Added private `renderToImageReference` and parallel `TestReferenceGoldenParity` testing against golden sextant renders replicated `6×8`.
+  - In `v1/sparkline/reference_test.go`, added private `renderToImageReference` and parallel `TestReferenceGoldenParity` testing both Quad (`render_spark_<n>ch.png`, replicated `3×3`) and Best (`render_spark_best_<n>ch.png`, replicated `3×1`), covering both $\le 64$ and $65-128$ pixel kernels.
+  - Package runtimes remain sub-second (`sextant` ~0.02s, `sparkline` ~0.35s). Verified by Host Orchestrator diff review.
 
 ### Milestone 3: Documentation & Quota-1 Verification
 - Update `docs/Testing.md` to document in-package reference golden testing.
 - Run `HTO=0 make test-q1` and `make preflight`.
 - Verify package runtimes remain sub-second.
+- Close Issue 114 with decisive evidence.
