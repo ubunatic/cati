@@ -37,23 +37,22 @@ While parity holds transitively ($\text{Reference} == \text{Standard} == \text{G
 
 ## 3. Implementation Roadmap
 
-### Milestone 1: In-Package Reference Golden Parity in `v1/halfblock` and `v1/quadblock`
-- **`v1/halfblock/reference_test.go`**:
-  - Add `renderToImageReference(img image.Image) *image.RGBA` that reconstructs pixels from `renderReference` grid cells.
-  - Add `TestReferenceGoldenParity(t *testing.T)` with `t.Parallel()` testing representative golden cases (`../../testdata/<folder>/render_halfblock_<n>ch.png`).
-  - Scale source with `imgutil.FitDims`, upscale `12×12` to canvas, and assert pixel equality against decoded golden PNG.
-- **`v1/quadblock/reference_test.go`**:
-  - Add `renderToImageReference(img image.Image, opts Options) *image.RGBA` that reconstructs `2×2` pixels from `core.Cell` (`'▌'`, `'▐'`, and `charToMask(c.Ch)`).
-  - Add `TestReferenceGoldenParity(t *testing.T)` with `t.Parallel()` testing `Options{SplitHalf: true, HalfblockThreshold: 2}` against `../../testdata/<folder>/render_quad_<n>ch.png` (upscaled `6×12`).
+### Milestone 1: In-Package Reference Golden Parity in `v1/halfblock` and `v1/quadblock` (Delivered: commit 935934d)
+- **Delivered Summary**:
+  - Implemented private `renderToImageReference` in `v1/halfblock/reference_test.go` and `v1/quadblock/reference_test.go`.
+  - Added parallel `TestReferenceGoldenParity` in both packages testing 8 representative golden cases (`demo_horiz_20x20`, `demo_verti_20x20`, `demo_horiz_4x4` at n=2, 4, 5).
+  - Used exact golden canvas replication (`12×12` for halfblock, `6×12` for quadblock) and asserted pixel-for-pixel equality against golden PNGs.
+  - Test runtimes remain sub-second (`halfblock` ~0.5s, `quadblock` ~0.03s). Verified by Host Orchestrator diff review.
 
 ### Milestone 2: Naive Solver & Golden Verification in `v1/sextant` and `v1/sparkline`
-- **`v1/sextant/reference_test.go`**:
-  - Replace `chooseCell` with naive `chooseCellReference` evaluating all 64 masks via `scoreMask` and tie-breaks.
-  - Add `renderToImageReference(img image.Image, mode Mode) *image.RGBA` reconstructing `2×3` blocks.
-  - Add `TestReferenceGoldenParity(t *testing.T)` testing against `../../testdata/<folder>/render_sextant_<n>ch.png` (upscaled `6×8`).
-- **`v1/sparkline/reference_test.go`**:
-  - Add `renderToImageReference(img image.Image, outCols, outRows int, mode Mode) *image.RGBA` calling `searchReference` for each cell.
-  - Add `TestReferenceGoldenParity(t *testing.T)` asserting against both `render_spark_<n>ch.png` (Quad, cell `4×8`) and `render_spark_best_<n>ch.png` (Best, cell `4×24`), exercising both $\le 64$ and $65-128$ pixel kernels.
+- **Pre-Work / Implementation Details**:
+  - `v1/sextant/reference_test.go`:
+    - Replace production `chooseCell` call with a true naive `chooseCellReference(pixels [6]color.RGBA) cellResult` evaluating all 64 masks using `scoreMask` and tie-breaks.
+    - Add private `renderToImageReference(img image.Image, mode Mode) *image.RGBA` reconstructing `2×3` blocks.
+    - Add `TestReferenceGoldenParity(t *testing.T)` with `t.Parallel()` testing against `../../testdata/<folder>/render_sextant_<n>ch.png` (replicated `6×8`).
+  - `v1/sparkline/reference_test.go`:
+    - Add private `renderToImageReference(img image.Image, outCols, outRows int, mode Mode) *image.RGBA` calling `searchReference` on each cell.
+    - Add `TestReferenceGoldenParity(t *testing.T)` asserting against both `render_spark_<n>ch.png` (Quad, cell `4×8`, replicated `3×3`) and `render_spark_best_<n>ch.png` (Best, cell `4×24`, replicated `3×1`), covering both $\le 64$ and $65-128$ pixel kernels.
 
 ### Milestone 3: Documentation & Quota-1 Verification
 - Update `docs/Testing.md` to document in-package reference golden testing.
