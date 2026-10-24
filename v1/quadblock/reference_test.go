@@ -1,10 +1,15 @@
 package quadblock
 
 import (
+	"fmt"
 	"image"
 	"image/color"
+	"image/png"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/v1/core"
 )
 
@@ -40,6 +45,113 @@ func renderReference(img image.Image, opts Options) [][]core.Cell {
 		}
 	}
 	return grid
+}
+
+func renderToImageReference(img image.Image, opts Options) *image.RGBA {
+	b := img.Bounds()
+	out := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	for cy, row := range renderReference(img, opts) {
+		for cx, c := range row {
+			if c.Transparent {
+				continue
+			}
+			mask := charToMask(c.Ch)
+			for q, d := range [4]image.Point{{0, 0}, {1, 0}, {0, 1}, {1, 1}} {
+				x, y := cx*2+d.X, cy*2+d.Y
+				if x >= b.Dx() || y >= b.Dy() {
+					continue
+				}
+				src := color.RGBAModel.Convert(img.At(b.Min.X+x, b.Min.Y+y)).(color.RGBA)
+				if src.A == 0 {
+					continue
+				}
+				var pixel color.RGBA
+				switch c.Ch {
+				case '▌':
+					pixel = c.Bg
+					if d.X == 0 {
+						pixel = c.Fg
+					}
+				case '▐':
+					pixel = c.Bg
+					if d.X == 1 {
+						pixel = c.Fg
+					}
+				default:
+					pixel = c.Bg
+					if mask&(uint8(8)>>uint(q)) != 0 {
+						pixel = c.Fg
+					}
+				}
+				if !c.HasFg && !c.HasBg {
+					continue
+				}
+				if !c.HasFg {
+					pixel = c.Bg
+				}
+				if !c.HasBg && c.HasFg {
+					pixel = c.Fg
+				}
+				out.SetRGBA(x, y, pixel)
+			}
+		}
+	}
+	return out
+}
+
+func TestReferenceGoldenParity(t *testing.T) {
+	t.Parallel()
+	type testCase struct {
+		folder string
+		chars  int
+	}
+	cases := []testCase{
+		{"demo_horiz_20x20", 2}, {"demo_horiz_20x20", 4}, {"demo_horiz_20x20", 5},
+		{"demo_verti_20x20", 2}, {"demo_verti_20x20", 4}, {"demo_verti_20x20", 5},
+		{"demo_horiz_4x4", 2}, {"demo_horiz_4x4", 4},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(fmt.Sprintf("%s_%d", tc.folder, tc.chars), func(t *testing.T) {
+			t.Parallel()
+			sourcePath := filepath.Join("..", "..", "testdata", tc.folder, "source.png")
+			f, err := os.Open(sourcePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			src, err := png.Decode(f)
+			_ = f.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			w, h, extH := imgutil.FitDims(src.Bounds().Dx(), src.Bounds().Dy(), 2, 2, 2, tc.chars, tc.chars)
+			scaled := imgutil.ScaleNN(src, w, h)
+			if extH > 0 {
+				scaled = imgutil.AppendTransparentRows(scaled, extH)
+			}
+			opts := Options{SplitHalf: true, HalfblockThreshold: 2}
+			gotNative := renderToImageReference(scaled, opts)
+			got := image.NewRGBA(image.Rect(0, 0, gotNative.Bounds().Dx()*6, gotNative.Bounds().Dy()*12))
+			for y := range got.Bounds().Dy() {
+				for x := range got.Bounds().Dx() {
+					got.Set(x, y, gotNative.At(x/6, y/12))
+				}
+			}
+			goldenPath := filepath.Join("..", "..", "testdata", tc.folder, fmt.Sprintf("render_quad_%dch.png", tc.chars))
+			gf, err := os.Open(goldenPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := png.Decode(gf)
+			_ = gf.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !imagesEqual(got, want) {
+				t.Fatalf("reference image differs from %s", goldenPath)
+			}
+		})
+	}
 }
 
 func TestReferenceParity(t *testing.T) {

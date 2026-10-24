@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"image"
 	"image/color"
+	"image/png"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
+	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/v1/core"
 )
 
@@ -46,6 +50,111 @@ func renderReference(img image.Image) *core.Grid {
 		}
 	}
 	return &core.Grid{Width: w, Height: rows, Cells: cells}
+}
+
+func renderToImageReference(img image.Image) *image.RGBA {
+	b := img.Bounds()
+	out := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	for y, row := range renderReference(img).Cells {
+		for x, c := range row {
+			if c.Transparent {
+				continue
+			}
+			top, bottom := c.Bg, c.Bg
+			switch c.Ch {
+			case '▀':
+				top = c.Fg
+			case '▄':
+				bottom = c.Fg
+			case '█':
+				top, bottom = c.Fg, c.Fg
+			default:
+				if c.HasFg {
+					top = c.Fg
+				}
+				if c.HasBg {
+					bottom = c.Bg
+				}
+			}
+			if c.HasFg || c.HasBg {
+				out.SetRGBA(x, y*2, top)
+				if y*2+1 < b.Dy() {
+					out.SetRGBA(x, y*2+1, bottom)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func TestReferenceGoldenParity(t *testing.T) {
+	t.Parallel()
+	type testCase struct {
+		folder string
+		chars  int
+	}
+	cases := []testCase{
+		{"demo_horiz_20x20", 2}, {"demo_horiz_20x20", 4}, {"demo_horiz_20x20", 5},
+		{"demo_verti_20x20", 2}, {"demo_verti_20x20", 4}, {"demo_verti_20x20", 5},
+		{"demo_horiz_4x4", 2}, {"demo_horiz_4x4", 4},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(filepath.Base(tc.folder)+"_"+string(rune('0'+tc.chars)), func(t *testing.T) {
+			t.Parallel()
+			sourcePath := filepath.Join("..", "..", "testdata", tc.folder, "source.png")
+			f, err := os.Open(sourcePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			src, err := png.Decode(f)
+			_ = f.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			w, h, extH := imgutil.FitDims(src.Bounds().Dx(), src.Bounds().Dy(), 1, 2, 1, tc.chars, tc.chars)
+			scaled := imgutil.ScaleNN(src, w, h)
+			if extH > 0 {
+				scaled = imgutil.AppendTransparentRows(scaled, extH)
+			}
+			gotNative := renderToImageReference(scaled)
+			got := image.NewRGBA(image.Rect(0, 0, gotNative.Bounds().Dx()*12, gotNative.Bounds().Dy()*12))
+			for y := range got.Bounds().Dy() {
+				for x := range got.Bounds().Dx() {
+					got.Set(x, y, gotNative.At(x/12, y/12))
+				}
+			}
+			goldenPath := filepath.Join("..", "..", "testdata", tc.folder, "render_halfblock_"+string(rune('0'+tc.chars))+"ch.png")
+			gf, err := os.Open(goldenPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			want, err := png.Decode(gf)
+			_ = gf.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !referenceImagesEqual(got, want) {
+				t.Fatalf("reference image differs from %s", goldenPath)
+			}
+		})
+	}
+}
+
+func referenceImagesEqual(a, b image.Image) bool {
+	if a.Bounds().Dx() != b.Bounds().Dx() || a.Bounds().Dy() != b.Bounds().Dy() {
+		return false
+	}
+	for y := 0; y < a.Bounds().Dy(); y++ {
+		for x := 0; x < a.Bounds().Dx(); x++ {
+			ar, ag, ab, aa := a.At(a.Bounds().Min.X+x, a.Bounds().Min.Y+y).RGBA()
+			br, bg, bb, ba := b.At(b.Bounds().Min.X+x, b.Bounds().Min.Y+y).RGBA()
+			if ar != br || ag != bg || ab != bb || aa != ba {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func TestReferenceParity(t *testing.T) {
