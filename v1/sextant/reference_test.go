@@ -3,8 +3,13 @@ package sextant
 import (
 	"image"
 	"image/color"
+	"image/png"
+	"math/bits"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"ubunatic.com/cati/internal/imgutil"
 	"ubunatic.com/cati/v1/core"
 )
 
@@ -50,10 +55,133 @@ func renderReference(img image.Image, mode Mode) [][]cellResult {
 					}
 				}
 			}
-			grid[row][col] = chooseCell(pixels, mode)
+			grid[row][col] = chooseCellReference(pixels)
 		}
 	}
 	return grid
+}
+
+func chooseCellReference(pixels [6]color.RGBA) cellResult {
+	allTransparent := true
+	for _, pixel := range pixels {
+		if pixel.A != 0 {
+			allTransparent = false
+			break
+		}
+	}
+	if allTransparent {
+		return cellResult{ch: ' ', transparent: true}
+	}
+
+	preferred := directMask(pixels)
+	best := cellResult{ch: ' ', transparent: true}
+	bestScore, bestOverlap, bestPopcount := int(^uint(0)>>1), -1, -1
+	for mask := uint8(0); mask < 64; mask++ {
+		cell, score := scoreMask(pixels, mask)
+		overlap := bits.OnesCount8(mask & preferred)
+		pop := bits.OnesCount8(mask)
+		if score < bestScore || score == bestScore && (overlap > bestOverlap || overlap == bestOverlap && pop > bestPopcount) {
+			best, bestScore, bestOverlap, bestPopcount = cell, score, overlap, pop
+		}
+	}
+	return best
+}
+
+func renderToImageReference(img image.Image, mode Mode) *image.RGBA {
+	b := img.Bounds()
+	out := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	for cy, row := range renderReference(img, mode) {
+		for cx, cell := range row {
+			for i := 0; i < blockCols*blockRows; i++ {
+				if !emittedCoverage(cell, i) {
+					continue
+				}
+				pixel := cell.bg
+				if maskContains(cell.mask, i) {
+					pixel = cell.fg
+				}
+				x, y := cx*blockCols+i%blockCols, cy*blockRows+i/blockCols
+				if x < b.Dx() && y < b.Dy() {
+					out.SetRGBA(x, y, pixel)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func TestReferenceGoldenParity(t *testing.T) {
+	t.Parallel()
+	type testCase struct {
+		folder string
+		chars  int
+	}
+	cases := []testCase{
+		{"demo_horiz_20x20", 2}, {"demo_horiz_20x20", 4}, {"demo_horiz_20x20", 5},
+		{"demo_verti_20x20", 2}, {"demo_verti_20x20", 4}, {"demo_verti_20x20", 5},
+		{"demo_horiz_4x4", 2}, {"demo_horiz_4x4", 4},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(filepath.Base(tc.folder)+"_"+string(rune('0'+tc.chars)), func(t *testing.T) {
+			t.Parallel()
+			sourcePath := filepath.Join("..", "..", "testdata", tc.folder, "source.png")
+			source := referenceGoldenLoad(t, sourcePath)
+			w, h, extH := imgutil.FitDimsRatio(source.Bounds().Dx(), source.Bounds().Dy(), blockCols, blockRows, 4, 3, tc.chars, tc.chars)
+			scaled := imgutil.ScaleNN(source, w, h)
+			if extH > 0 {
+				scaled = imgutil.AppendTransparentRows(scaled, extH)
+			}
+			native := renderToImageReference(scaled, ModeSextant)
+			got := upscaleReferenceImage(native, 6, 8)
+			goldenPath := filepath.Join("..", "..", "testdata", tc.folder, "render_sextant_"+string(rune('0'+tc.chars))+"ch.png")
+			want := referenceGoldenLoad(t, goldenPath)
+			if !referenceImagesEqual(got, want) {
+				t.Fatalf("reference image differs from %s: got %v, want %v", goldenPath, got.Bounds(), want.Bounds())
+			}
+		})
+	}
+}
+
+func referenceGoldenLoad(t *testing.T, path string) image.Image {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return img
+}
+
+func upscaleReferenceImage(img image.Image, scaleX, scaleY int) *image.RGBA {
+	b := img.Bounds()
+	out := image.NewRGBA(image.Rect(0, 0, b.Dx()*scaleX, b.Dy()*scaleY))
+	for y := range out.Bounds().Dy() {
+		for x := range out.Bounds().Dx() {
+			out.Set(x, y, img.At(b.Min.X+x/scaleX, b.Min.Y+y/scaleY))
+		}
+	}
+	return out
+}
+
+func referenceImagesEqual(a, b image.Image) bool {
+	if a.Bounds().Dx() != b.Bounds().Dx() || a.Bounds().Dy() != b.Bounds().Dy() {
+		return false
+	}
+	for y := 0; y < a.Bounds().Dy(); y++ {
+		for x := 0; x < a.Bounds().Dx(); x++ {
+			ar, ag, ab, aa := a.At(a.Bounds().Min.X+x, a.Bounds().Min.Y+y).RGBA()
+			br, bg, bb, ba := b.At(b.Bounds().Min.X+x, b.Bounds().Min.Y+y).RGBA()
+			if ar != br || ag != bg || ab != bb || aa != ba {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func TestReferenceParity(t *testing.T) {
