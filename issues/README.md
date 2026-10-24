@@ -41,7 +41,6 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 097 | [097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md](097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md) | 2x4 braille mode must be dot-only: no full block, no background color | Open |
 | 111 | [111-test-suite-catalog-and-roadmap-lighter-quieter-timed-tests.md](111-test-suite-catalog-and-roadmap-lighter-quieter-timed-tests.md) | test suite catalog and roadmap: lighter, quieter, timed tests | Open |
 | 112 | [112-modularize-cmd-package-extract-browser-player-and-modes-into-internal-sub-packages.md](112-modularize-cmd-package-extract-browser-player-and-modes-into-internal-sub-packages.md) | modularize cmd package: extract browser, player, and modes into internal sub-packages | Open |
-| 114 | [114-verify-reference-render-paths-directly-against-golden-images.md](114-verify-reference-render-paths-directly-against-golden-images.md) | Verify reference render paths directly against golden images | Open |
 <!-- harnez:end issues-active-index -->
 ## Archived
 

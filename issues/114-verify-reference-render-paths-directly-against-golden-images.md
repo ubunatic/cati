@@ -1,6 +1,6 @@
 # 114 — Verify reference render paths directly against golden images
 
-**Status**: Open
+**Status**: Closed — Added in-package TestReferenceGoldenParity across v1/{halfblock,quadblock,sextant,sparkline}; replaced sextant solver delegation with naive scoreMask loop; verified directly against golden PNGs with sub-second execution; make test-q1 green
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Testing
