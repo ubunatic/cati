@@ -32,4 +32,9 @@ Following Issue 113's standardization of production renderers to direct slice ac
 ## 3. Milestones & Progress Log
 
 - **Milestone 1**: In-Package Reference Golden Parity in `v1/halfblock` and `v1/quadblock`.
+  - *Status*: Delivered in commit `935934d`.
+  - *Verification*: `go test ./v1/halfblock/... ./v1/quadblock/...` and `make test-short` passed cleanly.
+  - *Summary*: Implemented private `renderToImageReference` in `v1/halfblock/reference_test.go` and `v1/quadblock/reference_test.go`. Added parallel `TestReferenceGoldenParity` in both packages testing 8 representative golden cases (`demo_horiz_20x20`, `demo_verti_20x20`, `demo_horiz_4x4` at n=2, 4, 5). Used exact golden canvas replication (`12×12` for halfblock, `6×12` for quadblock) and asserted pixel-for-pixel equality against golden PNGs. Package runtimes remained sub-second (`halfblock` ~0.5s, `quadblock` ~0.03s). Reviewed by Host Orchestrator directly due to `argon:low` quota exhaustion.
+
+- **Milestone 2**: Naive Solver & Golden Verification in `v1/sextant` and `v1/sparkline`.
   - *Status*: Dispatched to `sol:med`.
