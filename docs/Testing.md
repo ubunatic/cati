@@ -14,7 +14,8 @@ make test
 It runs `go vet ./...` and the default `go test ./...` suite in a single pass.
 The optimized direct-slice implementations serve as the sole production standard,
 while in-package `reference_test.go` suites maintain differential output parity
-against naive baseline implementations on small synthetic fixtures. This covers the
+against naive baseline implementations on synthetic fixtures and verify directly
+against representative golden PNGs in `testdata/`. This covers the
 library packages, renderers, CLI logic, spec integrity, and ordinary package
 tests. The Makefile runs these test targets with the pinned Go 1.26.0 toolchain
 and ignores enclosing `go.work` files so JPEG-based golden renders are stable.
