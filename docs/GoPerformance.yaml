@@ -21,9 +21,9 @@ Doc:
   Boundaries: |
     Always do:
     - Small, non-intrusive optimizations can be implemented directly inline.
-    - Bigger or complex changes (e.g. SIMD kernels, worker pools, multi-stage pipelines) MUST be dual-path and gated by an environment variable (e.g. CATI_FASTPATH=0 to fallback, defaulting to 1 for the new fast path).
-    - Preserve the simple reference path untouched so new features can be developed against it easily and comparative tests run both paths against each other for parity.
-    - Run go vet ./... and standard Go tests/benchmarks (go test -v ./..., go test -bench=. -benchmem ./...) testing BOTH the default fast path and the gated fallback path.
+    - Optimized paths (direct slice access, precomputed lookup tables, integer bitmask solvers) are the production standard; generic image.Image (img.At) is retained as the type-switch fallback for non-RGBA/NRGBA image types.
+    - Maintain naive reference implementations in in-package reference_test.go files, comparing parity on small synthetic fixtures and representative golden PNGs.
+    - Run go vet ./... and standard Go tests/benchmarks (go test -v ./..., go test -bench=. -benchmem ./...).
     - Enforce a 10-core ceiling in tests and benchmarks: cap worker pools or benchmark parallelism to at most 10 cores (e.g. go test -cpu=1,2,4,8,10).
     - Keep memory optimizations pragmatic: physical targets have 32GB RAM, so avoid extreme, unreadable micro-tuning for minor RAM drops; focus on throughput, latency, and eliminating hot-loop GC churn.
     - Commit an architectural and benchmark record into docs/perf/YYYY-MM-DD-<slug>.md.
@@ -104,25 +104,24 @@ Doc:
        - Idiomatic Go, explicit latency comments, create docs/perf/YYYY-MM-DD-<slug>.md.
 
     4. Verify:
-       - Run go fmt ./..., go vet ./..., and go test -v ./... (testing both fast and reference paths).
+       - Run go fmt ./..., go vet ./..., and go test -v ./...
        - Comparative benchmarks with core limits: go test -bench=. -benchmem -cpu=1,2,4,8,10 -count=5
 
     5. Present the Pull Request:
        Create PR with:
        - Title: ⚡ Bolt: [clear performance improvement]
        - Description Sections:
-         * 💡 What: Precise technical description of the optimization (inline vs. dual-path).
-         * ⚙️ Gating: Envar used for fallback (default enabled, e.g. CATI_FASTPATH=0 to fallback).
+         * 💡 What: Precise technical description of the optimization (direct slice access, precomputations, bitmask solvers).
          * 🎯 Why: The underlying bottleneck (syscall volume, allocations, single-core starvation).
-         * 📊 Impact: Measured benchstat metrics comparing fast path vs. simple reference.
+         * 📊 Impact: Measured benchstat metrics comparing standard implementation vs. reference baseline.
          * 📁 Documentation: Reference to the new docs/perf/ file.
          * 🔬 Verification: Commands to reproduce parity and benchmark tests.
          * ❓ Open Questions & Decisions: Unblock decisions, trade-offs, and hardware edge cases for maintainer review.
 
   PatternsAndAntiPatterns: |
     Bolt's Preferred Go Patterns:
-    - Dual-Path Dispatch: Check envar with default-on (e.g. os.Getenv("FOO_FASTPATH") != "0").
-    - Differential Parity Testing: Write tests that run both simple and fast implementations over identical inputs to guarantee exact byte/pixel/output parity.
+    - Standard Production Optimization: Direct slice access, zero-alloc builders, and bitmask solvers as production standard; type switch with generic img.At fallback for non-RGBA/NRGBA images.
+    - Differential Parity Testing: Maintain in-package reference_test.go suites comparing naive reference loops against standard implementations to guarantee exact byte/pixel/output parity.
     - Bounded Multi-Core Distribution: Fan out heavy math across row chunks with a worker cap: workers := min(runtime.NumCPU(), 10).
     - Vector-Friendly Slices: Flat, contiguous, 64-byte aligned slices for AVX-512 vector pipelines; place slice bounds checks upfront (_ = b[3]).
     - Zero-Copy Terminal Buffers: Sized bufio.Writer (e.g., 64KB) over stdout to saturate single write(2) calls.
