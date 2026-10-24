@@ -37,4 +37,9 @@ Following Issue 113's standardization of production renderers to direct slice ac
   - *Summary*: Implemented private `renderToImageReference` in `v1/halfblock/reference_test.go` and `v1/quadblock/reference_test.go`. Added parallel `TestReferenceGoldenParity` in both packages testing 8 representative golden cases (`demo_horiz_20x20`, `demo_verti_20x20`, `demo_horiz_4x4` at n=2, 4, 5). Used exact golden canvas replication (`12×12` for halfblock, `6×12` for quadblock) and asserted pixel-for-pixel equality against golden PNGs. Package runtimes remained sub-second (`halfblock` ~0.5s, `quadblock` ~0.03s). Reviewed by Host Orchestrator directly due to `argon:low` quota exhaustion.
 
 - **Milestone 2**: Naive Solver & Golden Verification in `v1/sextant` and `v1/sparkline`.
-  - *Status*: Dispatched to `sol:med`.
+  - *Status*: Delivered in commit `d5f9fcb`.
+  - *Verification*: `go test ./v1/sextant/... ./v1/sparkline/...` and `make test-short` passed cleanly.
+  - *Summary*: Replaced sextant production solver delegation with `chooseCellReference` evaluating all 64 masks using `scoreMask` and tie breaks. Added private `renderToImageReference` and parallel `TestReferenceGoldenParity` in both packages. Sparkline verifies both Quad (`render_spark`) and Best (`render_spark_best`) modes against goldens. Package runtimes remain sub-second (`sextant` ~0.02s, `sparkline` ~0.35s). Reviewed by Host Orchestrator diff review.
+
+- **Milestone 3**: Documentation & Final Quota-1 Verification.
+  - *Status*: In progress.
