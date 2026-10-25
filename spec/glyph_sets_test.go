@@ -415,7 +415,9 @@ func TestVectorDrawnMasksAreUsed(t *testing.T) {
 				continue
 			}
 			var w, h int
-			fmt.Sscanf(key, "%dx%d", &w, &h)
+			if _, err := fmt.Sscanf(key, "%dx%d", &w, &h); err != nil {
+				t.Fatalf("%s: parse mask size %s: %v", def.Glyph, key, err)
+			}
 			shapes, err := vectorShapes(rm.VectorShapes, w, h)
 			if err != nil {
 				t.Fatal(err)
