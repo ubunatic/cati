@@ -1,6 +1,6 @@
 # 115 — Fix unchecked fmt.Sscanf in spec/glyph_sets_test.go
 
-**Status**: In Progress
+**Status**: Closed — checked error return from fmt.Sscanf in glyph_sets_test
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Quality
