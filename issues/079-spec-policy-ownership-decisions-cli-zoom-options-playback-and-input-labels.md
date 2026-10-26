@@ -28,3 +28,20 @@ Keep behavior and parsing mechanisms in Go where appropriate; reuse existing ren
 
 ## 3. Implementation & Verification Plan
 Inspect the live code and related specs before deciding. For each candidate, document the chosen owner and rationale; verify any accepted contract with spec integrity and behavior tests. File implementation issues for accepted changes, or close with the documented decision if no migration is warranted.
+
+## 4. Gokay ownership triage — 2026-10-26
+
+At `f178232`, `gokay assess --json` reports valid schemas, 17 orphan-key candidates, four unspecced constants and eight numeric shadow matches. These are heuristic findings requiring ownership decisions, not permission to migrate arbitrary matching values.
+
+Candidates for this existing ownership review:
+
+- `cmd/browser.go:741`: 300ms animation ticker; decide whether UI timing is spec-owned.
+- `cmd/input_tester.go:66`: `maxLines = 20`; decide whether diagnostic history length is a UI policy or code-owned bound.
+- `cmd/interactive.go:579,597`: 3s transient status expiry. The reported match to `spec/cli.yaml` bench-budget is unrelated behavior and is not evidence that status expiry should load the benchmark budget.
+- `internal/metrics/metrics.go:303,317`: `maxExcess = 0.15`, `threshold = 0.05`; decide whether metric calibration belongs in an application spec or remains part of the metric definition, with tests and documentation for any accepted migration.
+
+Rejected automatic-shadow conclusions: 10ms formatting threshold in `cmd/modes_benchmark.go:177` matched glyph order 10; 50ms example timing matched button priority 50; 40ms example timing matched preview height 40. The dimensions and meanings differ. Retain the distinct semantics; assess code ownership separately if needed.
+
+The assessor does not enumerate the 17 orphan keys in its JSON, so no exact unused spec object was established and none was deleted. Schema validation and the passing spec tests in `gokay check` are distinct evidence; the check's own spec step says `skipped-empty`. Require exact paths and consumption evidence before acting on orphan counts. No change to YAML or loaders was made.
+
+Cross-package lint findings are separately tracked by [Epic 120](120-epic-reconcile-unused-go-declarations-across-cli-and-render-packages.md); the architecture hotspot remains #112 and the broader test roadmap #111. This update leaves ownership decisions Open.

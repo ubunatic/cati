@@ -45,6 +45,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 116 | [116-epic-2-cati-cam-tui-loom-based-video-tui.md](116-epic-2-cati-cam-tui-loom-based-video-tui.md) | Epic 2: cati cam --tui - Loom-based Video TUI | Open |
 | 117 | [117-epic-3-cati-live-stream-multi-device-dashboard.md](117-epic-3-cati-live-stream-multi-device-dashboard.md) | Epic 3: cati live stream & multi-device dashboard | Open |
 | 119 | [119-complete-second-vendor-review-of-october-26-project-story.md](119-complete-second-vendor-review-of-october-26-project-story.md) | Complete second-vendor review of October 26 project story | Open |
+| 120 | [120-epic-reconcile-unused-go-declarations-across-cli-and-render-packages.md](120-epic-reconcile-unused-go-declarations-across-cli-and-render-packages.md) | Epic: reconcile unused Go declarations across CLI and render packages | Open |
 <!-- harnez:end issues-active-index -->
 ## Archived
 
