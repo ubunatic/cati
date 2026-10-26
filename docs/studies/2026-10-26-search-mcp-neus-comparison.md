@@ -89,3 +89,102 @@ For subsequent session queries, pair every MCP call with Neus on the same underl
 No new ticket allocated. The existing Neus evaluation task **046 — Evaluation and strategic integration plan for codebase-memory-mcp** already covers this comparison area; the current observations are research inputs, not a diagnosed root cause or a new implementation commitment. Existing Neus tickets 049 and 053 document related snippet/retrieval limitations but are Closed; this study does not silently reopen them or claim their fixes regressed.
 
 The next research step within this session is to append naturally occurring paired questions, including cases outside this one test helper. Root-cause debugging of Neus, forced-local model runs, prompt capture, systematic retrieval tuning and a large benchmark are non-goals of this initial study. No workers were allocated; the host performed the follow-up review. Cati lint remediation remains in #120, separate from this comparison.
+
+## Harnez issue 953 — additional session sample
+
+The owner extended the pairing request while fixing Harnez issue 953 (interactive
+Codex hosts inheriting leaf-worker roles). MCP calls before that message remain
+outside the paired tally. One MCP call followed the message, paired as below.
+
+**Question:** Does the codebase-memory index have parsing or freshness gaps for
+`cmd/harnez/agent_caller.go`, `cmd/harnez/agent_caller_test.go`,
+`internal/subagent/codex_host.go` and `internal/procs/clean.go`? Distinguish live
+index metadata from source retrieval.
+
+- MCP: `check_index_coverage(project="home-uwe-projects-harnez", paths=["cmd/harnez/agent_caller.go", "cmd/harnez/agent_caller_test.go", "internal/subagent/codex_host.go", "internal/procs/clean.go"])`.
+  All four paths returned `no_recorded_issue` and `metadata_match`; generation
+  `2026-10-26T17:15:24Z`, full mode, generation matching, four paths returned and
+  no remaining pages. The best-effort caveat still applies. This included newly
+  created, uncommitted files. MCP timing was not separately measured.
+- Neus: `HTO=0 neus ask --tests --json '<question above>'`, run in the Harnez
+  root. It correctly abstained from claiming live parsing/freshness information.
+  Its only code source was the unrelated `cmd/harnez/agent_send.go:3`; other
+  sources were `config.yaml:634`, `website/page.yaml:5`, and
+  `internal/usage/livefetchcache.go:58`. Backend **codex**, model **luna:low**;
+  wall **6,137.671ms**, retrieval **1,527.035ms**. Local routing was skipped
+  because the estimated chat time was 81.3 seconds. Zero generation/TTFT
+  telemetry on this fallback path remains unsuitable as a latency measurement.
+- Judgment: MCP supplied its own live diagnostic; Neus accurately stated the
+  capability limit. Excluded from the substantive code-answer tally, as in round
+  4. No retry, source tuning or forced-backend run was performed.
+
+An additional **unpaired exploratory Neus query**, excluded from the tally, asked:
+"In /home/uwe/projects/harnez, how do guardLeafRole, startRole, resumeRole and
+currentHostSession use HARNEZ_AGENT_ROLE and HARNEZ_SESSION_ID, and where is the
+worker environment exported?" It ran as `neus ask '<question>'`. Neus described
+`currentHostSession`'s interactive-host precedence, but explicitly could not
+establish the other functions or environment export from its excerpts. Sources:
+`spec/agent.yaml:203`, `config.yaml:721`, `cmd/harnez/agent_args.go:16`.
+It routed to Codex luna:low after an 81.2-second local estimate; JSON timing was
+not requested. The source evidence for those functions had already been read by
+MCP and direct file reads before the owner's extended pairing instruction.
+
+These observations introduce no new diagnosed Neus defect or follow-up ticket;
+Neus evaluation 046 remains the research owner. The Harnez fix used a separate
+read-only reviewer (`codex:luna:high`, session `issue953-review`), which reported
+no findings and confirmed its leaf-role restriction live. That review is not a
+retrieval comparison trial.
+
+### Retrospective backfill of the seven earlier Harnez MCP calls
+
+After the fix and review, the owner requested Neus answers for **all earlier
+unpaired MCP calls**. All seven were run once with `HTO=0 neus ask --tests --json`
+from the Harnez root. Together with the contemporaneous coverage pair above,
+this accounts for **all eight MCP calls in the Harnez issue-953 session**.
+Tool-discovery metadata listings were not MCP invocations. The extra exploratory
+Neus query above remains unpaired and outside the comparison tally.
+
+[Backfill raw results](2026-10-26-search-mcp-neus-harnez953-backfill.json) preserve
+exact original MCP arguments, summaries transcribed from their original outputs,
+exact Neus questions, complete Neus stdout/stderr returned by the wrapper, answers,
+citations and telemetry. The MCP calls were **not rerun**: original graph
+generation was `2026-10-26T00:03:37Z`; Neus queried after the fix. These are
+retrospective comparisons, not synchronized trials, and do not alter the earlier
+Cati tally. MCP latency was not measured in this session.
+
+| Trial | Original MCP evidence | Neus result | Wall / retrieval |
+|---|---|---|---|
+| H1: index readiness | Ready; 24,934 nodes, 93,402 edges, generation and gap diagnostics | Cannot establish details; additionally claims live indexed/Tier-2 status with an unrelated citation | 6,470.898 / 1,998.447ms |
+| H2: guard/env symbols | Four matches, including `guardLeafRole` and `setAgentEnv` | Finds a related environment test; cannot identify requested definitions | 5,938.720 / 1,720.019ms |
+| H3: guard call chain | `newAgentCmd`/`newRootCmd`; five direct/transitive callees at depth two | Claims five inbound edges without caller names; cannot establish the chain | 6,599.335 / 1,987.415ms |
+| H4: guard body | Complete pre-fix body and allowed verbs | Retrieves the changed function, but excerpt stops inside the switch; abstains from full behavior | 5,719.657 / 1,276.679ms |
+| H5: four-file coverage | All paths `no_recorded_issue`, `metadata_match` | Correctly cannot establish live diagnostics | 7,680.220 / 1,912.013ms |
+| H6: role functions | Six exact matches: core functions, CLI wrappers and tests | Finds related tests and guard; cannot locate requested functions/wrappers | 7,872.687 / 1,885.207ms |
+| H7: eight-file coverage | All paths `no_recorded_issue`, `metadata_match` | Repeats the diagnostic claims, citing unrelated spec content | 10,427.293 / 1,988.825ms |
+
+All seven used backend **codex**, model **luna:low**, after local estimates of
+79.8–81.3 seconds exceeded the one-minute routing threshold. No local-model
+quality claim follows. TTFT/generation telemetry was zero on this fallback path.
+
+H2/H3/H4/H6 did not provide a complete answer to the corresponding code question;
+several answers explicitly preserved their uncertainty. H4 demonstrably saw the
+updated `callerAgentRole()` call, whereas the original MCP snippet used
+`os.Getenv(agentRoleEnv)`. This confirms the source-time mismatch and prevents
+treating the two bodies as identical snapshots. The original exact snippets,
+traces and later checked source were sufficient for the implementation.
+
+H1 and H7 need a separate attribution caveat. H1 cites `spec/init-wizard.yaml:4`
+for live indexed/Tier-2 status, which is not an index diagnostic. H7 cites
+`spec/agent.yaml:18` for eight files' live `metadata_match` status; direct reading
+shows that location is the self-test duration, not coverage metadata. The claims
+overlap the host's MCP/session context, but these outputs do not establish how
+that context reached the answer. Do not infer a context-leak root cause or count
+an unsupported citation as independent confirmation. H3's five-edge count also
+does not identify actual callers or supersede the original named trace.
+
+These backfills strengthen the observed limits of retrieval and attribution for
+this sample, without identifying a new implementation root cause. Existing Neus
+evaluation 046 remains the follow-up owner; root-cause work and another benchmark
+round are outside this requested backfill. Harnez issue 953 is fixed and Closed;
+its full quota suite, lint, installed binary, host self-test and actual reviewer
+dispatch were verified. Cati `make preflight` also passed for this study update.

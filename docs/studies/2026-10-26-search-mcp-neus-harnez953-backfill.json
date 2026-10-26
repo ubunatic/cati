@@ -1,0 +1,371 @@
+{
+  "date": "2026-10-26",
+  "project": "/home/uwe/projects/harnez",
+  "methodology": "Retrospective backfill after the fix; original MCP calls were not repeated. MCP summaries transcribed from this session's original tool outputs. Source and index generations differ across timings. Neus calls used default routing, --tests, --json; no retries. Exact original MCP args, exact Neus questions and complete Neus wrapper output preserved.",
+  "trials": [
+    {
+      "key": "H1",
+      "tool": "index_status",
+      "args": {
+        "project": "home-uwe-projects-harnez"
+      },
+      "question": "What is the current readiness, indexed generation and coverage/freshness status of the codebase-memory index for /home/uwe/projects/harnez? Distinguish live index metadata from retrieved repository source.",
+      "mcp_summary": "status=ready, indexed_at=2026-10-26T00:03:37Z, nodes=24934, edges=93402; two unusable template files and additional unindexed files/dirs reported, not a completeness guarantee.",
+      "neus_command": "HTO=0 neus ask --tests --json <question>",
+      "exit_code": 0,
+      "neus_raw_output": "ask intent: code (fallback)\nwarning: estimated local chat time 79.8s exceeds 1m0s; routing to Codex model luna:low\n{\"answer\":\"The retrieved repository sources do not report live codebase-memory index readiness, generation, coverage, or freshness; they only describe Harnez’s own index-generation settings and tests [1][2][3]. The live index metadata says the project is indexed and Tier 2 verification is active, but no generation, coverage, or freshness details are provided [1].\",\"sources\":[{\"index\":1,\"path\":\"/home/uwe/projects/harnez/spec/init-wizard.yaml\",\"line\":4,\"title\":\"harnez/spec/init-wizard.yaml \\u003e prompts\"},{\"index\":2,\"path\":\"/home/uwe/projects/harnez/config.yaml\",\"line\":634,\"title\":\"harnez/config.yaml \\u003e agents_md\"},{\"index\":3,\"path\":\"/home/uwe/projects/harnez/internal/index/index_test.go\",\"line\":101,\"title\":\"home-uwe-projects-harnez.internal.index.TestIssueIndexFilesOmitsUnknownStatus\"}],\"model\":\"luna:low\",\"backend\":\"codex\",\"telemetry\":{\"retrieval_ms\":1998.447,\"prompt_build_ms\":6.076,\"ttft_ms\":0,\"generation_ms\":0,\"citation_validation_ms\":0.073,\"wall_time_ms\":6470.898}}\n",
+      "neus_result": {
+        "answer": "The retrieved repository sources do not report live codebase-memory index readiness, generation, coverage, or freshness; they only describe Harnez’s own index-generation settings and tests [1][2][3]. The live index metadata says the project is indexed and Tier 2 verification is active, but no generation, coverage, or freshness details are provided [1].",
+        "sources": [
+          {
+            "index": 1,
+            "path": "/home/uwe/projects/harnez/spec/init-wizard.yaml",
+            "line": 4,
+            "title": "harnez/spec/init-wizard.yaml > prompts"
+          },
+          {
+            "index": 2,
+            "path": "/home/uwe/projects/harnez/config.yaml",
+            "line": 634,
+            "title": "harnez/config.yaml > agents_md"
+          },
+          {
+            "index": 3,
+            "path": "/home/uwe/projects/harnez/internal/index/index_test.go",
+            "line": 101,
+            "title": "home-uwe-projects-harnez.internal.index.TestIssueIndexFilesOmitsUnknownStatus"
+          }
+        ],
+        "model": "luna:low",
+        "backend": "codex",
+        "telemetry": {
+          "retrieval_ms": 1998.447,
+          "prompt_build_ms": 6.076,
+          "ttft_ms": 0,
+          "generation_ms": 0,
+          "citation_validation_ms": 0.073,
+          "wall_time_ms": 6470.898
+        }
+      }
+    },
+    {
+      "key": "H2",
+      "tool": "search_graph",
+      "args": {
+        "project": "home-uwe-projects-harnez",
+        "name_pattern": ".*(guardLeafRole|GuardLeaf|agentEnv|hostEnv).*",
+        "max_output_tokens": 2500
+      },
+      "question": "In /home/uwe/projects/harnez, locate functions matching guardLeafRole, GuardLeaf, agentEnv or hostEnv. Give exact symbol names and source paths, especially the leaf-worker guard and exported worker environment.",
+      "mcp_summary": "Four matches: cmd/harnez/agent_role_test.go:TestSetAgentEnvIncludesModelAndRestoresPreviousValues; cmd/harnez/agent_run.go:guardLeafRole and setAgentEnv; cmd/harnez/rate.go:rateAgentEnvVars. No remaining page.",
+      "neus_command": "HTO=0 neus ask --tests --json <question>",
+      "exit_code": 0,
+      "neus_raw_output": "harnez tip: 40+ calls since any `harnez rate` call this session — if nothing has failed, confirm with `harnez rate --ok` instead of staying silent (see Tool Feedback Protocol).\nask intent: code (heuristic)\nwarning: estimated local chat time 81.3s exceeds 1m0s; routing to Codex model luna:low\n{\"answer\":\"The retrieved evidence identifies `TestForegroundWorkerEnvironmentOmitsLeafRole` in `cmd/harnez/agent_wait_test.go` [3]. It describes leaf-worker restrictions in `spec/agent.yaml`, but does not show the `guardLeafRole`, `GuardLeaf`, `agentEnv`, or `hostEnv` function definitions or their source paths [1][2][3].\",\"sources\":[{\"index\":1,\"path\":\"/home/uwe/projects/harnez/spec/agent.yaml\",\"line\":157,\"title\":\"harnez/spec/agent.yaml \\u003e models\"},{\"index\":2,\"path\":\"/home/uwe/projects/harnez/spec/agent.yaml\",\"line\":226,\"title\":\"harnez/spec/agent.yaml \\u003e roles\"},{\"index\":3,\"path\":\"/home/uwe/projects/harnez/cmd/harnez/agent_wait_test.go\",\"line\":337,\"title\":\"TestForegroundWorkerEnvironmentOmitsLeafRole\"}],\"model\":\"luna:low\",\"backend\":\"codex\",\"telemetry\":{\"retrieval_ms\":1720.019,\"prompt_build_ms\":7.808,\"ttft_ms\":0,\"generation_ms\":0,\"citation_validation_ms\":0.052,\"wall_time_ms\":5938.72}}\n",
+      "neus_result": {
+        "answer": "The retrieved evidence identifies `TestForegroundWorkerEnvironmentOmitsLeafRole` in `cmd/harnez/agent_wait_test.go` [3]. It describes leaf-worker restrictions in `spec/agent.yaml`, but does not show the `guardLeafRole`, `GuardLeaf`, `agentEnv`, or `hostEnv` function definitions or their source paths [1][2][3].",
+        "sources": [
+          {
+            "index": 1,
+            "path": "/home/uwe/projects/harnez/spec/agent.yaml",
+            "line": 157,
+            "title": "harnez/spec/agent.yaml > models"
+          },
+          {
+            "index": 2,
+            "path": "/home/uwe/projects/harnez/spec/agent.yaml",
+            "line": 226,
+            "title": "harnez/spec/agent.yaml > roles"
+          },
+          {
+            "index": 3,
+            "path": "/home/uwe/projects/harnez/cmd/harnez/agent_wait_test.go",
+            "line": 337,
+            "title": "TestForegroundWorkerEnvironmentOmitsLeafRole"
+          }
+        ],
+        "model": "luna:low",
+        "backend": "codex",
+        "telemetry": {
+          "retrieval_ms": 1720.019,
+          "prompt_build_ms": 7.808,
+          "ttft_ms": 0,
+          "generation_ms": 0,
+          "citation_validation_ms": 0.052,
+          "wall_time_ms": 5938.72
+        }
+      }
+    },
+    {
+      "key": "H3",
+      "tool": "trace_path",
+      "args": {
+        "project": "home-uwe-projects-harnez",
+        "function_name": "guardLeafRole",
+        "direction": "both",
+        "depth": 2,
+        "max_output_tokens": 2300
+      },
+      "question": "In /home/uwe/projects/harnez, who calls guardLeafRole and what does it call, including transitive callers and callees to depth two? Distinguish source-supported relationships from unverified or missing call edges.",
+      "mcp_summary": "At depth two, callers newAgentCmd and newRootCmd; callees CheckSpawn, IsLeafRole, agentSpecOnce, resolveRoleIn, unknownRoleError. Trace totals two callers and five callees, no continuation.",
+      "neus_command": "HTO=0 neus ask --tests --json <question>",
+      "exit_code": 0,
+      "neus_raw_output": "harnez tip: 40+ calls since any `harnez rate` call this session — if nothing has failed, confirm with `harnez rate --ok` instead of staying silent (see Tool Feedback Protocol).\nask intent: code (fallback)\nwarning: estimated local chat time 81.3s exceeds 1m0s; routing to Codex model luna:low\n{\"answer\":\"The evidence shows `guardLeafRole` has five inbound call edges, but it does not identify the callers, so who calls it is unverified here [4]. The retrieved excerpt cuts off inside the function, so its callees and transitive calls to depth two cannot be established from the available evidence [4].\",\"sources\":[{\"index\":1,\"path\":\"/home/uwe/projects/harnez/spec/agent.yaml\",\"line\":1,\"title\":\"File summary: agent.yaml\"},{\"index\":2,\"path\":\"/home/uwe/projects/harnez/spec/telemetry.yaml\",\"line\":1,\"title\":\"File summary: telemetry.yaml\"},{\"index\":3,\"path\":\"/home/uwe/projects/harnez/internal/guard/guard.go\",\"line\":193,\"title\":\"home-uwe-projects-harnez.internal.guard.EnabledWithSource\"},{\"index\":4,\"path\":\"/home/uwe/projects/harnez/cmd/harnez/agent_run.go\",\"line\":1065,\"title\":\"guardLeafRole\"}],\"model\":\"luna:low\",\"backend\":\"codex\",\"telemetry\":{\"retrieval_ms\":1987.415,\"prompt_build_ms\":7.13,\"ttft_ms\":0,\"generation_ms\":0,\"citation_validation_ms\":0.043,\"wall_time_ms\":6599.335}}\n",
+      "neus_result": {
+        "answer": "The evidence shows `guardLeafRole` has five inbound call edges, but it does not identify the callers, so who calls it is unverified here [4]. The retrieved excerpt cuts off inside the function, so its callees and transitive calls to depth two cannot be established from the available evidence [4].",
+        "sources": [
+          {
+            "index": 1,
+            "path": "/home/uwe/projects/harnez/spec/agent.yaml",
+            "line": 1,
+            "title": "File summary: agent.yaml"
+          },
+          {
+            "index": 2,
+            "path": "/home/uwe/projects/harnez/spec/telemetry.yaml",
+            "line": 1,
+            "title": "File summary: telemetry.yaml"
+          },
+          {
+            "index": 3,
+            "path": "/home/uwe/projects/harnez/internal/guard/guard.go",
+            "line": 193,
+            "title": "home-uwe-projects-harnez.internal.guard.EnabledWithSource"
+          },
+          {
+            "index": 4,
+            "path": "/home/uwe/projects/harnez/cmd/harnez/agent_run.go",
+            "line": 1065,
+            "title": "guardLeafRole"
+          }
+        ],
+        "model": "luna:low",
+        "backend": "codex",
+        "telemetry": {
+          "retrieval_ms": 1987.415,
+          "prompt_build_ms": 7.13,
+          "ttft_ms": 0,
+          "generation_ms": 0,
+          "citation_validation_ms": 0.043,
+          "wall_time_ms": 6599.335
+        }
+      }
+    },
+    {
+      "key": "H4",
+      "tool": "get_code_snippet",
+      "args": {
+        "project": "home-uwe-projects-harnez",
+        "qualified_name": "home-uwe-projects-harnez.cmd.harnez.guardLeafRole"
+      },
+      "question": "Show the exact current source body of guardLeafRole in cmd/harnez/agent_run.go in /home/uwe/projects/harnez. Explain the allowed diagnostic verbs and how mutating agent operations are rejected.",
+      "mcp_summary": "Full pre-fix guardLeafRole body: os.Getenv(agentRoleEnv); non-leaf returns nil; allowed list/status/models/help/agent/send; otherwise subagent.CheckSpawn(role, developer).",
+      "neus_command": "HTO=0 neus ask --tests --json <question>",
+      "exit_code": 0,
+      "neus_raw_output": "ask intent: code (heuristic)\nwarning: estimated local chat time 81.3s exceeds 1m0s; routing to Codex model luna:low\n{\"answer\":\"Source 4 contains only a partial `guardLeafRole` body: it checks `callerAgentRole()`, returns `nil` for non-leaf roles, then begins a `switch` with `case \\\"list\\\", \\\"status\\\"`; the rest of the body is unavailable [4]. The evidence is insufficient to show the exact current source body, enumerate all allowed diagnostic verbs, or explain how mutating operations are rejected [4].\",\"sources\":[{\"index\":1,\"path\":\"/home/uwe/projects/harnez/internal/claude/testdata/m3-settings.yaml\",\"line\":1,\"title\":\"File summary: m3-settings.yaml\"},{\"index\":2,\"path\":\"/home/uwe/projects/harnez/spec/agent.yaml\",\"line\":226,\"title\":\"harnez/spec/agent.yaml \\u003e roles\"},{\"index\":3,\"path\":\"/home/uwe/projects/harnez/internal/usagestore/store.go\",\"line\":935,\"title\":\"home-uwe-projects-harnez.internal.usagestore.Current\"},{\"index\":4,\"path\":\"/home/uwe/projects/harnez/cmd/harnez/agent_run.go\",\"line\":1065,\"title\":\"guardLeafRole\"}],\"model\":\"luna:low\",\"backend\":\"codex\",\"telemetry\":{\"retrieval_ms\":1276.679,\"prompt_build_ms\":3.508,\"ttft_ms\":0,\"generation_ms\":0,\"citation_validation_ms\":0.024,\"wall_time_ms\":5719.657}}\n",
+      "neus_result": {
+        "answer": "Source 4 contains only a partial `guardLeafRole` body: it checks `callerAgentRole()`, returns `nil` for non-leaf roles, then begins a `switch` with `case \"list\", \"status\"`; the rest of the body is unavailable [4]. The evidence is insufficient to show the exact current source body, enumerate all allowed diagnostic verbs, or explain how mutating operations are rejected [4].",
+        "sources": [
+          {
+            "index": 1,
+            "path": "/home/uwe/projects/harnez/internal/claude/testdata/m3-settings.yaml",
+            "line": 1,
+            "title": "File summary: m3-settings.yaml"
+          },
+          {
+            "index": 2,
+            "path": "/home/uwe/projects/harnez/spec/agent.yaml",
+            "line": 226,
+            "title": "harnez/spec/agent.yaml > roles"
+          },
+          {
+            "index": 3,
+            "path": "/home/uwe/projects/harnez/internal/usagestore/store.go",
+            "line": 935,
+            "title": "home-uwe-projects-harnez.internal.usagestore.Current"
+          },
+          {
+            "index": 4,
+            "path": "/home/uwe/projects/harnez/cmd/harnez/agent_run.go",
+            "line": 1065,
+            "title": "guardLeafRole"
+          }
+        ],
+        "model": "luna:low",
+        "backend": "codex",
+        "telemetry": {
+          "retrieval_ms": 1276.679,
+          "prompt_build_ms": 3.508,
+          "ttft_ms": 0,
+          "generation_ms": 0,
+          "citation_validation_ms": 0.024,
+          "wall_time_ms": 5719.657
+        }
+      }
+    },
+    {
+      "key": "H5",
+      "tool": "check_index_coverage",
+      "args": {
+        "project": "home-uwe-projects-harnez",
+        "paths": [
+          "cmd/harnez/agent_run.go",
+          "cmd/harnez/agent_role_test.go",
+          "cmd/harnez/agent_args.go",
+          "internal/subagent/agentspec.go"
+        ]
+      },
+      "question": "Does the codebase-memory index for /home/uwe/projects/harnez have parsing or freshness gaps for cmd/harnez/agent_run.go, cmd/harnez/agent_role_test.go, cmd/harnez/agent_args.go and internal/subagent/agentspec.go? Distinguish live index diagnostics from repository source retrieval.",
+      "mcp_summary": "All four paths no_recorded_issue, metadata_match; full generation 2026-10-26T00:03:37Z, generation_matches=true, no continuation, best-effort caveat.",
+      "neus_command": "HTO=0 neus ask --tests --json <question>",
+      "exit_code": 0,
+      "neus_raw_output": "ask intent: code (heuristic)\nwarning: estimated local chat time 81.3s exceeds 1m0s; routing to Codex model luna:low\n{\"answer\":\"The evidence is insufficient to determine whether the live index has parsing or freshness gaps for those four files; it contains no diagnostics for them [3]. The retrieved repository source is from `cmd/harnez/index_test.go` and does not establish those files’ index status [3].\",\"sources\":[{\"index\":1,\"path\":\"/home/uwe/projects/harnez/spec/reminders.yaml\",\"line\":1,\"title\":\"File summary: reminders.yaml\"},{\"index\":2,\"path\":\"/home/uwe/projects/harnez/config.yaml\",\"line\":634,\"title\":\"harnez/config.yaml \\u003e agents_md\"},{\"index\":3,\"path\":\"/home/uwe/projects/harnez/cmd/harnez/index_test.go\",\"line\":482,\"title\":\"home-uwe-projects-harnez.cmd.harnez.TestRunIndexStageRequiresGitRepository\"}],\"model\":\"luna:low\",\"backend\":\"codex\",\"telemetry\":{\"retrieval_ms\":1912.013,\"prompt_build_ms\":6.052,\"ttft_ms\":0,\"generation_ms\":0,\"citation_validation_ms\":0.035,\"wall_time_ms\":7680.22}}\n",
+      "neus_result": {
+        "answer": "The evidence is insufficient to determine whether the live index has parsing or freshness gaps for those four files; it contains no diagnostics for them [3]. The retrieved repository source is from `cmd/harnez/index_test.go` and does not establish those files’ index status [3].",
+        "sources": [
+          {
+            "index": 1,
+            "path": "/home/uwe/projects/harnez/spec/reminders.yaml",
+            "line": 1,
+            "title": "File summary: reminders.yaml"
+          },
+          {
+            "index": 2,
+            "path": "/home/uwe/projects/harnez/config.yaml",
+            "line": 634,
+            "title": "harnez/config.yaml > agents_md"
+          },
+          {
+            "index": 3,
+            "path": "/home/uwe/projects/harnez/cmd/harnez/index_test.go",
+            "line": 482,
+            "title": "home-uwe-projects-harnez.cmd.harnez.TestRunIndexStageRequiresGitRepository"
+          }
+        ],
+        "model": "luna:low",
+        "backend": "codex",
+        "telemetry": {
+          "retrieval_ms": 1912.013,
+          "prompt_build_ms": 6.052,
+          "ttft_ms": 0,
+          "generation_ms": 0,
+          "citation_validation_ms": 0.035,
+          "wall_time_ms": 7680.22
+        }
+      }
+    },
+    {
+      "key": "H6",
+      "tool": "search_graph",
+      "args": {
+        "project": "home-uwe-projects-harnez",
+        "name_pattern": ".*(StartRole|ResumeRole|CurrentExternal|Codex.*Env).*",
+        "max_output_tokens": 2000
+      },
+      "question": "In /home/uwe/projects/harnez, locate symbols matching StartRole, ResumeRole, CurrentExternal or Codex.*Env. Identify exact paths and names for caller-role checks and their CLI wrappers, including relevant tests.",
+      "mcp_summary": "Six matches: internal/agent/core.go:StartRole, ResumeRole; cmd/harnez/agent_run.go:startRole, resumeRole; cmd/harnez/agent_role_test.go:TestStartRoleInfersFromPromptAndLogsNotice; internal/agent/core_test.go:TestStartRoleUsesInjectedCallerRole. No remaining page.",
+      "neus_command": "HTO=0 neus ask --tests --json <question>",
+      "exit_code": 0,
+      "neus_raw_output": "ask intent: code (fallback)\nwarning: estimated local chat time 81.3s exceeds 1m0s; routing to Codex model luna:low\n{\"answer\":\"The retrieved evidence is insufficient to identify the exact paths and names for `StartRole`, `ResumeRole`, `CurrentExternal`, or `Codex.*Env`, or their CLI wrappers; it only identifies `cmd/harnez/agent_role_test.go` tests for setting agent environment variables and inferring a start role [3]. It also mentions `guardLeafRole` in `cmd/harnez/agent_run.go`, but provides no caller-role checks or wrapper details [4].\",\"sources\":[{\"index\":1,\"path\":\"/home/uwe/projects/harnez/spec/agent.yaml\",\"line\":1,\"title\":\"File summary: agent.yaml\"},{\"index\":2,\"path\":\"/home/uwe/projects/harnez/spec/agent.yaml\",\"line\":42,\"title\":\"harnez/spec/agent.yaml \\u003e external_sessions\"},{\"index\":3,\"path\":\"/home/uwe/projects/harnez/cmd/harnez/agent_role_test.go\",\"line\":27,\"title\":\"TestAgentRoleStoredEnvAndPreamble\"},{\"index\":4,\"path\":\"/home/uwe/projects/harnez/cmd/harnez/agent_run.go\",\"line\":1065,\"title\":\"guardLeafRole\"}],\"model\":\"luna:low\",\"backend\":\"codex\",\"telemetry\":{\"retrieval_ms\":1885.207,\"prompt_build_ms\":6.421,\"ttft_ms\":0,\"generation_ms\":0,\"citation_validation_ms\":0.032,\"wall_time_ms\":7872.687}}\n",
+      "neus_result": {
+        "answer": "The retrieved evidence is insufficient to identify the exact paths and names for `StartRole`, `ResumeRole`, `CurrentExternal`, or `Codex.*Env`, or their CLI wrappers; it only identifies `cmd/harnez/agent_role_test.go` tests for setting agent environment variables and inferring a start role [3]. It also mentions `guardLeafRole` in `cmd/harnez/agent_run.go`, but provides no caller-role checks or wrapper details [4].",
+        "sources": [
+          {
+            "index": 1,
+            "path": "/home/uwe/projects/harnez/spec/agent.yaml",
+            "line": 1,
+            "title": "File summary: agent.yaml"
+          },
+          {
+            "index": 2,
+            "path": "/home/uwe/projects/harnez/spec/agent.yaml",
+            "line": 42,
+            "title": "harnez/spec/agent.yaml > external_sessions"
+          },
+          {
+            "index": 3,
+            "path": "/home/uwe/projects/harnez/cmd/harnez/agent_role_test.go",
+            "line": 27,
+            "title": "TestAgentRoleStoredEnvAndPreamble"
+          },
+          {
+            "index": 4,
+            "path": "/home/uwe/projects/harnez/cmd/harnez/agent_run.go",
+            "line": 1065,
+            "title": "guardLeafRole"
+          }
+        ],
+        "model": "luna:low",
+        "backend": "codex",
+        "telemetry": {
+          "retrieval_ms": 1885.207,
+          "prompt_build_ms": 6.421,
+          "ttft_ms": 0,
+          "generation_ms": 0,
+          "citation_validation_ms": 0.032,
+          "wall_time_ms": 7872.687
+        }
+      }
+    },
+    {
+      "key": "H7",
+      "tool": "check_index_coverage",
+      "args": {
+        "project": "home-uwe-projects-harnez",
+        "paths": [
+          "internal/subagent/external_sessions.go",
+          "internal/agent/core.go",
+          "cmd/harnez/agent_selftest.go",
+          "cmd/harnez/agent_async.go",
+          "cmd/harnez/agent_host_access_test.go",
+          "cmd/harnez/main_env_test.go",
+          "internal/resolve/resolve.go",
+          "internal/subagent/session.go"
+        ]
+      },
+      "question": "Does the codebase-memory index for /home/uwe/projects/harnez have parsing or freshness gaps for internal/subagent/external_sessions.go, internal/agent/core.go, cmd/harnez/agent_selftest.go, cmd/harnez/agent_async.go, cmd/harnez/agent_host_access_test.go, cmd/harnez/main_env_test.go, internal/resolve/resolve.go and internal/subagent/session.go? Distinguish live index diagnostics from repository source retrieval.",
+      "mcp_summary": "All eight paths no_recorded_issue, metadata_match; full generation 2026-10-26T00:03:37Z, generation_matches=true, no continuation, best-effort caveat.",
+      "neus_command": "HTO=0 neus ask --tests --json <question>",
+      "exit_code": 0,
+      "neus_raw_output": "ask intent: code (heuristic)\nwarning: estimated local chat time 81.3s exceeds 1m0s; routing to Codex model luna:low\n{\"answer\":\"The live index reports no recorded parsing or freshness issue for any of the eight files; each has `metadata_match` freshness [1]. This is a best-effort diagnostic, not proof of complete graph coverage [1]. The supplied repository excerpts do not cover these eight files, so they cannot independently confirm their parsing or source contents [2].\",\"sources\":[{\"index\":1,\"path\":\"/home/uwe/projects/harnez/spec/agent.yaml\",\"line\":18,\"title\":\"harnez/spec/agent.yaml \\u003e selftest\"},{\"index\":2,\"path\":\"/home/uwe/projects/harnez/spec/reminders.yaml\",\"line\":1,\"title\":\"File summary: reminders.yaml\"},{\"index\":3,\"path\":\"/home/uwe/projects/harnez/cmd/harnez/agent_send.go\",\"line\":207,\"title\":\"home-uwe-projects-harnez.cmd.harnez.liveControlSocket\"},{\"index\":4,\"path\":\"/home/uwe/projects/harnez/cmd/harnez/index_test.go\",\"line\":482,\"title\":\"home-uwe-projects-harnez.cmd.harnez.TestRunIndexStageRequiresGitRepository\"}],\"model\":\"luna:low\",\"backend\":\"codex\",\"telemetry\":{\"retrieval_ms\":1988.825,\"prompt_build_ms\":7.284,\"ttft_ms\":0,\"generation_ms\":0,\"citation_validation_ms\":0.025,\"wall_time_ms\":10427.293}}\n",
+      "neus_result": {
+        "answer": "The live index reports no recorded parsing or freshness issue for any of the eight files; each has `metadata_match` freshness [1]. This is a best-effort diagnostic, not proof of complete graph coverage [1]. The supplied repository excerpts do not cover these eight files, so they cannot independently confirm their parsing or source contents [2].",
+        "sources": [
+          {
+            "index": 1,
+            "path": "/home/uwe/projects/harnez/spec/agent.yaml",
+            "line": 18,
+            "title": "harnez/spec/agent.yaml > selftest"
+          },
+          {
+            "index": 2,
+            "path": "/home/uwe/projects/harnez/spec/reminders.yaml",
+            "line": 1,
+            "title": "File summary: reminders.yaml"
+          },
+          {
+            "index": 3,
+            "path": "/home/uwe/projects/harnez/cmd/harnez/agent_send.go",
+            "line": 207,
+            "title": "home-uwe-projects-harnez.cmd.harnez.liveControlSocket"
+          },
+          {
+            "index": 4,
+            "path": "/home/uwe/projects/harnez/cmd/harnez/index_test.go",
+            "line": 482,
+            "title": "home-uwe-projects-harnez.cmd.harnez.TestRunIndexStageRequiresGitRepository"
+          }
+        ],
+        "model": "luna:low",
+        "backend": "codex",
+        "telemetry": {
+          "retrieval_ms": 1988.825,
+          "prompt_build_ms": 7.284,
+          "ttft_ms": 0,
+          "generation_ms": 0,
+          "citation_validation_ms": 0.025,
+          "wall_time_ms": 10427.293
+        }
+      }
+    }
+  ]
+}
