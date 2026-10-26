@@ -44,6 +44,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 115 | [115-epic-1-cati-cam-camera-video-capture-support.md](115-epic-1-cati-cam-camera-video-capture-support.md) | Epic 1: cati cam - Camera & Video Capture Support | Open |
 | 116 | [116-epic-2-cati-cam-tui-loom-based-video-tui.md](116-epic-2-cati-cam-tui-loom-based-video-tui.md) | Epic 2: cati cam --tui - Loom-based Video TUI | Open |
 | 117 | [117-epic-3-cati-live-stream-multi-device-dashboard.md](117-epic-3-cati-live-stream-multi-device-dashboard.md) | Epic 3: cati live stream & multi-device dashboard | Open |
+| 119 | [119-complete-second-vendor-review-of-october-26-project-story.md](119-complete-second-vendor-review-of-october-26-project-story.md) | Complete second-vendor review of October 26 project story | Open |
 <!-- harnez:end issues-active-index -->
 ## Archived
 
