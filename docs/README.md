@@ -38,6 +38,7 @@ Welcome to the Cati developer documentation. The following resources cover our p
 | [studies/2026-10-24-two-agent-lean-sprint-issue-113-fastpath-standardization.md](studies/2026-10-24-two-agent-lean-sprint-issue-113-fastpath-standardization.md) | Invert fastpath architecture across `cati`, standardize direct-slice renderers, introduce in-package reference parity tests, remove CLI/core runtime switches, and eliminate Makefile double-run. |
 | [studies/2026-10-24-two-agent-lean-sprint-issue-114-reference-golden-testing.md](studies/2026-10-24-two-agent-lean-sprint-issue-114-reference-golden-testing.md) | Two-Agent Lean Sprint Study: Issue 114 In-Package Reference Golden Parity Testing |
 | [studies/2026-10-26-renderer-confidence-and-workflow-cost-story.md](studies/2026-10-26-renderer-confidence-and-workflow-cost-story.md) | Renderer Confidence and the Cost of the Workflow |
+| [studies/2026-10-26-search-mcp-neus-comparison.md](studies/2026-10-26-search-mcp-neus-comparison.md) | Session Study: Codebase Memory MCP versus neus ask |
 | [studies/codespaces-color-rendering.md](studies/codespaces-color-rendering.md) | GitHub Codespaces Workbench Color Rendering Artifacts |
 | [studies/google-jules-performance-story.md](studies/google-jules-performance-story.md) | Google Jules performance work across Cati and Loom Games |
 <!-- harnez:end docs-studies-index -->

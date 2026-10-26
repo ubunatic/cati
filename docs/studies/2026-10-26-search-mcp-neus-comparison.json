@@ -1,0 +1,262 @@
+{
+  "date": "2026-10-26",
+  "baseline": "b1f50be",
+  "rounds": [
+    {
+      "round": 1,
+      "question": "Where is parseYamlView defined in this cati repository? Identify its exact file and function symbol; include tests if relevant.",
+      "mcp": {
+        "elapsed_ms": 123,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "results: 1  (cols: qn label file lines in out)\n  home-uwe-projects-cati.cmd.parseYamlView Function cmd/browser_config.go 411-423 1 7\ntotal: 1\nreturned: 1\nhas_more: false\ntruncated: false\n"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "neus": {
+        "command": "HTO=0 neus ask --tests --json Where is parseYamlView defined in this cati repository? Identify its exact file and function symbol; include tests if relevant.",
+        "exit_code": 0,
+        "result": {
+          "answer": "`parseYamlView` is defined as `func parseYamlView(name string) (*YamlView, error)` in `cmd/browser_config.go` [4]. Its test is `TestBrowser_ParseYaml` in `cmd/browser_test.go` [3].",
+          "sources": [
+            {
+              "index": 1,
+              "path": "/home/uwe/projects/cati/spec/config.yaml",
+              "line": 1,
+              "title": "File summary: config.yaml"
+            },
+            {
+              "index": 2,
+              "path": "/home/uwe/projects/cati/.goreleaser.yaml",
+              "line": 1,
+              "title": "File summary: .goreleaser.yaml"
+            },
+            {
+              "index": 3,
+              "path": "/home/uwe/projects/cati/cmd/browser_test.go",
+              "line": 143,
+              "title": "TestBrowser_ParseYaml"
+            },
+            {
+              "index": 4,
+              "path": "/home/uwe/projects/cati/cmd/browser_config.go",
+              "line": 411,
+              "title": "parseYamlView"
+            },
+            {
+              "index": 5,
+              "path": "/home/uwe/projects/cati/spec/cli.yaml",
+              "line": 1,
+              "title": "File summary: cli.yaml"
+            }
+          ],
+          "model": "luna:low",
+          "backend": "codex",
+          "telemetry": {
+            "retrieval_ms": 1830.956,
+            "prompt_build_ms": 6.914,
+            "ttft_ms": 0,
+            "generation_ms": 0,
+            "citation_validation_ms": 0.024,
+            "wall_time_ms": 7438.868
+          }
+        },
+        "notes": [
+          "warning: estimated local chat time 81.3s exceeds 1m0s; routing to Codex model luna:low"
+        ]
+      }
+    },
+    {
+      "round": 2,
+      "question": "Who calls parseYamlView in cati, including tests? Distinguish test callers from production callers and state the limits of any no-production-callers claim.",
+      "mcp": {
+        "elapsed_ms": 133,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "function: home-uwe-projects-cati.cmd.parseYamlView\ndirection: inbound\ncallers_total: 1\ncallers_total_relation: eq\ncallers: 1  (cols: qn hop test)\n  home-uwe-projects-cati.cmd.TestBrowser_ParseYaml 1 true\n"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "neus": {
+        "command": "HTO=0 neus ask --tests --json Who calls parseYamlView in cati, including tests? Distinguish test callers from production callers and state the limits of any no-production-callers claim.",
+        "exit_code": 0,
+        "result": {
+          "answer": "The supplied evidence is insufficient to identify any callers of `parseYamlView`, whether tests or production code, because none of the retrieved excerpts mention that function or show its call graph [1]. It therefore also cannot support a claim that there are no production callers [1].",
+          "sources": [
+            {
+              "index": 1,
+              "path": "/home/uwe/projects/cati/docs/GoPerformance.yaml",
+              "line": 121,
+              "title": "cati/docs/GoPerformance.yaml > Doc > PatternsAndAntiPatterns [1/2]"
+            },
+            {
+              "index": 2,
+              "path": "/home/uwe/projects/cati/spec/views.yaml",
+              "line": 14,
+              "title": "cati/spec/views.yaml > (root defaults)"
+            },
+            {
+              "index": 3,
+              "path": "/home/uwe/projects/cati/cmd/root_test.go",
+              "line": 3,
+              "title": "imports"
+            },
+            {
+              "index": 4,
+              "path": "/home/uwe/projects/cati/cmd/spec_test.go",
+              "line": 240,
+              "title": "TestSpecButtonsAllUsed"
+            }
+          ],
+          "model": "luna:low",
+          "backend": "codex",
+          "telemetry": {
+            "retrieval_ms": 1581.804,
+            "prompt_build_ms": 4.629,
+            "ttft_ms": 0,
+            "generation_ms": 0,
+            "citation_validation_ms": 0.038,
+            "wall_time_ms": 5531.534
+          }
+        },
+        "notes": [
+          "warning: estimated local chat time 81.3s exceeds 1m0s; routing to Codex model luna:low"
+        ]
+      }
+    },
+    {
+      "round": 3,
+      "question": "What does parseYamlView do in cmd/browser_config.go, including error handling and delegation?",
+      "mcp": {
+        "elapsed_ms": 125,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "name: parseYamlView\nqualified_name: home-uwe-projects-cati.cmd.parseYamlView\nlabel: Function\nfile_path: /home/uwe/projects/cati/cmd/browser_config.go\nstart_line: 411\nend_line: 423\nsource_mode: full\nsource: |\n  func parseYamlView(name string) (*YamlView, error) {\n  \tv, err := spec.LoadYamlView(name)\n  \tif err != nil {\n  \t\treturn nil, err\n  \t}\n  \treturn &YamlView{\n  \t\tType:     v.Type,\n  \t\tName:     v.Name,\n  \t\tTitle:    v.Title,\n  \t\tContent:  v.Content,\n  \t\tControls: v.Controls,\n  \t}, nil\n  }\ncallers: 1\ncallees: 1\npossibly_described_in: 5  (cols: section file_path start_line p kind position)\n  home-uwe-projects-cati.issues.008-spaghetti-code-analysis.Round-1-(earlier-June-2026) issues/008-spaghetti-code-analysis.md 14 0.51 function global\n  home-uwe-projects-cati.issues.008-spaghetti-code-analysis.Phase-1:-Dependency-&-Parsing-Modernization-(P0) issues/008-spaghetti-code-analysis.md 400 0.51 function global\n  home-uwe-projects-cati.docs.Spec.YAML-Definition-(`spec/actions.yaml`) docs/Spec.md 134 0.22 function global\n  home-uwe-projects-cati.issues.098-split-spec-render-modes-yaml-so-a-new-glyph-set-or-composition-is-one-small-edit.2.-Proposal issues/098-split-spec-render-modes-yaml-so-a-new-glyph-set-or-composition-is-one-small-edit.md 31 0.22 function global\n  home-uwe-projects-cati.issues.008-spaghetti-code-analysis.A.-Manual-YAML-Parsing-—-12-ad-hoc-parsers,-zero-YAML-libraries issues/008-spaghetti-code-analysis.md 60 0.22 function global\ncandidates_note: \"doc<->code candidates by shared terms or the doc's folder, not links: p is the judged probability the section is about the target; verify\"\n"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "neus": {
+        "command": "HTO=0 neus ask --tests --json What does parseYamlView do in cmd/browser_config.go, including error handling and delegation?",
+        "exit_code": 0,
+        "result": {
+          "answer": "The retrieved excerpt shows the `parseYamlView` symbol and file, but cuts off before the function body, so its behavior, error handling, and delegation cannot be determined from the available evidence [4]. The YAML excerpts describe view and config data, but do not establish what `parseYamlView` does [1][2].",
+          "sources": [
+            {
+              "index": 1,
+              "path": "/home/uwe/projects/cati/spec/views.yaml",
+              "line": 16,
+              "title": "cati/spec/views.yaml > views"
+            },
+            {
+              "index": 2,
+              "path": "/home/uwe/projects/cati/spec/config.yaml",
+              "line": 6,
+              "title": "cati/spec/config.yaml > config"
+            },
+            {
+              "index": 3,
+              "path": "/home/uwe/projects/cati/examples/mediabrowse/main_test.go",
+              "line": 130,
+              "title": "TestRootCommandReportsInvalidDirectory"
+            },
+            {
+              "index": 4,
+              "path": "/home/uwe/projects/cati/cmd/browser_config.go",
+              "line": 411,
+              "title": "parseYamlView"
+            }
+          ],
+          "model": "luna:low",
+          "backend": "codex",
+          "telemetry": {
+            "retrieval_ms": 779.007,
+            "prompt_build_ms": 4.575,
+            "ttft_ms": 0,
+            "generation_ms": 0,
+            "citation_validation_ms": 0.049,
+            "wall_time_ms": 5091.706
+          }
+        },
+        "notes": []
+      }
+    },
+    {
+      "round": 4,
+      "question": "Does the current codebase-memory index have parsing or freshness gaps for cmd/browser_config.go and cmd/browser_test.go? Separate live index metadata from inferences based on source retrieval.",
+      "mcp": {
+        "elapsed_ms": 127,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "project: home-uwe-projects-cati\nsignal: best_effort\nindexed_at: 2026-10-26T16:53:45Z\nmetadata:\n  generation: 2026-10-26T16:53:45Z\n  index_mode: full\n  recorded_at: 2026-10-26T16:53:45Z\n  recording_status: complete\n  ignored_files_stored: 431\n  ignored_files_total: 431\n  hash_records_complete: true\n  coverage_version: 9\n  generation_matches: true\npaths: 2  (cols: requested_path path status freshness recommended_action coverage)\n  cmd/browser_config.go cmd/browser_config.go no_recorded_issue metadata_match use_graph_with_best_effort_caveat []\n  cmd/browser_test.go cmd/browser_test.go no_recorded_issue metadata_match use_graph_with_best_effort_caveat []\npath_total: 2\npath_returned: 2\npath_has_more: false\nscopes: 0\nscope_total: 0\nscope_returned: 0\nscope_truncated: false\nhas_more: false\ncaveat: \"Best-effort signal only. No recorded issue does not prove graph or source completeness; read flagged source and qualify claims when metadata is changed or unavailable.\"\n"
+            }
+          ],
+          "isError": false
+        }
+      },
+      "neus": {
+        "command": "HTO=0 neus ask --tests --json Does the current codebase-memory index have parsing or freshness gaps for cmd/browser_config.go and cmd/browser_test.go? Separate live index metadata from inferences based on source retrieval.",
+        "exit_code": 0,
+        "result": {
+          "answer": "The retrieved evidence confirms that the index has parsed symbols from both files: `browser_config.go` includes function and file metadata, and `browser_test.go` includes benchmark symbols [4][3]. It does not include live index coverage or freshness metadata, so parsing or freshness gaps cannot be established; the snippets alone are insufficient to assess either [3][4].",
+          "sources": [
+            {
+              "index": 1,
+              "path": "/home/uwe/projects/cati/dist/config.yaml",
+              "line": 189,
+              "title": "cati/dist/config.yaml > announce > telegram"
+            },
+            {
+              "index": 2,
+              "path": "/home/uwe/projects/cati/dist/config.yaml",
+              "line": 152,
+              "title": "cati/dist/config.yaml > source"
+            },
+            {
+              "index": 3,
+              "path": "/home/uwe/projects/cati/cmd/browser_test.go",
+              "line": 176,
+              "title": "home-uwe-projects-cati.cmd.BenchmarkRenderTpl"
+            },
+            {
+              "index": 4,
+              "path": "/home/uwe/projects/cati/cmd/browser_config.go",
+              "line": 451,
+              "title": "home-uwe-projects-cati.cmd.getConfigDir"
+            },
+            {
+              "index": 5,
+              "path": "/home/uwe/projects/cati/spec/buttons.yaml",
+              "line": 1,
+              "title": "cati/spec/buttons.yaml > document"
+            }
+          ],
+          "model": "luna:low",
+          "backend": "codex",
+          "telemetry": {
+            "retrieval_ms": 895.949,
+            "prompt_build_ms": 5.699,
+            "ttft_ms": 0,
+            "generation_ms": 0,
+            "citation_validation_ms": 0.034,
+            "wall_time_ms": 4950.493
+          }
+        },
+        "notes": []
+      }
+    }
+  ]
+}
