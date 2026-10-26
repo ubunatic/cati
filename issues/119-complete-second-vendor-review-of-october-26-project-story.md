@@ -19,3 +19,9 @@ Baseline `8dcf63b`, measured head `0f866fd`. Intended reviewer: `claude:sonnet:h
 2. Verify baseline selection, 203/16 commit counts, +13,417/-6,817 lines outside issues, ticket transitions, release evidence, compatibility qualifications and quality/flow verdicts against the recorded git range. Distinguish session observations from repository evidence.
 3. Apply accepted corrections; record reviewer model and findings fixed in the story header. File any genuinely new actionable findings and list their ticket numbers in the story.
 4. Remove review-blocked status only once review is complete, refresh the documentation index, and close this ticket with evidence.
+
+## 4. Session handoff — 2026-10-26
+
+The original startup blocker is resolved: Harnez #953 was fixed in `6d9ab6b0` and closed after host reviewer dispatch and leaf-guard verification. This Cati host independently completed hello -> background -> confirm -> confirm-running -> verify successfully, with the 30-second task exiting cleanly. No role override was used.
+
+The story's Anthropic review has not been run; the timer-based self-test and the separate review of the Harnez fix do not satisfy it. Resume with the read-only `claude:sonnet:high` review described above, apply accepted corrections, update the story review header and close this ticket only with that evidence. There is no active reviewer or background task from the failed original launch to clean up.

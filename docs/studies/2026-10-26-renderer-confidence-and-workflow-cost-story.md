@@ -4,8 +4,8 @@ title: "Renderer Confidence and the Cost of the Workflow"
 date: 2026-10-26
 baseline: 8dcf63b
 head: 0f866fd
-status: review-blocked
-review: "Not performed; host agent-role guard rejected launch (issue 119)"
+status: pending-review
+review: "Not performed; original role-guard blocker resolved; resume via issue 119"
 ---
 
 # Renderer Confidence and the Cost of the Workflow
@@ -16,7 +16,7 @@ This follows [Terminal Pixels, Measured and Made](2026-10-04-terminal-pixels-wit
 
 The previous account described unified geometry, spec ownership, optimized/reference parity, and ticketed agent work. It explicitly left geometry edge cases (#078) unresolved. This interval expanded glyph rendering, repaired correctness boundaries, improved verification and CI, and exposed the cost of keeping command logic and slow tests together. Dates in filenames are not reliable chronology: the Jules setup study says March 31 but entered this range in `3a6f95e` on October 26.
 
-**Review:** Not performed. Writer: OpenAI Codex. The attempted dedicated read-only reviewer was `claude:sonnet:high` (Anthropic), selected from the installed lineup below Opus and above Haiku. Harnez rejected startup because it classifies this session as an advisor leaf forbidden from managing agents. No reviewer was created; no findings were independently checked or fixed. [Issue 119](../../issues/119-complete-second-vendor-review-of-october-26-project-story.md) tracks host review and finalization. This story remains review-blocked.
+**Review:** Not performed. Writer: OpenAI Codex. The attempted dedicated read-only reviewer was `claude:sonnet:high` (Anthropic), selected from the installed lineup below Opus and above Haiku. Harnez originally rejected startup because it classified this session as an advisor leaf forbidden from managing agents. No reviewer was created; no findings were independently checked or fixed. By session wrap, Harnez #953 was fixed and closed, and this host's background self-test passed without role overrides. The original launch blocker is resolved, but the required story review remains outstanding. [Issue 119](../../issues/119-complete-second-vendor-review-of-october-26-project-story.md) tracks review and finalization; status is pending review, not complete.
 
 ## 2. Executive Summary
 

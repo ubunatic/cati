@@ -56,3 +56,7 @@ Spec assessment reports schema_valid=true, 17 orphan-key candidates, four unspec
 ### Diagnosis outcome — 2026-10-26
 
 No source remediation attempted: this is Epic-scale work requiring classification and coordinated package cleanup. No ready localized ticket batch was allocated, so the quick-fix sprint was skipped. The last check remains the baseline failure above; no redundant full rerun was made without source changes, in accordance with Quota-1. Existing Harnez advisor-leaf restrictions also prevent dispatching a worker from this session; an authorized host can run the planned implementation sprint.
+
+### Wrap update — 2026-10-26
+
+The role restriction described in the historical diagnosis is resolved by Harnez #953, which is fixed and Closed; this host's background self-test passed without overrides. The 36 unused findings remain unremediated. Resume with milestone 1's classification, preserving test-only helpers and reference independence rather than deleting every lint-listed declaration. Tracker metadata lint is a separate finding, now #121.

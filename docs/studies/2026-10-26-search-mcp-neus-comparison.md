@@ -2,7 +2,7 @@
 kind: topic
 title: "Session Study: Codebase Memory MCP versus neus ask"
 date: 2026-10-26
-status: ongoing
+status: session-complete
 baseline: b1f50be
 ---
 
@@ -188,3 +188,13 @@ evaluation 046 remains the follow-up owner; root-cause work and another benchmar
 round are outside this requested backfill. Harnez issue 953 is fixed and Closed;
 its full quota suite, lint, installed binary, host self-test and actual reviewer
 dispatch were verified. Cati `make preflight` also passed for this study update.
+
+## Session close
+
+The session-only comparison is preserved as a completed session sample, not a new standing agent rule. `AGENTS.md` has no change from this experiment. Harnez issue 963 records the owner's requested improvement: ask where persistent guidance belongs when the destination is unclear, and do not persist explicitly session-only instructions.
+
+The four contemporaneous Cati trials and eight Harnez trials (one contemporaneous, seven retrospective backfills) remain separate samples with the timing and source-snapshot limits above. No further MCP or Neus trials were run during wrap. New research or root-cause work requires its own scope; the existing Neus evaluation ticket 046 remains the research reference.
+
+The base background self-test subsequently passed in this host without a role override. Harnez #953 is Closed; #964 tracks the requested extended skill, and #965 tracks stale inherited issue-closure attribution. Commit `8dac9485` contains #964 and concurrently staged #965; shared history was preserved rather than rewritten. All background processes started by this host returned exit codes; the failed original story-review launch created no worker.
+
+[The session handoff](2026-10-26-session-handoff.md) records remaining Cati work. The tracker-lint failure on legacy Archived metadata is now [issue 121](../../issues/121-reconcile-legacy-archived-statuses-with-harnez-issues-lint.md); the required story review remains #119, and lint remediation remains #120.
