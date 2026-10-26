@@ -1,0 +1,13 @@
+┌─────────────────── cati cam --tui (Device: /dev/video0) ───────────────────┐
+│Device: /dev/video0 [Logitech C920] | Format: YUYV 1280x720 @ 30fps         │
+│Mode: quadblock | Resolution: 80x24 | Color: TrueColor | FPS: 29.8          │
+│                                                                            │
+│+--------------------------------------------------------------------------+│
+│|                                                                          |│
+│|                     [LIVE VIDEO STREAM CANVAS]                           |│
+│|                                                                          |│
+│|                     (Terminal Rendered Video)                            |│
+│|                                                                          |│
+│+--------------------------------------------------------------------------+│
+│[s] Save JPEG  [a] Export .ANSI  [m] Change Mode  [r] Res  [q] Quit         │
+└────────────────────────────────────────────────────────────────────────────┘
