@@ -3,3 +3,7 @@ docs/feedback/*.png filter=lfs diff=lfs merge=lfs -text
 *.mp4 filter=lfs diff=lfs merge=lfs -text
 *.pxo diff=pxo
 *.kdenlive diff=kdenlive
+issues/README.md merge=harnez-issues-index
+issues/BACKLOG.md merge=harnez-issues-index
+issues/CLOSED.md merge=harnez-issues-index
+docs/README.md merge=harnez-issues-index

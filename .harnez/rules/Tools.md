@@ -35,7 +35,8 @@ subagents in a sprint skip it unless their skill requires it at the end; the hos
 Applies when this project has an `issues/` tracker. To search existing issues,
 compute the next ticket number, or allocate one, use `harnez find` / `harnez issues`
 instead of `ls issues/`, `find`, or raw grep:
-- `harnez find -d <repo> issues -a status:open` — list active open issues as text.
+- `harnez find -d <repo> issues -a status:active` — list active tickets (Open, In Progress, Blocked, Draft) as text.
+- `issues/README.md` is the generated active index; follow its links to `issues/BACKLOG.md` and `issues/CLOSED.md` for other lifecycle groups.
 - `harnez find -d <repo> issues "<query>"` — fuzzy search across titles and body text.
 - `harnez issues show -d <repo> <n>` — read a single issue as text.
 - Use text for routine issue discovery and document reads. Render PNG cards with
@@ -51,19 +52,21 @@ instead of `ls issues/`, `find`, or raw grep:
   `issues/README.md`, and commit, in one call
 - Closing an already-Closed ticket is a no-op regardless of reason; use
   `harnez issues close --amend-reason` to explicitly correct its reason.
+- `harnez issues close` refuses unless a commit outside `issues/` references the ticket number; pass `--no-code` when the ticket needed no code.
 - Commit documentation and `issues/*.md` changes immediately; don't batch them behind
   pending code work.
 
 ## Harnez Agent
-- Prefer loaded `mcp__harnez__*` tools for lifecycle actions; otherwise use `harnez agent` via Bash (see the local Subagent Policy).
+- In interactive hosts, run `harnez_command` start/wait in the host background runner; never synchronously call `harnez_wait_agent` or spawn-and-wait MCP (see the local Subagent Policy).
 - A requested model such as `sol:low` or `luna` is a Harnez agent model (see `harnez agent models`); dispatch it with `harnez agent start --model <name>`, regardless of `subagent_mode`.
+- Release only when the user or `/goal` asks; otherwise recommend the semver bump and wait. See `docs/GoRelease.md`.
 - Start: `harnez agent start --name <name> --role <role> --model <model> -p <prompt>`; roles are `orchestrator`, `developer`, `reviewer` and `advisor`. Run it with `HTO=0` in your session background, one call per worker, so it never detaches: Claude Bash `run_in_background: true` (jobs stop after 30 minutes; size worker turns to finish before that); agy `run_command` with a small `WaitMsBeforeAsync`; Codex `exec_command`, then `write_stdin` on the returned `session_id` until an exit code. Never use shell `&`, `nohup` or a status/log polling loop; see `harnez agent start --help`.
 - List: `harnez agent list`.
 - Status: `harnez agent status --name <session>`.
 - Wait: `harnez agent wait <session>` (session is positional).
 - Resume: `harnez agent resume --name <session> <prompt>`.
 - Stop: `harnez agent stop --name <session>`.
-- When a `/goal` without an exit clause is set (e.g. typed by the user), say so in the first reply and offer `/goal ... or stop and report when blocked on a user decision or denied permission`; once blocked on the user, suggest `/goal clear` instead of repeating the wait message.
+- When a `/goal` without an exit clause is set (e.g. typed by the user), say so in the first reply and offer `/goal ... or stop and report when blocked on a user decision or denied permission`; once blocked on the user, suggest `/goal clear` instead of repeating the wait message. Circuit breaker: on a loop, a hard architectural or OS blocker, or no progress, run `/goal clear` and write a failure report (what was tried, why it failed, resume point) in the ticket.
 
 ## External Skills
 External skills (installed with `harnez skill install`) are explicit-only: never use one

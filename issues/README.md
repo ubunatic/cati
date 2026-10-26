@@ -41,6 +41,9 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 097 | [097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md](097-2x4-braille-mode-must-be-dot-only-no-full-block-no-background-color.md) | 2x4 braille mode must be dot-only: no full block, no background color | Open |
 | 111 | [111-test-suite-catalog-and-roadmap-lighter-quieter-timed-tests.md](111-test-suite-catalog-and-roadmap-lighter-quieter-timed-tests.md) | test suite catalog and roadmap: lighter, quieter, timed tests | Open |
 | 112 | [112-modularize-cmd-package-extract-browser-player-and-modes-into-internal-sub-packages.md](112-modularize-cmd-package-extract-browser-player-and-modes-into-internal-sub-packages.md) | modularize cmd package: extract browser, player, and modes into internal sub-packages | Open |
+| 115 | [115-epic-1-cati-cam-camera-video-capture-support.md](115-epic-1-cati-cam-camera-video-capture-support.md) | Epic 1: cati cam - Camera & Video Capture Support | Open |
+| 116 | [116-epic-2-cati-cam-tui-loom-based-video-tui.md](116-epic-2-cati-cam-tui-loom-based-video-tui.md) | Epic 2: cati cam --tui - Loom-based Video TUI | Open |
+| 117 | [117-epic-3-cati-live-stream-multi-device-dashboard.md](117-epic-3-cati-live-stream-multi-device-dashboard.md) | Epic 3: cati live stream & multi-device dashboard | Open |
 <!-- harnez:end issues-active-index -->
 ## Archived
 
