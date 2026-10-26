@@ -1,10 +1,10 @@
-# 115 — Fix unchecked fmt.Sscanf in spec/glyph_sets_test.go
+# 118 — Fix unchecked fmt.Sscanf in spec/glyph_sets_test.go
 
 **Status**: Closed — checked error return from fmt.Sscanf in glyph_sets_test
 **Priority**: P2 (Medium)
 **Severity**: Minor
 **Category**: Quality
-**Related**:
+**Related**: Originally local issue 115; renumbered to 118 when integrating GitHub main to preserve camera epic 115. Fixed by commit `1e9445f`.
 
 ---
 
