@@ -28,8 +28,10 @@ In-repo tracker in `issues/`, one file per ticket (`issues/NNN-kebab-case-title.
 - All status verbs, show/find/index/lint accept both namespaces: `GH42` and `gh42` select GH42; `42` stays local 042. README sorts local tickets first, then GH IDs numerically. Duplicate GH IDs are errors; reconcile the files preserving the ID (local renumber repair below does not apply).
 - `harnez issues <verb> <n> [reason]` — Update Status, regenerate index, commit in one step (`open`, `start`, `block` [reason req], `close`, `done` [alias for close], `draft`).
 - `harnez issues close <n> [reason]` (or `done`) — Already Closed: exit 0, preserve existing reason, no writes or commit. Use `--amend-reason` to explicitly correct the reason in one commit; requires an already-Closed ticket. Close refuses unless a commit outside `issues/` names the ticket; `--no-code` for a ticket that needed no code.
+- `harnez issues close <n> [reason] --model <spec> --session <id>` — Record `**Closed-By**` under Status; defaults are `HARNEZ_AGENT_MODEL` and `HARNEZ_SESSION_ID`, with flags taking precedence. Missing parts are omitted, generated indexes exclude this line, and a later close replaces it.
 - `harnez issues mv <old> [new]` — Renumber ticket, rename file, rewrite title header and exact filename references in issues/ and docs/, resync index, commit. Bare numbers stay unchanged.
 - Duplicate numbers after a merge: `harnez index` and `harnez status` fail with all colliding paths. Run `harnez issues mv -d . issues/NNN-extra-ticket.md` for each extra file (next free number by default); use the path because the number is ambiguous. If the title lacks a number, add `# NNN — Title` before retrying.
+- On a pushed branch, prefer `harnez issues reconcile [--dry-run]`: renumbers only your own colliding tickets (added in `<ref>..HEAD`), rewrites references, repairs indexes, commits once, rolls back on failure. Agents use `harnez issues reconcile --pull` instead of `git pull` (`--fetch` previews only). No hook runs it implicitly.
 - `harnez issues list [filter]` — List matching tickets (default `is:open`).
 
 ### 3.2 Metadata Header (Top of Every Ticket)
@@ -58,11 +60,11 @@ In-repo tracker in `issues/`, one file per ticket (`issues/NNN-kebab-case-title.
 ## 4. Issues Index & Archive Conventions
 
 - `issues/README.md` lists active tickets only (Open, In Progress, Blocked, Draft) and links to generated `issues/BACKLOG.md` and `issues/CLOSED.md`.
-- `harnez index` regenerates all three indexes; `harnez issues lint` checks completeness across them. Never hand-edit rows.
+- `harnez index` regenerates all three indexes; `harnez index --stage` also stages only indexes rewritten by that run. `harnez issues lint` checks completeness across them. Never hand-edit rows.
 - `harnez find -d <repo> issues -a status:active` searches the active set. `harnez issues lint` and `harnez issues status` warn above the active cap configured in `spec/issues.yaml`.
 - **Backlog**: defer with `harnez issues backlog <n…> [reason]`, return with `promote <n…>`; `is:open` excludes Backlog, `status:unresolved` includes it.
 - **Duplicates**: `harnez issues new` refuses when `find issues similar` scores a match at or above 0.65 in any status; reopen/promote it, or pass `--force`.
-- **Generated files** carry a `managed by harnez index` top line and `harnez:begin/end` blocks; the `harnez init` merge driver rebuilds them on merge. A one-sided deletion wins over an unchanged row; renames are delete+add, and competing row edits conflict.
+- **Generated files** carry a `managed by harnez index` top line and `harnez:begin/end` blocks; `.gitattributes` uses `merge=union` and the `harnez init` post-merge hook rebuilds them on merge. A one-sided deletion wins over an unchanged row; renames are delete+add, and competing row edits conflict.
 - **Archiving**: Closed tickets may move to `issues/archive/NNN-kebab-case.md`; `harnez index` keeps them listed in `issues/CLOSED.md`.
 
 ## 5. Lifecycle Invariants

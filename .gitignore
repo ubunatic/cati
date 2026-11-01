@@ -15,3 +15,7 @@ catibrowse
 /dist/
 /.container-test-output/
 /testreport/
+
+# harnez issue-index lock files
+/issues/README.md.lock
+/issues/.reserve.lock

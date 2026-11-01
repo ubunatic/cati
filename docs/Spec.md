@@ -18,6 +18,7 @@ The `spec/` directory is **application code**, not runtime user configuration. T
 - **YAML for authoring**: YAML provides concise, comment-friendly, and human/LLM-readable specification definitions without syntax noise or string escaping friction. Plain JSON files are **not** promoted for authoring due to lack of comments and strict syntax friction.
 - **JSON Schema for validation**: Every YAML file must have a companion JSON Schema (`spec/schemas/*.schema.json`) for automated IDE validation, editor auto-completion, and CI/pre-commit verification.
 - **Embedded application code**: In compiled languages, embed the `spec/` directory directly into the binary (e.g. Go `//go:embed`, Rust `include_str!`). The spec is part of the application artifact, not external config.
+- `spec/glossary.yaml` (`spec/schemas/glossary.schema.json`) — machine-readable ubiquitous-language glossary, canonical terms, and forbidden wording patterns
 
 ### Project-local Harnez configuration
 Harnez repositories may also contain `.harnez/repo.yaml`, validated by
@@ -90,6 +91,40 @@ Every YAML file references its schema at the top:
 statements and DDL, while its JSON Schema validates the YAML structure rather
 than SQL syntax. In another project, substitute an existing spec file or omit
 this example when absent.
+
+For the model catalog contract, legacy `spec/agent.yaml` model `cost` values map
+to `relative_cost` facts when migrating. This is a relative estimate, not a
+currency price. `relative_cost` must be positive or null. API prices and
+subscription quota are nonnegative or null: zero means a measured free rate or
+zero quota, while null means unknown. In policy patches, null explicitly clears
+the field. A `version_pin` must equal the version in the same entry's identity
+when both are present; JSON Schema cannot compare those sibling fields, so
+`internal/modelcatalog.ValidatePolicyPins` checks the relationship after schema
+validation.
+
+Each fact may carry `disputed: true` when its evidence producer identifies a
+conflict with another credible observation. The marker belongs to that fact in
+the facts array; all observations remain available, and readers must surface an
+unresolved conflict rather than select a value by array order. A policy override
+is an explicit user choice, not a resolution of the underlying evidence.
+
+Policy patch schema fixtures prove accepted document shapes only. The 941 loader
+enforces patch behavior: omitted fields inherit, arrays replace, and null clears.
+Policy `fields` currently accepts only `aliases`, `purpose`, and `tier`; schema
+and loader reject fields with no merged-catalog behavior. Access observations
+carry their own `observed_at` timestamp in addition to the file-level timestamp.
+For enablement, a model entry's explicit `enabled` value takes precedence; absent
+that, membership in `enabled` decides, then `default_enabled` supplies the
+fallback. Snapshots use opaque non-empty IDs. Change report `before` and `after`
+refer to snapshot IDs; row `before`/`after` contain field values, and `field` is a
+dotted path relative to its model entry, such as `facts.api_cost`.
+
+Policy IDs keep a lowercase harness prefix (`pi`, for example), followed by a
+case-sensitive model ID. The model portion may include uppercase letters,
+slashes, dots, underscores, and hyphens so exact Pi IDs can be enabled; an
+optional final `:low`, `:med`, or `:high` selects a tier. Whitespace and an empty
+model ID are invalid. Runtime policy matching preserves model-ID case while
+comparing harness names and tiers without case sensitivity.
 
 ---
 

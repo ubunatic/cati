@@ -7,5 +7,4 @@
 - **Unauthorized Bypass Forbidden**: Bypassing guardrails via `QUOTA_BYPASS=1` or `HARNEZ_QUOTA_BYPASS=1` is strictly reserved for human developers and CI environments. Agent loops must not set or pass bypass flags.
 - **Media & Demo Verification Gate**: Get explicit user confirmation before publishing recordings or screenshots.
 
-
 - **Enforced Test Target**: Use `make test-q1` when available; otherwise use `harnez exec --quota-1 -- <repo-test-command>`.

@@ -1,6 +1,6 @@
 # 010 — Unified Zoom Geometry and Ladder (Archived)
 
-**Status:** 🗄️ Archived — content merged into [008 — Spaghetti Code & Viewport Geometry Refactoring Plan](../008-spaghetti-code-analysis.md)  
+**Status:** Closed — content merged into [008 — Spaghetti Code & Viewport Geometry Refactoring Plan](../008-spaghetti-code-analysis.md)  
 **Archived:** 2026-06-29  
 **Reason:** Consolidated as a sub-topic of the larger geometry refactoring tracked in issue 008.
 

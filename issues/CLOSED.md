@@ -6,7 +6,9 @@
 |---|------|-------|--------|
 | 002 | [002-browser-input-handling.md](002-browser-input-handling.md) | Browser Input: q/ESC/^C not working in browser + video viewer | ✅ Closed |
 | 003 | [003-style-consistency.md](003-style-consistency.md) | Style: hint bar used hardcoded reverse-video instead of theme palette | ✅ Closed |
+| 010 | [archive/010-unified-zoom-geometry-and-ladder.md](archive/010-unified-zoom-geometry-and-ladder.md) | Unified Zoom Geometry and Ladder (Archived) | Closed — content merged into [008 — Spaghetti Code & Viewport Geometry Refactoring Plan](../008-spaghetti-code-analysis.md) |
 | 011 | [011-sparkline-inversion-and-stripe-bugs.md](011-sparkline-inversion-and-stripe-bugs.md) | Sparkline Inversion and Stripe Bugs | ✅ Closed |
+| 012 | [archive/012-viewport-geometry-mode-switch-regression.md](archive/012-viewport-geometry-mode-switch-regression.md) | Viewport Geometry Regression on Render-Mode Switch (Archived) | Closed — content merged into [008 — Spaghetti Code & Viewport Geometry Refactoring Plan](../008-spaghetti-code-analysis.md) |
 | 015 | [015-spark-bottom-row-halfcell-fit.md](015-spark-bottom-row-halfcell-fit.md) | Spark/quad garbled bottom row at mid-cell fit heights | ✅ Closed |
 | 020 | [020-sextant-column-mask-nul-glyph.md](020-sextant-column-mask-nul-glyph.md) | Sextant pure-column masks emit NUL glyph (garbled right edge) | ✅ Closed |
 | 021 | [021-golden-storage-resolution-all-algos.md](021-golden-storage-resolution-all-algos.md) | Golden storage resolution that exactly covers all current & future algos | 🟢 Closed |
