@@ -83,13 +83,30 @@ One tracking issue ("Jules sweep 2026-11") with a `## Jules runs` table
 
 | Wave | Kind | Session | Jules ID | PR | State |
 |---|---|---|---|---|---|
-| 1 | audit | jules-audit-004 | | | running |
-| 1 | audit | jules-audit-007 | | | running |
-| 1 | audit | jules-audit-008 | | | running |
-| 1 | audit | jules-audit-016 | | | running |
-| 1 | audit | jules-audit-018 | | | running |
-| 1 | audit | jules-audit-024 | | | running |
-| 1 | audit | jules-audit-057 | | | running |
-| 1 | audit | jules-audit-059 | | | running |
-| 1 | audit | jules-audit-067 | | | running |
-| 1 | audit | jules-audit-112 | | | running |
+| 1 | audit | jules-audit-004 | | | failed: clone (LFS) |
+| 1 | audit | jules-audit-007 | | | failed: clone (LFS) |
+| 1 | audit | jules-audit-008 | | | failed: clone (LFS) |
+| 1 | audit | jules-audit-016 | | | failed: clone (LFS) |
+| 1 | audit | jules-audit-018 | | | failed: clone (LFS) |
+| 1 | audit | jules-audit-024 | | | failed: clone (LFS) |
+| 1 | audit | jules-audit-057 | | | failed: clone (LFS) |
+| 1 | audit | jules-audit-059 | | | failed: clone (LFS) |
+| 1 | audit | jules-audit-067 | | | failed: clone (LFS) |
+| 1 | audit | jules-audit-112 | | | failed: clone (LFS) |
+| 1 | audit | jules-audit-004-r2 | 1796877461217116899 | | failed: clone (LFS) |
+| 1 | audit | jules-audit-004-r3 (jules-base) | 9972900510142540389 | | failed: clone (LFS) |
+| 1 | audit | jules-audit-004-r4 (HARNEZ_JULES_BRANCH=jules-base) | 13018607114825096742 | #63 (closed) | done: partly done, 8/10 refs, report kept |
+
+## Blocker (2026-11-07)
+All 12 runs failed with "Jules encountered an error when cloning the repo." In the Jules VM log,
+`git clone ... https://github.com/ubunatic/cati -b main` succeeds, but the LFS smudge fails:
+`batch response: Unable to parse HTTP response for POST http://git@192.168.0.1:8080/ubunatic/cati.git/info/lfs/objects/batch: unexpected EOF`
+(first file `assets/baby-180p-nn.mp4`; 14 files are LFS-tracked).
+GitHub itself is fine: a fresh local clone runs `git lfs pull` from GitHub without error. The fault is Jules's git proxy.
+Workaround tried: a GitHub-only branch `jules-base` with `.lfsconfig` `fetchexclude = *`. Jules ignored it, because it always clones `-b main`.
+The branch was deleted.
+Owner decision needed to unblock: (a) commit `.lfsconfig` with `fetchexclude=*` on main (fresh clones and CI would then get LFS pointer files and need `git lfs pull` for media); or (b) make harnez/Jules start from a non-main branch (harnez's `jules.sync_branch` or Jules's `startingBranch`; unverified whether that is configurable); or (c) drop the sweep.
+
+**Fix (2026-11-07):** start runs with `HARNEZ_JULES_BRANCH=jules-base` (harnez `internal/subagent/jules.go:28`).
+`jules-base` is a GitHub-only branch: main plus `.lfsconfig` (`fetchexclude = *`). It is never merged.
+Before each wave, rebuild it from the current main. Run jules-audit-004-r4 completed in 3m44s with PR #63.
