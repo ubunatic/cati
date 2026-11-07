@@ -12,6 +12,7 @@
 
 
 Deadline: Jules stops taking work on 2026-11-11. Each wave has at most 10 sessions (the account cap).
+The account is shared with lmcoder (its ticket 328). After Wave 1, cati keeps at most 5 open Jules sessions (a 5/5 split), so waves 2–4 run as rolling batches of 5. Tell lmcoder via SendMessage as slots free up; a side with no runs going may borrow the other side's slots after telling it.
 Each run takes 3–40 min, so a wave lasts about 45 min.
 
 ## Sync gate (before every wave)
@@ -82,3 +83,13 @@ One tracking issue ("Jules sweep 2026-11") with a `## Jules runs` table
 
 | Wave | Kind | Session | Jules ID | PR | State |
 |---|---|---|---|---|---|
+| 1 | audit | jules-audit-004 | | | running |
+| 1 | audit | jules-audit-007 | | | running |
+| 1 | audit | jules-audit-008 | | | running |
+| 1 | audit | jules-audit-016 | | | running |
+| 1 | audit | jules-audit-018 | | | running |
+| 1 | audit | jules-audit-024 | | | running |
+| 1 | audit | jules-audit-057 | | | running |
+| 1 | audit | jules-audit-059 | | | running |
+| 1 | audit | jules-audit-067 | | | running |
+| 1 | audit | jules-audit-112 | | | running |
