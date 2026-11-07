@@ -47,6 +47,7 @@ Concrete current and past issues: bugs, design decisions, open features.
 | 119 | [119-complete-second-vendor-review-of-october-26-project-story.md](119-complete-second-vendor-review-of-october-26-project-story.md) | Complete second-vendor review of October 26 project story | Open |
 | 120 | [120-epic-reconcile-unused-go-declarations-across-cli-and-render-packages.md](120-epic-reconcile-unused-go-declarations-across-cli-and-render-packages.md) | Epic: reconcile unused Go declarations across CLI and render packages | Open |
 | 121 | [121-reconcile-legacy-archived-statuses-with-harnez-issues-lint.md](121-reconcile-legacy-archived-statuses-with-harnez-issues-lint.md) | Reconcile legacy Archived statuses with harnez issues lint | Open |
+| 122 | [122-jules-sweep-2026-11-multi-wave-report-only-repository-review.md](122-jules-sweep-2026-11-multi-wave-report-only-repository-review.md) | Jules sweep 2026-11: multi-wave report-only repository review | Open |
 <!-- harnez:end issues-active-index -->
 ## Archived
 
