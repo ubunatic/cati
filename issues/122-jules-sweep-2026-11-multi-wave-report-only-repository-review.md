@@ -12,7 +12,7 @@
 
 
 Deadline: Jules stops taking work on 2026-11-11. Each wave has at most 10 sessions (the account cap).
-The account is shared with lmcoder (its ticket 328). After Wave 1, cati keeps at most 5 open Jules sessions (a 5/5 split), so waves 2–4 run as rolling batches of 5. Tell lmcoder via SendMessage as slots free up; a side with no runs going may borrow the other side's slots after telling it.
+lmcoder runs on a separate Jules account (confirmed 2026-11-07), so cati has its own cap of about 10 open sessions (finished sessions may count briefly: starts right after a completion still hit HTTP 400) and about 100 jobs/day.
 Each run takes 3–40 min, so a wave lasts about 45 min.
 
 ## Sync gate (before every wave)
@@ -96,6 +96,16 @@ One tracking issue ("Jules sweep 2026-11") with a `## Jules runs` table
 | 1 | audit | jules-audit-004-r2 | 1796877461217116899 | | failed: clone (LFS) |
 | 1 | audit | jules-audit-004-r3 (jules-base) | 9972900510142540389 | | failed: clone (LFS) |
 | 1 | audit | jules-audit-004-r4 (HARNEZ_JULES_BRANCH=jules-base) | 13018607114825096742 | #63 (closed) | done: partly done, 8/10 refs, report kept |
+| 1 | audit | jules-audit-007-b | 2979654456957508536 | #64 (closed) | discarded: scope (added generate_report.py); host verified still valid (media_meta.go:136 probes every file) |
+| 1 | audit | jules-audit-059-b | 9393155128620679498 | #65 (closed) | done: still valid, 3/3 refs, report kept |
+| 1 | audit | jules-audit-018-b | 8993073000837387833 | #66 (closed) | done: partly done, 5/5 refs, benches reproduced, report kept |
+| 1 | audit | jules-audit-057-b | 5636256323960672811 | #67 (closed) | done: partly done, 8/8 refs, report kept |
+| 1 | audit | jules-audit-005-e | 2332396799955557010 | #68 (closed) | done: still valid, 4/5 refs, report kept |
+| 1 | audit | jules-audit-112-c | 10484382285619105045 | #71 (closed) | done: still valid, 5/6 refs, report kept |
+| 1 | audit | jules-audit-016-b | 13291937613804283066 | #70 (closed) | done: partly done, 8/8 refs, report kept |
+| 1 | audit | jules-audit-067-b | 17471314065596726627 | #69 (closed) | done: already done, 5/5 refs; ticket 067 closed (ccae5a4) |
+| 1 | audit | jules-audit-008-b | | | pending |
+| 1 | audit | jules-audit-024-b | | | pending |
 
 ## Blocker (2026-11-07)
 All 12 runs failed with "Jules encountered an error when cloning the repo." In the Jules VM log,
