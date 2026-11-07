@@ -48,6 +48,7 @@
 | 064 | [064-use-loom-s-standard-navigation-pane-in-mediabrowse.md](064-use-loom-s-standard-navigation-pane-in-mediabrowse.md) | Use Loom's standard navigation pane in mediabrowse | Closed |
 | 065 | [065-mediabrowse-video-playback-and-fullscreen-shortcuts-do-not-work.md](065-mediabrowse-video-playback-and-fullscreen-shortcuts-do-not-work.md) | Mediabrowse video playback and fullscreen shortcuts do not work | Closed |
 | 066 | [066-mediabrowse-play-pause-should-not-reload-the-video-preview.md](066-mediabrowse-play-pause-should-not-reload-the-video-preview.md) | Mediabrowse play/pause should not reload the video preview | Closed |
+| 067 | [067-make-test-fails-makefile-pins-gotoolchain-go1-25-0-but-go-mod-needs-1-26.md](067-make-test-fails-makefile-pins-gotoolchain-go1-25-0-but-go-mod-needs-1-26.md) | make test fails: Makefile pins GOTOOLCHAIN=go1.25.0 but go.mod needs 1.26 | Closed — Makefile pin is go1.26.0, matching go.mod (Jules audit, host-verified) |
 | 069 | [069-add-2x4-dot-only-braille-render-mode.md](069-add-2x4-dot-only-braille-render-mode.md) | Add 2x4 dot-only braille render mode | Resolved |
 | 070 | [070-add-2x4-braille-foreground-and-background-render-mode.md](070-add-2x4-braille-foreground-and-background-render-mode.md) | Add 2x4 braille foreground and background render mode | Resolved |
 | 071 | [071-respect-explicit-width-and-height-in-static-renders.md](071-respect-explicit-width-and-height-in-static-renders.md) | Respect explicit width and height in static renders | Closed — unified in CLI geometry pipeline and pure planner |

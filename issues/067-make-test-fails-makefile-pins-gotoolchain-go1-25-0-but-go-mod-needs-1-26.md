@@ -1,6 +1,6 @@
 # 067 — make test fails: Makefile pins GOTOOLCHAIN=go1.25.0 but go.mod needs 1.26
 
-**Status**: Open
+**Status**: Closed — Makefile pin is go1.26.0, matching go.mod (Jules audit, host-verified)
 **Priority**: P2 (Medium)
 **Severity**: Moderate
 **Category**: Bug
